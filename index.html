@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Network Config Workbench</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./src/react/profile-mapping.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -255,6 +256,7 @@
                   <button id="addNewLineRuleBtn" type="button">신규 선택 규칙 추가</button>
                 </div>
                 <div id="profileSelectionGuide" class="profile-guide">토큰을 클릭해 선택한 뒤 Object Match 또는 Field Extraction으로 연결하세요.</div>
+                <div id="profileMappingReactRoot" class="profile-mapping-react-root"></div>
                 <div class="profile-manual-rule-panels">
                   <div>
                     <h4>라인 매핑</h4>
@@ -301,6 +303,10 @@
       </main>
     </div>
 
+    <!-- React CDN is used only for the profile mapping studio; the app remains a static no-build page. -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="./app.js"></script>
+    <script src="./src/react/profile-mapping-app.js"></script>
   </body>
 </html>

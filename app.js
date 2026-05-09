@@ -72,6 +72,7 @@ const selectors = {
   profileNewPreview: document.querySelector("#profileNewPreview"),
   profileExampleConnectorSvg: document.querySelector("#profileExampleConnectorSvg"),
   profileRulePopover: document.querySelector("#profileRulePopover"),
+  profileMappingReactRoot: document.querySelector("#profileMappingReactRoot"),
   profileMappingRows: document.querySelector("#profileMappingRows"),
   profileContextMappingRows: document.querySelector("#profileContextMappingRows"),
   profileFieldMappingRows: document.querySelector("#profileFieldMappingRows"),
@@ -572,6 +573,212 @@ function renderProfileEditor() {
   renderLineRules();
   renderProfileChanges();
   renderExamplePreviews();
+  renderReactProfileMappingPanel();
+}
+
+function renderReactProfileMappingPanel() {
+  window.ProfileMappingBridge = createProfileMappingBridge();
+  if (typeof window.renderProfileMappingReactPanel === "function") {
+    window.renderProfileMappingReactPanel(window.ProfileMappingBridge.getSnapshot(), window.ProfileMappingBridge);
+  }
+}
+
+function createProfileMappingBridge() {
+  return {
+    getSnapshot: getProfileMappingSnapshot,
+    deleteLineMapping,
+    deleteTokenMapping,
+    focusLineMapping,
+    focusTokenMapping,
+    deleteLineGroup: (groupId) => removeSemanticGroup("line", groupId),
+    deleteTokenGroup: (groupId) => removeSemanticGroup("token", groupId),
+    renameLineGroup,
+    selectLineGroup,
+    clearFocus: clearProfileMappingFocus,
+  };
+}
+
+function getProfileMappingSnapshot() {
+  const type = state.selectedProfileObjectType;
+  const lineMappings = (state.profileDraft.lineMappings?.[type] || []).map((mapping, index) => ({
+    id: mapping.id || `line-map-${index}`,
+    index,
+    kind: inferLineMappingKind(mapping),
+    oldLabel: formatLineMappingSide(mapping, "old"),
+    newLabel: formatLineMappingSide(mapping, "new"),
+    oldRef: mapping.oldRef || null,
+    newRef: mapping.newRef || null,
+    oldText: mapping.oldText || "",
+    newText: mapping.newText || "",
+    selected: profileLineRefsEquivalent(mapping.oldRef, state.selectedProfileLineLink?.oldRef)
+      && profileLineRefsEquivalent(mapping.newRef, state.selectedProfileLineLink?.newRef),
+  }));
+  const tokenMappings = (state.profileDraft.semanticMappings?.[type] || []).map((mapping, index) => {
+    const oldNodes = getSemanticMappingNodes(mapping, "old");
+    const newNodes = getSemanticMappingNodes(mapping, "new");
+    return {
+      id: mapping.id || mapping.groupId || `token-map-${index}`,
+      index,
+      kind: "token",
+      field: mapping.field || "",
+      role: mapping.role || "compare-field",
+      cardinality: mapping.cardinality || semanticMappingCardinality(oldNodes, newNodes),
+      oldLabel: oldNodes.map(formatSemanticNodeLabel).filter(Boolean).join(", ") || "-",
+      newLabel: newNodes.map(formatSemanticNodeLabel).filter(Boolean).join(", ") || "-",
+      oldNodes: deepClone(oldNodes),
+      newNodes: deepClone(newNodes),
+      selected: state.pendingSemanticMapping?.id === mapping.id,
+    };
+  });
+  const lineGroups = (state.profileDraft.semanticLineGroups?.[type] || []).map((group) => ({
+    id: group.id,
+    source: group.source,
+    label: group.lineNumber || group.label || "Group",
+    lineNumber: group.lineNumber || group.label || "",
+    lineIndexes: group.lineIndexes || [],
+    linesLabel: (group.lineIndexes || []).map((lineIndex) => lineIndex + 1).join(", "),
+    text: group.text || Object.entries(group.fields || {}).map(([field, value]) => `${field}=${value}`).join(", "),
+    mapped: isProfileLineRefMapped(buildProfileGroupRef(group)),
+    selected: isProfileLineRefSelected(buildProfileGroupRef(group)),
+  }));
+  const tokenGroups = (state.profileDraft.semanticNodeGroups?.[type] || []).map((group) => ({
+    id: group.id,
+    source: group.source,
+    field: group.field || "",
+    value: group.value || "",
+    lineIndex: group.lineIndex,
+    tokenIndexes: group.tokenIndexes || [group.tokenIndex].filter((item) => Number.isFinite(Number(item))),
+    text: group.text || group.selectedToken || group.value || "",
+  }));
+  return {
+    objectType: type,
+    hasReact: Boolean(window.React && window.ReactDOM),
+    lineMappings,
+    tokenMappings,
+    lineGroups,
+    tokenGroups,
+    selected: {
+      pendingLineRef: state.pendingProfileLineRef || null,
+      selectedLineLink: state.selectedProfileLineLink || null,
+      semanticTokens: {
+        old: state.selectedSemanticTokens.old || [],
+        new: state.selectedSemanticTokens.new || [],
+      },
+    },
+    counts: {
+      lineMappings: lineMappings.length,
+      tokenMappings: tokenMappings.length,
+      oldLineGroups: lineGroups.filter((group) => group.source === "old").length,
+      newLineGroups: lineGroups.filter((group) => group.source === "new").length,
+      tokenGroups: tokenGroups.length,
+    },
+  };
+}
+
+function inferLineMappingKind(mapping) {
+  const oldKind = mapping.oldRef?.kind || "line";
+  const newKind = mapping.newRef?.kind || "line";
+  if (oldKind === "group" && newKind === "group") return "group-to-group";
+  if (oldKind === "group") return "group-to-line";
+  if (newKind === "group") return "line-to-group";
+  return "line-to-line";
+}
+
+function deleteLineMapping(index) {
+  const type = state.selectedProfileObjectType;
+  const mappings = state.profileDraft.lineMappings?.[type] || [];
+  if (!Number.isInteger(index) || !mappings[index]) return;
+  pushProfileUndoSnapshot(`line-map-remove:${index}`);
+  mappings.splice(index, 1);
+  state.selectedProfileLineLink = null;
+  state.pendingProfileLineRef = null;
+  renderProfileEditor();
+  setProfileGuide("라인 매핑을 삭제했습니다.", "ok");
+  markProfileDirty("Line Mapping", "삭제", type);
+  markCompareStale();
+}
+
+function deleteTokenMapping(index) {
+  const type = state.selectedProfileObjectType;
+  const mappings = state.profileDraft.semanticMappings?.[type] || [];
+  if (!Number.isInteger(index) || !mappings[index]) return;
+  pushProfileUndoSnapshot(`semantic-map-remove:${index}`);
+  mappings.splice(index, 1);
+  state.selectedSemanticTokens = { old: [], new: [] };
+  state.activeSemanticSelectionSource = "";
+  state.pendingSemanticMapping = null;
+  renderProfileEditor();
+  setProfileGuide("토큰 매핑을 삭제했습니다.", "ok");
+  markProfileDirty("Field Extraction", "삭제", type);
+  markCompareStale();
+}
+
+function focusLineMapping(index) {
+  const mapping = (state.profileDraft.lineMappings?.[state.selectedProfileObjectType] || [])[index];
+  if (!mapping) return;
+  state.selectedProfileLineLink = {
+    oldLineIndex: firstLineIndexFromRef(mapping.oldRef),
+    newLineIndex: firstLineIndexFromRef(mapping.newRef),
+    oldRef: mapping.oldRef,
+    newRef: mapping.newRef,
+  };
+  state.pendingProfileLineRef = null;
+  renderExamplePreviews();
+  renderReactProfileMappingPanel();
+  setProfileGuide(`라인 매핑 선택: ${formatLineMappingSide(mapping, "old")} ↔ ${formatLineMappingSide(mapping, "new")}`, "info");
+}
+
+function focusTokenMapping(index) {
+  const mapping = (state.profileDraft.semanticMappings?.[state.selectedProfileObjectType] || [])[index];
+  if (!mapping) return;
+  const selected = { old: [], new: [] };
+  ["old", "new"].forEach((source) => {
+    selected[source] = getSemanticMappingNodes(mapping, source).map((node) => ({
+      ...node,
+      id: `${source}:${Number(node.lineIndex) || 0}:${Number(node.tokenIndex) || 0}`,
+      source,
+      token: node.selectedToken || node.token || node.value || "",
+      line: getExampleLine(source, Number(node.lineIndex) || 0),
+    }));
+  });
+  state.selectedSemanticTokens = selected;
+  state.activeSemanticSelectionSource = selected.old.length ? "old" : selected.new.length ? "new" : "";
+  state.pendingSemanticMapping = { id: mapping.id || mapping.groupId || `token-map-${index}` };
+  state.selectedProfileLineLink = null;
+  renderExamplePreviews();
+  renderReactProfileMappingPanel();
+  setProfileGuide(`토큰 매핑 선택: ${mapping.field || "field"} (${mapping.role || "compare-field"})`, "info");
+}
+
+function renameLineGroup(groupId, nextName) {
+  const type = state.selectedProfileObjectType;
+  const group = (state.profileDraft.semanticLineGroups?.[type] || []).find((item) => item.id === groupId);
+  const value = canonicalizeGroupLineNumber(nextName);
+  if (!group || !value || value === group.lineNumber) return;
+  pushProfileUndoSnapshot(`line-group-rename:${groupId}`);
+  group.lineNumber = value;
+  group.label = value;
+  renderProfileEditor();
+  setProfileGuide(`라인 그룹 이름 변경: ${value}`, "ok");
+  markProfileDirty("Line Group", "수정", value);
+  markCompareStale();
+}
+
+function selectLineGroup(groupId) {
+  const group = findSemanticLineGroupById(groupId);
+  if (!group) return;
+  applyProfileLineRefSelection(buildProfileGroupRef(group));
+}
+
+function clearProfileMappingFocus() {
+  state.selectedProfileLineLink = null;
+  state.pendingProfileLineRef = null;
+  state.selectedSemanticTokens = { old: [], new: [] };
+  state.activeSemanticSelectionSource = "";
+  state.pendingSemanticMapping = null;
+  renderExamplePreviews();
+  renderReactProfileMappingPanel();
+  setProfileGuide("매핑 선택을 해제했습니다.", "info");
 }
 
 function renderParserRuleEditor() {
@@ -1653,6 +1860,7 @@ function renderRulesList(kind) {
 function renderExamplePreviews() {
   renderExamplePreview("old");
   renderExamplePreview("new");
+  renderReactProfileMappingPanel();
 }
 
 function saveCurrentProfileExamples() {
@@ -2199,6 +2407,10 @@ function handleProfileLineRefClick(event) {
   event.stopPropagation();
   const ref = parseProfileLineRef(event.currentTarget.dataset.lineRef);
   if (!ref) return;
+  applyProfileLineRefSelection(ref);
+}
+
+function applyProfileLineRefSelection(ref) {
   if (!state.pendingProfileLineRef || state.pendingProfileLineRef.source === ref.source) {
     state.pendingProfileLineRef = ref;
     state.selectedProfileLineLink = null;

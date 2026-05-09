@@ -4,8 +4,10 @@ const lineActions = ["same", "added", "ignore", "missing", "required", "required
 const selectors = {
   compareTabBtn: document.querySelector("#compareTabBtn"),
   profilesTabBtn: document.querySelector("#profilesTabBtn"),
+  summaryPageTabBtn: document.querySelector("#summaryPageTabBtn"),
   compareTab: document.querySelector("#compareTab"),
   profilesTab: document.querySelector("#profilesTab"),
+  summaryTab: document.querySelector("#summaryTab"),
   historySelect: document.querySelector("#historySelect"),
   loadHistoryBtn: document.querySelector("#loadHistoryBtn"),
   saveSessionBtn: document.querySelector("#saveSessionBtn"),
@@ -44,10 +46,13 @@ const selectors = {
   compareBtn: document.querySelector("#compareBtn"),
   alignBtn: document.querySelector("#alignBtn"),
   exportReportBtn: document.querySelector("#exportReportBtn"),
-  compareSemanticFieldInput: document.querySelector("#compareSemanticFieldInput"),
-  compareSemanticRoleSelect: document.querySelector("#compareSemanticRoleSelect"),
-  saveCompareSemanticLinkBtn: document.querySelector("#saveCompareSemanticLinkBtn"),
-  compareSemanticLinkStatus: document.querySelector("#compareSemanticLinkStatus"),
+  summaryTabBtn: document.querySelector("#summaryTabBtn"),
+  objectsTabBtn: document.querySelector("#objectsTabBtn"),
+  summaryResultPanel: document.querySelector("#summaryResultPanel"),
+  objectsResultPanel: document.querySelector("#objectsResultPanel"),
+  objectSearchInput: document.querySelector("#objectSearchInput"),
+  objectSortSelect: document.querySelector("#objectSortSelect"),
+  restoreInitialBtn: document.querySelector("#restoreInitialBtn"),
   summaryCards: document.querySelector("#summaryCards"),
   reportList: document.querySelector("#reportList"),
   objectList: document.querySelector("#objectList"),
@@ -128,16 +133,14 @@ const state = {
   activeProfileId: null,
   selectedProfileObjectType: "static-route",
   lastReport: null,
+  initialConfigSnapshot: null,
   syncingEditorScroll: false,
   syncingDiffScroll: false,
   connectorFrame: null,
-  selectedDiffTokens: { old: null, new: null },
-  draggingSemanticToken: null,
   draggingProfileLine: null,
   selectedProfileLineLink: null,
   pendingProfileLineRef: null,
   lastProfileExampleSource: "",
-  suppressNextDiffClick: false,
   selectedProfileLibraryId: null,
   compareDirty: false,
   profileChanges: [],
@@ -214,8 +217,13 @@ function createEmptyRulesByType() {
 function createDefaultIdentityRules() {
   return Object.fromEntries(objectTypes.map((type) => [
     type,
-    { mode: ["port", "lag", "interface"].includes(type) ? "description" : "header", pattern: "" },
+    createDefaultIdentityRuleForType(type),
   ]));
+}
+
+function createDefaultIdentityRuleForType(type) {
+  const rule = { mode: ["port", "lag", "interface"].includes(type) ? "description" : "header", pattern: "" };
+  return { old: { ...rule }, new: { ...rule } };
 }
 
 function createDefaultSemanticObjects() {
@@ -377,6 +385,7 @@ function createDefaultExamples() {
 async function init() {
   selectors.oldInput.value = defaultSamples.oldConfig;
   selectors.newInput.value = defaultSamples.newConfig;
+  captureInitialConfigSnapshot(true);
   renderObjectToggles();
   renderProfileEditor();
   bindEvents();
@@ -392,6 +401,7 @@ async function init() {
 function bindEvents() {
   selectors.compareTabBtn.addEventListener("click", () => setActiveTab("compare"));
   selectors.profilesTabBtn.addEventListener("click", () => setActiveTab("profiles"));
+  selectors.summaryPageTabBtn?.addEventListener("click", () => setActiveTab("summary"));
   selectors.loadHistoryBtn.addEventListener("click", loadSelectedSession);
   selectors.saveSessionBtn.addEventListener("click", saveSession);
   selectors.loadProfileBtn.addEventListener("click", loadSelectedProfile);
@@ -403,7 +413,11 @@ function bindEvents() {
   selectors.compareBtn.addEventListener("click", runCompare);
   selectors.alignBtn.addEventListener("click", alignNewConfigToOldOrder);
   selectors.exportReportBtn.addEventListener("click", exportReport);
-  selectors.saveCompareSemanticLinkBtn.addEventListener("click", saveCompareSemanticLink);
+  selectors.summaryTabBtn?.addEventListener("click", () => setResultTab("summary"));
+  selectors.objectsTabBtn?.addEventListener("click", () => setResultTab("objects"));
+  selectors.objectSearchInput?.addEventListener("input", renderObjectNavigator);
+  selectors.objectSortSelect?.addEventListener("input", renderObjectNavigator);
+  selectors.restoreInitialBtn?.addEventListener("click", restoreInitialConfigSnapshot);
 
   selectors.saveOldBtn.addEventListener("click", () => saveTextFile("old-config.txt", selectors.oldInput.value));
   selectors.saveNewBtn.addEventListener("click", () => saveTextFile("new-config.txt", selectors.newInput.value));
@@ -428,6 +442,7 @@ function bindEvents() {
 
   [selectors.oldInput, selectors.newInput].forEach((input) => {
     input.addEventListener("input", () => {
+      captureInitialConfigSnapshot();
       updateLineNumbers();
       markCompareStale();
     });
@@ -435,12 +450,6 @@ function bindEvents() {
   });
   selectors.oldDiffPane.addEventListener("scroll", syncDiffScroll);
   selectors.newDiffPane.addEventListener("scroll", syncDiffScroll);
-  selectors.oldDiffPane.addEventListener("click", handleDiffTokenClick);
-  selectors.newDiffPane.addEventListener("click", handleDiffTokenClick);
-  selectors.oldDiffPane.addEventListener("pointerdown", startSemanticTokenDrag);
-  selectors.newDiffPane.addEventListener("pointerdown", startSemanticTokenDrag);
-  window.addEventListener("pointermove", moveSemanticTokenDrag);
-  window.addEventListener("pointerup", finishSemanticTokenDrag);
   window.addEventListener("pointermove", moveProfileLineDrag);
   window.addEventListener("pointerup", finishProfileLineDrag);
   window.addEventListener("pointermove", moveSemanticPreviewTokenDrag);
@@ -509,12 +518,18 @@ function bindEvents() {
 
 function setActiveTab(tab) {
   if (tab === "compare" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 탭으로 이동")) return;
+  if (tab === "summary" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 요약 탭으로 이동")) return;
   hideProfileRulePopover();
   const compare = tab === "compare";
+  const profiles = tab === "profiles";
+  const summary = tab === "summary";
   selectors.compareTabBtn.classList.toggle("active", compare);
-  selectors.profilesTabBtn.classList.toggle("active", !compare);
+  selectors.profilesTabBtn.classList.toggle("active", profiles);
+  selectors.summaryPageTabBtn?.classList.toggle("active", summary);
   selectors.compareTab.classList.toggle("active", compare);
-  selectors.profilesTab.classList.toggle("active", !compare);
+  selectors.profilesTab.classList.toggle("active", profiles);
+  selectors.summaryTab?.classList.toggle("active", summary);
+  if (summary) renderObjectNavigator();
 }
 
 function renderObjectToggles() {
@@ -563,13 +578,13 @@ function renderProfileEditor() {
   });
 
   renderIdentityRuleEditor();
-  renderPolicyEditor();
-  renderNormalizeEditor();
-  renderSemanticRuleEditor();
   renderParserRuleEditor();
+  renderNormalizeEditor();
   renderLineMappings();
   renderContextMappings();
   renderFieldMappings();
+  renderSemanticRuleEditor();
+  renderPolicyEditor();
   renderLineRules();
   renderProfileChanges();
   renderExamplePreviews();
@@ -788,7 +803,7 @@ function renderParserRuleEditor() {
   selectors.parserRuleEditor.innerHTML = `
     <div class="parser-rule-guide">
       <div class="small-note">현재 객체: ${escapeHtml(type)}. 아래 Field Extraction 패턴이 우선 적용됩니다. 기존 파서 규칙은 호환용이며, 새 규칙은 가능한 한 필드 패턴으로 옮기세요.</div>
-      <button type="button" id="draftParserRuleBtn">선택 라인 초안</button>
+        <button type="button" id="draftParserRuleBtn">Field Extraction 후보 만들기</button>
       <button type="button" id="addParserRuleBtn">파서 규칙 추가</button>
     </div>
     <div class="semantic-object-summary">
@@ -816,14 +831,15 @@ function renderParserRuleEditor() {
   });
 
   selectors.parserRuleEditor.querySelector("#draftParserRuleBtn").addEventListener("click", () => {
+    const source = getSelectedText(selectors.profileOldExampleInput) ? "old" : "new";
     const selected = getSelectedText(selectors.profileOldExampleInput) || getSelectedText(selectors.profileNewExampleInput);
     if (!selected || selected.includes("\n")) {
       setProfileGuide("파서 규칙 초안 실패: 예제에서 한 줄만 선택하세요.", "error");
       return;
     }
-    state.profileDraft.parserRules[type].push({ pattern: selected, objectField: defaultObjectFieldForType(type), message: "선택 라인 기반 초안" });
+    state.profileDraft.parserRules[type].push({ source, pattern: selected, objectField: defaultObjectFieldForType(type), message: `${source} 선택 라인 기반 후보` });
     renderProfileEditor();
-    setProfileGuide("파서 규칙 초안이 추가되었습니다. 값 위치를 {route}, {next-hop}, {tag} 같은 필드로 바꾸세요.", "ok");
+    setProfileGuide("Field Extraction 후보가 추가되었습니다. 값 위치를 {route}, {next-hop}, {tag} 같은 필드로 바꾸세요.", "ok");
     markProfileDirty("Field Extraction", "추가", type);
     markCompareStale();
   });
@@ -874,8 +890,7 @@ function renderSemanticRuleEditor() {
     </div>
     <div class="small-note">예제에서 값 토큰 하나를 선택한 뒤 의미 필드로 등록하세요. 도구가 선택 위치 주변 토큰으로 같은 형식의 값을 찾습니다.</div>
     <div class="semantic-rule-rows">
-      ${tokenGroups.length ? `<div class="small-note">토큰 그룹</div>${tokenGroups.map(renderTokenGroupRow).join("")}` : ""}
-      ${mappings.length ? mappings.map(renderSemanticMappingRow).join("") : ""}
+      ${tokenGroups.length || mappings.length ? `<div class="small-note">토큰 그룹과 토큰 매핑은 위 프로파일 매핑 스튜디오에서 관리합니다. 현재 토큰 그룹 ${tokenGroups.length}개, 토큰 매핑 ${mappings.length}개.</div>` : ""}
       ${rules.length ? rules.map(renderSemanticRuleRow).join("") : `<div class="small-note">학습된 의미 필드가 없습니다.</div>`}
     </div>
   `;
@@ -896,21 +911,6 @@ function renderSemanticRuleEditor() {
     });
   });
 
-  selectors.semanticRuleEditor.querySelectorAll("[data-semantic-map-remove]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = Number(button.dataset.semanticMapRemove);
-      pushProfileUndoSnapshot(`semantic-map-remove:${index}`);
-      state.profileDraft.semanticMappings[type].splice(index, 1);
-      state.selectedSemanticTokens = { old: [], new: [] };
-      state.activeSemanticSelectionSource = "";
-      renderProfileEditor();
-      markProfileDirty("Field Extraction", "삭제", type);
-      markCompareStale();
-    });
-  });
-  selectors.semanticRuleEditor.querySelectorAll("[data-token-group-id]").forEach((button) => {
-    button.addEventListener("click", () => removeSemanticGroup("token", button.dataset.tokenGroupId));
-  });
   selectors.semanticRuleEditor.querySelectorAll(".semantic-group-row").forEach((row) => {
     row.addEventListener("mouseenter", () => setProfilePreviewHoverState(row.dataset.groupId || ""));
     row.addEventListener("mouseleave", clearProfilePreviewHoverState);
@@ -1141,14 +1141,18 @@ function buildSemanticTokenSelector(item, field) {
   const tokens = getSemanticLineTokens(item.line);
   const selectedToken = canonicalizeComparableLine(item.token);
   const tokenIndex = Number.isFinite(item.tokenIndex) ? item.tokenIndex : tokens.findIndex((token) => canonicalizeComparableLine(token) === selectedToken);
-  const valueTokenIndex = inferValueTokenIndex(tokens, tokenIndex, field);
-  const value = extractKnownFieldValue(item.line, field) || canonicalizeComparableLine(tokens[valueTokenIndex] || selectedToken);
+  const explicitTokenOnly = item.explicitTokenOnly === true;
+  const valueTokenIndex = explicitTokenOnly ? tokenIndex : inferValueTokenIndex(tokens, tokenIndex, field);
+  const value = explicitTokenOnly
+    ? selectedToken
+    : extractKnownFieldValue(item.line, field) || canonicalizeComparableLine(tokens[valueTokenIndex] || selectedToken);
   return {
     lineIndex: item.lineIndex,
     tokenIndex,
     selectedToken,
     valueTokenIndex,
     value,
+    explicitTokenOnly,
     anchorBefore: tokens.slice(Math.max(0, tokenIndex - 2), tokenIndex).join(" "),
     anchorAfter: tokens.slice(tokenIndex + 1, tokenIndex + 3).join(" "),
   };
@@ -1514,42 +1518,50 @@ function parseNormalizeMap(text) {
 
 function renderIdentityRuleEditor() {
   const type = state.selectedProfileObjectType;
-  const rule = state.profileDraft.identityRules?.[type] || { mode: "header", pattern: "" };
+  const oldRule = getIdentityRuleForSource(state.profileDraft.identityRules?.[type], "old", type);
+  const newRule = getIdentityRuleForSource(state.profileDraft.identityRules?.[type], "new", type);
   selectors.identityRuleEditor.innerHTML = `
-    <div class="identity-rule-row">
+    <div class="identity-rule-split">
+      ${renderIdentityRuleSide("old", oldRule)}
+      ${renderIdentityRuleSide("new", newRule)}
+    </div>
+    <div class="small-note">기존 단일 Identity Rule 데이터는 old/new 양쪽에 같은 값으로 자동 적용됩니다. 신규 저장부터는 old/new를 분리해 저장합니다.</div>
+  `;
+
+  selectors.identityRuleEditor.querySelectorAll("[data-identity-side]").forEach((input) => {
+    input.addEventListener("input", (event) => {
+      const side = event.target.dataset.identitySide;
+      const key = event.target.dataset.identityKey;
+      if (!["old", "new"].includes(side) || !["mode", "pattern"].includes(key)) return;
+      const current = state.profileDraft.identityRules[type] || createDefaultIdentityRuleForType(type);
+      const normalized = normalizeIdentityRuleBySide(current, type);
+      normalized[side][key] = key === "pattern" ? event.target.value.trim() : event.target.value;
+      state.profileDraft.identityRules[type] = normalized;
+      markProfileDirty("Identity Rule", "수정", `${type}:${side}`);
+      markCompareStale();
+    });
+  });
+}
+
+function renderIdentityRuleSide(side, rule) {
+  const label = side === "old" ? "Old identity rule" : "New identity rule";
+  return `
+    <div class="identity-rule-card">
+      <strong>${label}</strong>
       <label>
         기준
-        <select id="identityModeSelect">
-          <option value="header" ${rule.mode === "header" ? "selected" : ""}>객체 시작 라인</option>
+        <select data-identity-side="${side}" data-identity-key="mode">
+          <option value="header" ${rule.mode === "header" ? "selected" : ""}>객체 시작 라인/header</option>
           <option value="description" ${rule.mode === "description" ? "selected" : ""}>description 값</option>
           <option value="regex" ${rule.mode === "regex" ? "selected" : ""}>사용자 정규식</option>
         </select>
       </label>
       <label>
         추출 정규식
-        <input id="identityPatternInput" value="${escapeHtml(rule.pattern || "")}" placeholder='예: ##\\s*(.*?)\\s*## 또는 회선번호:([A-Z0-9-]+)' />
+        <input data-identity-side="${side}" data-identity-key="pattern" value="${escapeHtml(rule.pattern || "")}" placeholder='예: ##\\s*(.*?)\\s*## 또는 ^route\\s+([^\\s{]+)' />
       </label>
     </div>
-    <div class="small-note">description 기준에서 정규식이 비어 있으면 따옴표 안 값 또는 ##...## 값을 자동 사용합니다. 정규식은 첫 번째 캡처 그룹을 객체 ID로 씁니다.</div>
   `;
-
-  selectors.identityRuleEditor.querySelector("#identityModeSelect").addEventListener("input", (event) => {
-    state.profileDraft.identityRules[type] = {
-      ...(state.profileDraft.identityRules[type] || {}),
-      mode: event.target.value,
-    };
-    markProfileDirty();
-    markCompareStale();
-  });
-
-  selectors.identityRuleEditor.querySelector("#identityPatternInput").addEventListener("input", (event) => {
-    state.profileDraft.identityRules[type] = {
-      ...(state.profileDraft.identityRules[type] || {}),
-      pattern: event.target.value.trim(),
-    };
-    markProfileDirty();
-    markCompareStale();
-  });
 }
 
 function renderLineMappings() {
@@ -1938,7 +1950,7 @@ function renderExamplePreview(source) {
       }
       toggleSemanticPreviewToken(token);
     });
-    token.addEventListener("mouseenter", () => setProfilePreviewHoverState(token.dataset.groupIds || token.closest(".preview-line")?.dataset.lineGroupIds || ""));
+    token.addEventListener("mouseenter", () => setProfilePreviewTokenHoverState(token));
     token.addEventListener("mouseleave", clearProfilePreviewHoverState);
   });
   preview.querySelectorAll(".preview-line").forEach((line) => {
@@ -2081,7 +2093,7 @@ function semanticTokenClasses(source, lineIndex) {
       if (selector.lineIndex !== lineIndex) return;
       const color = semanticColorClassForId(mapping.id || `mapping-${mappingIndex}`, 8);
       appendSemanticTokenClass(classes, `${selector.tokenIndex}:${canonicalizeComparableLine(selector.selectedToken)}`, color, mapping.id || `mapping-${mappingIndex}`);
-      if (selector.valueTokenIndex !== selector.tokenIndex) appendSemanticTokenClass(classes, `${selector.valueTokenIndex}:${canonicalizeComparableLine(selector.value)}`, color, mapping.id || `mapping-${mappingIndex}`);
+      if (!selector.explicitTokenOnly && selector.valueTokenIndex !== selector.tokenIndex) appendSemanticTokenClass(classes, `${selector.valueTokenIndex}:${canonicalizeComparableLine(selector.value)}`, color, mapping.id || `mapping-${mappingIndex}`);
     });
   });
   (state.profileDraft.semanticNodeGroups?.[type] || []).forEach((group, groupIndex) => {
@@ -2135,6 +2147,24 @@ function setProfilePreviewHoverState(groupIdsText) {
 
 function clearProfilePreviewHoverState() {
   document.querySelectorAll(".group-hover").forEach((element) => element.classList.remove("group-hover"));
+  document.querySelectorAll(".token-hover").forEach((element) => element.classList.remove("token-hover"));
+}
+
+function setProfilePreviewTokenHoverState(token) {
+  const tokenId = token?.dataset?.tokenId || "";
+  if (!tokenId) return;
+  clearProfilePreviewHoverState();
+  token.classList.add("token-hover");
+  const connectorSelector = [
+    `.profile-example-connector[data-from-token-id="${cssEscape(tokenId)}"]`,
+    `.profile-example-connector[data-to-token-id="${cssEscape(tokenId)}"]`,
+  ].join(", ");
+  document.querySelectorAll(connectorSelector).forEach((path) => {
+    path.classList.add("token-hover");
+    const otherTokenId = path.dataset.fromTokenId === tokenId ? path.dataset.toTokenId : path.dataset.fromTokenId;
+    if (!otherTokenId) return;
+    document.querySelector(`.profile-example-preview .semantic-token[data-token-id="${cssEscape(otherTokenId)}"]`)?.classList.add("token-hover");
+  });
 }
 
 function toggleSemanticPreviewToken(token) {
@@ -2147,6 +2177,7 @@ function toggleSemanticPreviewToken(token) {
     tokenIndex: Number(token.dataset.tokenIndex),
     token: canonicalizeComparableLine(token.dataset.token || token.textContent),
     line: getExampleLine(source, Number(token.dataset.lineIndex)),
+    explicitTokenOnly: true,
   };
   const existing = current.findIndex((candidate) => candidate.id === item.id);
   if (existing >= 0) current.splice(existing, 1);
@@ -2222,6 +2253,7 @@ function buildSemanticNodeFromToken(token) {
     tokenIndex,
     token: selectedToken,
     line,
+    explicitTokenOnly: true,
   }, field);
 }
 
@@ -2615,7 +2647,10 @@ function renderProfileExampleConnectors() {
         if (!newElement) return;
         const points = connectorPointsBetweenElements(oldElement, newElement);
         const selected = state.pendingSemanticMapping?.id === mapping.id ? "selected" : "";
-        paths.push(buildProfileConnectorPath(points.from, points.to, `semantic-connector ${selected} ${semanticColorClassForId(mapping.id || `${mapping.field}:${mapping.role}`)}`));
+        const oldTokenId = semanticNodeTokenId("old", oldNode);
+        const newTokenId = semanticNodeTokenId("new", newNode);
+        const attrs = `data-mapping-id="${escapeHtml(mapping.id || `${mapping.field}:${mapping.role}`)}" data-from-token-id="${escapeHtml(oldTokenId)}" data-to-token-id="${escapeHtml(newTokenId)}"`;
+        paths.push(buildProfileConnectorPath(points.from, points.to, `semantic-connector ${selected} ${semanticColorClassForId(mapping.id || `${mapping.field}:${mapping.role}`)}`, attrs));
       });
     });
   });
@@ -2714,6 +2749,11 @@ function findSemanticTokenElement(source, node) {
     .find((item) => canonicalizeComparableLine(item.dataset.token || item.textContent) === canonicalizeComparableLine(node.selectedToken || node.token));
 }
 
+function semanticNodeTokenId(source, node) {
+  if (!node || !Number.isFinite(Number(node.lineIndex)) || !Number.isFinite(Number(node.tokenIndex))) return "";
+  return `${source}:${Number(node.lineIndex)}:${Number(node.tokenIndex)}`;
+}
+
 function renderProfileDraftConnector(startPoint, endPoint) {
   const svg = selectors.profileExampleConnectorSvg;
   if (!svg) return;
@@ -2726,7 +2766,7 @@ function clearProfileDraftConnector() {
   selectors.profileExampleConnectorSvg?.querySelectorAll(".profile-example-connector.draft").forEach((path) => path.remove());
 }
 
-function buildProfileConnectorPath(startPoint, endPoint, stateName) {
+function buildProfileConnectorPath(startPoint, endPoint, stateName, attrs = "") {
   const grid = selectors.profileOldPreview.closest(".profile-example-grid");
   const rect = grid.getBoundingClientRect();
   const x1 = startPoint.x - rect.left;
@@ -2737,7 +2777,7 @@ function buildProfileConnectorPath(startPoint, endPoint, stateName) {
   const mid = gutterOnly
     ? Math.max(4, Math.abs(x2 - x1) * 0.5)
     : Math.max(40, Math.abs(x2 - x1) * 0.45);
-  return `<path class="profile-example-connector ${stateName}" d="M ${x1} ${y1} C ${x1 + mid} ${y1}, ${x2 - mid} ${y2}, ${x2} ${y2}" />`;
+  return `<path class="profile-example-connector ${stateName}" ${attrs} d="M ${x1} ${y1} C ${x1 + mid} ${y1}, ${x2 - mid} ${y2}, ${x2} ${y2}" />`;
 }
 
 function connectorAnchorPoint(element, preferredEdge = "right") {
@@ -3017,9 +3057,34 @@ function bindDropZone(zone, input, meta) {
     if (!file) return;
     input.value = await file.text();
     meta.textContent = `${file.name} | 마지막 수정 ${formatDate(file.lastModified)}`;
+    captureInitialConfigSnapshot(true);
     updateLineNumbers();
     markCompareStale();
   });
+}
+
+function captureInitialConfigSnapshot(force = false) {
+  const oldValue = selectors.oldInput?.value || "";
+  const newValue = selectors.newInput?.value || "";
+  if (!force && state.initialConfigSnapshot) return;
+  if (!force && !oldValue.trim() && !newValue.trim()) return;
+  state.initialConfigSnapshot = {
+    oldConfig: oldValue,
+    newConfig: newValue,
+    capturedAt: Date.now(),
+  };
+}
+
+function restoreInitialConfigSnapshot() {
+  if (!state.initialConfigSnapshot) {
+    selectors.compareStatus.textContent = "원복할 초기값 없음";
+    return;
+  }
+  selectors.oldInput.value = state.initialConfigSnapshot.oldConfig;
+  selectors.newInput.value = state.initialConfigSnapshot.newConfig;
+  updateLineNumbers();
+  markCompareStale();
+  selectors.compareStatus.textContent = "초기값 원복 완료";
 }
 
 function updateLineNumbers() {
@@ -3054,6 +3119,20 @@ function toggleCompareControls() {
   selectors.toggleControlsBtn.title = hidden ? "비교 옵션 보이기" : "비교 옵션 숨기기";
   selectors.toggleControlsBtn.setAttribute("aria-label", selectors.toggleControlsBtn.title);
   scheduleDiffConnectorRender();
+}
+
+function setResultTab(tabName) {
+  const target = tabName === "objects" ? "objects" : "summary";
+  [
+    [selectors.summaryTabBtn, selectors.summaryResultPanel, "summary"],
+    [selectors.objectsTabBtn, selectors.objectsResultPanel, "objects"],
+  ].forEach(([button, panel, name]) => {
+    const active = name === target;
+    button?.classList.toggle("active", active);
+    button?.setAttribute("aria-selected", String(active));
+    panel?.classList.toggle("active", active);
+    if (panel) panel.hidden = !active;
+  });
 }
 
 function setProfileStatus(message, kind = "info") {
@@ -3217,155 +3296,9 @@ function syncDiffScroll(event) {
   scheduleDiffConnectorRender();
 }
 
-function handleDiffTokenClick(event) {
-  if (state.suppressNextDiffClick) {
-    state.suppressNextDiffClick = false;
-    return;
-  }
-  if (state.draggingSemanticToken) return;
-  const token = event.target.closest(".diff-token-match");
-  if (!token) return;
-  const line = token.closest(".diff-line");
-  if (!line) return;
-  const side = line.dataset.side;
-  if (!["old", "new"].includes(side)) return;
-
-  selectors[side === "old" ? "oldDiffPane" : "newDiffPane"]
-    .querySelectorAll(".diff-token-match.selected")
-    .forEach((item) => item.classList.remove("selected"));
-  token.classList.add("selected");
-
-  state.selectedDiffTokens[side] = {
-    side,
-    token: token.dataset.token || token.textContent.trim(),
-    line: line.querySelector(".diff-line-text")?.textContent || "",
-    objectType: line.dataset.objectType || "",
-  };
-  updateCompareSemanticLinkStatus();
-}
-
-function startSemanticTokenDrag(event) {
-  const token = event.target.closest(".diff-token-match");
-  if (!token || event.button !== 0) return;
-  const selection = buildDiffTokenSelection(token);
-  if (!selection) return;
-  state.draggingSemanticToken = {
-    ...selection,
-    element: token,
-    startPoint: centerOfElement(token),
-  };
-  token.classList.add("dragging");
-  selectors.compareSemanticLinkStatus.textContent = `${selection.side === "old" ? "기존" : "신규"} ${selection.token} 연결 중...`;
-  event.preventDefault();
-}
-
-function moveSemanticTokenDrag(event) {
-  if (!state.draggingSemanticToken) return;
-  renderDraftSemanticConnector(state.draggingSemanticToken.startPoint, { x: event.clientX, y: event.clientY });
-}
-
-function finishSemanticTokenDrag(event) {
-  if (!state.draggingSemanticToken) return;
-  const start = state.draggingSemanticToken;
-  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".diff-token-match");
-  const end = target ? buildDiffTokenSelection(target) : null;
-  clearDraftSemanticConnector();
-  start.element?.classList.remove("dragging");
-  state.draggingSemanticToken = null;
-
-  if (!end || end.side === start.side) {
-    selectors.compareSemanticLinkStatus.textContent = "반대쪽 diff 토큰 위에 놓아야 연결됩니다.";
-    return;
-  }
-
-  const oldToken = start.side === "old" ? start : end;
-  const newToken = start.side === "new" ? start : end;
-  state.suppressNextDiffClick = true;
-  saveSemanticLinkFromSelections(oldToken, newToken, { keepDiffMode: true });
-}
-
-function buildDiffTokenSelection(token) {
-  const line = token.closest(".diff-line");
-  if (!line) return null;
-  const side = line.dataset.side;
-  if (!["old", "new"].includes(side)) return null;
-  return {
-    side,
-    token: token.dataset.token || token.textContent.trim(),
-    line: line.querySelector(".diff-line-text")?.textContent || "",
-    objectType: line.dataset.objectType || "",
-  };
-}
-
-function centerOfElement(element) {
-  const rect = element.getBoundingClientRect();
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-}
-
 function clearSelectedDiffTokens() {
-  state.selectedDiffTokens = { old: null, new: null };
-  state.draggingSemanticToken = null;
   document.querySelectorAll(".diff-token-match.selected").forEach((item) => item.classList.remove("selected"));
   document.querySelectorAll(".diff-token-match.dragging").forEach((item) => item.classList.remove("dragging"));
-  if (selectors.compareSemanticLinkStatus) selectors.compareSemanticLinkStatus.textContent = "좌우 토큰을 선택하세요.";
-}
-
-function updateCompareSemanticLinkStatus() {
-  const oldToken = state.selectedDiffTokens.old?.token || "-";
-  const newToken = state.selectedDiffTokens.new?.token || "-";
-  selectors.compareSemanticLinkStatus.textContent = `기존 ${oldToken} ↔ 신규 ${newToken}`;
-}
-
-function saveCompareSemanticLink() {
-  const oldToken = state.selectedDiffTokens.old;
-  const newToken = state.selectedDiffTokens.new;
-  if (!oldToken || !newToken) {
-    selectors.compareSemanticLinkStatus.textContent = "기존/신규 토큰을 하나씩 선택하세요.";
-    return;
-  }
-  saveSemanticLinkFromSelections(oldToken, newToken, { keepDiffMode: true });
-}
-
-function saveSemanticLinkFromSelections(oldToken, newToken, options = {}) {
-  const objectType = oldToken.objectType || newToken.objectType || state.selectedProfileObjectType;
-  if (!objectTypes.includes(objectType)) {
-    selectors.compareSemanticLinkStatus.textContent = "객체 타입을 확인할 수 없습니다.";
-    return;
-  }
-  const field = canonicalizeComparableLine(selectors.compareSemanticFieldInput.value || defaultSemanticFieldForType(objectType));
-  const role = selectors.compareSemanticRoleSelect.value;
-  const oldRule = buildSemanticRuleFromDiffToken(oldToken, field, role);
-  const newRule = buildSemanticRuleFromDiffToken(newToken, field, role);
-  if (!oldRule || !newRule) {
-    selectors.compareSemanticLinkStatus.textContent = "선택 토큰에서 의미 규칙을 만들 수 없습니다.";
-    return;
-  }
-
-  const groupId = createId();
-  if (!state.profileDraft.semanticRules[objectType]) state.profileDraft.semanticRules[objectType] = [];
-  state.profileDraft.semanticRules[objectType].push({ ...oldRule, groupId });
-  state.profileDraft.semanticRules[objectType].push({ ...newRule, groupId });
-  selectors.compareSemanticLinkStatus.textContent = `프로파일에 '${field}' 연결 규칙을 추가했습니다.`;
-  state.selectedProfileObjectType = objectType;
-  renderProfileEditor();
-  markProfileDirty();
-  state.compareDirty = true;
-  selectors.compareStatus.textContent = "비교 필요";
-  selectors.lastComparedAt.textContent = "의미 규칙 추가됨 - 다시 비교 필요";
-  if (options.keepDiffMode) showDiffMode();
-}
-
-function buildSemanticRuleFromDiffToken(selection, field, role) {
-  const resolved = resolveSemanticSelection(selection.line, selection.token, field);
-  if (!resolved) return null;
-  return {
-    source: selection.side,
-    field,
-    role,
-    valueType: inferSemanticValueType(resolved.value),
-    selector: resolved.selector,
-    sample: canonicalizeComparableLine(resolved.value),
-  };
 }
 
 function getOptions() {
@@ -3746,7 +3679,7 @@ function detectObjectStart(line, options, source = "old") {
   const semanticDetected = detectSemanticRuleObjectStart(normalized, options, source);
   if (semanticDetected) return semanticDetected;
 
-  const parserDetected = detectParserRuleObjectStart(normalized, options);
+  const parserDetected = detectParserRuleObjectStart(normalized, { ...options, source });
   if (parserDetected) return parserDetected;
 
   const profileDetected = detectProfileObjectStart(normalized, options, source);
@@ -3822,6 +3755,7 @@ function detectParserRuleObjectStart(normalizedLine, options) {
   for (const type of objectTypes) {
     const rules = options.profile?.parserRules?.[type] || [];
     for (const rule of rules) {
+      if (rule.source && rule.source !== "both" && rule.source !== options.source) continue;
       const fields = extractParserRuleFields(normalizedLine, rule);
       if (!fields) continue;
       const objectField = canonicalizeComparableLine(rule.objectField || defaultObjectFieldForType(type));
@@ -4056,7 +3990,7 @@ function extractFallbackCanonicalFields(object, profile = state.profileDraft) {
 }
 
 function buildProfileObjectIdentity(object, options) {
-  const rule = options.profile?.identityRules?.[object.type];
+  const rule = getIdentityRuleForSource(options.profile?.identityRules?.[object.type], object.source || "old", object.type);
   if (!rule || rule.mode === "header") return "";
   const lines = [...object.lines, ...object.rawLines].map(canonicalizeComparableLine);
 
@@ -4074,6 +4008,30 @@ function buildProfileObjectIdentity(object, options) {
   }
 
   return "";
+}
+
+function getIdentityRuleForSource(rule, source, type = state.selectedProfileObjectType) {
+  return normalizeIdentityRuleBySide(rule, type)[source === "new" ? "new" : "old"];
+}
+
+function normalizeIdentityRuleBySide(rule, type = state.selectedProfileObjectType) {
+  const defaults = createDefaultIdentityRuleForType(type);
+  if (!rule || typeof rule !== "object") return defaults;
+  if (rule.old || rule.new) {
+    return {
+      old: normalizeIdentityRuleRecord(rule.old || rule.new, defaults.old),
+      new: normalizeIdentityRuleRecord(rule.new || rule.old, defaults.new),
+    };
+  }
+  const legacy = normalizeIdentityRuleRecord(rule, defaults.old);
+  return { old: { ...legacy }, new: { ...legacy } };
+}
+
+function normalizeIdentityRuleRecord(rule, fallback = { mode: "header", pattern: "" }) {
+  return {
+    mode: ["header", "description", "regex"].includes(rule?.mode) ? rule.mode : fallback.mode,
+    pattern: typeof rule?.pattern === "string" ? rule.pattern : fallback.pattern,
+  };
 }
 
 function extractIdentityByPattern(line, pattern) {
@@ -4341,6 +4299,7 @@ function collectParserRuleFields(object, profile) {
   const rules = profile?.parserRules?.[object.type] || [];
   return object.lines.reduce((fields, line) => {
     for (const rule of rules) {
+      if (rule.source && rule.source !== "both" && rule.source !== object.source) continue;
       const parsed = extractParserRuleFields(line, rule);
       if (parsed) Object.assign(fields, parsed);
     }
@@ -5453,31 +5412,6 @@ function diffLineTextAnchor(line, paneRect, preferredEdge) {
   };
 }
 
-function renderDraftSemanticConnector(startPoint, endPoint) {
-  const svg = selectors.diffConnectorSvg;
-  if (!svg) return;
-  const grid = svg.closest(".editor-grid");
-  grid.classList.add("diff-connectors-active");
-  const gridRect = grid.getBoundingClientRect();
-  const x1 = startPoint.x - gridRect.left;
-  const y1 = startPoint.y - gridRect.top;
-  const x2 = endPoint.x - gridRect.left;
-  const y2 = endPoint.y - gridRect.top;
-  const mid = x1 + (x2 - x1) / 2;
-  const path = `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`;
-  let draft = svg.querySelector(".semantic-draft-connector");
-  if (!draft) {
-    draft = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    draft.setAttribute("class", "semantic-draft-connector");
-    svg.appendChild(draft);
-  }
-  draft.setAttribute("d", path);
-}
-
-function clearDraftSemanticConnector() {
-  selectors.diffConnectorSvg?.querySelector(".semantic-draft-connector")?.remove();
-}
-
 function renderReportV2(report) {
   selectors.summaryCards.innerHTML = [
     ["차이", report.summary.total],
@@ -5494,7 +5428,7 @@ function renderReportV2(report) {
     ? report.visibleItems
         .map(
           (item) => `
-            <li data-type="${item.type}" data-object-key="${escapeHtml(`${item.objectType}:${item.objectName}`)}">
+            <li data-type="${item.type}" data-object-key="${escapeHtml(item.objectKey || `${item.objectType}:${item.objectName}`)}">
               <strong>${escapeHtml(item.objectType)} ${escapeHtml(item.objectName)}</strong>
               <div>${escapeHtml(item.message)}</div>
               <small>기존: ${escapeHtml(item.oldLine)} | 신규: ${escapeHtml(item.newLine)}</small>
@@ -5504,12 +5438,82 @@ function renderReportV2(report) {
         .join("")
     : "<li>현재 필터 기준으로 표시할 차이가 없습니다.</li>";
 
-  selectors.objectList.innerHTML = [...report.oldObjects, ...report.newObjects]
-    .filter((object, index, list) => object.type !== "global" && list.findIndex((candidate) => candidate.key === object.key) === index)
-    .sort(compareObjectIdentity)
-    .map((object) => `<div class="object-item" data-object-key="${escapeHtml(object.key)}"><strong>${escapeHtml(object.type)} ${escapeHtml(object.name)}</strong><span class="small-note">${object.source === "old" ? "기존" : "신규"} | 라인 ${object.startLine}-${object.endLine}</span></div>`)
-    .join("");
+  renderObjectNavigator(false);
   bindDiffObjectNavigation();
+}
+
+function renderObjectNavigator(rebind = true) {
+  if (!selectors.objectList || !state.lastReport) return;
+  const query = canonicalizeComparableLine(selectors.objectSearchInput?.value || "");
+  const sortMode = selectors.objectSortSelect?.value || "identity";
+  const objects = [...state.lastReport.oldObjects, ...state.lastReport.newObjects]
+    .filter((object) => object.type !== "global")
+    .filter((object) => !query || objectSearchText(object).includes(query))
+    .sort((left, right) => compareNavigatorObjects(left, right, sortMode));
+
+  selectors.objectList.innerHTML = objects.length
+    ? objects.map(renderNavigatorObjectItem).join("")
+    : `<div class="small-note">검색 조건에 맞는 객체가 없습니다.</div>`;
+  if (rebind) bindDiffObjectNavigation();
+}
+
+function renderNavigatorObjectItem(object) {
+  const fields = objectFieldEntries(object).slice(0, 8);
+  return `
+    <div class="object-item" data-object-key="${escapeHtml(object.key)}" data-object-source="${escapeHtml(object.source)}">
+      <button type="button" class="object-nav-main" data-object-navigate="${escapeHtml(object.key)}">
+        <strong>${escapeHtml(object.type)} ${escapeHtml(object.name)}</strong>
+        <span class="small-note">${object.source === "old" ? "기존" : "신규"} | 라인 ${object.startLine}-${object.endLine}</span>
+        ${fields.length ? `<span class="object-field-chips">${fields.map(([field, value]) => `<span>${escapeHtml(field)}=${escapeHtml(formatObjectFieldValue(value))}</span>`).join("")}</span>` : ""}
+      </button>
+      <button type="button" class="object-delete-btn" data-object-delete="${escapeHtml(object.key)}" data-object-source="${escapeHtml(object.source)}">삭제</button>
+    </div>
+  `;
+}
+
+function objectFieldEntries(object) {
+  const fields = object?.canonicalFields || object?.fields || {};
+  return Object.entries(fields)
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "")
+    .sort(([left], [right]) => compareSemanticFieldName(left, right));
+}
+
+function formatObjectFieldValue(value) {
+  const text = Array.isArray(value) ? value.join(",") : String(value || "");
+  return text.length > 42 ? `${text.slice(0, 39)}...` : text;
+}
+
+function objectSearchText(object) {
+  const fieldText = objectFieldEntries(object).map(([field, value]) => `${field} ${formatObjectFieldValue(value)}`).join(" ");
+  return canonicalizeComparableLine([
+    object.source,
+    object.type,
+    object.name,
+    object.key,
+    fieldText,
+    ...(object.rawLines || []),
+  ].join(" "));
+}
+
+function compareNavigatorObjects(left, right, sortMode) {
+  if (sortMode === "source") {
+    const sourceRank = (left.source || "").localeCompare(right.source || "");
+    if (sourceRank) return sourceRank;
+    return compareObjectIdentity(left, right);
+  }
+  if (sortMode === "line") {
+    const sourceRank = (left.source || "").localeCompare(right.source || "");
+    if (sourceRank) return sourceRank;
+    return Number(left.startLine || 0) - Number(right.startLine || 0);
+  }
+  if (sortMode === "field") {
+    const leftField = objectFieldEntries(left).map(([field, value]) => `${field}:${formatObjectFieldValue(value)}`).join("|");
+    const rightField = objectFieldEntries(right).map(([field, value]) => `${field}:${formatObjectFieldValue(value)}`).join("|");
+    const fieldRank = leftField.localeCompare(rightField, undefined, { numeric: true });
+    if (fieldRank) return fieldRank;
+    return compareObjectIdentity(left, right);
+  }
+  return compareObjectIdentity(left, right);
 }
 
 function renderReportDetails(item) {
@@ -5536,21 +5540,67 @@ function renderReportDetails(item) {
 }
 
 function bindDiffObjectNavigation() {
-  [selectors.reportList, selectors.objectList].forEach((list) => {
-    list.querySelectorAll("[data-object-key]").forEach((item) => {
-      item.addEventListener("click", () => scrollToDiffObject(item.dataset.objectKey));
+  selectors.reportList.querySelectorAll("[data-object-key]").forEach((item) => {
+    item.addEventListener("click", () => scrollToDiffObject(item.dataset.objectKey));
+  });
+  selectors.objectList.querySelectorAll("[data-object-navigate]").forEach((button) => {
+    button.addEventListener("click", () => scrollToDiffObject(button.dataset.objectNavigate));
+  });
+  selectors.objectList.querySelectorAll("[data-object-delete]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteComparedObject(button.dataset.objectSource, button.dataset.objectDelete);
     });
   });
 }
 
+function deleteComparedObject(source, objectKey) {
+  if (!state.lastReport || !["old", "new"].includes(source) || !objectKey) return;
+  const objects = source === "old" ? state.lastReport.oldObjects : state.lastReport.newObjects;
+  const object = (objects || []).find((candidate) => candidate.key === objectKey);
+  if (!object) return;
+  const label = `${source === "old" ? "기존" : "신규"} ${object.type} ${object.name}`;
+  if (!window.confirm(`${label} 객체를 입력 config에서 삭제할까요?`)) return;
+  const input = source === "old" ? selectors.oldInput : selectors.newInput;
+  const lines = input.value.replace(/\r\n/g, "\n").split("\n");
+  const start = Math.max(0, Number(object.startLine) - 1);
+  const end = Math.max(start, Number(object.endLine) - 1);
+  lines.splice(start, end - start + 1);
+  input.value = lines.join("\n");
+  updateLineNumbers();
+  runCompare();
+}
+
 function scrollToDiffObject(objectKey) {
   if (!objectKey) return;
+  showDiffMode();
   const selector = `[data-object-key="${cssEscape(objectKey)}"]`;
-  const oldTarget = selectors.oldDiffPane.querySelector(selector);
-  const newTarget = selectors.newDiffPane.querySelector(selector);
-  oldTarget?.scrollIntoView({ block: "center", behavior: "smooth" });
-  newTarget?.scrollIntoView({ block: "center", behavior: "smooth" });
+  const oldTarget = findBestDiffObjectTarget(selectors.oldDiffPane, selector);
+  const newTarget = findBestDiffObjectTarget(selectors.newDiffPane, selector);
+  const primary = oldTarget || newTarget;
+  if (!primary) return;
+  const pairIndex = primary.dataset.pairIndex;
+  const pairedOld = pairIndex ? selectors.oldDiffPane.querySelector(`[data-pair-index="${cssEscape(pairIndex)}"]`) : oldTarget;
+  const pairedNew = pairIndex ? selectors.newDiffPane.querySelector(`[data-pair-index="${cssEscape(pairIndex)}"]`) : newTarget;
+  state.syncingDiffScroll = true;
+  scrollPaneToLine(selectors.oldDiffPane, pairedOld || oldTarget || primary);
+  scrollPaneToLine(selectors.newDiffPane, pairedNew || newTarget || primary);
+  state.syncingDiffScroll = false;
   flashObjectLines(objectKey);
+  scheduleDiffConnectorRender();
+}
+
+function findBestDiffObjectTarget(pane, selector) {
+  const targets = [...pane.querySelectorAll(selector)];
+  return targets.find((line) => line.classList.contains("changed") || line.classList.contains("missing") || line.classList.contains("added"))
+    || targets[0]
+    || null;
+}
+
+function scrollPaneToLine(pane, line) {
+  if (!pane || !line) return;
+  const targetTop = line.offsetTop - Math.max(0, (pane.clientHeight - line.clientHeight) / 2);
+  pane.scrollTop = Math.max(0, targetTop);
 }
 
 function flashObjectLines(objectKey) {
@@ -5883,6 +5933,7 @@ async function loadSelectedSession() {
   if (!session) return;
   selectors.oldInput.value = session.oldConfig;
   selectors.newInput.value = session.newConfig;
+  captureInitialConfigSnapshot(true);
   updateLineNumbers();
   if (session.profileId) {
     const profiles = await readRecords("profiles", "configWorkbenchProfiles");
@@ -6144,6 +6195,7 @@ function normalizeParserRules(value) {
     if (!Array.isArray(value[type])) return;
     base[type] = value[type]
       .map((item, index) => ({
+        source: ["old", "new", "both"].includes(item.source) ? item.source : "both",
         pattern: typeof item.pattern === "string" ? item.pattern : "",
         objectField: canonicalizeComparableLine(item.objectField || defaultObjectFieldForType(type)),
         message: typeof item.message === "string" ? item.message : "",
@@ -6176,10 +6228,7 @@ function normalizeIdentityRules(value) {
   if (!value || typeof value !== "object") return base;
   objectTypes.forEach((type) => {
     if (value[type] && typeof value[type] === "object") {
-      base[type] = {
-        mode: ["header", "description", "regex"].includes(value[type].mode) ? value[type].mode : "header",
-        pattern: typeof value[type].pattern === "string" ? value[type].pattern : "",
-      };
+      base[type] = normalizeIdentityRuleBySide(value[type], type);
     }
   });
   return base;

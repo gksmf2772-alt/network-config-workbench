@@ -7,3 +7,5 @@ backup_*/
 *.log
 *.tmp
 *.dmp
+node_modules/
+dist/

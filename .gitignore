@@ -1,0 +1,9 @@
+.edge-profile/
+Crashpad/
+backup_*/
+예제 및 테스트 설정/
+새대화용.txt
+
+*.log
+*.tmp
+*.dmp

@@ -11,6 +11,7 @@ export default function ConfigEditor({ side, title }) {
           <span id={`${prefix}Meta`}>파일 없음</span>
         </div>
         <div className="header-actions">
+          <button id={`restore${cap}Btn`} type="button">원복</button>
           <button id={`move${cap}UpBtn`} type="button">위로</button>
           <button id={`move${cap}DownBtn`} type="button">아래로</button>
           <button id={`clear${cap}Btn`} type="button">비우기</button>
@@ -23,6 +24,7 @@ export default function ConfigEditor({ side, title }) {
         <textarea id={`${prefix}ConfigInput`} spellCheck="false" wrap="off" />
         <div id={`${prefix}DiffPane`} className="embedded-diff" />
       </div>
+      <div id={`${prefix}DiffObjectToolbar`} className="diff-object-toolbar" hidden />
     </article>
   );
 }

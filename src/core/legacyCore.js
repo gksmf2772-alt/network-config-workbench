@@ -37,6 +37,8 @@ const selectors = {
   moveOldDownBtn: document.querySelector("#moveOldDownBtn"),
   moveNewUpBtn: document.querySelector("#moveNewUpBtn"),
   moveNewDownBtn: document.querySelector("#moveNewDownBtn"),
+  restoreOldBtn: document.querySelector("#restoreOldBtn"),
+  restoreNewBtn: document.querySelector("#restoreNewBtn"),
   clearOldBtn: document.querySelector("#clearOldBtn"),
   clearNewBtn: document.querySelector("#clearNewBtn"),
   clearAllBtn: document.querySelector("#clearAllBtn"),
@@ -48,8 +50,11 @@ const selectors = {
   exportReportBtn: document.querySelector("#exportReportBtn"),
   summaryTabBtn: document.querySelector("#summaryTabBtn"),
   objectsTabBtn: document.querySelector("#objectsTabBtn"),
+  overviewTabBtn: document.querySelector("#overviewTabBtn"),
   summaryResultPanel: document.querySelector("#summaryResultPanel"),
   objectsResultPanel: document.querySelector("#objectsResultPanel"),
+  overviewResultPanel: document.querySelector("#overviewResultPanel"),
+  overviewReport: document.querySelector("#overviewReport"),
   objectSearchInput: document.querySelector("#objectSearchInput"),
   objectSortSelect: document.querySelector("#objectSortSelect"),
   restoreInitialBtn: document.querySelector("#restoreInitialBtn"),
@@ -58,6 +63,8 @@ const selectors = {
   objectList: document.querySelector("#objectList"),
   oldDiffPane: document.querySelector("#oldDiffPane"),
   newDiffPane: document.querySelector("#newDiffPane"),
+  oldDiffObjectToolbar: document.querySelector("#oldDiffObjectToolbar"),
+  newDiffObjectToolbar: document.querySelector("#newDiffObjectToolbar"),
   diffConnectorSvg: document.querySelector("#diffConnectorSvg"),
   profileNameInput: document.querySelector("#profileNameInput"),
   vendorSelect: document.querySelector("#vendorSelect"),
@@ -151,6 +158,7 @@ const state = {
   draggingProfileToken: null,
   suppressNextPreviewTokenClick: false,
   pendingSemanticMapping: null,
+  activeDiffObjectKey: "",
   profileDraft: createDefaultProfile(),
 };
 
@@ -415,9 +423,12 @@ function bindEvents() {
   selectors.exportReportBtn.addEventListener("click", exportReport);
   selectors.summaryTabBtn?.addEventListener("click", () => setResultTab("summary"));
   selectors.objectsTabBtn?.addEventListener("click", () => setResultTab("objects"));
+  selectors.overviewTabBtn?.addEventListener("click", () => setResultTab("overview"));
   selectors.objectSearchInput?.addEventListener("input", renderObjectNavigator);
   selectors.objectSortSelect?.addEventListener("input", renderObjectNavigator);
   selectors.restoreInitialBtn?.addEventListener("click", restoreInitialConfigSnapshot);
+  selectors.restoreOldBtn?.addEventListener("click", () => restoreInitialConfigSnapshot("old"));
+  selectors.restoreNewBtn?.addEventListener("click", () => restoreInitialConfigSnapshot("new"));
 
   selectors.saveOldBtn.addEventListener("click", () => saveTextFile("old-config.txt", selectors.oldInput.value));
   selectors.saveNewBtn.addEventListener("click", () => saveTextFile("new-config.txt", selectors.newInput.value));
@@ -516,9 +527,9 @@ function bindEvents() {
   selectors.fontSelect.addEventListener("input", saveUiPreferences);
 }
 
-function setActiveTab(tab) {
-  if (tab === "compare" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 탭으로 이동")) return;
-  if (tab === "summary" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 요약 탭으로 이동")) return;
+function setActiveTab(tab, options = {}) {
+  if (!options.skipConfirm && tab === "compare" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 탭으로 이동")) return false;
+  if (!options.skipConfirm && tab === "summary" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 요약 탭으로 이동")) return false;
   hideProfileRulePopover();
   const compare = tab === "compare";
   const profiles = tab === "profiles";
@@ -530,6 +541,7 @@ function setActiveTab(tab) {
   selectors.profilesTab.classList.toggle("active", profiles);
   selectors.summaryTab?.classList.toggle("active", summary);
   if (summary) renderObjectNavigator();
+  return true;
 }
 
 function renderObjectToggles() {
@@ -3075,16 +3087,20 @@ function captureInitialConfigSnapshot(force = false) {
   };
 }
 
-function restoreInitialConfigSnapshot() {
+function restoreInitialConfigSnapshot(side = "all") {
   if (!state.initialConfigSnapshot) {
     selectors.compareStatus.textContent = "원복할 초기값 없음";
     return;
   }
-  selectors.oldInput.value = state.initialConfigSnapshot.oldConfig;
-  selectors.newInput.value = state.initialConfigSnapshot.newConfig;
+  if (side === "old" || side === "all") selectors.oldInput.value = state.initialConfigSnapshot.oldConfig;
+  if (side === "new" || side === "all") selectors.newInput.value = state.initialConfigSnapshot.newConfig;
   updateLineNumbers();
   markCompareStale();
   selectors.compareStatus.textContent = "초기값 원복 완료";
+}
+
+function resetInitialConfigSnapshot() {
+  state.initialConfigSnapshot = null;
 }
 
 function updateLineNumbers() {
@@ -3093,6 +3109,7 @@ function updateLineNumbers() {
 }
 
 function clearConfigInput(target) {
+  resetInitialConfigSnapshot();
   if (target === "old" || target === "all") {
     selectors.oldInput.value = "";
     selectors.oldMeta.textContent = "파일 없음";
@@ -3122,10 +3139,11 @@ function toggleCompareControls() {
 }
 
 function setResultTab(tabName) {
-  const target = tabName === "objects" ? "objects" : "summary";
+  const target = ["summary", "objects", "overview"].includes(tabName) ? tabName : "summary";
   [
     [selectors.summaryTabBtn, selectors.summaryResultPanel, "summary"],
     [selectors.objectsTabBtn, selectors.objectsResultPanel, "objects"],
+    [selectors.overviewTabBtn, selectors.overviewResultPanel, "overview"],
   ].forEach(([button, panel, name]) => {
     const active = name === target;
     button?.classList.toggle("active", active);
@@ -4617,7 +4635,7 @@ function buildEssentialItems(oldMap, newMap) {
     ].forEach(([field, label]) => {
       const oldHasField = hasComparableField(oldObject, field);
       const newHasField = hasComparableField(newObject, field);
-      if (!oldHasField || !newHasField) {
+      if (oldHasField !== newHasField) {
         items.push(simpleRequired("static-route", `${oldObject.name} ${label}`, `static-route 필수 요소 '${label}'가 양쪽 config에 모두 있어야 합니다.`));
       }
     });
@@ -4655,6 +4673,7 @@ function buildPolicyRequiredItems(oldObject, newObject, profile) {
     if (!field || !["required", "presence", "conditional"].includes(policy.policy)) return [];
     const oldHasField = hasObjectField(oldObject, field, profile);
     const newHasField = hasObjectField(newObject, field, profile);
+    if (!oldHasField && !newHasField) return [];
     const violated = policy.policy === "required"
       ? !newHasField
       : policy.policy === "presence"
@@ -5324,6 +5343,8 @@ function renderDiff(rows) {
     clearSelectedDiffTokens();
     selectors.oldDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.oldRow || null, row?.oldState || "placeholder", row?.newRow || null, index, "old")).join("");
     selectors.newDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.newRow || null, row?.newState || "placeholder", row?.oldRow || null, index, "new")).join("");
+    renderDiffObjectToolbars();
+    if (state.activeDiffObjectKey) highlightObjectLines(state.activeDiffObjectKey);
     scheduleDiffConnectorRender();
   } catch (error) {
     console.error("renderDiff failed", error);
@@ -5424,22 +5445,69 @@ function renderReportV2(report) {
     .map(([label, value]) => `<div class="summary-card"><strong>${value}</strong><span>${label}</span></div>`)
     .join("");
 
-  selectors.reportList.innerHTML = report.visibleItems.length
-    ? report.visibleItems
-        .map(
-          (item) => `
-            <li data-type="${item.type}" data-object-key="${escapeHtml(item.objectKey || `${item.objectType}:${item.objectName}`)}">
-              <strong>${escapeHtml(item.objectType)} ${escapeHtml(item.objectName)}</strong>
-              <div>${escapeHtml(item.message)}</div>
-              <small>기존: ${escapeHtml(item.oldLine)} | 신규: ${escapeHtml(item.newLine)}</small>
-            </li>
-          `,
-        )
-        .join("")
-    : "<li>현재 필터 기준으로 표시할 차이가 없습니다.</li>";
+  selectors.reportList.innerHTML = renderGroupedReportItems(report.visibleItems);
 
   renderObjectNavigator(false);
+  renderOverviewReport(report);
   bindDiffObjectNavigation();
+}
+
+function renderGroupedReportItems(items = []) {
+  if (!items.length) return `<div class="small-note">현재 필터 기준으로 표시할 차이가 없습니다.</div>`;
+  const groups = items.reduce((result, item) => {
+    const key = item.objectKey || `${item.objectType}:${item.objectName}`;
+    if (!result.has(key)) result.set(key, { key, objectType: item.objectType, objectName: item.objectName, items: [] });
+    result.get(key).items.push(item);
+    return result;
+  }, new Map());
+  return [...groups.values()].map((group) => `
+    <section class="report-object-group" data-object-key="${escapeHtml(group.key)}">
+      <button type="button" class="report-object-header" data-object-navigate="${escapeHtml(group.key)}">
+        <strong>${escapeHtml(group.objectType)} ${escapeHtml(group.objectName)}</strong>
+        <span>${group.items.length}건</span>
+      </button>
+      <div class="report-object-details">
+        ${group.items.map(renderReportItemRow).join("")}
+      </div>
+    </section>
+  `).join("");
+}
+
+function renderReportItemRow(item) {
+  const details = (item.details || []).length ? item.details : [{
+    field: item.field || "",
+    rule: item.message || item.type,
+    oldText: item.oldLine || "-",
+    newText: item.newLine || "-",
+  }];
+  return `
+    <div class="report-item-row" data-type="${escapeHtml(item.type)}" data-object-key="${escapeHtml(item.objectKey || `${item.objectType}:${item.objectName}`)}">
+      <div class="report-item-title">${escapeHtml(reportTypeLabel(item.type))}: ${escapeHtml(item.message || "")}</div>
+      ${details.map((detail) => `
+        <div class="report-field-diff">
+          <span class="field-name">${escapeHtml(detail.field || "-")}</span>
+          <code class="old-value">기존 ${escapeHtml(compactReportValue(detail.oldText))}</code>
+          <span class="diff-arrow">↔</span>
+          <code class="new-value">신규 ${escapeHtml(compactReportValue(detail.newText))}</code>
+        </div>
+      `).join("")}
+      <small>라인: 기존 ${escapeHtml(item.oldLine || "-")} / 신규 ${escapeHtml(item.newLine || "-")}</small>
+    </div>
+  `;
+}
+
+function reportTypeLabel(type) {
+  return ({
+    changed: "변경",
+    missing: "누락",
+    added: "추가",
+    required: "필수 규칙",
+    syntax: "문법 의심",
+  })[type] || type;
+}
+
+function compactReportValue(value) {
+  return String(value || "-").replace(/\s+/g, " ").trim();
 }
 
 function renderObjectNavigator(rebind = true) {
@@ -5448,13 +5516,25 @@ function renderObjectNavigator(rebind = true) {
   const sortMode = selectors.objectSortSelect?.value || "identity";
   const objects = [...state.lastReport.oldObjects, ...state.lastReport.newObjects]
     .filter((object) => object.type !== "global")
-    .filter((object) => !query || objectSearchText(object).includes(query))
+    .filter((object) => !query || objectMatchesSearch(object, query))
     .sort((left, right) => compareNavigatorObjects(left, right, sortMode));
 
   selectors.objectList.innerHTML = objects.length
     ? objects.map(renderNavigatorObjectItem).join("")
     : `<div class="small-note">검색 조건에 맞는 객체가 없습니다.</div>`;
   if (rebind) bindDiffObjectNavigation();
+}
+
+function objectMatchesSearch(object, query) {
+  const text = objectSearchText(object);
+  const compact = compactSearchText(text);
+  return query.split(/\s+/).filter(Boolean).every((part) => {
+    const normalizedPart = canonicalizeComparableLine(part);
+    const compactPart = compactSearchText(normalizedPart);
+    return text.includes(normalizedPart)
+      || compact.includes(compactPart)
+      || objectSearchTokens(object).some((token) => token.includes(normalizedPart) || compactSearchText(token).includes(compactPart));
+  });
 }
 
 function renderNavigatorObjectItem(object) {
@@ -5493,6 +5573,17 @@ function objectSearchText(object) {
     fieldText,
     ...(object.rawLines || []),
   ].join(" "));
+}
+
+function objectSearchTokens(object) {
+  return objectSearchText(object)
+    .split(/[^a-z0-9./:-]+/i)
+    .map(canonicalizeComparableLine)
+    .filter(Boolean);
+}
+
+function compactSearchText(value) {
+  return canonicalizeComparableLine(value).replace(/[^a-z0-9./:-]+/g, "");
 }
 
 function compareNavigatorObjects(left, right, sortMode) {
@@ -5540,8 +5631,8 @@ function renderReportDetails(item) {
 }
 
 function bindDiffObjectNavigation() {
-  selectors.reportList.querySelectorAll("[data-object-key]").forEach((item) => {
-    item.addEventListener("click", () => scrollToDiffObject(item.dataset.objectKey));
+  selectors.reportList.querySelectorAll("[data-object-navigate], [data-object-key]").forEach((item) => {
+    item.addEventListener("click", () => scrollToDiffObject(item.dataset.objectNavigate || item.dataset.objectKey));
   });
   selectors.objectList.querySelectorAll("[data-object-navigate]").forEach((button) => {
     button.addEventListener("click", () => scrollToDiffObject(button.dataset.objectNavigate));
@@ -5552,6 +5643,108 @@ function bindDiffObjectNavigation() {
       deleteComparedObject(button.dataset.objectSource, button.dataset.objectDelete);
     });
   });
+}
+
+function renderOverviewReport(report) {
+  if (!selectors.overviewReport) return;
+  const objects = [...(report.oldObjects || []), ...(report.newObjects || [])].filter((object) => object.type !== "global");
+  const byType = groupBy(objects, (object) => object.type);
+  selectors.overviewReport.innerHTML = `
+    <section class="overview-section">
+      <h3>요약</h3>
+      <div class="overview-grid overview-summary-grid">
+        <div class="overview-card"><strong>${report.summary.total}</strong><span>전체 차이</span></div>
+        <div class="overview-card"><strong>${report.summary.changed}</strong><span>변경 객체</span></div>
+        <div class="overview-card"><strong>${report.summary.missing}</strong><span>누락</span></div>
+        <div class="overview-card"><strong>${report.summary.added}</strong><span>추가</span></div>
+      </div>
+    </section>
+    <section class="overview-section">
+      <h3>객체 수</h3>
+      <div class="overview-grid">
+        ${[...byType.entries()].sort(([left], [right]) => objectTypeRank(left) - objectTypeRank(right)).map(([type, list]) => {
+          const oldCount = list.filter((object) => object.source === "old").length;
+          const newCount = list.filter((object) => object.source === "new").length;
+          return `<div class="overview-card"><strong>${escapeHtml(type)}</strong><span>기존 ${oldCount}개 / 신규 ${newCount}개</span></div>`;
+        }).join("") || `<div class="small-note">비교 결과가 없습니다.</div>`}
+      </div>
+    </section>
+    <section class="overview-section">
+      <h3>주요 필드 분포</h3>
+      ${renderFieldDistributionSummary(objects)}
+    </section>
+  `;
+}
+
+function renderFieldDistributionSummary(objects) {
+  const rows = [];
+  objects.forEach((object) => {
+    objectFieldEntries(object).forEach(([field, value]) => {
+      if (!["route", "next-hop", "tag", "description", "admin-state", "state", "port", "lag", "interface", "address"].includes(field)) return;
+      rows.push({ source: object.source, type: object.type, field, value: formatObjectFieldValue(value) });
+    });
+  });
+  const grouped = [...groupBy(rows, (row) => `${row.type}|${row.field}|${row.value}`).entries()]
+    .map(([key, list]) => {
+      const [type, field, value] = key.split("|");
+      return {
+        type,
+        field,
+        value,
+        oldCount: list.filter((row) => row.source === "old").length,
+        newCount: list.filter((row) => row.source === "new").length,
+      };
+    })
+    .sort((left, right) => (right.oldCount + right.newCount) - (left.oldCount + left.newCount))
+    .slice(0, 18);
+  return grouped.length
+    ? `<div class="overview-chip-list">${grouped.map((row) => `<span><strong>${escapeHtml(row.type)}</strong> ${escapeHtml(row.field)}=${escapeHtml(row.value)} · 기존 ${row.oldCount} / 신규 ${row.newCount}</span>`).join("")}</div>`
+    : `<div class="small-note">요약할 필드가 없습니다.</div>`;
+}
+
+function renderFieldDistribution(objects) {
+  const rows = [];
+  objects.forEach((object) => {
+    objectFieldEntries(object).forEach(([field, value]) => {
+      rows.push({
+        source: object.source,
+        type: object.type,
+        field,
+        value: formatObjectFieldValue(value),
+      });
+    });
+  });
+  const grouped = groupBy(rows, (row) => `${row.type}|${row.field}|${row.value}`);
+  return `
+    <div class="overview-table">
+      <div class="overview-table-head">타입</div>
+      <div class="overview-table-head">필드</div>
+      <div class="overview-table-head">값</div>
+      <div class="overview-table-head">기존</div>
+      <div class="overview-table-head">신규</div>
+      ${[...grouped.entries()].sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true })).map(([key, list]) => {
+        const [type, field, value] = key.split("|");
+        const oldCount = list.filter((row) => row.source === "old").length;
+        const newCount = list.filter((row) => row.source === "new").length;
+        return `
+          <div>${escapeHtml(type)}</div>
+          <div>${escapeHtml(field)}</div>
+          <div><code>${escapeHtml(value)}</code></div>
+          <div>${oldCount}</div>
+          <div>${newCount}</div>
+        `;
+      }).join("") || `<div class="small-note">인식된 필드가 없습니다.</div>`}
+    </div>
+  `;
+}
+
+function groupBy(items, keyFn) {
+  return items.reduce((result, item) => {
+    const key = keyFn(item);
+    if (!result.has(key)) result.set(key, []);
+    result.get(key).push(item);
+    return result;
+  }, new Map());
 }
 
 function deleteComparedObject(source, objectKey) {
@@ -5571,9 +5764,44 @@ function deleteComparedObject(source, objectKey) {
   runCompare();
 }
 
+function moveComparedObject(source, objectKey, direction) {
+  if (!state.lastReport || !["old", "new"].includes(source) || !objectKey) return;
+  const objects = (source === "old" ? state.lastReport.oldObjects : state.lastReport.newObjects)
+    .filter((object) => object.type !== "global")
+    .sort((left, right) => Number(left.startLine || 0) - Number(right.startLine || 0));
+  const index = objects.findIndex((object) => object.key === objectKey);
+  const swapIndex = index + direction;
+  if (index < 0 || swapIndex < 0 || swapIndex >= objects.length) return;
+  const input = source === "old" ? selectors.oldInput : selectors.newInput;
+  const lines = input.value.replace(/\r\n/g, "\n").split("\n");
+  const current = objects[index];
+  const target = objects[swapIndex];
+  const blocks = [current, target]
+    .sort((left, right) => Number(right.startLine) - Number(left.startLine))
+    .map((object) => ({
+      object,
+      start: Math.max(0, Number(object.startLine) - 1),
+      end: Math.max(0, Number(object.endLine) - 1),
+    }));
+  const extracted = new Map();
+  blocks.forEach(({ object, start, end }) => {
+    extracted.set(object.key, lines.splice(start, end - start + 1));
+  });
+  const insertAt = Math.max(0, Math.min(current.startLine, target.startLine) - 1);
+  const ordered = direction < 0 ? [current, target] : [target, current];
+  lines.splice(insertAt, 0, ...ordered.flatMap((object) => extracted.get(object.key) || []));
+  input.value = lines.join("\n");
+  updateLineNumbers();
+  state.activeDiffObjectKey = objectKey;
+  runCompare();
+  scrollToDiffObject(objectKey);
+}
+
 function scrollToDiffObject(objectKey) {
   if (!objectKey) return;
+  setActiveTab("compare", { skipConfirm: true });
   showDiffMode();
+  state.activeDiffObjectKey = objectKey;
   const selector = `[data-object-key="${cssEscape(objectKey)}"]`;
   const oldTarget = findBestDiffObjectTarget(selectors.oldDiffPane, selector);
   const newTarget = findBestDiffObjectTarget(selectors.newDiffPane, selector);
@@ -5586,7 +5814,7 @@ function scrollToDiffObject(objectKey) {
   scrollPaneToLine(selectors.oldDiffPane, pairedOld || oldTarget || primary);
   scrollPaneToLine(selectors.newDiffPane, pairedNew || newTarget || primary);
   state.syncingDiffScroll = false;
-  flashObjectLines(objectKey);
+  highlightObjectLines(objectKey);
   scheduleDiffConnectorRender();
 }
 
@@ -5603,11 +5831,13 @@ function scrollPaneToLine(pane, line) {
   pane.scrollTop = Math.max(0, targetTop);
 }
 
-function flashObjectLines(objectKey) {
+function highlightObjectLines(objectKey) {
+  document.querySelectorAll(".object-active").forEach((line) => line.classList.remove("object-active"));
   const selector = `[data-object-key="${cssEscape(objectKey)}"]`;
   const lines = [...selectors.oldDiffPane.querySelectorAll(selector), ...selectors.newDiffPane.querySelectorAll(selector)];
   lines.forEach((line) => {
     line.classList.remove("object-flash");
+    line.classList.add("object-active");
     void line.offsetWidth;
     line.classList.add("object-flash");
   });
@@ -5627,6 +5857,48 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
   if (row?.objectMatched) classes.push("object-matched", `object-color-${objectColorIndex(row.objectKey)}`);
   if (row?.ignoredVisual) classes.push("ignored-visual");
   return `<div class="${classes.join(" ")}" data-pair-index="${pairIndex}" data-side="${side}" data-object-type="${escapeHtml(objectType)}" data-object-key="${escapeHtml(row?.objectKey || "")}" data-diff-key="${escapeHtml(key)}" data-semantic-field="${escapeHtml(row?.semanticField || "")}"><div class="diff-line-number">${row ? row.number : ""}</div><div class="diff-line-text">${row ? highlightSharedTokens(row.text || "", counterpart?.text || "", objectType, counterpartType, row.semanticField || "", counterpart?.semanticField || "", row.highlights || []) : "&nbsp;"}</div></div>`;
+}
+
+function renderDiffObjectToolbars() {
+  renderDiffObjectToolbar("old");
+  renderDiffObjectToolbar("new");
+}
+
+function renderDiffObjectToolbar(source) {
+  const toolbar = source === "old" ? selectors.oldDiffObjectToolbar : selectors.newDiffObjectToolbar;
+  const objects = state.lastReport ? (source === "old" ? state.lastReport.oldObjects : state.lastReport.newObjects) : [];
+  if (!toolbar) return;
+  if (!objects.length) {
+    toolbar.hidden = true;
+    toolbar.innerHTML = "";
+    return;
+  }
+  toolbar.hidden = false;
+  toolbar.innerHTML = `
+    <div class="diff-object-toolbar-title">${source === "old" ? "기존" : "신규"} 객체</div>
+    <div class="diff-object-actions">
+      ${objects.filter((object) => object.type !== "global").map((object) => `
+        <div class="diff-object-action-row">
+          <button type="button" data-diff-object-jump="${escapeHtml(object.key)}">${escapeHtml(object.type)} ${escapeHtml(object.name)}</button>
+          <button type="button" data-diff-object-up="${escapeHtml(object.key)}">위</button>
+          <button type="button" data-diff-object-down="${escapeHtml(object.key)}">아래</button>
+          <button type="button" data-diff-object-delete="${escapeHtml(object.key)}" data-object-source="${source}">삭제</button>
+        </div>
+      `).join("")}
+    </div>
+  `;
+  toolbar.querySelectorAll("[data-diff-object-jump]").forEach((button) => {
+    button.addEventListener("click", () => scrollToDiffObject(button.dataset.diffObjectJump));
+  });
+  toolbar.querySelectorAll("[data-diff-object-delete]").forEach((button) => {
+    button.addEventListener("click", () => deleteComparedObject(button.dataset.objectSource, button.dataset.diffObjectDelete));
+  });
+  toolbar.querySelectorAll("[data-diff-object-up]").forEach((button) => {
+    button.addEventListener("click", () => moveComparedObject(source, button.dataset.diffObjectUp, -1));
+  });
+  toolbar.querySelectorAll("[data-diff-object-down]").forEach((button) => {
+    button.addEventListener("click", () => moveComparedObject(source, button.dataset.diffObjectDown, 1));
+  });
 }
 
 function highlightSharedTokens(text, counterpartText, objectType = "", counterpartObjectType = "", semanticField = "", counterpartSemanticField = "", highlights = []) {

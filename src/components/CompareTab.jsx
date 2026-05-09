@@ -71,18 +71,18 @@ export default function CompareTab() {
         </aside>
 
         <section className="compare-area">
-          <div className="editor-grid">
-            <ConfigEditor side="old" title="기존 Config" />
-            <ConfigEditor side="new" title="신규 Config" />
-            <svg id="diffConnectorSvg" className="diff-connector-overlay" aria-hidden="true" />
-          </div>
-
           <div className="action-bar">
             <button id="compareBtn" type="button">비교 실행</button>
             <button id="alignBtn" type="button">객체 정렬</button>
             <button id="restoreInitialBtn" type="button">초기값 원복</button>
             <button id="exportReportBtn" type="button">리포트 저장</button>
             <button id="clearAllBtn" type="button">전체 비우기</button>
+          </div>
+
+          <div className="editor-grid">
+            <ConfigEditor side="old" title="기존 Config" />
+            <ConfigEditor side="new" title="신규 Config" />
+            <svg id="diffConnectorSvg" className="diff-connector-overlay" aria-hidden="true" />
           </div>
         </section>
       </div>

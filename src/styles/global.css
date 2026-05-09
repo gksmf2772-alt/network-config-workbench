@@ -451,7 +451,7 @@ h3 {
 }
 
 .compare-area {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: calc(100vh - 150px);
 }
 
@@ -736,7 +736,7 @@ label {
 .code-frame {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
-  height: calc(100vh - 250px);
+  height: calc(100vh - 220px);
   min-height: 620px;
   border-top: 1px solid var(--line);
   background: var(--code-bg);
@@ -815,6 +815,146 @@ textarea {
   border-radius: 0 0 8px 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.report-list {
+  padding-left: 0;
+}
+
+.report-object-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.report-object-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.report-object-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.report-object-details,
+.report-item-row {
+  display: grid;
+  gap: 6px;
+}
+
+.report-item-row {
+  padding: 8px;
+  border-left: 3px solid var(--line);
+  background: var(--panel-muted);
+}
+
+.report-item-row[data-type="changed"] { border-left-color: var(--warning); }
+.report-item-row[data-type="missing"] { border-left-color: var(--danger); }
+.report-item-row[data-type="added"] { border-left-color: var(--success); }
+.report-item-row[data-type="required"] { border-left-color: var(--primary); }
+
+.report-item-title {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-field-diff {
+  display: grid;
+  grid-template-columns: minmax(90px, 150px) minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.field-name {
+  color: var(--primary-strong);
+  font-weight: 700;
+}
+
+.old-value,
+.new-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-arrow {
+  color: var(--muted);
+}
+
+.overview-report,
+.overview-section {
+  display: grid;
+  gap: 12px;
+}
+
+.overview-section h3 {
+  margin: 0;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.overview-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.overview-table {
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) minmax(90px, 140px) minmax(140px, 1fr) 70px 70px;
+  gap: 1px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.overview-table > div {
+  padding: 7px 8px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.overview-table-head {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.overview-summary-grid .overview-card strong {
+  font-size: 22px;
+}
+
+.overview-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overview-chip-list span {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-muted);
+  font-size: 12px;
 }
 
 .object-tools {
@@ -1376,6 +1516,49 @@ textarea {
 
 .diff-line.object-flash {
   animation: objectFlash 1.4s ease-out;
+}
+
+.diff-line.object-active {
+  background: rgba(14, 116, 144, 0.13);
+  box-shadow: inset 3px 0 0 var(--primary-strong);
+}
+
+.diff-object-toolbar {
+  display: grid;
+  gap: 8px;
+  max-height: 150px;
+  overflow: auto;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-muted);
+}
+
+.diff-object-toolbar[hidden] {
+  display: none;
+}
+
+.diff-object-toolbar-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.diff-object-actions {
+  display: grid;
+  gap: 5px;
+}
+
+.diff-object-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 5px;
+  align-items: center;
+}
+
+.diff-object-action-row button {
+  min-height: 26px;
+  padding: 4px 7px;
+  font-size: 12px;
 }
 
 @keyframes objectFlash {

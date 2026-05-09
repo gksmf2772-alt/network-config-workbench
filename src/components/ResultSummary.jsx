@@ -2,18 +2,21 @@ import React from "react";
 
 export default function ResultSummary() {
   return (
-    <section className="result-layout compact top-result-tabs">
-      <div className="result-tabs" role="tablist" aria-label="비교 결과">
+    <section className="result-layout compact">
+      <div className="result-tabs" role="tablist" aria-label="비교 요약">
         <button id="summaryTabBtn" className="result-tab active" type="button" data-result-tab="summary" role="tab" aria-selected="true">
-          비교 요약
+          차이 요약
         </button>
         <button id="objectsTabBtn" className="result-tab" type="button" data-result-tab="objects" role="tab" aria-selected="false">
           객체 이동/검색
         </button>
+        <button id="overviewTabBtn" className="result-tab" type="button" data-result-tab="overview" role="tab" aria-selected="false">
+          통합 리포트
+        </button>
       </div>
       <article id="summaryResultPanel" className="result-panel active" data-result-panel="summary" role="tabpanel">
         <div id="summaryCards" className="summary-grid" />
-        <ol id="reportList" className="report-list" />
+        <div id="reportList" className="report-list grouped-report-list" />
       </article>
       <article id="objectsResultPanel" className="result-panel" data-result-panel="objects" role="tabpanel" hidden>
         <div className="object-tools">
@@ -26,6 +29,9 @@ export default function ResultSummary() {
           </select>
         </div>
         <div id="objectList" className="object-list" />
+      </article>
+      <article id="overviewResultPanel" className="result-panel" data-result-panel="overview" role="tabpanel" hidden>
+        <div id="overviewReport" className="overview-report" />
       </article>
     </section>
   );

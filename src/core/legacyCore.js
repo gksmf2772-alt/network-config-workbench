@@ -1570,7 +1570,7 @@ function renderIdentityRuleSide(side, rule) {
       </label>
       <label>
         추출 정규식
-        <input data-identity-side="${side}" data-identity-key="pattern" value="${escapeHtml(rule.pattern || "")}" placeholder='예: ##\\s*(.*?)\\s*## 또는 ^route\\s+([^\\s{]+)' />
+        <input data-identity-side="${side}" data-identity-key="pattern" value="${escapeHtml(rule.pattern || "")}" placeholder='예: /configure { router "Base" bgp neighbor 또는 ^neighbor\\s+([^\\s{]+)' />
       </label>
     </div>
   `;
@@ -3377,6 +3377,42 @@ function handleCompareError(error) {
   }
 }
 
+function hasLeadingIndent(rawLine = "") {
+  return /^\s+/.test(String(rawLine || ""));
+}
+
+function isObjectTerminatorLine(normalizedLine = "") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  return line === "exit" || line === "}" || line === "!";
+}
+
+function isInsideConfigBlock(current) {
+  return Boolean(current && current.type && current.type !== "global");
+}
+
+/**
+ * 현재 객체가 열려 있는 상태에서, 이번 라인을 새 객체로 분리하지 않고
+ * 현재 객체의 하위 설정으로 유지할지 판단한다.
+ *
+ * 핵심 원칙:
+ * - Classic/IOS 계열에서 들여쓰기 된 라인은 현재 section/block의 하위 설정이다.
+ * - 하위 설정 라인이 port/interface/route/neighbor 같은 키워드로 시작해도 새 객체로 분리하지 않는다.
+ * - exit/!/} 는 현재 객체 종료 라인이므로 현재 객체에 포함시킨 뒤 flush한다.
+ */
+function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
+  if (!isInsideConfigBlock(current)) return false;
+
+  const line = canonicalizeComparableLine(normalizedLine);
+  if (!line) return true;
+
+  if (isObjectTerminatorLine(line)) return true;
+
+  // 가장 중요한 공통 규칙: 들여쓰기 된 라인은 현재 객체 내부 설정이다.
+  if (hasLeadingIndent(rawLine)) return true;
+
+  return false;
+}
+
 function parseConfig(text, options, source) {
   try {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -3390,6 +3426,18 @@ function parseConfig(text, options, source) {
 
   lines.forEach((rawLine, index) => {
     const normalized = normalizeLine(rawLine, options);
+
+    // 현재 객체 내부의 하위 설정 라인은 canonical object / detected object로 분리하지 않는다.
+    if (shouldKeepLineInCurrentObject(current, rawLine, normalized)) {
+      current.lines.push(normalized);
+      current.rawLines.push(rawLine);
+
+      if (isObjectTerminatorLine(normalized)) {
+        flushCurrent();
+      }
+
+      return;
+    }
 
     const canonicalObject = buildCanonicalObject(rawLine, options, source, index + 1);
     if (canonicalObject) {
@@ -3412,6 +3460,7 @@ function parseConfig(text, options, source) {
       };
       return;
     }
+
     if (!current) current = { type: "global", sourceType: "global", name: "global", key: "global:global", startLine: index + 1, lines: [], rawLines: [] };
     current.lines.push(normalized);
     current.rawLines.push(rawLine);
@@ -3445,6 +3494,119 @@ function tokenizeConfigLine(line) {
     });
   }
   return tokens;
+}
+
+function extractGenericSemanticField(line = "") {
+  const source = String(line || "").trim();
+  if (!source) return null;
+
+  const normalizedSource = stripConfigureEnvelope(source);
+  const normalized = canonicalizeComparableLine(normalizedSource);
+
+  if (!normalized || normalized === "exit" || normalized === "}") {
+    return null;
+  }
+
+  if (/\bno\s+shutdown\b/i.test(normalizedSource)) {
+    return {
+      field: "state",
+      value: "enabled",
+      token: "no shutdown",
+      role: "terminal",
+    };
+  }
+
+  if (/\badmin-state\s+enable\b/i.test(normalizedSource)) {
+    return {
+      field: "state",
+      value: "enabled",
+      token: "admin-state",
+      role: "terminal",
+    };
+  }
+
+  if (/\badmin-state\s+disable\b/i.test(normalizedSource)) {
+    return {
+      field: "state",
+      value: "disabled",
+      token: "admin-state",
+      role: "terminal",
+    };
+  }
+
+  if (/^shutdown$/i.test(normalizedSource) || /\bshutdown\b/i.test(normalizedSource)) {
+    return {
+      field: "state",
+      value: "disabled",
+      token: "shutdown",
+      role: "terminal",
+    };
+  }
+
+  const parsedTokens = tokenizeConfigLine(normalizedSource);
+  const tokens = parsedTokens
+    .map((item) => item.token)
+    .filter(Boolean);
+
+  if (!tokens.length) return null;
+
+  const contextKeywords = new Set([
+    "configure",
+    "router",
+    "service",
+    "vprn",
+    "ies",
+    "base",
+    "bgp",
+    "neighbor",
+    "interface",
+    "port",
+    "lag",
+    "static-routes",
+    "route",
+    "static-route-entry",
+    "family",
+    "ipv4",
+    "ipv6",
+    "unit",
+  ]);
+
+  const terminalKeywords = new Set(Object.keys(commonFieldAliases));
+
+  let fieldIndex = -1;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = canonicalizeComparableLine(tokens[i]);
+
+    if (!terminalKeywords.has(token)) continue;
+
+    const isLikelyContext =
+      contextKeywords.has(token) &&
+      i + 1 < tokens.length &&
+      !terminalKeywords.has(canonicalizeComparableLine(tokens[i + 1]));
+
+    if (isLikelyContext && i < tokens.length - 2) {
+      continue;
+    }
+
+    fieldIndex = i;
+  }
+
+  if (fieldIndex < 0) {
+    fieldIndex = 0;
+  }
+
+  const rawField = tokens[fieldIndex];
+  const field = normalizeFieldName(rawField);
+  const valueTokens = tokens.slice(fieldIndex + 1);
+  const value = valueTokens.join(" ");
+
+  return {
+    field,
+    value,
+    token: rawField,
+    role: "terminal",
+  };
 }
 
 function buildCanonicalObject(rawLine, options, source, lineNumber = 1) {
@@ -3524,9 +3686,15 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
 
   if (!objectType || objectType === "bgp") {
     setField("neighbor", normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/)?.[1]);
-    setField("peer-as", normalized.match(/\bpeer-as\s+([^"\s{}]+)/)?.[1]);
+    setField("peer-as", normalized.match(/\b(?:peer-as|remote-as)\s+([^"\s{}]+)/)?.[1]);
     setField("authentication-key", normalized.match(/\bauthentication-key\s+"?([^"\s{}]+)"?/)?.[1]);
     setField("description", extractDescriptionValue(line));
+    setField("group", normalized.match(/\bgroup\s+"?([^"\s{}]+)"?/)?.[1]);
+
+    if (/\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
+    if (/\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
+    if (/\bno\s+shutdown\b/.test(normalized)) setField("state", "enabled");
+    if (/^shutdown$|\bshutdown\b/.test(normalized)) setField("state", "disabled");
   }
 
   const objectProfile = profile?.objects?.[objectType];
@@ -3535,6 +3703,11 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
     const value = extractSemanticFieldFromLine(normalized, rule, field, profile?.normalize);
     if (value) fields[field] = value;
   });
+
+  const genericField = extractGenericSemanticField(line);
+  if (genericField?.field) {
+    setField(genericField.field, genericField.value || genericField.token);
+  }
 
   return fields;
 }
@@ -3593,6 +3766,62 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
       add("state", "disabled", "disable", "terminal");
     }
   }
+  if (!objectType || objectType === "bgp") {
+    const neighbor = normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/);
+    if (neighbor) {
+      add("neighbor", neighbor[1], "neighbor", "context");
+      add("neighbor", neighbor[1], neighbor[1], "context");
+      add("neighbor", neighbor[1], `"${neighbor[1]}"`, "context");
+    }
+
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "description", "terminal");
+      add("description", description, description, "terminal");
+      add("description", description, `"${description}"`, "terminal");
+    }
+
+    const auth = normalized.match(/\bauthentication-key\s+"?([^"\s{}]+)"?/);
+    if (auth) {
+      add("authentication-key", auth[1], "authentication-key", "terminal");
+      add("authentication-key", auth[1], auth[1], "terminal");
+      add("authentication-key", auth[1], `"${auth[1]}"`, "terminal");
+    }
+
+    const group = normalized.match(/\bgroup\s+"?([^"\s{}]+)"?/);
+    if (group) {
+      add("group", group[1], "group", "terminal");
+      add("group", group[1], group[1], "terminal");
+      add("group", group[1], `"${group[1]}"`, "terminal");
+    }
+
+    const peerAs = normalized.match(/\b(?:peer-as|remote-as)\s+([^"\s{}]+)/);
+    if (peerAs) {
+      add("peer-as", peerAs[1], "peer-as", "terminal");
+      add("peer-as", peerAs[1], peerAs[1], "terminal");
+    }
+
+    if (/\badmin-state\s+enable\b/.test(normalized)) {
+      add("state", "enabled", "admin-state", "terminal");
+      add("state", "enabled", "enable", "terminal");
+    }
+
+    if (/\badmin-state\s+disable\b/.test(normalized)) {
+      add("state", "disabled", "admin-state", "terminal");
+      add("state", "disabled", "disable", "terminal");
+    }
+  }
+  const genericField = extractGenericSemanticField(source);
+
+  if (genericField?.field) {
+    add(genericField.field, genericField.value || genericField.token, genericField.token, "terminal");
+
+    if (genericField.value) {
+      add(genericField.field, genericField.value, genericField.value, "terminal");
+      add(genericField.field, genericField.value, `"${genericField.value}"`, "terminal");
+    }
+  }
+
   return occurrences;
 }
 
@@ -4009,8 +4238,18 @@ function extractFallbackCanonicalFields(object, profile = state.profileDraft) {
 
 function buildProfileObjectIdentity(object, options) {
   const rule = getIdentityRuleForSource(options.profile?.identityRules?.[object.type], object.source || "old", object.type);
-  if (!rule || rule.mode === "header") return "";
   const lines = [...object.lines, ...object.rawLines].map(canonicalizeComparableLine);
+
+  if (!rule) return "";
+  if (rule.mode === "header") {
+    if (!rule.pattern) return "";
+    const headerLines = [lines[0], ...lines].filter(Boolean);
+    for (const line of headerLines) {
+      const identity = extractHeaderIdentityByPattern(line, rule.pattern);
+      if (identity) return identity;
+    }
+    return "";
+  }
 
   if (rule.mode === "description") {
     const descriptionLine = lines.find((line) => /^description\s+/.test(line));
@@ -4026,6 +4265,32 @@ function buildProfileObjectIdentity(object, options) {
   }
 
   return "";
+}
+
+function extractHeaderIdentityByPattern(line, pattern) {
+  const normalizedLine = canonicalizeComparableLine(line);
+  const normalizedPattern = canonicalizeComparableLine(pattern);
+  if (!normalizedLine || !normalizedPattern) return "";
+
+  const regexIdentity = extractIdentityByPattern(normalizedLine, pattern);
+  if (regexIdentity && regexIdentity !== canonicalizeIdentity(normalizedPattern)) return regexIdentity;
+
+  const prefixIdentity = extractIdentityAfterLiteralPrefix(normalizedLine, normalizedPattern);
+  if (prefixIdentity) return prefixIdentity;
+
+  const loosePrefix = normalizedPattern.replace(/[{}"]/g, " ").replace(/\s+/g, " ").trim();
+  const looseLine = normalizedLine.replace(/[{}"]/g, " ").replace(/\s+/g, " ").trim();
+  return extractIdentityAfterLiteralPrefix(looseLine, loosePrefix);
+}
+
+function extractIdentityAfterLiteralPrefix(line, prefix) {
+  const normalizedLine = canonicalizeComparableLine(line);
+  const normalizedPrefix = canonicalizeComparableLine(prefix);
+  const index = normalizedLine.indexOf(normalizedPrefix);
+  if (index < 0) return "";
+  const rest = normalizedLine.slice(index + normalizedPrefix.length).trim();
+  const token = rest.match(/^["']?([^"'\s{}]+)["']?/)?.[1] || "";
+  return canonicalizeIdentity(stripTrailingSyntax(token));
 }
 
 function getIdentityRuleForSource(rule, source, type = state.selectedProfileObjectType) {
@@ -4949,13 +5214,60 @@ const semanticFieldOrder = [
   "neighbor",
   "interface",
   "description",
+  "authentication-key",
+  "group",
+  "peer-as",
   "next-hop",
   "tag",
   "state",
   "admin-state",
-  "authentication-key",
-  "group",
 ];
+
+const commonFieldAliases = {
+  "admin-state": "state",
+  "shutdown": "state",
+  "no shutdown": "state",
+  "description": "description",
+  "authentication-key": "authentication-key",
+  "auth-key": "authentication-key",
+  "group": "group",
+  "peer-as": "peer-as",
+  "remote-as": "peer-as",
+  "next-hop": "next-hop",
+  "nexthop": "next-hop",
+  "tag": "tag",
+  "preference": "preference",
+  "metric": "metric",
+  "address": "address",
+  "ip-address": "address",
+  "ipv4": "address",
+  "ipv6": "address",
+  "mtu": "mtu",
+  "mode": "mode",
+  "encap-type": "encap-type",
+  "speed": "speed",
+  "duplex": "duplex",
+  "vlan": "vlan",
+  "sap": "sap",
+  "port": "port",
+  "neighbor": "neighbor",
+  "interface": "interface",
+  "lag": "lag",
+  "route": "route",
+  "static-route-entry": "route",
+};
+
+function stripConfigureEnvelope(line = "") {
+  return String(line)
+    .replace(/^\/configure\s*\{\s*/i, "")
+    .replace(/\s*\}\s*$/i, "")
+    .trim();
+}
+
+function normalizeFieldName(field = "") {
+  const normalized = canonicalizeComparableLine(String(field).trim());
+  return commonFieldAliases[normalized] || normalized;
+}
 
 function buildSemanticObjectDiffRows(oldText, newText, options) {
   const oldObjects = parseConfig(oldText, { ...options, sortObjects: false }, "old").filter((object) => object.type !== "global");
@@ -4983,21 +5295,123 @@ function buildSemanticObjectDiffRows(oldText, newText, options) {
 function buildMatchedObjectDiffRows(oldObject, newObject) {
   const oldRows = buildObjectVisualRows(oldObject);
   const newRows = buildObjectVisualRows(newObject);
+
+  if (shouldUseSemanticFieldAlignment(oldObject, newObject, oldRows, newRows)) {
+    return buildSemanticFieldAlignedObjectDiffRows(oldObject, newObject, oldRows, newRows);
+  }
+
   const pairs = alignLineArrays(oldRows, newRows);
   const changedFields = changedCanonicalFieldSet(oldObject, newObject);
 
   return pairs.map(([oldIndex, newIndex]) => {
     const oldRow = oldIndex === null ? null : oldRows[oldIndex];
     const newRow = newIndex === null ? null : newRows[newIndex];
-    const oldChanged = rowTouchesChangedField(oldRow, changedFields);
-    const newChanged = rowTouchesChangedField(newRow, changedFields);
-    return {
-      oldRow,
-      newRow,
-      oldState: !oldRow ? "placeholder" : !newRow ? "missing" : oldChanged || newChanged ? "changed" : "equal",
-      newState: !newRow ? "placeholder" : !oldRow ? "added" : oldChanged || newChanged ? "changed" : "equal",
-    };
+    return buildObjectDiffPair(oldRow, newRow, changedFields);
   });
+}
+
+function shouldUseSemanticFieldAlignment(oldObject, newObject, oldRows, newRows) {
+  const oldFields = Object.keys(oldObject?.canonicalFields || {});
+  const newFields = Object.keys(newObject?.canonicalFields || {});
+
+  if (oldFields.length || newFields.length) return true;
+
+  return [...oldRows, ...newRows].some((row) => {
+    const field = getPrimarySemanticField(row);
+    return Boolean(field && !["unknown", "exit"].includes(field));
+  });
+}
+
+function buildSemanticFieldAlignedObjectDiffRows(oldObject, newObject, oldRows, newRows) {
+  const changedFields = changedCanonicalFieldSet(oldObject, newObject);
+  const oldFieldRows = groupRowsBySemanticField(oldRows);
+  const newFieldRows = groupRowsBySemanticField(newRows);
+  const fields = orderedObjectVisualFields(oldObject, newObject, oldFieldRows, newFieldRows);
+  const rows = [];
+
+  fields.forEach((field) => {
+    const oldItems = oldFieldRows.get(field) || [];
+    const newItems = newFieldRows.get(field) || [];
+    const max = Math.max(oldItems.length, newItems.length);
+
+    for (let index = 0; index < max; index += 1) {
+      const oldRow = oldItems[index] || null;
+      const newRow = newItems[index] || null;
+      rows.push(buildObjectDiffPair(oldRow, newRow, changedFields));
+    }
+  });
+
+  return rows;
+}
+
+function buildObjectDiffPair(oldRow, newRow, changedFields) {
+  const oldChanged = rowTouchesChangedField(oldRow, changedFields);
+  const newChanged = rowTouchesChangedField(newRow, changedFields);
+
+  return {
+    oldRow,
+    newRow,
+    oldState: !oldRow ? "placeholder" : !newRow ? "missing" : oldChanged || newChanged ? "changed" : "equal",
+    newState: !newRow ? "placeholder" : !oldRow ? "added" : oldChanged || newChanged ? "changed" : "equal",
+  };
+}
+
+function groupRowsBySemanticField(rows) {
+  const result = new Map();
+
+  rows.forEach((row, index) => {
+    const field = getPrimarySemanticField(row) || `raw:${index}`;
+    if (!result.has(field)) result.set(field, []);
+    result.get(field).push(row);
+  });
+
+  return result;
+}
+
+function orderedObjectVisualFields(oldObject, newObject, oldFieldRows, newFieldRows) {
+  const fields = new Set([
+    ...Object.keys(oldObject?.canonicalFields || {}),
+    ...Object.keys(newObject?.canonicalFields || {}),
+    ...oldFieldRows.keys(),
+    ...newFieldRows.keys(),
+  ]);
+
+  return [...fields]
+    .filter((field) => field && field !== "unknown")
+    .sort(compareSemanticVisualFieldName);
+}
+
+function compareSemanticVisualFieldName(left, right) {
+  const leftRank = semanticFieldOrder.indexOf(left);
+  const rightRank = semanticFieldOrder.indexOf(right);
+  const normalizedLeft = leftRank >= 0 ? leftRank : semanticFieldOrder.length;
+  const normalizedRight = rightRank >= 0 ? rightRank : semanticFieldOrder.length;
+
+  if (normalizedLeft !== normalizedRight) return normalizedLeft - normalizedRight;
+  return String(left).localeCompare(String(right));
+}
+
+function getPrimarySemanticField(row) {
+  if (!row) return "";
+
+  const highlights = Array.isArray(row.highlights) ? row.highlights : [];
+  const fields = highlights
+    .map((highlight) => canonicalizeComparableLine(highlight.field || ""))
+    .filter(Boolean);
+
+  if (fields.length) {
+    const objectKeyFields = new Set(["route", "neighbor", "interface", "port", "lag"]);
+
+    const compareField = fields
+      .filter((field) => !objectKeyFields.has(field))
+      .sort(compareSemanticVisualFieldName)[0];
+
+    if (compareField) return compareField;
+
+    return fields.sort(compareSemanticVisualFieldName)[0];
+  }
+
+  return canonicalizeComparableLine(row.semanticField || inferSemanticFieldName(row.text || ""));
 }
 
 function buildObjectVisualRows(object) {
@@ -5165,7 +5579,15 @@ function buildSemanticDiffRows(text, options, source) {
   return lines.map((rawLine, index) => {
     const normalized = normalizeLine(rawLine, options);
     const detected = detectObjectStart(normalized, options, source);
-    if (detected) {
+    const currentStub = {
+      type: currentType,
+      sourceType: currentType,
+      key: currentObjectKey,
+    };
+
+    const keepInCurrent = shouldKeepLineInCurrentObject(currentStub, rawLine, normalized);
+
+    if (detected && !keepInCurrent) {
       currentType = source === "new" ? mapNewObjectTypeToOld(detected.type, options.profile.mappings) : detected.type;
       currentObjectKey = buildObjectKey(detected.type, detected.name, source, options.profile.mappings);
     }

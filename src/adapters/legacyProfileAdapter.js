@@ -1,6 +1,9 @@
+import { ensureVendorPresetFields } from "../core/vendorPresets.js";
+
 export function normalizeLegacyProfile(profile) {
   if (!profile || typeof profile !== "object") return profile;
-  return {
+
+  const normalizedProfile = {
     ...profile,
     schemaVersion: profile.schemaVersion || 1,
     lineMappings: profile.lineMappings || {},
@@ -8,6 +11,8 @@ export function normalizeLegacyProfile(profile) {
     semanticNodeGroups: profile.semanticNodeGroups || {},
     semanticLineGroups: profile.semanticLineGroups || {},
   };
+
+  return ensureVendorPresetFields(normalizedProfile);
 }
 
 export function serializeLegacyProfile(profile) {

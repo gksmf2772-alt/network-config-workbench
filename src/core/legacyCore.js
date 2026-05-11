@@ -1,4 +1,12 @@
-﻿const objectTypes = ["port", "lag", "interface", "static-route", "pim", "bgp"];
+﻿import {
+  DEFAULT_VENDOR_PRESET_ID,
+  getDefaultVendorPreset,
+  getVendorPresetByLegacyVendor,
+  buildVendorPresetSnapshot,
+  ensureVendorPresetFields,
+} from "./vendorPresets.js";
+
+const objectTypes = ["port", "lag", "interface", "static-route", "pim", "bgp"];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
 
 const selectors = {
@@ -183,10 +191,27 @@ const defaultSamples = {
 };
 
 function createDefaultProfile() {
+  const defaultPreset = getDefaultVendorPreset();
+
   return {
     id: null,
-    name: "Nokia 기본 검증",
-    vendor: "nokia",
+    name: "새 프로파일",
+
+    // 기존 legacyCore.js 호환용
+    vendor: defaultPreset.legacyVendor,
+
+    // 신규 vendor preset 구조
+    vendorPresetId: defaultPreset.id,
+    oldVendor: defaultPreset.oldVendor,
+    newVendor: defaultPreset.newVendor,
+    vendorPreset: {
+      id: defaultPreset.id,
+      label: defaultPreset.label,
+      oldVendor: defaultPreset.oldVendor,
+      newVendor: defaultPreset.newVendor,
+      legacyVendor: defaultPreset.legacyVendor,
+    },
+
     mappings: objectTypes.map((type) => ({ oldType: type, newType: type })),
     objects: createDefaultSemanticObjects(),
     normalize: createDefaultNormalizeRules(),
@@ -207,11 +232,17 @@ function createDefaultProfile() {
 }
 
 function createEmptyProfile(vendor = state.profileDraft?.vendor || "nokia") {
+  const preset = getVendorPresetByLegacyVendor(vendor);
+
   return {
     ...createDefaultProfile(),
     id: null,
     name: "새 프로파일",
-    vendor,
+    vendor: preset.legacyVendor,
+    vendorPresetId: preset.id,
+    oldVendor: preset.oldVendor,
+    newVendor: preset.newVendor,
+    vendorPreset: buildVendorPresetSnapshot(preset),
     semanticMappings: Object.fromEntries(objectTypes.map((type) => [type, []])),
     semanticNodeGroups: createEmptyRulesByType(),
     semanticLineGroups: createEmptyRulesByType(),
@@ -512,7 +543,16 @@ function bindEvents() {
   });
   selectors.vendorSelect.addEventListener("input", () => {
     pushProfileUndoSnapshot("profile-vendor");
-    state.profileDraft.vendor = selectors.vendorSelect.value;
+
+    const legacyVendor = selectors.vendorSelect.value;
+    const preset = getVendorPresetByLegacyVendor(legacyVendor);
+
+    state.profileDraft.vendor = preset.legacyVendor;
+    state.profileDraft.vendorPresetId = preset.id;
+    state.profileDraft.oldVendor = preset.oldVendor;
+    state.profileDraft.newVendor = preset.newVendor;
+    state.profileDraft.vendorPreset = buildVendorPresetSnapshot(preset);
+
     markProfileDirty("Profile", "수정", "벤더");
     markCompareStale();
   });
@@ -553,6 +593,9 @@ function renderObjectToggles() {
 
 function renderProfileEditor() {
   hideProfileRulePopover();
+
+  state.profileDraft = ensureVendorPresetFields(state.profileDraft);
+
   ensureProfileExamples(state.profileDraft);
   selectors.profileNameInput.value = state.profileDraft.name;
   selectors.vendorSelect.value = state.profileDraft.vendor;
@@ -7143,6 +7186,7 @@ async function refreshProfileSelect() {
 }
 
 async function saveProfile() {
+  state.profileDraft = ensureVendorPresetFields(state.profileDraft);
   saveCurrentProfileExamples();
   const targetId = state.profileDraft.id || state.activeProfileId || null;
   const record = {
@@ -7164,6 +7208,7 @@ async function saveProfile() {
 }
 
 async function saveProfileAs() {
+  state.profileDraft = ensureVendorPresetFields(state.profileDraft);
   saveCurrentProfileExamples();
   const record = {
     ...state.profileDraft,

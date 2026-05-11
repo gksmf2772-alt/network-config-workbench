@@ -1,2 +1,22 @@
-// Transitional module. Normalizer functions currently live in legacyCore.js and will be extracted here incrementally.
-export {};
+// src/core/normalizer.js
+
+import {
+  createParserContext,
+  parseConfigByVendor,
+} from "./parsers/index.js";
+
+export function normalizeConfig({
+  vendor,
+  profile,
+  configText,
+  side = "old",
+}) {
+  const context = createParserContext({
+    vendor,
+    profile,
+    configText,
+    side,
+  });
+
+  return parseConfigByVendor(context);
+}

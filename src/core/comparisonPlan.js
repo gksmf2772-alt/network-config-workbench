@@ -1,5 +1,6 @@
 // src/core/comparisonPlan.js
 import { compareObjectPlanLines } from "./lineDiff.js";
+import { applyFieldPolicies } from "./fieldPolicy.js";
 
 function getObjectType(match) {
   return (
@@ -21,6 +22,9 @@ function getRawLines(object) {
 }
 
 function inferMatchKeyFields(match) {
+  if (Array.isArray(match.matchKeyFields) && match.matchKeyFields.length) {
+    return match.matchKeyFields;
+  }
   const fields = [];
 
   if (match.reason === "prefix") {
@@ -88,11 +92,154 @@ function collectTokenMatchesFromLineMatches(lineMatches = []) {
   return tokenMatches;
 }
 
+function collectObjectLevelFieldMatches({
+  oldObject,
+  newObject,
+  existingTokenMatches = [],
+}) {
+  const results = [];
+
+  const oldFields = collectObjectFields(oldObject);
+  const newFields = collectObjectFields(newObject);
+
+  // line 단위 비교에서 이미 나온 field라도 object-level field summary에서는 다시 검증한다.
+  // Cisco 1-line static route ↔ Nokia multi-line route 같은 1:N 구조 보정을 위해 필요.
+  const alreadyComparedFields = new Set();
+
+  for (const [field, oldField] of Object.entries(oldFields)) {
+    if (!isVisibleCompareField(field)) continue;
+    if (alreadyComparedFields.has(field)) continue;
+
+    const newField = newFields[field];
+
+    if (!newField) {
+      results.push({
+        field,
+        status: "missing",
+        oldValue: oldField.value,
+        newValue: null,
+        oldRawValue: oldField.rawValue,
+        newRawValue: null,
+        oldLine: null,
+        newLine: null,
+        sourceReason: "object-field-missing",
+      });
+      continue;
+    }
+
+    if (String(oldField.value) === String(newField.value)) {
+      results.push({
+        field,
+        status: "equal",
+        oldValue: oldField.value,
+        newValue: newField.value,
+        oldRawValue: oldField.rawValue,
+        newRawValue: newField.rawValue,
+        oldLine: null,
+        newLine: null,
+        sourceReason: "object-field-equal",
+      });
+    } else {
+      results.push({
+        field,
+        status: "changed",
+        oldValue: oldField.value,
+        newValue: newField.value,
+        oldRawValue: oldField.rawValue,
+        newRawValue: newField.rawValue,
+        oldLine: null,
+        newLine: null,
+        sourceReason: "object-field-changed",
+      });
+    }
+  }
+
+  for (const [field, newField] of Object.entries(newFields)) {
+    if (!isVisibleCompareField(field)) continue;
+    if (alreadyComparedFields.has(field)) continue;
+    if (oldFields[field]) continue;
+
+    results.push({
+      field,
+      status: "added",
+      oldValue: null,
+      newValue: newField.value,
+      oldRawValue: null,
+      newRawValue: newField.rawValue,
+      oldLine: null,
+      newLine: null,
+      sourceReason: "object-field-added",
+    });
+  }
+
+  return results;
+}
+
+function collectObjectFields(object) {
+  const fields = {};
+
+  if (!object || typeof object !== "object") return fields;
+
+  const candidateFields = {
+    description: object.description,
+
+    // UI/fieldSummary에서는 address 하나로 통일
+    address: object.prefix || object.ipAddress,
+
+    peerIp: object.peerIp,
+    "peer-as": object.peerAs,
+  };
+
+  for (const [field, value] of Object.entries(candidateFields)) {
+    if (value == null || value === "") continue;
+
+    fields[field] = {
+      field,
+      value,
+      rawValue: value,
+    };
+  }
+
+  if (object.fields && typeof object.fields === "object") {
+    for (const [field, value] of Object.entries(object.fields)) {
+      if (value == null || value === "") continue;
+      if (fields[field]) continue;
+      if (!isVisibleCompareField(field)) continue;
+
+      fields[field] = {
+        field,
+        value,
+        rawValue: value,
+      };
+    }
+  }
+
+  return fields;
+}
+
+const VISIBLE_COMPARE_FIELDS = new Set([
+  "description",
+  "address",
+  "admin-state",
+  "state",
+  "peer-as",
+  "peerIp",
+  "neighbor",
+  "route",
+  "next-hop",
+  "tag",
+]);
+
+function isVisibleCompareField(field) {
+  return VISIBLE_COMPARE_FIELDS.has(field);
+}
+
 export function createFieldSummary(tokenMatches = []) {
   const summary = {};
 
   for (const tokenMatch of tokenMatches) {
     const field = tokenMatch.field || "unknown";
+    if (!isVisibleCompareField(field)) continue;
 
     if (!summary[field]) {
       summary[field] = {
@@ -134,12 +281,28 @@ export function createFieldSummary(tokenMatches = []) {
   for (const field of Object.keys(summary)) {
     const item = summary[field];
 
-    if (item.changed > 0) {
+    const oldValueSet = new Set(item.oldValues.map((value) => String(value)));
+    const newValueSet = new Set(item.newValues.map((value) => String(value)));
+
+    const hasOldValues = oldValueSet.size > 0;
+    const hasNewValues = newValueSet.size > 0;
+
+    const sameValueSet =
+      hasOldValues &&
+      hasNewValues &&
+      oldValueSet.size === newValueSet.size &&
+      [...oldValueSet].every((value) => newValueSet.has(value));
+
+    if (sameValueSet) {
+      item.status = "equal";
+    } else if (item.changed > 0) {
       item.status = "changed";
-    } else if (item.missing > 0) {
+    } else if (item.missing > 0 && !hasNewValues) {
       item.status = "missing";
-    } else if (item.added > 0) {
+    } else if (item.added > 0 && !hasOldValues) {
       item.status = "added";
+    } else if (item.missing > 0 || item.added > 0) {
+      item.status = "changed";
     } else {
       item.status = "equal";
     }
@@ -178,13 +341,32 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
     profile
   );
 
-  const tokenMatches = collectTokenMatchesFromLineMatches(lineMatches);
-  const fieldSummary = createFieldSummary(tokenMatches);
+  const lineTokenMatches = collectTokenMatchesFromLineMatches(lineMatches);
+
+  const objectFieldMatches = collectObjectLevelFieldMatches({
+    oldObject: match.oldObject,
+    newObject: match.newObject,
+    existingTokenMatches: lineTokenMatches,
+  });
+
+  const tokenMatches = [
+    ...lineTokenMatches,
+    ...objectFieldMatches,
+  ];
+
+  const rawFieldSummary = createFieldSummary(tokenMatches);
+
+  const policyResult = applyFieldPolicies({
+    objectType,
+    fieldSummary: rawFieldSummary,
+    profile,
+  });
+
+  const fieldSummary = policyResult.fieldSummary;
   const fieldStats = summarizeFieldSummary(fieldSummary);
 
   return {
     id: getComparePlanId(match, index),
-
     status: match.status,
     reason: match.reason,
     score: match.score,
@@ -198,14 +380,15 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
     newLines,
 
     matchKeyFields: inferMatchKeyFields(match),
-
     lineCompareMode: inferLineCompareMode(match),
 
     lineMatches,
-
     tokenMatches,
     fieldSummary,
     fieldStats,
+
+    policyViolations: policyResult.violations,
+    policyViolationCount: policyResult.violationCount,
 
     warnings: [],
   };

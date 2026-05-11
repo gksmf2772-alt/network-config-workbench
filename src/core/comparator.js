@@ -30,3 +30,13 @@ export {
   createFieldSummary,
   summarizeFieldSummary,
 } from "./comparisonPlan.js";
+
+export {
+  getFieldPoliciesForObjectType,
+  getPolicyForField,
+  applyFieldPolicies,
+} from "./fieldPolicy.js";
+
+export {
+  renderComparisonPlanHtml,
+} from "./compareRenderer.js";

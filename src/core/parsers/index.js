@@ -97,9 +97,6 @@ export function parseConfigByVendor(context) {
     case PARSER_IDS.NOKIA_CLASSIC:
       return createParserResult(context);
 
-    case PARSER_IDS.NOKIA_MD_CLI:
-      return createParserResult(context);
-
     default:
       context.warnings.push(
         `Unknown parser vendor: ${context.vendor}`

@@ -47,6 +47,13 @@ export function extractComparableFieldsFromLine(line) {
       rawValue: trimmed,
       rawLine: line,
     });
+
+    fields.push({
+      field: "state",
+      value: "enabled",
+      rawValue: trimmed,
+      rawLine: line,
+    });
   }
 
   if (/^shutdown$/i.test(trimmed) || /^admin-state\s+disable$/i.test(trimmed)) {
@@ -54,6 +61,79 @@ export function extractComparableFieldsFromLine(line) {
       field: "admin-state",
       value: "disabled",
       rawValue: trimmed,
+      rawLine: line,
+    });
+
+    fields.push({
+      field: "state",
+      value: "disabled",
+      rawValue: trimmed,
+      rawLine: line,
+    });
+  }
+
+  const ciscoStaticRoute = trimmed.match(
+    /^ip\s+route\s+(\S+)\s+(\S+)\s+(\S+)(.*)$/i
+  );
+
+  if (ciscoStaticRoute) {
+    const [, destination, mask, nextHop, rest] = ciscoStaticRoute;
+    const prefix = normalizeIpv4Prefix(destination, mask);
+
+    fields.push({
+      field: "route",
+      value: prefix || `${destination}/${mask}`,
+      rawValue: `${destination} ${mask}`,
+      rawLine: line,
+    });
+
+    fields.push({
+      field: "next-hop",
+      value: nextHop,
+      rawValue: nextHop,
+      rawLine: line,
+    });
+
+    const tag = rest.match(/\btag\s+(\S+)/i);
+    if (tag) {
+      fields.push({
+        field: "tag",
+        value: tag[1],
+        rawValue: tag[1],
+        rawLine: line,
+      });
+    }
+  }
+
+  const nokiaStaticRoute = trimmed.match(
+    /^route\s+"?([^"\s{]+)"?(?:\s+route-type\s+\S+)?\s*\{/i
+  );
+
+  if (nokiaStaticRoute) {
+    fields.push({
+      field: "route",
+      value: nokiaStaticRoute[1],
+      rawValue: nokiaStaticRoute[1],
+      rawLine: line,
+    });
+  }
+
+  const nokiaNextHop = trimmed.match(/^next-hop\s+"?([^"\s{]+)"?/i);
+  if (nokiaNextHop) {
+    fields.push({
+      field: "next-hop",
+      value: nokiaNextHop[1],
+      rawValue: nokiaNextHop[1],
+      rawLine: line,
+    });
+  }
+
+  const tagLine = trimmed.match(/^tag\s+(\S+)$/i);
+  if (tagLine) {
+    fields.push({
+      field: "tag",
+      value: tagLine[1],
+      rawValue: tagLine[1],
       rawLine: line,
     });
   }

@@ -185,15 +185,13 @@ function parseMdCliInterfaces(lines) {
 }
 
 function parseMdCliStaticRoutes(lines) {
-  const objects = [];
+  const blocks = collectBraceBlocks(
+    lines,
+    /^route\s+"?([^"\s{]+)"?(?:\s+route-type\s+\S+)?\s*\{/i
+  );
 
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-
-    const match = trimmed.match(/^route\s+"?([^"\s{]+)"?(?:\s+route-type\s+\S+)?\s*\{/i);
-    if (!match) return;
-
-    const prefix = stripQuotes(match[1]);
+  return blocks.map((block, index) => {
+    const prefix = stripQuotes(block.name);
 
     const object = createNormalizedObject({
       id: `nokia-md-static-route-${index}-${prefix}`,
@@ -202,7 +200,7 @@ function parseMdCliStaticRoutes(lines) {
       sourceName: prefix,
       normalizedType: "static-route",
       normalizedIdentity: prefix,
-      rawLines: [line],
+      rawLines: block.lines,
       fields: {
         route: prefix,
       },
@@ -210,10 +208,30 @@ function parseMdCliStaticRoutes(lines) {
 
     object.prefix = prefix;
 
-    objects.push(object);
-  });
+    for (const line of block.lines) {
+      const trimmed = line.trim();
 
-  return objects;
+      const nextHop = trimmed.match(/^next-hop\s+"?([^"\s{]+)"?/i);
+      if (nextHop) {
+        object.fields["next-hop"] = nextHop[1];
+      }
+
+      const tag = trimmed.match(/^tag\s+(\S+)$/i);
+      if (tag) {
+        object.fields.tag = tag[1];
+      }
+
+      if (/^admin-state\s+enable$/i.test(trimmed)) {
+        object.fields.state = "enabled";
+      }
+
+      if (/^admin-state\s+disable$/i.test(trimmed)) {
+        object.fields.state = "disabled";
+      }
+    }
+
+    return object;
+  });
 }
 
 function parseMdCliBgpNeighbors(lines) {

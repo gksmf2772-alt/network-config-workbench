@@ -51,6 +51,67 @@ function hasComparableFieldOverlap(oldLine, newLine) {
   return oldFields.some((item) => newFieldNames.has(item.field));
 }
 
+function scoreLineSimilarity(oldLine, newLine, profile = {}) {
+  const oldNorm = normalizeLine(oldLine);
+  const newNorm = normalizeLine(newLine);
+
+  if (!oldNorm && !newNorm) return 0;
+  if (oldNorm === newNorm) return 100;
+
+  const semanticRule = findSemanticLineRule({
+    oldLine,
+    newLine,
+    profile,
+  });
+
+  if (semanticRule) return 95;
+
+  const fieldMatches = compareLineFields(oldLine, newLine);
+  if (fieldMatches.some((item) => item.status === "equal")) {
+    return 85;
+  }
+
+  if (hasComparableFieldOverlap(oldLine, newLine)) {
+    return 65;
+  }
+
+  return 0;
+}
+
+function findBestNewLineMatch({
+  oldLine,
+  newUsefulLines,
+  usedNewIndexes,
+  profile,
+}) {
+  let best = null;
+
+  newUsefulLines.forEach((newLine, index) => {
+    if (usedNewIndexes.has(index)) return;
+
+    const score = scoreLineSimilarity(oldLine, newLine, profile);
+    if (!score) return;
+
+    if (!best || score > best.score) {
+      best = {
+        index,
+        newLine,
+        score,
+      };
+    }
+  });
+
+  return best;
+}
+
+function getLineMatchReason(score) {
+  if (score >= 100) return "normalized-line-equal";
+  if (score >= 95) return "semantic-line-rule";
+  if (score >= 85) return "field-value-equal";
+  if (score >= 65) return "field-overlap";
+  return "line-similarity";
+}
+
 export function compareObjectLines({
   oldLines = [],
   newLines = [],
@@ -62,114 +123,51 @@ export function compareObjectLines({
   const results = [];
   const usedNewIndexes = new Set();
 
-  // 1. exact normalized line matching
-    oldUsefulLines.forEach((oldLine) => {
-    const oldNorm = normalizeLine(oldLine);
-
-    // 1. exact / normalized equal
-    const exactNewIndex = newUsefulLines.findIndex((newLine, index) => {
-        if (usedNewIndexes.has(index)) return false;
-        return normalizeLine(newLine) === oldNorm;
+  for (const oldLine of oldUsefulLines) {
+    const best = findBestNewLineMatch({
+      oldLine,
+      newUsefulLines,
+      usedNewIndexes,
+      profile,
     });
 
-    if (exactNewIndex >= 0) {
-        results.push(
+    if (best && best.score >= 65) {
+      results.push(
         makeLineMatch({
-            oldLines: [oldLine],
-            newLines: [newUsefulLines[exactNewIndex]],
-            status: "equal",
-            reason: "normalized-line-equal",
-            score: 100,
-            fieldMatches: compareLineFields(oldLine, newUsefulLines[exactNewIndex]),
+          oldLines: [oldLine],
+          newLines: [best.newLine],
+          status: best.score >= 85 ? "equal" : "changed",
+          reason: getLineMatchReason(best.score),
+          score: best.score,
+          fieldMatches: compareLineFields(oldLine, best.newLine),
         })
-        );
+      );
 
-        usedNewIndexes.add(exactNewIndex);
-        return;
+      usedNewIndexes.add(best.index);
+      continue;
     }
 
-    // 2. semantic line rule
-    const semanticNewIndex = newUsefulLines.findIndex((newLine, index) => {
-        if (usedNewIndexes.has(index)) return false;
-
-        return Boolean(
-        findSemanticLineRule({
-            oldLine,
-            newLine,
-            profile,
-        })
-        );
-    });
-
-    if (semanticNewIndex >= 0) {
-        const rule = findSemanticLineRule({
-        oldLine,
-        newLine: newUsefulLines[semanticNewIndex],
-        profile,
-        });
-
-        results.push(
-        makeLineMatch({
-            oldLines: [oldLine],
-            newLines: [newUsefulLines[semanticNewIndex]],
-            status: "equal",
-            reason: "semantic-line-rule",
-            score: 100,
-            fieldMatches: compareLineFields(oldLine, newUsefulLines[semanticNewIndex]),
-        })
-        );
-
-        results[results.length - 1].field = rule?.field || null;
-        results[results.length - 1].value = rule?.value || null;
-        results[results.length - 1].ruleId = rule?.id || null;
-
-        usedNewIndexes.add(semanticNewIndex);
-        return;
-    }
-
-    // 3. field overlap matching
-    const fieldNewIndex = newUsefulLines.findIndex((newLine, index) => {
-        if (usedNewIndexes.has(index)) return false;
-        return hasComparableFieldOverlap(oldLine, newLine);
-    });
-
-    if (fieldNewIndex >= 0) {
-        const fieldMatches = compareLineFields(
-        oldLine,
-        newUsefulLines[fieldNewIndex]
-        );
-
-        const hasChanged = fieldMatches.some((item) => item.status === "changed");
-        const hasMissing = fieldMatches.some((item) => item.status === "missing");
-        const hasAdded = fieldMatches.some((item) => item.status === "added");
-
-        results.push(
-        makeLineMatch({
-            oldLines: [oldLine],
-            newLines: [newUsefulLines[fieldNewIndex]],
-            status: hasChanged || hasMissing || hasAdded ? "changed" : "equal",
-            reason: "field-overlap",
-            score: hasChanged || hasMissing || hasAdded ? 70 : 100,
-            fieldMatches,
-        })
-        );
-
-        usedNewIndexes.add(fieldNewIndex);
-        return;
-    }
-
-    // 4. missing
     results.push(
-        makeLineMatch({
+      makeLineMatch({
         oldLines: [oldLine],
         newLines: [],
         status: "missing",
         reason: "no-line-match",
-        })
+        score: 0,
+        fieldMatches: extractComparableFieldsFromLine(oldLine).map((field) => ({
+          field: field.field,
+          status: "missing",
+          oldValue: field.value,
+          newValue: null,
+          oldRawValue: field.rawValue,
+          newRawValue: null,
+          oldLine,
+          newLine: null,
+        })),
+      })
     );
-    });
+  }
 
-  // 2. new-only lines
   newUsefulLines.forEach((newLine, index) => {
     if (usedNewIndexes.has(index)) return;
 
@@ -178,7 +176,18 @@ export function compareObjectLines({
         oldLines: [],
         newLines: [newLine],
         status: "added",
-        reason: "no-line-match",
+        reason: "new-line-unmatched",
+        score: 0,
+        fieldMatches: extractComparableFieldsFromLine(newLine).map((field) => ({
+          field: field.field,
+          status: "added",
+          oldValue: null,
+          newValue: field.value,
+          oldRawValue: null,
+          newRawValue: field.rawValue,
+          oldLine: null,
+          newLine,
+        })),
       })
     );
   });

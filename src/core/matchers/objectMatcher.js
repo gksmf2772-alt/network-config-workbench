@@ -73,6 +73,8 @@ function makeMatch({
   status,
   reason,
   score = null,
+  matchKeyFields = [],
+  scoreReasons = [],
 }) {
   return {
     oldObject: oldObject || null,
@@ -80,6 +82,8 @@ function makeMatch({
     status,
     reason,
     score,
+    matchKeyFields,
+    scoreReasons,
   };
 }
 
@@ -99,6 +103,8 @@ function findIdentityMatch(oldObject, candidates) {
           status: "matched",
           reason: "prefix",
           score: 100,
+          matchKeyFields: ["prefix"],
+          scoreReasons: ["prefix"],
         });
       }
 
@@ -113,6 +119,8 @@ function findIdentityMatch(oldObject, candidates) {
           status: "matched",
           reason: "ip-address",
           score: 100,
+          matchKeyFields: ["ipAddress"],
+          scoreReasons: ["ip-address"],
         });
       }
     }
@@ -129,6 +137,8 @@ function findIdentityMatch(oldObject, candidates) {
           status: "matched",
           reason: "prefix",
           score: 100,
+          matchKeyFields: ["prefix"],
+          scoreReasons: ["prefix"],
         });
       }
     }
@@ -145,6 +155,8 @@ function findIdentityMatch(oldObject, candidates) {
           status: "matched",
           reason: "peer-ip",
           score: 100,
+          matchKeyFields: ["peerIp"],
+          scoreReasons: ["peer-ip"]
         });
       }
     }
@@ -160,11 +172,178 @@ function findIdentityMatch(oldObject, candidates) {
         status: "matched",
         reason: "normalized-identity",
         score: 95,
+        matchKeyFields: ["normalizedIdentity"],
+        scoreReasons: ["normalized-identity"]
       });
     }
   }
 
   return null;
+}
+
+function getFieldValue(object, field) {
+  if (!object) return null;
+
+  if (object[field] !== undefined && object[field] !== null) {
+    return object[field];
+  }
+
+  const fieldValue = object.fields?.[field];
+
+  if (fieldValue && typeof fieldValue === "object" && "value" in fieldValue) {
+    return fieldValue.value;
+  }
+
+  return fieldValue ?? null;
+}
+
+function normalizeValue(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .toLowerCase();
+}
+
+function addWeightedScore(result, field, score, reason) {
+  if (!score) return;
+
+  result.score += score;
+  result.matchKeyFields.push(field);
+  result.scoreReasons.push(reason || field);
+}
+
+function scoreSemanticObjectPair(oldObject, newObject) {
+  const result = {
+    score: 0,
+    matchKeyFields: [],
+    scoreReasons: [],
+  };
+
+  if (!isSameType(oldObject, newObject)) return result;
+
+  const oldPrefix = normalizeValue(getFieldValue(oldObject, "prefix"));
+  const newPrefix = normalizeValue(getFieldValue(newObject, "prefix"));
+
+  if (oldPrefix && newPrefix && oldPrefix === newPrefix) {
+    addWeightedScore(result, "prefix", 50, "prefix");
+  }
+
+  const oldIpAddress = normalizeValue(getFieldValue(oldObject, "ipAddress"));
+  const newIpAddress = normalizeValue(getFieldValue(newObject, "ipAddress"));
+
+  if (oldIpAddress && newIpAddress && oldIpAddress === newIpAddress) {
+    addWeightedScore(result, "ipAddress", 40, "ip-address");
+  }
+
+  const oldPeerIp = normalizeValue(
+    getFieldValue(oldObject, "peerIp") || getFieldValue(oldObject, "neighbor")
+  );
+  const newPeerIp = normalizeValue(
+    getFieldValue(newObject, "peerIp") || getFieldValue(newObject, "neighbor")
+  );
+
+  if (oldPeerIp && newPeerIp && oldPeerIp === newPeerIp) {
+    addWeightedScore(result, "peerIp", 55, "peer-ip");
+  }
+
+  const oldPeerAs = normalizeValue(
+    getFieldValue(oldObject, "peerAs") ||
+      getFieldValue(oldObject, "peer-as") ||
+      getFieldValue(oldObject, "peerAs")
+  );
+  const newPeerAs = normalizeValue(
+    getFieldValue(newObject, "peerAs") ||
+      getFieldValue(newObject, "peer-as") ||
+      getFieldValue(newObject, "peerAs")
+  );
+
+  if (oldPeerAs && newPeerAs && oldPeerAs === newPeerAs) {
+    addWeightedScore(result, "peer-as", 20, "peer-as");
+  }
+
+  const oldRoute = normalizeValue(
+    getFieldValue(oldObject, "route") || getFieldValue(oldObject, "normalizedIdentity")
+  );
+  const newRoute = normalizeValue(
+    getFieldValue(newObject, "route") || getFieldValue(newObject, "normalizedIdentity")
+  );
+
+  if (
+    oldObject.normalizedType === "static-route" &&
+    oldRoute &&
+    newRoute &&
+    oldRoute === newRoute
+  ) {
+    addWeightedScore(result, "route", 55, "route");
+  }
+
+  const oldNextHop = normalizeValue(
+    getFieldValue(oldObject, "next-hop") || getFieldValue(oldObject, "nextHop")
+  );
+  const newNextHop = normalizeValue(
+    getFieldValue(newObject, "next-hop") || getFieldValue(newObject, "nextHop")
+  );
+
+  if (oldNextHop && newNextHop && oldNextHop === newNextHop) {
+    addWeightedScore(result, "next-hop", 25, "next-hop");
+  }
+
+  const descScore = descriptionSimilarity(
+    oldObject.description || getFieldValue(oldObject, "description"),
+    newObject.description || getFieldValue(newObject, "description")
+  );
+
+  if (descScore >= 85) {
+    addWeightedScore(result, "description", 25, "description-similarity");
+  } else if (descScore >= 60) {
+    addWeightedScore(result, "description", 10, "description-partial-similarity");
+  }
+
+  result.score = Math.min(result.score, 100);
+
+  return result;
+}
+
+function getBestWeightedReason(matchKeyFields = []) {
+  if (matchKeyFields.includes("prefix")) return "prefix";
+  if (matchKeyFields.includes("route")) return "route";
+  if (matchKeyFields.includes("peerIp")) return "peer-ip";
+  if (matchKeyFields.includes("ipAddress")) return "ip-address";
+  if (matchKeyFields.includes("next-hop")) return "next-hop";
+  if (matchKeyFields.includes("description")) return "description-similarity";
+  return "weighted-semantic-score";
+}
+
+function findBestWeightedMatch(oldObject, candidates) {
+  let best = null;
+
+  for (const newObject of candidates) {
+    const result = scoreSemanticObjectPair(oldObject, newObject);
+
+    if (!result.score) continue;
+
+    if (!best || result.score > best.score) {
+      best = {
+        oldObject,
+        newObject,
+        score: result.score,
+        matchKeyFields: result.matchKeyFields,
+        scoreReasons: result.scoreReasons,
+      };
+    }
+  }
+
+  if (!best || best.score < 55) return null;
+
+  return makeMatch({
+    oldObject: best.oldObject,
+    newObject: best.newObject,
+    status: best.score >= 80 ? "matched" : "candidate",
+    reason: getBestWeightedReason(best.matchKeyFields),
+    score: best.score,
+    matchKeyFields: best.matchKeyFields,
+    scoreReasons: best.scoreReasons,
+  });
 }
 
 function findBestDescriptionMatch(oldObject, candidates) {
@@ -222,6 +401,8 @@ export function matchNormalizedObjects({
         status: "matched",
         reason: "manual",
         score: 100,
+        matchKeyFields: ["manual"],
+        scoreReasons: ["manual"]
       })
     );
 
@@ -247,7 +428,28 @@ export function matchNormalizedObjects({
     usedNewIds.add(match.newObject.id);
   }
 
-  // 3. Description similarity matching
+  // 3. Weighted semantic matching
+  for (const oldObject of oldObjects) {
+    if (usedOldIds.has(oldObject.id)) continue;
+
+    const candidates = newObjects.filter(
+      (newObject) =>
+        !usedNewIds.has(newObject.id) &&
+        newObject.normalizedType === oldObject.normalizedType
+    );
+
+    const match = findBestWeightedMatch(oldObject, candidates);
+    if (!match) continue;
+
+    matches.push(match);
+    usedOldIds.add(oldObject.id);
+
+    if (match.status === "matched") {
+      usedNewIds.add(match.newObject.id);
+    }
+  }
+
+  // 4. Description similarity matching
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -269,7 +471,7 @@ export function matchNormalizedObjects({
     }
   }
 
-  // 4. Old only
+  // 5. Old only
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -284,7 +486,7 @@ export function matchNormalizedObjects({
     usedOldIds.add(oldObject.id);
   }
 
-  // 5. New only
+  // 6. New only
   for (const newObject of newObjects) {
     if (usedNewIds.has(newObject.id)) continue;
 

@@ -2120,3 +2120,243 @@ textarea {
     display: none;
   }
 }
+
+.semantic-compare-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.semantic-object-card {
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.semantic-object-card.has-violation {
+  border-color: #d1242f;
+}
+
+.semantic-object-card.no-violation {
+  border-color: #2da44e;
+}
+
+.semantic-object-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.semantic-object-header h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.semantic-object-type {
+  font-size: 12px;
+  font-weight: 700;
+  color: #57606a;
+  text-transform: uppercase;
+}
+
+.semantic-object-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #57606a;
+  text-align: right;
+}
+
+.semantic-object-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #57606a;
+}
+
+.semantic-field-list {
+  display: grid;
+  gap: 8px;
+}
+
+.semantic-field {
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f6f8fa;
+}
+
+.semantic-field-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.semantic-field-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: #57606a;
+}
+
+.semantic-field-values {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #24292f;
+}
+
+.semantic-violation {
+  margin-top: 6px;
+  color: #d1242f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.semantic-empty {
+  color: #57606a;
+  font-size: 13px;
+  padding: 8px;
+}
+
+.semantic-field-values.compact {
+  display: block;
+  font-size: 12px;
+  color: #24292f;
+  padding-left: 24px;
+  word-break: break-word;
+}
+
+.semantic-field-ignored {
+  opacity: 0.72;
+}
+
+.semantic-field-changed {
+  background: #fff8c5;
+}
+
+.semantic-field-missing,
+.semantic-field-added {
+  background: #ffebe9;
+}
+
+.semantic-field-equal,
+.semantic-field-present {
+  background: #dafbe1;
+}
+
+.semantic-line-section {
+  margin-top: 10px;
+  border-top: 1px solid #d8dee4;
+  padding-top: 8px;
+}
+
+.semantic-line-section summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: #57606a;
+  margin-bottom: 8px;
+}
+
+.semantic-line-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.semantic-line-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 24px minmax(0, 1fr) 120px;
+  gap: 6px;
+  align-items: stretch;
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  padding: 6px;
+  background: #f6f8fa;
+}
+
+.semantic-line-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #57606a;
+  justify-content: center;
+  text-align: center;
+}
+
+.semantic-line-cell {
+  margin: 0;
+  padding: 6px;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.semantic-line-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #57606a;
+}
+
+.semantic-line-reason {
+  font-size: 11px;
+  color: #57606a;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.semantic-line-equal {
+  border-color: #2da44e;
+  background: #dafbe1;
+}
+
+.semantic-line-changed {
+  border-color: #bf8700;
+  background: #fff8c5;
+}
+
+.semantic-line-missing {
+  border-color: #d1242f;
+  background: #ffebe9;
+}
+
+.semantic-line-added {
+  border-color: #0969da;
+  background: #ddf4ff;
+}
+
+.semantic-line-ignored {
+  opacity: 0.72;
+}
+
+@media (max-width: 900px) {
+  .semantic-line-row {
+    grid-template-columns: 1fr;
+  }
+
+  .semantic-line-status,
+  .semantic-line-reason {
+    text-align: left;
+    align-items: flex-start;
+  }
+
+  .semantic-line-arrow {
+    display: none;
+  }
+}

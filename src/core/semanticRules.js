@@ -9,7 +9,20 @@ export const SEMANTIC_DEFAULT_RULES = {
   interface: {
     ignoreWhenAdded: {
       "admin-state": ["enable", "enabled"],
+      state: ["enable", "enabled"],
     },
+
+    ignoreMissingLines: [
+      /^no switchport$/i,
+    ],
+
+    ignoreAddedLines: [
+      /^interface\s+/i,
+    ],
+    
+    ignoreWrapperLines: [
+  /^interface\s+/i,
+    ],
   },
   port: {
     ignoreWhenAdded: {
@@ -63,11 +76,85 @@ export function isAddedDefaultNoopLine(lineMatch, objectType) {
   });
 }
 
+function matchesSemanticLineRule(line, rules = []) {
+  const normalizedLine = String(line || "").trim();
+
+  return rules.some((rule) => {
+    if (rule instanceof RegExp) {
+      return rule.test(normalizedLine);
+    }
+
+    return normalizedLine === String(rule).trim();
+  });
+}
+
+function isWrapperLinePair(lineMatch, wrapperRules = []) {
+  const oldText = Array.isArray(lineMatch.oldLines)
+    ? lineMatch.oldLines.join(" ").trim()
+    : "";
+
+  const newText = Array.isArray(lineMatch.newLines)
+    ? lineMatch.newLines.join(" ").trim()
+    : "";
+
+  if (!oldText && !newText) return false;
+
+  return (
+    matchesSemanticLineRule(oldText, wrapperRules) ||
+    matchesSemanticLineRule(newText, wrapperRules)
+  );
+}
+
 export function applyDefaultNoopLineSuppression(
   lineMatches = [],
   objectType = "unknown"
 ) {
-  return lineMatches.map((lineMatch) => {
+    const rules = getSemanticDefaultRulesForObjectType(objectType);
+
+    const ignoreMissingLines = rules.ignoreMissingLines || [];
+    const ignoreAddedLines = rules.ignoreAddedLines || [];
+    const ignoreWrapperLines = rules.ignoreWrapperLines || [];
+
+      return lineMatches.map((lineMatch) => {
+        if (isWrapperLinePair(lineMatch, ignoreWrapperLines)) {
+          return {
+            ...lineMatch,
+            status: "equal",
+            reason: "semantic-wrapper-line-ignored",
+            semanticCovered: true,
+          };
+        }
+        const oldText = Array.isArray(lineMatch.oldLines)
+      ? lineMatch.oldLines.join(" ").trim()
+      : "";
+
+    const newText = Array.isArray(lineMatch.newLines)
+      ? lineMatch.newLines.join(" ").trim()
+      : "";
+
+    if (
+      lineMatch.status === "missing" &&
+      matchesSemanticLineRule(oldText, ignoreMissingLines)
+    ) {
+      return {
+        ...lineMatch,
+        status: "equal",
+        reason: "semantic-missing-line-ignored",
+        semanticCovered: true,
+      };
+    }
+
+    if (
+      lineMatch.status === "added" &&
+      matchesSemanticLineRule(newText, ignoreAddedLines)
+    ) {
+      return {
+        ...lineMatch,
+        status: "equal",
+        reason: "semantic-added-line-ignored",
+        semanticCovered: true,
+      };
+    }
     if (!isAddedDefaultNoopLine(lineMatch, objectType)) {
       return lineMatch;
     }

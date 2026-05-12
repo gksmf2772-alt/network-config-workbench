@@ -443,6 +443,14 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
     newLines,
 
     matchKeyFields: inferMatchKeyFields(match),
+    scoreReasons: Array.isArray(match.scoreReasons)
+      ? match.scoreReasons
+      : [],
+
+    ambiguousAlternatives: Array.isArray(match.ambiguousAlternatives)
+      ? match.ambiguousAlternatives
+      : [],
+      
     lineCompareMode: inferLineCompareMode(match),
 
     lineMatches: coveredLineMatches,

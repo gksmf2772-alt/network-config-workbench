@@ -185,6 +185,33 @@ function renderLineMatches(lineMatches = []) {
   `;
 }
 
+function renderAmbiguousAlternatives(item = {}) {
+  const alternatives = Array.isArray(item.ambiguousAlternatives)
+    ? item.ambiguousAlternatives
+    : [];
+
+  if (!alternatives.length) return "";
+
+  return `
+    <div class="semantic-candidate-box">
+      <strong>Candidate alternatives</strong>
+      <ul>
+        ${alternatives
+          .map((alternative) => {
+            return `
+              <li>
+                <span>${escapeHtml(alternative.sourceName || alternative.id || "-")}</span>
+                <span>score: ${escapeHtml(alternative.score ?? "-")}</span>
+                <span>reason: ${escapeHtml(alternative.reason || "-")}</span>
+              </li>
+            `;
+          })
+          .join("")}
+      </ul>
+    </div>
+  `;
+}
+
 function getObjectTitle(item) {
   const oldName = item.oldObject?.sourceName;
   const newName = item.newObject?.sourceName;
@@ -223,10 +250,11 @@ export function renderComparisonPlanHtml(plan = []) {
 
               <div class="semantic-object-meta">
                 <span>match key: ${escapeHtml((item.matchKeyFields || []).join(", ") || "-")}</span>
+                <span>score reason: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
                 <span>violations: ${item.policyViolationCount || 0}</span>
                 <span>fields: ${item.fieldStats?.totalFields ?? 0}</span>
               </div>
-
+              ${renderAmbiguousAlternatives(item)}
               ${renderFieldSummary(item.fieldSummary)}
               ${renderLineMatches(item.lineMatches)}
             </section>

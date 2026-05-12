@@ -75,6 +75,7 @@ function makeMatch({
   score = null,
   matchKeyFields = [],
   scoreReasons = [],
+  ambiguousAlternatives = [],
 }) {
   return {
     oldObject: oldObject || null,
@@ -84,10 +85,13 @@ function makeMatch({
     score,
     matchKeyFields,
     scoreReasons,
+    ambiguousAlternatives,
   };
 }
 
 function findIdentityMatch(oldObject, candidates) {
+  const normalizedIdentityMatches = [];
+
   for (const newObject of candidates) {
     if (!isSameType(oldObject, newObject)) continue;
 
@@ -156,7 +160,7 @@ function findIdentityMatch(oldObject, candidates) {
           reason: "peer-ip",
           score: 100,
           matchKeyFields: ["peerIp"],
-          scoreReasons: ["peer-ip"]
+          scoreReasons: ["peer-ip"],
         });
       }
     }
@@ -166,19 +170,45 @@ function findIdentityMatch(oldObject, candidates) {
       newObject.normalizedIdentity &&
       oldObject.normalizedIdentity === newObject.normalizedIdentity
     ) {
-      return makeMatch({
-        oldObject,
-        newObject,
-        status: "matched",
-        reason: "normalized-identity",
-        score: 95,
-        matchKeyFields: ["normalizedIdentity"],
-        scoreReasons: ["normalized-identity"]
-      });
+      normalizedIdentityMatches.push(newObject);
     }
   }
 
-  return null;
+  if (!normalizedIdentityMatches.length) {
+    return null;
+  }
+
+  if (normalizedIdentityMatches.length > 1) {
+    return makeMatch({
+      oldObject,
+      newObject: normalizedIdentityMatches[0],
+      status: "candidate",
+      reason: "ambiguous-normalized-identity",
+      score: 95,
+      matchKeyFields: ["normalizedIdentity"],
+      scoreReasons: [
+        "normalized-identity",
+        "ambiguous-candidates",
+      ],
+      ambiguousAlternatives: normalizedIdentityMatches.map((item) => ({
+        id: item.id,
+        sourceName: item.sourceName,
+        normalizedIdentity: item.normalizedIdentity,
+        score: 95,
+        reason: "normalized-identity",
+      })),
+    });
+  }
+
+  return makeMatch({
+    oldObject,
+    newObject: normalizedIdentityMatches[0],
+    status: "matched",
+    reason: "normalized-identity",
+    score: 95,
+    matchKeyFields: ["normalizedIdentity"],
+    scoreReasons: ["normalized-identity"],
+  });
 }
 
 function getFieldValue(object, field) {
@@ -301,6 +331,35 @@ function scoreSemanticObjectPair(oldObject, newObject) {
 
   result.score = Math.min(result.score, 100);
 
+  const oldDescription = normalizeValue(
+  getFieldValue(oldObject, "description") || oldObject.description
+  );
+  const newDescription = normalizeValue(
+    getFieldValue(newObject, "description") || newObject.description
+  );
+
+  if (oldDescription && newDescription && oldDescription === newDescription) {
+    addWeightedScore(result, "description", 35, "description");
+  }
+
+  const oldIdentity = normalizeValue(getFieldValue(oldObject, "normalizedIdentity"));
+  const newIdentity = normalizeValue(getFieldValue(newObject, "normalizedIdentity"));
+
+  if (oldIdentity && newIdentity && oldIdentity === newIdentity) {
+    addWeightedScore(result, "normalizedIdentity", 40, "normalized-identity");
+  }
+
+  if (oldObject.normalizedType === "interface") {
+  const hasAddressMatch = result.matchKeyFields.includes("prefix") ||
+    result.matchKeyFields.includes("ipAddress");
+
+  const hasDescriptionMatch = result.matchKeyFields.includes("description");
+
+  if (hasAddressMatch && hasDescriptionMatch) {
+    addWeightedScore(result, "interface-semantic", 15, "interface-semantic-confidence");
+  }
+}
+
   return result;
 }
 
@@ -314,35 +373,71 @@ function getBestWeightedReason(matchKeyFields = []) {
   return "weighted-semantic-score";
 }
 
+function isAmbiguousBestMatch(best, alternatives = [], tolerance = 5) {
+  if (!best) return false;
+
+  return alternatives.some(
+    (item) =>
+      item.newObject?.id !== best.newObject?.id &&
+      Math.abs(item.score - best.score) <= tolerance
+  );
+}
+
 function findBestWeightedMatch(oldObject, candidates) {
-  let best = null;
+  const scoredCandidates = [];
 
   for (const newObject of candidates) {
     const result = scoreSemanticObjectPair(oldObject, newObject);
 
     if (!result.score) continue;
 
-    if (!best || result.score > best.score) {
-      best = {
-        oldObject,
-        newObject,
-        score: result.score,
-        matchKeyFields: result.matchKeyFields,
-        scoreReasons: result.scoreReasons,
-      };
-    }
+    scoredCandidates.push({
+      oldObject,
+      newObject,
+      score: result.score,
+      matchKeyFields: result.matchKeyFields,
+      scoreReasons: result.scoreReasons,
+    });
   }
 
+  if (!scoredCandidates.length) return null;
+
+  scoredCandidates.sort((a, b) => b.score - a.score);
+
+  const best = scoredCandidates[0];
+
   if (!best || best.score < 55) return null;
+
+  const ambiguous = isAmbiguousBestMatch(
+    best,
+    scoredCandidates.slice(1)
+  );
 
   return makeMatch({
     oldObject: best.oldObject,
     newObject: best.newObject,
-    status: best.score >= 80 ? "matched" : "candidate",
-    reason: getBestWeightedReason(best.matchKeyFields),
+    status: ambiguous ? "candidate" : best.score >= 80 ? "matched" : "candidate",
+    reason: ambiguous
+      ? "ambiguous-weighted-match"
+      : getBestWeightedReason(best.matchKeyFields),
     score: best.score,
     matchKeyFields: best.matchKeyFields,
-    scoreReasons: best.scoreReasons,
+    scoreReasons: ambiguous
+      ? [...best.scoreReasons, "ambiguous-candidates"]
+      : best.scoreReasons,
+    ambiguousAlternatives: ambiguous
+      ? scoredCandidates
+          .filter((item) => Math.abs(item.score - best.score) <= 5)
+          .map((item) => ({
+            id: item.newObject?.id,
+            sourceName: item.newObject?.sourceName,
+            normalizedIdentity: item.newObject?.normalizedIdentity,
+            score: item.score,
+            reason: getBestWeightedReason(item.matchKeyFields),
+            matchKeyFields: item.matchKeyFields,
+            scoreReasons: item.scoreReasons,
+          }))
+      : [],
   });
 }
 
@@ -486,9 +581,24 @@ export function matchNormalizedObjects({
     usedOldIds.add(oldObject.id);
   }
 
+  const ambiguousAlternativeNewIds = new Set();
+
+  for (const match of matches) {
+    const alternatives = Array.isArray(match.ambiguousAlternatives)
+      ? match.ambiguousAlternatives
+      : [];
+
+    for (const alternative of alternatives) {
+      if (alternative?.id) {
+        ambiguousAlternativeNewIds.add(alternative.id);
+      }
+    }
+  }
+
   // 6. New only
   for (const newObject of newObjects) {
     if (usedNewIds.has(newObject.id)) continue;
+    if (ambiguousAlternativeNewIds.has(newObject.id)) continue;
 
     const alreadyCandidate = matches.some(
       (match) =>

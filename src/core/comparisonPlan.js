@@ -326,6 +326,142 @@ export function summarizeFieldSummary(fieldSummary = {}) {
   };
 }
 
+function getEqualFieldNames(fieldSummary = {}) {
+  return new Set(
+    Object.values(fieldSummary)
+      .filter(
+        (item) =>
+          item.status === "equal" ||
+          item.effectiveStatus === "equal"
+      )
+      .map((item) => String(item.field || "").trim())
+      .filter(Boolean)
+  );
+}
+
+function isLineCoveredByEqualField(lineMatch, equalFields) {
+  const status = String(lineMatch.status || "").trim();
+
+  if (status !== "added" && status !== "missing") {
+    return false;
+  }
+
+  const fieldMatches = Array.isArray(lineMatch.fieldMatches)
+    ? lineMatch.fieldMatches
+    : [];
+
+  return fieldMatches.some((fieldMatch) => {
+    const field = String(fieldMatch.field || "").trim();
+    return equalFields.has(field);
+  });
+}
+
+function applySemanticLineCoverage(
+  lineMatches = [],
+  fieldSummary = {}
+) {
+  const equalFields = getEqualFieldNames(fieldSummary);
+
+  if (!equalFields.size) return lineMatches;
+
+  return lineMatches.map((lineMatch) => {
+    if (!isLineCoveredByEqualField(lineMatch, equalFields)) {
+      return lineMatch;
+    }
+
+    return {
+      ...lineMatch,
+      status: "equal",
+      reason: "semantic-field-covered",
+      semanticCovered: true,
+    };
+  });
+}
+
+const SEMANTIC_DEFAULT_RULES = {
+  "static-route": {
+    ignoreWhenAdded: {
+      "admin-state": ["enable", "enabled"],
+      state: ["enable", "enabled"],
+      "route-type": ["unicast"],
+    },
+  },
+  interface: {
+    ignoreWhenAdded: {
+      "admin-state": ["enable", "enabled"],
+    },
+  },
+  port: {
+    ignoreWhenAdded: {
+      "admin-state": ["enable", "enabled"],
+    },
+  },
+  lag: {
+    ignoreWhenAdded: {
+      "admin-state": ["enable", "enabled"],
+    },
+  },
+};
+
+function getSemanticDefaultRulesForObjectType(objectType) {
+  return SEMANTIC_DEFAULT_RULES[objectType] || {};
+}
+
+function normalizeSemanticValue(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .toLowerCase();
+}
+
+function isAddedDefaultNoopLine(lineMatch, objectType) {
+  if (String(lineMatch.status || "").trim() !== "added") {
+    return false;
+  }
+
+  const rules = getSemanticDefaultRulesForObjectType(objectType);
+  const ignoreWhenAdded = rules.ignoreWhenAdded || {};
+
+  const fieldMatches = Array.isArray(lineMatch.fieldMatches)
+    ? lineMatch.fieldMatches
+    : [];
+
+  if (!fieldMatches.length) return false;
+
+  return fieldMatches.every((fieldMatch) => {
+    const field = String(fieldMatch.field || "").trim();
+    const value = normalizeSemanticValue(
+      fieldMatch.newValue ?? fieldMatch.value
+    );
+
+    const allowedValues = ignoreWhenAdded[field];
+    if (!allowedValues) return false;
+
+    return allowedValues
+      .map(normalizeSemanticValue)
+      .includes(value);
+  });
+}
+
+function applyDefaultNoopLineSuppression(
+  lineMatches = [],
+  objectType = "unknown"
+) {
+  return lineMatches.map((lineMatch) => {
+    if (!isAddedDefaultNoopLine(lineMatch, objectType)) {
+      return lineMatch;
+    }
+
+    return {
+      ...lineMatch,
+      status: "equal",
+      reason: "default-noop-covered",
+      defaultNoop: true,
+      semanticCovered: true,
+    };
+  });
+}
+
 export function createObjectComparePlan(match, index = 0, profile = {}) {
   const objectType = getObjectType(match);
 
@@ -365,6 +501,16 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
   const fieldSummary = policyResult.fieldSummary;
   const fieldStats = summarizeFieldSummary(fieldSummary);
 
+  const semanticallyCoveredLineMatches = applySemanticLineCoverage(
+    lineMatches,
+    fieldSummary
+  );
+
+  const coveredLineMatches = applyDefaultNoopLineSuppression(
+    semanticallyCoveredLineMatches,
+    objectType
+  );
+
   return {
     id: getComparePlanId(match, index),
     status: match.status,
@@ -382,7 +528,7 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
     matchKeyFields: inferMatchKeyFields(match),
     lineCompareMode: inferLineCompareMode(match),
 
-    lineMatches,
+    lineMatches: coveredLineMatches,
     tokenMatches,
     fieldSummary,
     fieldStats,

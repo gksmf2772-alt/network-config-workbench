@@ -2360,3 +2360,8 @@ textarea {
     display: none;
   }
 }
+
+.semantic-line-covered {
+  opacity: 0.72;
+  border-left: 3px solid #7c5cff;
+}

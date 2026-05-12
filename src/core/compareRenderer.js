@@ -113,7 +113,19 @@ function renderFieldSummary(fieldSummary = {}) {
   `;
 }
 
-function getLineStatusIcon(status) {
+function getLineDisplayStatus(lineMatch) {
+  if (lineMatch?.semanticCovered) {
+    return "SEMANTIC EQUAL";
+  }
+
+  return String(lineMatch?.status || "unknown").toUpperCase();
+}
+
+function getLineStatusIcon(lineMatch) {
+  if (lineMatch?.semanticCovered) return "🧠";
+
+  const status = lineMatch?.status;
+
   if (status === "equal") return "✅";
   if (status === "changed") return "⚠️";
   if (status === "missing") return "❌";
@@ -142,15 +154,19 @@ function renderLineMatches(lineMatches = []) {
       <div class="semantic-line-grid">
         ${lineMatches
           .map((lineMatch) => {
-            const icon = getLineStatusIcon(lineMatch.status);
+            const icon = getLineStatusIcon(lineMatch);
             const oldText = formatLineText(lineMatch.oldLines);
             const newText = formatLineText(lineMatch.newLines);
 
             return `
-              <div class="semantic-line-row semantic-line-${escapeHtml(lineMatch.status)}">
+              <div class="
+                semantic-line-row
+                semantic-line-${escapeHtml(lineMatch.status)}
+                ${lineMatch.semanticCovered ? "semantic-line-covered" : ""}
+              ">
                 <div class="semantic-line-status">
                   <span>${icon}</span>
-                  <span>${escapeHtml(lineMatch.status)}</span>
+                  <span>${escapeHtml(getLineDisplayStatus(lineMatch))}</span>
                 </div>
 
                 <pre class="semantic-line-cell old">${oldText || "&nbsp;"}</pre>

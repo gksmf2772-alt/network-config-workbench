@@ -40,3 +40,18 @@ export {
 export {
   renderComparisonPlanHtml,
 } from "./compareRenderer.js";
+
+export {
+  normalizeManualMap,
+  setManualMapping,
+  removeManualMapping,
+  clearManualMappings,
+  saveManualMapToLocalStorage,
+  loadManualMapFromLocalStorage,
+  clearManualMapFromLocalStorage,
+  applyManualSelectionToStorage,
+} from "./manualMapping.js";
+
+export {
+  normalizeConfig,
+} from "./normalizer.js";

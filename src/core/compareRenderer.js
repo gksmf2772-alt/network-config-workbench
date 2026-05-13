@@ -192,17 +192,29 @@ function renderAmbiguousAlternatives(item = {}) {
 
   if (!alternatives.length) return "";
 
+  const oldObjectId = item.oldObject?.id || "";
+
   return `
     <div class="semantic-candidate-box">
       <strong>Candidate alternatives</strong>
       <ul>
         ${alternatives
           .map((alternative) => {
+            const alternativeId = alternative.id || "";
+
             return `
-              <li>
+              <li class="semantic-candidate-option">
                 <span>${escapeHtml(alternative.sourceName || alternative.id || "-")}</span>
                 <span>score: ${escapeHtml(alternative.score ?? "-")}</span>
                 <span>reason: ${escapeHtml(alternative.reason || "-")}</span>
+                <button
+                  type="button"
+                  class="semantic-candidate-select-btn"
+                  data-old-object-id="${escapeHtml(oldObjectId)}"
+                  data-new-object-id="${escapeHtml(alternativeId)}"
+                >
+                  Select
+                </button>
               </li>
             `;
           })

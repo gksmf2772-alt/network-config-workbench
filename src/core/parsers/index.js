@@ -1,6 +1,7 @@
 // src/core/parsers/index.js
 import { parseCiscoIosXeConfig } from "./ciscoIosXeParser.js";
 import { parseNokiaMdCliConfig } from "./nokiaMdCliParser.js";
+import { parseNokiaClassicConfig } from "./nokiaClassicParser.js";
 
 export const PARSER_IDS = {
   NOKIA_CLASSIC: "nokia-classic",
@@ -94,8 +95,17 @@ export function parseConfigByVendor(context) {
     case PARSER_IDS.ARISTA_EOS:
       return createParserResult(context);
 
-    case PARSER_IDS.NOKIA_CLASSIC:
+    case PARSER_IDS.NOKIA_CLASSIC: {
+      const result = parseNokiaClassicConfig(context.configText, {
+        side: context.side,
+      });
+
+      context.objects = Array.isArray(result.objects) ? result.objects : [];
+      context.warnings.push(...(result.warnings || []));
+      context.errors.push(...(result.errors || []));
+
       return createParserResult(context);
+    }
 
     default:
       context.warnings.push(

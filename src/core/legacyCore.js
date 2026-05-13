@@ -6,6 +6,15 @@
   ensureVendorPresetFields,
 } from "./vendorPresets.js";
 
+import {
+  normalizeConfig,
+  matchNormalizedObjects,
+  createComparisonPlan,
+  renderComparisonPlanHtml,
+  loadManualMapFromLocalStorage,
+  applyManualSelectionToStorage,
+} from "./comparator.js";
+
 const objectTypes = ["port", "lag", "interface", "static-route", "pim", "bgp"];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
 
@@ -3419,20 +3428,151 @@ function getOptions() {
 function runCompare() {
   try {
     selectors.compareStatus.textContent = "비교 중";
+
     const options = getOptions();
-    const oldObjects = safeStep("기존 config 파싱", () => parseConfig(selectors.oldInput.value, options, "old"));
-    const newObjects = safeStep("신규 config 파싱", () => parseConfig(selectors.newInput.value, options, "new"));
-    const report = safeStep("객체 비교", () => compareObjects(oldObjects, newObjects, options));
+
+    const oldObjects = safeStep("기존 config 파싱", () =>
+      parseConfig(selectors.oldInput.value, options, "old")
+    );
+
+    const newObjects = safeStep("신규 config 파싱", () =>
+      parseConfig(selectors.newInput.value, options, "new")
+    );
+
+    const report = safeStep("객체 비교", () =>
+      compareObjects(oldObjects, newObjects, options)
+    );
+
     state.lastReport = report;
+
     safeStep("리포트 렌더링", () => renderReportV2(report));
     safeStep("diff 렌더링", () => renderDiff(report.diffRows || []));
+
     showDiffMode();
+
+    safeStep("semantic preview 렌더링", () => {
+      renderSemanticPreview();
+    });
+
     state.compareDirty = false;
-    selectors.compareStatus.textContent = report.items.length ? `차이 ${report.items.length}건` : "차이 없음";
+    selectors.compareStatus.textContent = report.items.length
+      ? `차이 ${report.items.length}건`
+      : "차이 없음";
     selectors.lastComparedAt.textContent = `마지막 비교: ${formatDate(Date.now())}`;
   } catch (error) {
     handleCompareError(error);
   }
+}
+
+function getCurrentVendorPresetForSemanticPreview() {
+  const oldText = selectors.oldInput?.value || "";
+  const newText = selectors.newInput?.value || "";
+
+  const oldLooksCisco =
+    /^\s*interface\s+\S+/im.test(oldText) ||
+    /^\s*ip\s+route\s+/im.test(oldText) ||
+    /^\s*router\s+bgp\s+/im.test(oldText) ||
+    /^\s*neighbor\s+\S+/im.test(oldText);
+
+  const oldLooksNokiaClassic =
+    /^\s*configure\s+/im.test(oldText) ||
+    /^\s*static-route-entry\s+/im.test(oldText);
+
+  const newLooksNokiaMdCli =
+    /\{\s*$/m.test(newText) ||
+    /^\s*admin-state\s+/im.test(newText) ||
+    /^\s*route\s+\S+\/\d+\s+route-type\s+/im.test(newText) ||
+    /^\s*interface\s+"[^"]+"\s*\{/im.test(newText);
+
+  if (oldLooksCisco && newLooksNokiaMdCli) {
+    return {
+      oldVendor: "cisco-ios-xe",
+      newVendor: "nokia-md-cli",
+    };
+  }
+
+  if (oldLooksNokiaClassic && newLooksNokiaMdCli) {
+    return {
+      oldVendor: "nokia-classic",
+      newVendor: "nokia-md-cli",
+    };
+  }
+
+  const preset = state.profileDraft?.vendorPreset;
+
+  if (preset?.oldVendor && preset?.newVendor) {
+    return {
+      oldVendor: preset.oldVendor,
+      newVendor: preset.newVendor,
+    };
+  }
+
+  return {
+    oldVendor: "cisco-ios-xe",
+    newVendor: "nokia-md-cli",
+  };
+}
+
+function ensureSemanticPreviewContainer() {
+  let container = document.querySelector("#semanticPreviewPanel");
+
+  if (container) return container;
+
+  container = document.createElement("section");
+  container.id = "semanticPreviewPanel";
+  container.className = "semantic-preview-panel";
+
+  selectors.reportList?.parentElement?.prepend(container);
+
+  return container;
+}
+
+function renderSemanticPreview() {
+  const container = ensureSemanticPreviewContainer();
+
+  const { oldVendor, newVendor } = getCurrentVendorPresetForSemanticPreview();
+
+  const oldResult = normalizeConfig({
+    vendor: oldVendor,
+    configText: selectors.oldInput.value,
+    side: "old",
+  });
+
+  const newResult = normalizeConfig({
+    vendor: newVendor,
+    configText: selectors.newInput.value,
+    side: "new",
+  });
+
+  const manualMap = loadManualMapFromLocalStorage();
+
+  const matches = matchNormalizedObjects({
+    oldObjects: oldResult.objects,
+    newObjects: newResult.objects,
+    manualMap,
+  });
+
+  const plan = createComparisonPlan(matches, state.profileDraft || {});
+  const html = renderComparisonPlanHtml(plan);
+
+  container.innerHTML = `
+    <div class="semantic-preview-header">
+      <strong>Semantic Preview</strong>
+      <span>${escapeHtml(oldVendor)} → ${escapeHtml(newVendor)}</span>
+    </div>
+    ${html}
+  `;
+
+  container.querySelectorAll(".semantic-candidate-select-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      applyManualSelectionToStorage(
+        button.dataset.oldObjectId,
+        button.dataset.newObjectId
+      );
+
+      renderSemanticPreview();
+    });
+  });
 }
 
 function safeStep(label, callback) {

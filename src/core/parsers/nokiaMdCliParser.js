@@ -102,7 +102,7 @@ function parseMdCliPorts(lines) {
 
   return blocks.map((block, index) => {
     const description = extractDescription(block.lines);
-    const identity = description || block.name;
+    const identity = block.name;
 
     const object = createNormalizedObject({
       id: `nokia-md-port-${index}-${block.name}`,
@@ -129,7 +129,7 @@ function parseMdCliLags(lines) {
 
   return blocks.map((block, index) => {
     const description = extractDescription(block.lines);
-    const identity = description || block.name;
+    const identity = block.name;
 
     const object = createNormalizedObject({
       id: `nokia-md-lag-${index}-${block.name}`,
@@ -152,7 +152,13 @@ function parseMdCliLags(lines) {
 }
 
 function parseMdCliInterfaces(lines) {
-  const blocks = collectBraceBlocks(lines, /^interface\s+"?([^"\s{]+)"?\s*\{/i);
+  const blocks = collectBraceBlocks(
+    lines.filter((line, index) => {
+      const prev = lines[index - 1]?.trim() || "";
+      return !/^pim\s*\{/i.test(prev);
+    }),
+    /^interface\s+"?([^"\s{]+)"?\s*\{/i
+  );
 
   return blocks.map((block, index) => {
     const description = extractDescription(block.lines);
@@ -182,6 +188,85 @@ function parseMdCliInterfaces(lines) {
 
     return object;
   });
+}
+
+function parseMdCliPimInterfaces(lines) {
+  const objects = [];
+
+  let inPim = false;
+  let depth = 0;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+
+    if (/^pim\s*\{/i.test(trimmed)) {
+      inPim = true;
+      depth = 1;
+      continue;
+    }
+
+    if (!inPim) continue;
+
+    if (trimmed.includes("{")) {
+      depth += (trimmed.match(/\{/g) || []).length;
+    }
+
+    if (trimmed.includes("}")) {
+      depth -= (trimmed.match(/\}/g) || []).length;
+
+      if (depth <= 0) {
+        inPim = false;
+      }
+    }
+
+    const match = trimmed.match(/^interface\s+"?([^"\s]+)"?\s*\{/i);
+
+    if (!match) continue;
+
+    const interfaceName = match[1];
+
+    const blockLines = [raw];
+    let blockDepth = 1;
+
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const subLine = lines[j];
+
+      blockLines.push(subLine);
+
+      if (subLine.includes("{")) {
+        blockDepth += (subLine.match(/\{/g) || []).length;
+      }
+
+      if (subLine.includes("}")) {
+        blockDepth -= (subLine.match(/\}/g) || []).length;
+      }
+
+      if (blockDepth <= 0) {
+        i = j;
+        break;
+      }
+    }
+
+    const object = createNormalizedObject({
+      id: `nokia-md-pim-${interfaceName}`,
+      vendor: "nokia-md-cli",
+      sourceType: "pim",
+      sourceName: interfaceName,
+      normalizedType: "pim",
+      normalizedIdentity: interfaceName,
+      rawLines: blockLines,
+      fields: {
+        interface: interfaceName,
+      },
+    });
+
+    object.state = "enabled";
+
+    objects.push(object);
+  }
+
+  return objects;
 }
 
 function parseMdCliStaticRoutes(lines) {
@@ -279,5 +364,6 @@ export function parseNokiaMdCliConfig(configText) {
     ...parseMdCliInterfaces(lines),
     ...parseMdCliStaticRoutes(lines),
     ...parseMdCliBgpNeighbors(lines),
+    ...parseMdCliPimInterfaces(lines),
   ];
 }

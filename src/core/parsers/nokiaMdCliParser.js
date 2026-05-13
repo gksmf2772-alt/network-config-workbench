@@ -129,6 +129,14 @@ function parseMdCliLags(lines) {
 
   return blocks.map((block, index) => {
     const description = extractDescription(block.lines);
+    const members = block.lines
+      .map((line) => line.trim())
+      .map((line) =>
+        line.match(/^port\s+"?([^"\s]+)"?/i)
+      )
+      .filter(Boolean)
+      .map((match) => match[1]);
+
     const identity = block.name;
 
     const object = createNormalizedObject({
@@ -142,6 +150,7 @@ function parseMdCliLags(lines) {
       fields: {
         lag: block.name,
         description,
+        members,
       },
     });
 

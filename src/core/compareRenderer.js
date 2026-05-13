@@ -224,6 +224,120 @@ function renderAmbiguousAlternatives(item = {}) {
   `;
 }
 
+function renderManualCandidates(item = {}) {
+  const candidates = Array.isArray(item.manualCandidates)
+    ? item.manualCandidates
+    : [];
+
+  if (!candidates.length) return "";
+
+  const oldObject = item.oldObject || {};
+  const newObject = item.newObject || {};
+
+  const currentObjectId =
+    item.status === "old-only"
+      ? oldObject.id || oldObject.objectId || oldObject.sourceName || ""
+      : newObject.id || newObject.objectId || newObject.sourceName || "";
+
+  return `
+    <div class="semantic-candidate-box">
+      <strong>Manual match candidates</strong>
+      <ul>
+        ${candidates
+          .map((candidate) => {
+            const candidateId = candidate.id || "";
+
+            const oldObjectId =
+              item.status === "old-only" ? currentObjectId : candidateId;
+
+            const newObjectId =
+              item.status === "old-only" ? candidateId : currentObjectId;
+
+            return `
+              <li class="semantic-candidate-option">
+                <span>${escapeHtml(candidate.sourceName || candidate.id || "-")}</span>
+                <span>score: ${escapeHtml(candidate.score ?? "-")}</span>
+                <span>reason: ${escapeHtml(candidate.reason || "-")}</span>
+                <button
+                  type="button"
+                  class="semantic-candidate-select-btn"
+                  data-old-object-id="${escapeHtml(oldObjectId)}"
+                  data-new-object-id="${escapeHtml(newObjectId)}"
+                >
+                  Select
+                </button>
+              </li>
+            `;
+          })
+          .join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderRelationshipSummary(relationships = []) {
+  if (!Array.isArray(relationships) || !relationships.length) {
+    return "";
+  }
+
+  return `
+    <details class="semantic-detail-block">
+      <summary>Relationship Compare (${relationships.length})</summary>
+
+      <div class="semantic-relationship-list">
+        ${relationships.map((item) => `
+          <div class="semantic-relationship-item">
+            <div>
+              <strong>${escapeHtml(item.label || item.type)}</strong>
+            </div>
+
+            <div>
+              old: ${escapeHtml(String(item.oldValue || "-"))}
+            </div>
+
+            <div>
+              new: ${escapeHtml(String(item.newValue || "-"))}
+            </div>
+
+            <div>
+              status: ${escapeHtml(item.status || "-")}
+            </div>
+
+            <div>
+              reason: ${escapeHtml(item.reason || "-")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function renderManualMatchActions(item = {}) {
+  const reason = String(item.reason || "").toLowerCase();
+  const status = String(item.status || "").toLowerCase();
+
+  if (status !== "matched" || reason !== "manual") return "";
+
+  const oldObjectId =
+    item.oldObject?.id ||
+    item.oldObject?.objectId ||
+    item.oldObject?.sourceName ||
+    "";
+
+  if (!oldObjectId) return "";
+
+  return `
+    <button
+      type="button"
+      class="semantic-manual-remove-btn"
+      data-old-object-id="${escapeHtml(oldObjectId)}"
+    >
+      Remove manual match
+    </button>
+  `;
+}
+
 function getObjectTitle(item) {
   const oldName = item.oldObject?.sourceName;
   const newName = item.newObject?.sourceName;
@@ -239,12 +353,200 @@ export function renderComparisonPlanHtml(plan = []) {
     return `<div class="semantic-empty">No comparison result</div>`;
   }
 
+  const summary = plan.reduce(
+    (acc, item) => {
+      acc.total += 1;
+
+      const status = String(item.status || "").toLowerCase();
+
+      if (status.includes("match")) acc.matched += 1;
+      else if (status.includes("ambiguous")) acc.ambiguous += 1;
+      else acc.unmatched += 1;
+
+      acc.violations += item.policyViolationCount || 0;
+
+      return acc;
+    },
+    {
+      total: 0,
+      matched: 0,
+      unmatched: 0,
+      ambiguous: 0,
+      violations: 0,
+    }
+  );
+
   return `
+    <style>
+      .semantic-compare-result {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin: 12px 0;
+        font-size: 13px;
+      }
+
+      .semantic-preview-summary {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        background: #f6f8fa;
+      }
+
+      .semantic-summary-item {
+        padding: 10px;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .semantic-summary-label {
+        color: #57606a;
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+
+      .semantic-summary-value {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .semantic-object-card {
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        background: #ffffff;
+        overflow: hidden;
+      }
+
+      .semantic-object-card.has-violation {
+        border-color: #cf222e;
+      }
+
+      .semantic-object-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px;
+        border-bottom: 1px solid #d8dee4;
+        background: #f6f8fa;
+      }
+
+      .semantic-object-type {
+        display: inline-block;
+        margin-bottom: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #ddf4ff;
+        color: #0969da;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .semantic-object-header h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .semantic-object-status {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 6px;
+        min-width: 280px;
+      }
+
+      .semantic-status-badge {
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .semantic-status-matched {
+        background: #dafbe1;
+        color: #116329;
+      }
+
+      .semantic-status-ambiguous {
+        background: #fff8c5;
+        color: #7d4e00;
+      }
+
+      .semantic-status-unmatched {
+        background: #ffebe9;
+        color: #cf222e;
+      }
+
+      .semantic-status-neutral {
+        background: #eaeef2;
+        color: #57606a;
+      }
+
+      .semantic-object-meta {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(160px, 1fr));
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid #d8dee4;
+        color: #57606a;
+      }
+
+      .semantic-object-meta span {
+        overflow-wrap: anywhere;
+      }
+
+      .semantic-detail-block {
+        padding: 10px 12px;
+      }
+
+      details.semantic-detail-block summary {
+        cursor: pointer;
+        font-weight: 700;
+      }
+    </style>
+
     <div class="semantic-compare-result">
+      <div class="semantic-preview-summary">
+        <div class="semantic-summary-item">
+          <div class="semantic-summary-label">Total Objects</div>
+          <div class="semantic-summary-value">${summary.total}</div>
+        </div>
+        <div class="semantic-summary-item">
+          <div class="semantic-summary-label">Matched</div>
+          <div class="semantic-summary-value">${summary.matched}</div>
+        </div>
+        <div class="semantic-summary-item">
+          <div class="semantic-summary-label">Unmatched</div>
+          <div class="semantic-summary-value">${summary.unmatched}</div>
+        </div>
+        <div class="semantic-summary-item">
+          <div class="semantic-summary-label">Ambiguous</div>
+          <div class="semantic-summary-value">${summary.ambiguous}</div>
+        </div>
+        <div class="semantic-summary-item">
+          <div class="semantic-summary-label">Policy Violations</div>
+          <div class="semantic-summary-value">${summary.violations}</div>
+        </div>
+      </div>
+
       ${plan
         .map((item) => {
           const violationClass =
             item.policyViolationCount > 0 ? "has-violation" : "no-violation";
+
+          const statusText = getStatusLabel(item.status);
+          const rawStatus = String(item.status || "").toLowerCase();
+
+          let statusClass = "semantic-status-neutral";
+          if (rawStatus.includes("match")) statusClass = "semantic-status-matched";
+          else if (rawStatus.includes("ambiguous")) statusClass = "semantic-status-ambiguous";
+          else if (rawStatus.includes("unmatch") || rawStatus.includes("missing")) {
+            statusClass = "semantic-status-unmatched";
+          }
 
           return `
             <section class="semantic-object-card ${violationClass}">
@@ -254,20 +556,40 @@ export function renderComparisonPlanHtml(plan = []) {
                   <h3>${escapeHtml(getObjectTitle(item))}</h3>
                 </div>
                 <div class="semantic-object-status">
-                  <span>${getStatusLabel(item.status)}</span>
-                  <span>reason: ${escapeHtml(item.reason)}</span>
+                  <span class="semantic-status-badge ${statusClass}">${escapeHtml(statusText)}</span>
+                  <span>method: ${escapeHtml(item.reason || "-")}</span>
                   <span>score: ${item.score ?? "-"}</span>
+                  ${renderManualMatchActions(item)}
                 </div>
               </header>
 
               <div class="semantic-object-meta">
+                <span>old: ${escapeHtml(item.oldObject?.sourceName || item.oldObject?.id || "-")}</span>
+                <span>new: ${escapeHtml(item.newObject?.sourceName || item.newObject?.id || "-")}</span>
                 <span>match key: ${escapeHtml((item.matchKeyFields || []).join(", ") || "-")}</span>
-                <span>score reason: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
                 <span>violations: ${item.policyViolationCount || 0}</span>
+                <span>score reason: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
                 <span>fields: ${item.fieldStats?.totalFields ?? 0}</span>
               </div>
-              ${renderAmbiguousAlternatives(item)}
+
+              ${
+                item.ambiguousAlternatives?.length
+                  ? `<details class="semantic-detail-block">
+                      <summary>Candidate Alternatives (${item.ambiguousAlternatives.length})</summary>
+                      ${renderAmbiguousAlternatives(item)}
+                    </details>`
+                  : ""
+              }
+              ${
+                item.manualCandidates?.length
+                  ? `<details class="semantic-detail-block" open>
+                      <summary>Manual Match Candidates (${item.manualCandidates.length})</summary>
+                      ${renderManualCandidates(item)}
+                    </details>`
+                  : ""
+              }
               ${renderFieldSummary(item.fieldSummary)}
+              ${renderRelationshipSummary(item.relationshipSummary)}
               ${renderLineMatches(item.lineMatches)}
             </section>
           `;

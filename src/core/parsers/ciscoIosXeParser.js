@@ -138,6 +138,10 @@ function parseCiscoInterfaces(lines) {
     const normalizedType = classifyCiscoInterface(block.name, block.lines);
     const description = extractDescription(block.lines);
     const ipInfo = extractCiscoIpAddress(block.lines);
+    const channelGroup = block.lines
+      .map((line) => line.trim())
+      .map((line) => line.match(/^channel-group\s+(\S+)/i))
+      .find(Boolean);
 
     const identity =
       normalizedType === "interface" && ipInfo?.prefix
@@ -159,6 +163,7 @@ function parseCiscoInterfaces(lines) {
         prefix: ipInfo?.prefix || null,
         hasNoSwitchport: hasLine(block.lines, /^no\s+switchport$/i),
         hasSwitchport: hasLine(block.lines, /^switchport\b/i),
+        lag: channelGroup?.[1] || null,
       },
     });
 
@@ -302,6 +307,50 @@ function parseCiscoBgp(lines) {
   return Array.from(result.values());
 }
 
+function parseCiscoPimInterfaces(lines) {
+  return collectCiscoInterfaceBlocks(lines)
+    .filter((block) =>
+      block.lines.some((line) =>
+        /^ip\s+pim\s+(sparse-mode|dense-mode|sparse-dense-mode)$/i.test(
+          line.trim()
+        )
+      )
+    )
+    .map((block, index) => {
+      const modeLine = block.lines
+        .map((line) => line.trim())
+        .find((line) =>
+          /^ip\s+pim\s+(sparse-mode|dense-mode|sparse-dense-mode)$/i.test(line)
+        );
+
+      const modeMatch = modeLine?.match(
+        /^ip\s+pim\s+(sparse-mode|dense-mode|sparse-dense-mode)$/i
+      );
+
+      const mode = modeMatch?.[1] || "enabled";
+
+      const object = createNormalizedObject({
+        id: `cisco-pim-${index}-${block.name}`,
+        vendor: "cisco-ios-xe",
+        sourceType: "pim",
+        sourceName: block.name,
+        normalizedType: "pim",
+        normalizedIdentity: block.name,
+        rawLines: block.lines.filter((line) =>
+          /^ip\s+pim\s+/i.test(line.trim())
+        ),
+        fields: {
+          interface: block.name,
+          mode,
+        },
+      });
+
+      object.state = "enabled";
+
+      return object;
+    });
+}
+
 export function parseCiscoIosXeConfig(configText) {
   const lines = splitLines(configText);
 
@@ -309,5 +358,6 @@ export function parseCiscoIosXeConfig(configText) {
     ...parseCiscoInterfaces(lines),
     ...parseCiscoStaticRoutes(lines),
     ...parseCiscoBgp(lines),
+    ...parseCiscoPimInterfaces(lines),
   ];
 }

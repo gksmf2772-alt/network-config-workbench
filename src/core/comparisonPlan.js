@@ -379,7 +379,63 @@ function applySemanticLineCoverage(
   });
 }
 
-export function createObjectComparePlan(match, index = 0, profile = {}) {
+function createRelationshipSummary(match = {}) {
+  const objectType =
+    match.oldObject?.type ||
+    match.newObject?.type ||
+    "";
+
+  const summary = [];
+
+  if (objectType === "static-route") {
+    const oldNextHop =
+      match.oldObject?.normalizedFields?.["next-hop"] ||
+      match.oldObject?.fields?.["next-hop"] ||
+      null;
+
+    const newNextHop =
+      match.newObject?.normalizedFields?.["next-hop"] ||
+      match.newObject?.fields?.["next-hop"] ||
+      null;
+
+    let status = "unknown";
+    let reason = "no-next-hop";
+
+    if (oldNextHop && newNextHop) {
+      if (String(oldNextHop) === String(newNextHop)) {
+        status = "matched";
+        reason = "same-next-hop";
+      } else {
+        status = "changed";
+        reason = "next-hop-changed";
+      }
+    } else if (oldNextHop && !newNextHop) {
+      status = "missing";
+      reason = "next-hop-missing";
+    } else if (!oldNextHop && newNextHop) {
+      status = "added";
+      reason = "next-hop-added";
+    }
+
+    summary.push({
+      type: "static-route-next-hop",
+      label: "Static route next-hop",
+      status,
+      reason,
+      oldValue: oldNextHop || "-",
+      newValue: newNextHop || "-",
+    });
+  }
+
+  return summary;
+}
+
+export function createObjectComparePlan(
+  match,
+  index = 0,
+  profile = {},
+  allObjects = []
+) {
   const objectType = getObjectType(match);
 
   const oldLines = getRawLines(match.oldObject);
@@ -418,6 +474,44 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
   const fieldSummary = policyResult.fieldSummary;
   const fieldStats = summarizeFieldSummary(fieldSummary);
 
+  const localRelationships =
+    createRelationshipSummaryFromFields(
+      objectType,
+      fieldSummary
+    );
+
+  const crossRelationships =
+    createCrossObjectRelationships({
+      currentObject:
+        match.newObject ||
+        match.oldObject,
+      allObjects,
+    });
+
+  const relationshipSummary = [
+    ...localRelationships,
+    ...crossRelationships,
+  ];
+
+  const dedupedRelationshipSummary = [];
+  const relationshipKeys = new Set();
+
+  for (const relationship of relationshipSummary) {
+    const key = [
+      relationship.type,
+      relationship.oldValue,
+      relationship.newValue,
+      relationship.reason,
+    ].join("::");
+
+    if (relationshipKeys.has(key)) {
+      continue;
+    }
+
+    relationshipKeys.add(key);
+    dedupedRelationshipSummary.push(relationship);
+  }
+  
   const semanticallyCoveredLineMatches = applySemanticLineCoverage(
     lineMatches,
     fieldSummary
@@ -458,6 +552,8 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
     fieldSummary,
     fieldStats,
 
+    relationshipSummary: dedupedRelationshipSummary,
+
     policyViolations: policyResult.violations,
     policyViolationCount: policyResult.violationCount,
 
@@ -466,8 +562,18 @@ export function createObjectComparePlan(match, index = 0, profile = {}) {
 }
 
 export function createComparisonPlan(matches = [], profile = {}) {
+  const allObjects = [
+    ...matches.map((match) => match?.oldObject).filter(Boolean),
+    ...matches.map((match) => match?.newObject).filter(Boolean),
+  ];
+
   return matches.map((match, index) =>
-    createObjectComparePlan(match, index, profile)
+    createObjectComparePlan(
+      match,
+      index,
+      profile,
+      allObjects
+    )
   );
 }
 
@@ -493,4 +599,181 @@ export function summarizeComparisonPlan(plan = []) {
   }
 
   return summary;
+}
+
+function getFirstFieldValue(fieldSummary = {}, fieldName = "") {
+  const field = fieldSummary[fieldName];
+  if (!field) return "";
+
+  const oldValue = Array.isArray(field.oldValues) && field.oldValues.length
+    ? String(field.oldValues[0])
+    : "";
+
+  const newValue = Array.isArray(field.newValues) && field.newValues.length
+    ? String(field.newValues[0])
+    : "";
+
+  return { oldValue, newValue };
+}
+
+function createRelationshipSummaryFromFields(objectType, fieldSummary = {}) {
+  if (objectType !== "static-route") return [];
+
+  const { oldValue, newValue } = getFirstFieldValue(fieldSummary, "next-hop");
+
+  if (!oldValue && !newValue) return [];
+
+  let status = "unknown";
+  let reason = "no-next-hop";
+
+  if (oldValue && newValue) {
+    status = oldValue === newValue ? "matched" : "changed";
+    reason = oldValue === newValue ? "same-next-hop" : "next-hop-changed";
+  } else if (oldValue && !newValue) {
+    status = "missing";
+    reason = "next-hop-missing";
+  } else if (!oldValue && newValue) {
+    status = "added";
+    reason = "next-hop-added";
+  }
+
+  return [
+    {
+      type: "static-route-next-hop",
+      label: "Static route next-hop",
+      status,
+      reason,
+      oldValue: oldValue || "-",
+      newValue: newValue || "-",
+    },
+  ];
+}
+
+function findObjectsByType(objects = [], type = "") {
+  return objects.filter((item) => getNormalizedType(item) === type);
+}
+
+function ipInsidePrefix(ip = "", prefix = "") {
+  if (!ip || !prefix) return false;
+
+  if (prefix.includes("/32")) {
+    return prefix.replace("/32", "") === ip;
+  }
+
+  return false;
+}
+
+function getNormalizedType(object = {}) {
+  return object?.normalizedType || object?.type || object?.sourceType || "";
+}
+
+function getObjectField(object = {}, field = "") {
+  return object?.fields?.[field] ?? object?.[field] ?? "";
+}
+
+function getObjectArrayField(object = {}, field = "") {
+  const value = object?.fields?.[field] ?? object?.[field] ?? [];
+  return Array.isArray(value) ? value : value ? [value] : [];
+}
+
+function createCrossObjectRelationships({
+  currentObject,
+  allObjects = [],
+}) {
+  const relationships = [];
+
+  if (!currentObject) return relationships;
+
+  const currentType = getNormalizedType(currentObject);
+
+  if (currentType === "static-route") {
+    const route =
+      getObjectField(currentObject, "route") ||
+      currentObject.prefix ||
+      "";
+
+    const bgpObjects = findObjectsByType(allObjects, "bgp");
+
+    bgpObjects.forEach((bgp) => {
+      const neighbor =
+        getObjectField(bgp, "neighbor") ||
+        bgp.peerIp ||
+        "";
+
+      if (!neighbor) return;
+
+      if (ipInsidePrefix(neighbor, route)) {
+        relationships.push({
+          type: "static-route-bgp-neighbor",
+          label: "Static route → BGP neighbor",
+          status: "matched",
+          reason: "neighbor-ip-covered-by-static-route",
+          oldValue: route,
+          newValue: neighbor,
+        });
+      }
+    });
+  }
+
+  if (currentType === "port") {
+    const portName =
+      getObjectField(currentObject, "interfaceName") ||
+      getObjectField(currentObject, "port") ||
+      currentObject.sourceName ||
+      currentObject.id ||
+      "";
+
+    const lagId = getObjectField(currentObject, "lag");
+
+    if (lagId) {
+      relationships.push({
+        type: "port-lag",
+        label: "Port → LAG",
+        status: "matched",
+        reason: "port-member-of-lag",
+        oldValue: portName,
+        newValue: `lag-${lagId}`,
+      });
+    }
+  }
+
+  if (currentType === "lag") {
+    const lagId =
+      getObjectField(currentObject, "lag") ||
+      currentObject.sourceName ||
+      "";
+
+    const members = getObjectArrayField(currentObject, "members");
+
+    members.forEach((member) => {
+      relationships.push({
+        type: "lag-member-port",
+        label: "LAG → member port",
+        status: "matched",
+        reason: "lag-contains-port",
+        oldValue: `lag-${lagId}`,
+        newValue: member,
+      });
+    });
+  }
+
+  if (currentType === "pim") {
+  const pimInterface =
+    getObjectField(currentObject, "interface") ||
+    currentObject.sourceName ||
+    "";
+
+  if (pimInterface) {
+    relationships.push({
+      type: "pim-interface",
+      label: "PIM → Interface",
+      status: "matched",
+      reason: "pim-enabled-on-interface",
+      oldValue: pimInterface,
+      newValue: pimInterface,
+    });
+  }
+}
+
+  return relationships;
 }

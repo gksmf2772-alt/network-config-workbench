@@ -12,6 +12,8 @@ import {
   createComparisonPlan,
   renderComparisonPlanHtml,
   loadManualMapFromLocalStorage,
+  saveManualMapToLocalStorage,
+  removeManualMapping,
   applyManualSelectionToStorage,
 } from "./comparator.js";
 
@@ -237,11 +239,16 @@ function createDefaultProfile() {
     semanticNodeGroups: createEmptyRulesByType(),
     semanticLineGroups: createEmptyRulesByType(),
     parserRules: createDefaultParserRules(),
+    manualMap: {},
   };
 }
 
 function createEmptyProfile(vendor = state.profileDraft?.vendor || "nokia") {
   const preset = getVendorPresetByLegacyVendor(vendor);
+  console.log("[profile-preset-debug]", {
+  vendor,
+  preset,
+  });
 
   return {
     ...createDefaultProfile(),
@@ -3527,6 +3534,96 @@ function ensureSemanticPreviewContainer() {
   return container;
 }
 
+function getManualCandidateObjectId(object) {
+  if (!object || typeof object !== "object") return "";
+  return object.id || object.objectId || object.sourceName || "";
+}
+
+function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = []) {
+  const matchedOldIds = new Set();
+  const matchedNewIds = new Set();
+
+  plan.forEach((item) => {
+    if (!item) return;
+
+    const oldId = getManualCandidateObjectId(item.oldObject);
+    const newId = getManualCandidateObjectId(item.newObject);
+
+    const status = String(item.status || "").toLowerCase();
+
+    if (status === "matched") {
+      if (oldId) matchedOldIds.add(oldId);
+      if (newId) matchedNewIds.add(newId);
+    }
+  });
+
+  return plan.map((item) => {
+    if (!item) return item;
+
+    const status = String(item.status || "").toLowerCase();
+
+    if (status === "old-only") {
+      const candidates = newObjects
+        .filter((candidate) => {
+          const candidateId = getManualCandidateObjectId(candidate);
+          return candidateId && !matchedNewIds.has(candidateId);
+        })
+        .map((candidate) => ({
+          id: getManualCandidateObjectId(candidate),
+          sourceName:
+            candidate.sourceName ||
+            candidate.id ||
+            candidate.objectId ||
+            candidate.key ||
+            candidate.normalizedKey ||
+            candidate.matchKey ||
+            candidate.name ||
+            candidate.address ||
+            candidate.prefix ||
+            "-",
+          score: "-",
+          reason: "manual-candidate",
+        }));
+
+      return {
+        ...item,
+        manualCandidates: candidates,
+      };
+    }
+
+    if (status === "new-only") {
+      const candidates = oldObjects
+        .filter((candidate) => {
+          const candidateId = getManualCandidateObjectId(candidate);
+          return candidateId && !matchedOldIds.has(candidateId);
+        })
+        .map((candidate) => ({
+          id: getManualCandidateObjectId(candidate),
+          sourceName:
+            candidate.sourceName ||
+            candidate.id ||
+            candidate.objectId ||
+            candidate.key ||
+            candidate.normalizedKey ||
+            candidate.matchKey ||
+            candidate.name ||
+            candidate.address ||
+            candidate.prefix ||
+            "-",
+          score: "-",
+          reason: "manual-candidate",
+        }));
+
+      return {
+        ...item,
+        manualCandidates: candidates,
+      };
+    }
+
+    return item;
+  });
+}
+
 function renderSemanticPreview() {
   const container = ensureSemanticPreviewContainer();
 
@@ -3544,7 +3641,11 @@ function renderSemanticPreview() {
     side: "new",
   });
 
-  const manualMap = loadManualMapFromLocalStorage();
+  const manualMap =
+    state.profileDraft?.manualMap &&
+    Object.keys(state.profileDraft.manualMap).length
+      ? state.profileDraft.manualMap
+      : loadManualMapFromLocalStorage();
 
   const matches = matchNormalizedObjects({
     oldObjects: oldResult.objects,
@@ -3552,7 +3653,33 @@ function renderSemanticPreview() {
     manualMap,
   });
 
-  const plan = createComparisonPlan(matches, state.profileDraft || {});
+  const plan = attachManualCandidatesToPlan(
+    createComparisonPlan(matches, state.profileDraft || {}),
+    oldResult.objects,
+    newResult.objects
+  );
+
+  console.log("[relationship-debug]", {
+  oldObjects: oldResult.objects.map((o) => ({
+    id: o.id,
+    type: o.normalizedType,
+    sourceName: o.sourceName,
+    fields: o.fields,
+  })),
+  newObjects: newResult.objects.map((o) => ({
+    id: o.id,
+    type: o.normalizedType,
+    sourceName: o.sourceName,
+    fields: o.fields,
+  })),
+  plan: plan.map((p) => ({
+    title: `${p.oldObject?.sourceName || "-"} -> ${p.newObject?.sourceName || "-"}`,
+    type: p.objectType,
+    status: p.status,
+    relationships: p.relationshipSummary,
+  })),
+});
+
   const html = renderComparisonPlanHtml(plan);
 
   container.innerHTML = `
@@ -3565,14 +3692,47 @@ function renderSemanticPreview() {
 
   container.querySelectorAll(".semantic-candidate-select-btn").forEach((button) => {
     button.addEventListener("click", () => {
-      applyManualSelectionToStorage(
+      const nextManualMap = applyManualSelectionToStorage(
         button.dataset.oldObjectId,
         button.dataset.newObjectId
       );
 
+      state.profileDraft.manualMap = {
+        ...(state.profileDraft.manualMap || {}),
+        ...nextManualMap,
+      };
+
       renderSemanticPreview();
     });
   });
+
+  container.querySelectorAll(".semantic-manual-remove-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const oldObjectId = button.dataset.oldObjectId;
+
+      const profileManualMap = state.profileDraft?.manualMap || {};
+      const localManualMap = loadManualMapFromLocalStorage();
+
+      const mergedManualMap = {
+        ...localManualMap,
+        ...profileManualMap,
+      };
+
+      const nextManualMap = removeManualMapping(mergedManualMap, oldObjectId);
+
+      state.profileDraft.manualMap = nextManualMap;
+      saveManualMapToLocalStorage(nextManualMap);
+
+      console.log("[manual-map-remove]", {
+        oldObjectId,
+        before: mergedManualMap,
+        after: nextManualMap,
+      });
+
+      renderSemanticPreview();
+    });
+  });
+
 }
 
 function safeStep(label, callback) {
@@ -7283,6 +7443,8 @@ async function saveSession() {
     oldConfig: selectors.oldInput.value,
     newConfig: selectors.newInput.value,
     profileId: state.activeProfileId,
+    manualMap: state.profileDraft?.manualMap || loadManualMapFromLocalStorage(),
+    profileSnapshot: deepClone(state.profileDraft),
     updatedAt: Date.now(),
   };
   await saveRecord("sessions", session, "configWorkbenchSessions");
@@ -7295,14 +7457,30 @@ async function loadSelectedSession() {
   if (!session) return;
   selectors.oldInput.value = session.oldConfig;
   selectors.newInput.value = session.newConfig;
+
+  if (session.profileSnapshot) {
+    state.profileDraft = normalizeProfile(session.profileSnapshot);
+    if (!state.profileDraft.manualMap) {
+      state.profileDraft.manualMap = session.manualMap || {};
+    }
+    saveManualMapToLocalStorage(state.profileDraft.manualMap || {});
+  } else if (session.manualMap) {
+    state.profileDraft.manualMap = session.manualMap;
+    saveManualMapToLocalStorage(session.manualMap);
+  }
   captureInitialConfigSnapshot(true);
   updateLineNumbers();
-  if (session.profileId) {
+
+
+  if (!session.profileSnapshot && session.profileId) {
     const profiles = await readRecords("profiles", "configWorkbenchProfiles");
     const profile = profiles.find((item) => item.id === session.profileId);
     if (profile) {
       state.activeProfileId = profile.id;
       state.profileDraft = normalizeProfile(profile);
+      if (!state.profileDraft.manualMap) {
+        state.profileDraft.manualMap = {};
+      }
       renderProfileEditor();
       await refreshProfileSelect();
     }

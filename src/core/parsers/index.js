@@ -2,6 +2,7 @@
 import { parseCiscoIosXeConfig } from "./ciscoIosXeParser.js";
 import { parseNokiaMdCliConfig } from "./nokiaMdCliParser.js";
 import { parseNokiaClassicConfig } from "./nokiaClassicParser.js";
+import { parseJuniperSetConfig } from "./juniperParser.js";
 
 export const PARSER_IDS = {
   NOKIA_CLASSIC: "nokia-classic",
@@ -90,8 +91,9 @@ export function parseConfigByVendor(context) {
       return createParserResult(context);
 
     case PARSER_IDS.JUNIPER_SET:
+      context.objects = parseJuniperSetConfig(context.configText);
       return createParserResult(context);
-
+      
     case PARSER_IDS.ARISTA_EOS:
       return createParserResult(context);
 

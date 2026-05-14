@@ -52,19 +52,19 @@ export default function ProfileEditor() {
   return (
     <AppPanel as="article" className="profile-editor">
       <AppSectionHeader
-        title="Profile Editor"
-        description="Object identity, semantic field, normalization, and policy rule configuration."
-        actions={<AppButton id="newProfileBtn" type="button" variant="secondary"><Plus />New profile</AppButton>}
+        title="프로파일 편집기"
+        description="객체 식별, 의미 필드, 정규화, 검증 정책 설정"
+        actions={<AppButton id="newProfileBtn" type="button" variant="secondary"><Plus />새 프로파일</AppButton>}
       />
 
       <div className="profile-flow-note">
-        <strong>Rule flow</strong>
-        <span>Object mapping to identity rules to field extraction to normalization to GUI mapping to validation policy to exceptions.</span>
+        <strong>규칙 흐름</strong>
+        <span>객체 매핑 → 식별 규칙 → 필드 추출 → 정규화 → GUI 매핑 → 검증 정책 → 예외</span>
       </div>
 
-      <label>Profile name<input id="profileNameInput" defaultValue="Nokia default validation" /></label>
+      <label>프로파일 이름<input id="profileNameInput" defaultValue="Nokia 기본 검증" /></label>
       <label>
-        Vendor / OS
+        벤더 / OS
         <AppSelect id="vendorSelect">
           <option value="nokia">Nokia Classic / MD-CLI</option>
           <option value="cisco">Cisco</option>
@@ -72,27 +72,27 @@ export default function ProfileEditor() {
         </AppSelect>
       </label>
 
-      <CollapsibleSection id="object-type-mapping" title="1. Object Type Mapping" summary="Link old and new object types" defaultOpen>
-        <SectionIntro step="1" title="Object Type Mapping">Map source and target object types before identity and field extraction rules run.</SectionIntro>
+      <CollapsibleSection id="object-type-mapping" title="1. 객체 유형 매핑" summary="기존/신규 객체 유형 연결" defaultOpen>
+        <SectionIntro step="1" title="객체 유형 매핑">식별/필드 추출 전에 기존과 신규 객체 유형을 연결.</SectionIntro>
         <div id="mappingEditor" className="mapping-editor" />
       </CollapsibleSection>
 
-      <CollapsibleSection id="identity-rule" title="2. Identity Rules" summary="Object identity matching criteria" defaultOpen>
-        <SectionIntro step="2" title="Identity Rules">Define how old and new objects are recognized as the same semantic object.</SectionIntro>
+      <CollapsibleSection id="identity-rule" title="2. 식별 규칙" summary="기존/신규 객체 식별 기준" defaultOpen>
+        <SectionIntro step="2" title="식별 규칙">기존/신규 객체를 같은 의미 객체로 인식하는 기준.</SectionIntro>
         <div id="identityRuleEditor" className="identity-rule-editor" />
       </CollapsibleSection>
 
-      <CollapsibleSection id="mapping-workbench" title="3. Mapping Workbench" summary="Line, block, group, and token GUI mapping" defaultOpen>
-        <SectionIntro step="3" title="Mapping Workbench">Create line groups, structural mappings, and token mappings from representative examples.</SectionIntro>
-        <label>Object type<AppSelect id="profileObjectTypeSelect" /></label>
+      <CollapsibleSection id="mapping-workbench" title="3. 매핑 워크벤치" summary="라인/그룹/토큰 GUI 매핑" defaultOpen>
+        <SectionIntro step="3" title="매핑 워크벤치">예제 설정에서 라인 그룹, 구조 매핑, 토큰 매핑 생성.</SectionIntro>
+        <label>객체 유형<AppSelect id="profileObjectTypeSelect" /></label>
         <div className="profile-example-grid">
           <div>
-            <div className="profile-example-title">Source example</div>
+            <div className="profile-example-title">기존 설정 예제</div>
             <textarea id="profileOldExampleInput" className="profile-example-input" spellCheck="false" wrap="off" />
             <div id="profileOldPreview" className="profile-example-preview" />
           </div>
           <div>
-            <div className="profile-example-title">Target example</div>
+            <div className="profile-example-title">신규 설정 예제</div>
             <textarea id="profileNewExampleInput" className="profile-example-input" spellCheck="false" wrap="off" />
             <div id="profileNewPreview" className="profile-example-preview" />
           </div>
@@ -100,85 +100,85 @@ export default function ProfileEditor() {
           <div id="profileRulePopover" className="profile-rule-popover" hidden />
         </div>
         <AppToolbar className="profile-example-actions">
-          <AppButton id="autoLearnRulesBtn" type="button" variant="secondary"><Sparkles />Generate candidates</AppButton>
-          <AppButton id="addLineMappingBtn" type="button" variant="secondary">Add structure mapping</AppButton>
-          <AppButton id="addContextMappingBtn" type="button" variant="secondary">Add block mapping</AppButton>
-          <AppButton id="addFieldMappingBtn" type="button" variant="secondary">Add field mapping</AppButton>
-          <AppButton id="createTokenGroupBtn" type="button" variant="secondary">Create token group</AppButton>
-          <AppButton id="createLineGroupBtn" type="button" variant="secondary">Create line group</AppButton>
-          <AppButton id="addOldLineRuleBtn" type="button" variant="secondary">Add source exception</AppButton>
-          <AppButton id="addNewLineRuleBtn" type="button" variant="secondary">Add target exception</AppButton>
+          <AppButton id="autoLearnRulesBtn" type="button" variant="secondary"><Sparkles />후보 생성</AppButton>
+          <AppButton id="addLineMappingBtn" type="button" variant="secondary">구조 매핑 추가</AppButton>
+          <AppButton id="addContextMappingBtn" type="button" variant="secondary">블록 매핑 추가</AppButton>
+          <AppButton id="addFieldMappingBtn" type="button" variant="secondary">필드 매핑 추가</AppButton>
+          <AppButton id="createTokenGroupBtn" type="button" variant="secondary">토큰 그룹 생성</AppButton>
+          <AppButton id="createLineGroupBtn" type="button" variant="secondary">라인 그룹 생성</AppButton>
+          <AppButton id="addOldLineRuleBtn" type="button" variant="secondary">기존 예외 추가</AppButton>
+          <AppButton id="addNewLineRuleBtn" type="button" variant="secondary">신규 예외 추가</AppButton>
         </AppToolbar>
-        <div className="candidate-scope-list" aria-label="Candidate generation scope">
-          <span>identity</span>
-          <span>field extraction</span>
-          <span>normalization</span>
-          <span>structure mapping</span>
-          <span>token mapping</span>
-          <span>validation policy</span>
+        <div className="candidate-scope-list" aria-label="후보 생성 범위">
+          <span>식별</span>
+          <span>필드 추출</span>
+          <span>정규화</span>
+          <span>구조 매핑</span>
+          <span>토큰 매핑</span>
+          <span>검증 정책</span>
         </div>
-        <div id="profileSelectionGuide" className="profile-guide">Select tokens, lines, or groups.</div>
+        <div id="profileSelectionGuide" className="profile-guide">토큰, 라인, 그룹 선택</div>
         <div id="profileMappingReactRoot" className="profile-mapping-react-root" />
         <div className="profile-section-subtitle">
-          <h4>Semantic token mapping</h4>
-          <p>Token mappings are managed separately from line and group mappings.</p>
+          <h4>의미 토큰 매핑</h4>
+          <p>토큰 매핑은 라인/그룹 매핑과 분리 관리.</p>
         </div>
         <div id="semanticRuleEditor" className="semantic-rule-editor" />
         <details className="profile-compat-panel">
-          <summary>Advanced compatibility mappings</summary>
+          <summary>고급 호환 매핑</summary>
           <div className="profile-manual-rule-panels">
             <div>
-              <h4>Structure mapping</h4>
+              <h4>구조 매핑</h4>
               <div id="profileMappingRows" className="profile-mapping-rows" />
             </div>
             <div>
-              <h4>Block mapping compatibility</h4>
+              <h4>블록 매핑 호환</h4>
               <div id="profileContextMappingRows" className="profile-mapping-rows" />
             </div>
             <div>
-              <h4>Field mapping compatibility</h4>
+              <h4>필드 매핑 호환</h4>
               <div id="profileFieldMappingRows" className="profile-mapping-rows" />
             </div>
           </div>
         </details>
         <details className="profile-compat-panel">
-          <summary>Line exceptions</summary>
+          <summary>라인 예외</summary>
           <div className="profile-section-subtitle">
-            <h4>Line exceptions</h4>
-            <p>Final line-level exceptions such as ignore, required, added, and missing.</p>
+            <h4>라인 예외</h4>
+            <p>무시, 필수, 추가, 누락 같은 최종 라인 단위 예외.</p>
           </div>
           <div id="profileRuleRows" className="profile-rule-rows" />
         </details>
       </CollapsibleSection>
 
-      <CollapsibleSection id="advanced-compare-policy" title="4. Advanced Compare Policy" summary="Validation policy, normalization, parser rules" defaultOpen={false}>
-        <SectionIntro step="4" title="Validation Policy">Control required, presence, ignore, and compare behavior after field extraction and normalization.</SectionIntro>
+      <CollapsibleSection id="advanced-compare-policy" title="4. 고급 비교 정책" summary="검증 정책, 정규화, 파서 규칙" defaultOpen={false}>
+        <SectionIntro step="4" title="검증 정책">필드 추출/정규화 후 필수, 존재, 무시, 비교 동작 제어.</SectionIntro>
         <div id="policyEditor" className="policy-editor" />
         <div className="profile-section-subtitle">
-          <h4>Normalization rules</h4>
-          <p>Normalize equivalent expressions such as no shutdown and admin-state enable before compare.</p>
+          <h4>정규화 규칙</h4>
+          <p>no shutdown과 admin-state enable 같은 동일 의미 문법을 비교 전 정규화.</p>
         </div>
         <div id="normalizeEditor" className="normalize-editor" />
         <div className="profile-section-subtitle">
-          <h4>Parser rules / field extraction</h4>
-          <p>Advanced field extraction rules used by compare and semantic preview.</p>
+          <h4>파서 규칙 / 필드 추출</h4>
+          <p>비교 및 의미 미리보기에서 사용하는 고급 필드 추출 규칙.</p>
         </div>
         <div id="parserRuleEditor" className="parser-rule-editor" />
       </CollapsibleSection>
 
       <div className="profile-section">
-        <h3>Change History</h3>
+        <h3>변경 이력</h3>
         <div id="profileChangesList" className="profile-changes-list" />
         <AppToolbar className="profile-rollback-actions">
-          <AppIconButton id="undoProfileBtn" type="button" title="Undo last change"><Undo2 /></AppIconButton>
-          <AppButton id="rollbackProfileBtn" type="button" variant="secondary"><RotateCcw />Restore saved state</AppButton>
+          <AppIconButton id="undoProfileBtn" type="button" title="직전 변경 취소"><Undo2 /></AppIconButton>
+          <AppButton id="rollbackProfileBtn" type="button" variant="secondary"><RotateCcw />저장 상태 복원</AppButton>
         </AppToolbar>
       </div>
 
       <div className="profile-save-panel">
-        <div id="profileStatus" className="profile-status" data-kind="info">No profile changes</div>
-        <AppButton id="saveProfileBtn" type="button"><Save />Save profile</AppButton>
-        <AppButton id="saveProfileAsBtn" type="button" variant="secondary">Save as</AppButton>
+        <div id="profileStatus" className="profile-status" data-kind="info">프로파일 변경 없음</div>
+        <AppButton id="saveProfileBtn" type="button"><Save />프로파일 저장</AppButton>
+        <AppButton id="saveProfileAsBtn" type="button" variant="secondary">다른 이름 저장</AppButton>
       </div>
     </AppPanel>
   );

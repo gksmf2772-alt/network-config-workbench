@@ -5,6 +5,7 @@ import {
   buildHierarchyKey,
   canonicalInterfaceName,
   canonicalServiceName,
+  canonicalStaticRouteIdentity,
   normalizeNokiaSemanticFields,
 } from "../semanticFieldNormalizer.js";
 
@@ -14,6 +15,117 @@ function splitLines(configText) {
 
 function stripQuotes(value) {
   return String(value || "").replace(/^["']|["']$/g, "").trim();
+}
+
+function normalizeState(value = "") {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "enable" || text === "enabled" || text === "no shutdown") return "enabled";
+  if (text === "disable" || text === "disabled" || text === "shutdown") return "disabled";
+  return text;
+}
+
+function tokenizeMdCliLine(line = "") {
+  const tokens = [];
+  const regex = /"([^"]*)"|[{}]|\S+/g;
+  let match;
+
+  while ((match = regex.exec(String(line || "")))) {
+    const quoted = match[1] !== undefined;
+    const raw = match[0];
+    const token = quoted ? match[1] : raw;
+    tokens.push({
+      raw,
+      token: stripQuotes(token).replace(/[{};,]+$/g, ""),
+      normalized: stripQuotes(token).replace(/[{};,]+$/g, "").toLowerCase(),
+      quoted,
+    });
+  }
+
+  return tokens.filter((item) => item.token !== "");
+}
+
+function unwrapConfigureOneLine(line = "") {
+  const tokens = tokenizeMdCliLine(line)
+    .map((item) => item.token)
+    .filter((token) => token !== "{" && token !== "}");
+
+  if (tokens[0]?.toLowerCase() === "/configure" || tokens[0]?.toLowerCase() === "configure") {
+    return tokens.slice(1);
+  }
+
+  return [];
+}
+
+function tokenEquals(tokens, index, expected) {
+  return String(tokens[index] || "").toLowerCase() === String(expected || "").toLowerCase();
+}
+
+function findToken(tokens = [], token = "", start = 0) {
+  const normalized = String(token || "").toLowerCase();
+  for (let index = start; index < tokens.length; index += 1) {
+    if (String(tokens[index] || "").toLowerCase() === normalized) return index;
+  }
+  return -1;
+}
+
+function findPath(tokens = [], path = [], start = 0) {
+  const normalizedPath = path.map((item) => String(item || "").toLowerCase());
+  for (let index = start; index <= tokens.length - normalizedPath.length; index += 1) {
+    const matched = normalizedPath.every(
+      (part, offset) => String(tokens[index + offset] || "").toLowerCase() === part
+    );
+    if (matched) return index;
+  }
+  return -1;
+}
+
+function setField(fields, field, value) {
+  const cleanValue = stripQuotes(value);
+  if (!field || !cleanValue || fields[field] !== undefined) return;
+  fields[field] = cleanValue;
+}
+
+function mapLeafFields(fields, tokens, start, specs = []) {
+  const orderedSpecs = [...specs].sort((a, b) => b.path.length - a.path.length);
+
+  for (let index = start; index < tokens.length; index += 1) {
+    for (const spec of orderedSpecs) {
+      const pathIndex = findPath(tokens, spec.path, index);
+      if (pathIndex !== index) continue;
+
+      const value = tokens[index + spec.path.length];
+      if (!value) continue;
+
+      setField(fields, spec.field, spec.normalize ? spec.normalize(value) : value);
+      index += spec.path.length;
+      break;
+    }
+  }
+
+  return fields;
+}
+
+function createMdCliOneLineObject({ type, identity, sourceType, sourceName, fields, rawLine, index }) {
+  const normalizedFields = normalizeNokiaSemanticFields(fields);
+  const object = createNormalizedObject({
+    id: `nokia-md-oneline-${type}-${index}-${identity}`,
+    vendor: "nokia-md-cli",
+    sourceType: sourceType || type,
+    sourceName: sourceName || identity,
+    normalizedType: type,
+    normalizedIdentity: identity,
+    rawLines: [rawLine],
+    fields: normalizedFields,
+  });
+
+  object.description = normalizedFields.description || null;
+  object.prefix = normalizedFields.route || normalizedFields.prefix || normalizedFields.address || null;
+  object.nextHop = normalizedFields["next-hop"] || null;
+  object.ipAddress = normalizedFields.address?.split("/")?.[0] || null;
+  object.peerIp = normalizedFields.neighbor || normalizedFields.peerIp || null;
+  object.peerAs = normalizedFields["peer-as"] || normalizedFields.peerAs || null;
+
+  return object;
 }
 
 function extractDescription(lines) {
@@ -345,43 +457,61 @@ function parseMdCliStaticRoutes(lines) {
 
   return blocks.map((block, index) => {
     const prefix = stripQuotes(block.name);
-
-    const object = createNormalizedObject({
-      id: `nokia-md-static-route-${index}-${prefix}`,
-      vendor: "nokia-md-cli",
-      sourceType: "route",
-      sourceName: prefix,
-      normalizedType: "static-route",
-      normalizedIdentity: prefix,
-      rawLines: block.lines,
-      fields: {
-        route: prefix,
-      },
-    });
-
-    object.prefix = prefix;
+    const fields = {
+      route: prefix,
+    };
 
     for (const line of block.lines) {
       const trimmed = line.trim();
 
       const nextHop = trimmed.match(/^next-hop\s+"?([^"\s{]+)"?/i);
       if (nextHop) {
-        object.fields["next-hop"] = nextHop[1];
+        fields["next-hop"] = stripQuotes(nextHop[1]);
       }
 
       const tag = trimmed.match(/^tag\s+(\S+)$/i);
       if (tag) {
-        object.fields.tag = tag[1];
+        fields.tag = stripQuotes(tag[1]);
+      }
+
+      const metric = trimmed.match(/^metric\s+(\S+)$/i);
+      if (metric) {
+        fields.metric = stripQuotes(metric[1]);
+      }
+
+      const description = trimmed.match(/^description\s+"?(.+?)"?$/i);
+      if (description) {
+        fields.description = stripQuotes(description[1]);
       }
 
       if (/^admin-state\s+enable$/i.test(trimmed)) {
-        object.fields.state = "enabled";
+        fields.state = "enabled";
+        fields["admin-state"] = "enabled";
       }
 
       if (/^admin-state\s+disable$/i.test(trimmed)) {
-        object.fields.state = "disabled";
+        fields.state = "disabled";
+        fields["admin-state"] = "disabled";
       }
     }
+
+    const normalizedFields = normalizeNokiaSemanticFields(fields);
+    const identity = canonicalStaticRouteIdentity(normalizedFields) || prefix;
+
+    const object = createNormalizedObject({
+      id: `nokia-md-static-route-${index}-${identity}`,
+      vendor: "nokia-md-cli",
+      sourceType: "route",
+      sourceName: prefix,
+      normalizedType: "static-route",
+      normalizedIdentity: identity,
+      rawLines: block.lines,
+      fields: normalizedFields,
+    });
+
+    object.prefix = prefix;
+    object.nextHop = normalizedFields["next-hop"] || null;
+    object.description = normalizedFields.description || null;
 
     return object;
   });
@@ -395,9 +525,21 @@ function parseMdCliBgpNeighbors(lines) {
     const description = extractDescription(block.lines);
 
     let peerAs = null;
+    let group = null;
+    let authenticationKey = null;
+    let state = null;
     for (const line of block.lines) {
-      const match = line.trim().match(/^peer-as\s+(\S+)/i);
+      const trimmed = line.trim();
+      const match = trimmed.match(/^peer-as\s+(\S+)/i);
       if (match) peerAs = match[1];
+      const remoteAs = trimmed.match(/^remote-as\s+(\S+)/i);
+      if (remoteAs) peerAs = remoteAs[1];
+      const groupMatch = trimmed.match(/^group\s+"?([^"]+)"?/i);
+      if (groupMatch) group = stripQuotes(groupMatch[1]);
+      const authMatch = trimmed.match(/^authentication-key\s+(.+)$/i);
+      if (authMatch) authenticationKey = stripQuotes(authMatch[1]);
+      if (/^admin-state\s+enable$/i.test(trimmed) || /^no\s+shutdown$/i.test(trimmed)) state = "enabled";
+      if (/^admin-state\s+disable$/i.test(trimmed) || /^shutdown$/i.test(trimmed)) state = "disabled";
     }
 
     const object = createNormalizedObject({
@@ -412,6 +554,11 @@ function parseMdCliBgpNeighbors(lines) {
         neighbor: peerIp,
         description,
         peerAs,
+        "peer-as": peerAs,
+        group,
+        "authentication-key": authenticationKey,
+        state,
+        "admin-state": state,
       },
     });
 
@@ -718,6 +865,233 @@ function parseMdCliServiceObjects(lines) {
   return objects;
 }
 
+const PORT_ONE_LINE_FIELDS = [
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["description"], field: "description" },
+  { path: ["ethernet", "mtu"], field: "mtu" },
+  { path: ["mtu"], field: "mtu" },
+];
+
+const LAG_ONE_LINE_FIELDS = [
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["description"], field: "description" },
+  { path: ["lacp", "mode"], field: "lacpMode" },
+  { path: ["lacp", "mode"], field: "lacp-mode" },
+  { path: ["port"], field: "member-port" },
+];
+
+const INTERFACE_ONE_LINE_FIELDS = [
+  { path: ["description"], field: "description" },
+  { path: ["ipv4", "primary", "address"], field: "address" },
+  { path: ["ip", "address"], field: "address" },
+  { path: ["address"], field: "address" },
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+];
+
+const BGP_ONE_LINE_FIELDS = [
+  { path: ["description"], field: "description" },
+  { path: ["group"], field: "group" },
+  { path: ["authentication-key"], field: "authentication-key" },
+  { path: ["peer-as"], field: "peer-as" },
+  { path: ["remote-as"], field: "peer-as" },
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+];
+
+const STATIC_ROUTE_ONE_LINE_FIELDS = [
+  { path: ["next-hop"], field: "next-hop" },
+  { path: ["metric"], field: "metric" },
+  { path: ["tag"], field: "tag" },
+  { path: ["description"], field: "description" },
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+];
+
+const PIM_ONE_LINE_FIELDS = [
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["description"], field: "description" },
+];
+
+function parseMdCliOneLinePort(tokens, rawLine, index) {
+  if (!tokenEquals(tokens, 0, "port") || !tokens[1]) return null;
+  const portId = stripQuotes(tokens[1]);
+  const fields = mapLeafFields({ port: portId }, tokens, 2, PORT_ONE_LINE_FIELDS);
+  return createMdCliOneLineObject({
+    type: "port",
+    identity: portId,
+    sourceType: "port",
+    sourceName: portId,
+    fields,
+    rawLine,
+    index,
+  });
+}
+
+function parseMdCliOneLineLag(tokens, rawLine, index) {
+  if (!tokenEquals(tokens, 0, "lag") || !tokens[1]) return null;
+  const lagName = stripQuotes(tokens[1]);
+  const fields = mapLeafFields({ lag: lagName }, tokens, 2, LAG_ONE_LINE_FIELDS);
+  if (fields.lacpMode && !fields["lacp-mode"]) fields["lacp-mode"] = fields.lacpMode;
+  return createMdCliOneLineObject({
+    type: "lag",
+    identity: lagName,
+    sourceType: "lag",
+    sourceName: lagName,
+    fields,
+    rawLine,
+    index,
+  });
+}
+
+function parseMdCliOneLineService(tokens, rawLine, index) {
+  if (!tokenEquals(tokens, 0, "service")) return null;
+
+  const serviceType = tokens[1] || "";
+  const serviceId = stripQuotes(tokens[2] || "");
+  const interfaceIndex = findToken(tokens, "interface", 3);
+  const subscriberIndex = findToken(tokens, "subscriber-interface", 3);
+
+  if (interfaceIndex >= 0 && tokens[interfaceIndex + 1]) {
+    const interfaceName = canonicalInterfaceName(tokens[interfaceIndex + 1]);
+    const fields = mapLeafFields(
+      {
+        service: serviceType,
+        "service-id": serviceId,
+        interface: interfaceName,
+      },
+      tokens,
+      interfaceIndex + 2,
+      INTERFACE_ONE_LINE_FIELDS
+    );
+    const identity = buildHierarchyKey([serviceId, interfaceName]);
+    return createMdCliOneLineObject({
+      type: "interface",
+      identity,
+      sourceType: "interface",
+      sourceName: interfaceName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  if (subscriberIndex >= 0 && tokens[subscriberIndex + 1]) {
+    const subscriberName = canonicalServiceName(tokens[subscriberIndex + 1]);
+    const fields = mapLeafFields(
+      {
+        service: serviceType,
+        "service-id": serviceId,
+        "subscriber-interface": subscriberName,
+      },
+      tokens,
+      subscriberIndex + 2,
+      INTERFACE_ONE_LINE_FIELDS
+    );
+    const identity = buildHierarchyKey([serviceId, subscriberName]);
+    return createMdCliOneLineObject({
+      type: "subscriber-interface",
+      identity,
+      sourceType: "subscriber-interface",
+      sourceName: subscriberName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  return null;
+}
+
+function parseMdCliOneLineRouter(tokens, rawLine, index) {
+  if (!tokenEquals(tokens, 0, "router")) return null;
+
+  const bgpIndex = findToken(tokens, "bgp", 1);
+  const staticRoutesIndex = findToken(tokens, "static-routes", 1);
+  const pimIndex = findToken(tokens, "pim", 1);
+
+  if (bgpIndex >= 0 && tokenEquals(tokens, bgpIndex + 1, "neighbor") && tokens[bgpIndex + 2]) {
+    const peerIp = stripQuotes(tokens[bgpIndex + 2]);
+    const fields = mapLeafFields(
+      { neighbor: peerIp, peerIp },
+      tokens,
+      bgpIndex + 3,
+      BGP_ONE_LINE_FIELDS
+    );
+    return createMdCliOneLineObject({
+      type: "bgp",
+      identity: peerIp,
+      sourceType: "neighbor",
+      sourceName: peerIp,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  if (
+    staticRoutesIndex >= 0 &&
+    tokenEquals(tokens, staticRoutesIndex + 1, "route") &&
+    tokens[staticRoutesIndex + 2]
+  ) {
+    const route = stripQuotes(tokens[staticRoutesIndex + 2]);
+    const fields = mapLeafFields(
+      { route, prefix: route },
+      tokens,
+      staticRoutesIndex + 3,
+      STATIC_ROUTE_ONE_LINE_FIELDS
+    );
+    const normalizedFields = normalizeNokiaSemanticFields(fields);
+    const identity = canonicalStaticRouteIdentity(normalizedFields) || route;
+    return createMdCliOneLineObject({
+      type: "static-route",
+      identity,
+      sourceType: "route",
+      sourceName: route,
+      fields: normalizedFields,
+      rawLine,
+      index,
+    });
+  }
+
+  if (pimIndex >= 0 && tokenEquals(tokens, pimIndex + 1, "interface") && tokens[pimIndex + 2]) {
+    const interfaceName = canonicalInterfaceName(tokens[pimIndex + 2]);
+    const fields = mapLeafFields(
+      { interface: interfaceName },
+      tokens,
+      pimIndex + 3,
+      PIM_ONE_LINE_FIELDS
+    );
+    return createMdCliOneLineObject({
+      type: "pim",
+      identity: interfaceName,
+      sourceType: "pim",
+      sourceName: interfaceName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  return null;
+}
+
+function parseMdCliOneLineObject(line, index) {
+  if (!/^\s*\/?configure\s*\{/i.test(line)) return null;
+  const tokens = unwrapConfigureOneLine(line);
+  if (!tokens.length) return null;
+
+  return (
+    parseMdCliOneLinePort(tokens, line, index) ||
+    parseMdCliOneLineLag(tokens, line, index) ||
+    parseMdCliOneLineService(tokens, line, index) ||
+    parseMdCliOneLineRouter(tokens, line, index)
+  );
+}
+
+function parseMdCliOneLineObjects(lines) {
+  return lines
+    .map((line, index) => parseMdCliOneLineObject(line, index))
+    .filter(Boolean);
+}
+
 function mergeObjectsBySemanticIdentity(objects = []) {
   const merged = new Map();
 
@@ -737,6 +1111,7 @@ function mergeObjectsBySemanticIdentity(objects = []) {
     target.description ||= object.description;
     target.ipAddress ||= object.ipAddress;
     target.prefix ||= object.prefix;
+    target.nextHop ||= object.nextHop;
     target.peerIp ||= object.peerIp;
     target.peerAs ||= object.peerAs;
   });
@@ -762,6 +1137,7 @@ export function parseNokiaMdCliConfig(configText) {
   const lines = splitLines(configText);
 
   return mergeObjectsBySemanticIdentity([
+    ...parseMdCliOneLineObjects(lines),
     ...parseMdCliPorts(lines),
     ...parseMdCliLags(lines),
     ...parseMdCliInterfaces(lines),

@@ -3,6 +3,7 @@ import {
   buildHierarchyKey,
   canonicalInterfaceName,
   canonicalServiceName,
+  canonicalStaticRouteIdentity,
   normalizeNokiaSemanticFields,
 } from "../semanticFieldNormalizer.js";
 
@@ -52,6 +53,7 @@ function createObject({
     prefix: fields.route || fields.address || null,
     peerIp: fields.neighbor || fields.peerIp || null,
     peerAs: fields["peer-as"] || fields.peerAs || null,
+    nextHop: fields["next-hop"] || fields.nextHop || null,
 
     fields: normalizeNokiaSemanticFields(fields),
     rawLines,
@@ -86,12 +88,13 @@ function flushCurrent(current, objects) {
   if (!current) return null;
 
   const normalizedIdentity =
-    current.fields.route ||
-    current.fields.neighbor ||
-    current.fields.interface ||
-    current.fields.lag ||
-    current.fields.port ||
-    current.name;
+    current.type === "static-route"
+      ? (canonicalStaticRouteIdentity(current.fields) || current.fields.route || current.name)
+      : current.fields.neighbor ||
+        current.fields.interface ||
+        current.fields.lag ||
+        current.fields.port ||
+        current.name;
 
   objects.push(
     createObject({

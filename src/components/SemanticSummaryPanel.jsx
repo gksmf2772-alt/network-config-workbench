@@ -15,15 +15,15 @@ export default function SemanticSummaryPanel() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.16, ease: "easeOut" }}
     >
-      <AppToolbar className="result-tabs" role="tablist" aria-label="Comparison summary">
+      <AppToolbar className="result-tabs" role="tablist" aria-label="비교 요약">
         <AppButton id="summaryTabBtn" className="result-tab active" type="button" data-result-tab="summary" role="tab" aria-selected="true" variant="tab">
-          Semantic Summary
+          의미 비교 요약
         </AppButton>
         <AppButton id="objectsTabBtn" className="result-tab" type="button" data-result-tab="objects" role="tab" aria-selected="false" variant="tab">
-          Object Matches
+          객체 이동/검색
         </AppButton>
         <AppButton id="overviewTabBtn" className="result-tab" type="button" data-result-tab="overview" role="tab" aria-selected="false" variant="tab">
-          Relationship Graph
+          통합 리포트
         </AppButton>
       </AppToolbar>
 

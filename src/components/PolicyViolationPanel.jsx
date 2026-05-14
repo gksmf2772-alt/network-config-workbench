@@ -13,8 +13,8 @@ export default function PolicyViolationPanel() {
       <div className="ncw-panel-heading">
         <AlertTriangle className="h-4 w-4 text-amber-600" />
         <div>
-          <h2>Policy Violations</h2>
-          <p>Required rules, field policies, syntax risks, and migration findings.</p>
+          <h2>정책 위반</h2>
+          <p>필수 규칙, 필드 정책, 문법 위험, 마이그레이션 점검 결과를 표시합니다.</p>
         </div>
       </div>
       <div id="reportList" className="report-list grouped-report-list" />

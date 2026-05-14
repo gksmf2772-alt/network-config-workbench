@@ -94,7 +94,7 @@ function canUseNormalizedIdentityAsStrongMatch(object = {}) {
 
   // 벤더 간 장비 교체에서는 port/lag/interface 이름은 신뢰도가 낮다.
   // L3 interface는 prefix/ipAddress가 이미 위에서 강매칭된다.
-  if (["port", "lag", "interface"].includes(type)) {
+  if (["port", "lag", "interface", "static-route"].includes(type)) {
     return false;
   }
 
@@ -142,21 +142,31 @@ function findIdentityMatch(oldObject, candidates) {
     }
 
     if (oldObject.normalizedType === "static-route") {
+      const oldPrefix = getStaticRoutePrefix(oldObject);
+      const newPrefix = getStaticRoutePrefix(newObject);
+      const oldNextHop = getStaticRouteNextHop(oldObject);
+      const newNextHop = getStaticRouteNextHop(newObject);
+
       if (
-        oldObject.prefix &&
-        newObject.prefix &&
-        oldObject.prefix === newObject.prefix
+        oldPrefix &&
+        newPrefix &&
+        oldPrefix === newPrefix &&
+        oldNextHop &&
+        newNextHop &&
+        oldNextHop === newNextHop
       ) {
         return makeMatch({
           oldObject,
           newObject,
           status: "matched",
-          reason: "prefix",
+          reason: "prefix-next-hop",
           score: 100,
-          matchKeyFields: ["prefix"],
-          scoreReasons: ["prefix"],
+          matchKeyFields: ["prefix", "next-hop"],
+          scoreReasons: ["prefix", "next-hop", "static-route-exact-identity"],
         });
       }
+
+      continue;
     }
 
     if (oldObject.normalizedType === "bgp") {
@@ -247,6 +257,75 @@ function normalizeValue(value) {
     .toLowerCase();
 }
 
+function normalizeIdentityToken(value) {
+  return normalizeValue(value).replace(/[{};,]+$/g, "");
+}
+
+function splitStaticRouteIdentity(identity = "") {
+  const [prefix = "", nextHop = ""] = String(identity || "").split("|");
+  return {
+    prefix: normalizeIdentityToken(prefix),
+    nextHop: normalizeIdentityToken(nextHop),
+  };
+}
+
+function getStaticRoutePrefix(object = {}) {
+  const identity = splitStaticRouteIdentity(object?.normalizedIdentity);
+  return (
+    normalizeIdentityToken(getFieldValue(object, "route")) ||
+    normalizeIdentityToken(getFieldValue(object, "prefix")) ||
+    normalizeIdentityToken(object?.prefix) ||
+    identity.prefix
+  );
+}
+
+function getStaticRouteNextHop(object = {}) {
+  const identity = splitStaticRouteIdentity(object?.normalizedIdentity);
+  return (
+    normalizeIdentityToken(getFieldValue(object, "next-hop")) ||
+    normalizeIdentityToken(getFieldValue(object, "nextHop")) ||
+    normalizeIdentityToken(object?.nextHop) ||
+    identity.nextHop
+  );
+}
+
+function scoreStaticRoutePair(oldObject, newObject) {
+  const result = {
+    score: 0,
+    matchKeyFields: [],
+    scoreReasons: [],
+  };
+
+  const oldPrefix = getStaticRoutePrefix(oldObject);
+  const newPrefix = getStaticRoutePrefix(newObject);
+  const oldNextHop = getStaticRouteNextHop(oldObject);
+  const newNextHop = getStaticRouteNextHop(newObject);
+
+  if (oldPrefix && newPrefix && oldPrefix !== newPrefix) {
+    return result;
+  }
+
+  if (oldPrefix && newPrefix && oldPrefix === newPrefix) {
+    addWeightedScore(result, "prefix", 60, "prefix");
+
+    if (oldNextHop && newNextHop && oldNextHop === newNextHop) {
+      addWeightedScore(result, "next-hop", 40, "next-hop");
+      result.scoreReasons.push("static-route-exact-identity");
+      return result;
+    }
+
+    if (oldNextHop && newNextHop && oldNextHop !== newNextHop) {
+      result.scoreReasons.push("static-route-next-hop-mismatch");
+      return result;
+    }
+
+    result.scoreReasons.push("static-route-prefix-only");
+    return result;
+  }
+
+  return result;
+}
+
 function addWeightedScore(result, field, score, reason) {
   if (!score) return;
 
@@ -280,6 +359,10 @@ function scoreSemanticObjectPair(oldObject, newObject) {
   if (!isSameType(oldObject, newObject)) return result;
 
   const objectType = oldObject.normalizedType;
+
+  if (objectType === "static-route") {
+    return scoreStaticRoutePair(oldObject, newObject);
+  }
 
   const oldPrefix = normalizeValue(getFieldValue(oldObject, "prefix"));
   const newPrefix = normalizeValue(getFieldValue(newObject, "prefix"));
@@ -448,6 +531,9 @@ function scoreSemanticObjectPair(oldObject, newObject) {
 }
 
 function getBestWeightedReason(matchKeyFields = []) {
+  if (matchKeyFields.includes("prefix") && matchKeyFields.includes("next-hop")) {
+    return "prefix-next-hop";
+  }
   if (matchKeyFields.includes("prefix")) return "prefix";
   if (matchKeyFields.includes("route")) return "route";
   if (matchKeyFields.includes("peerIp")) return "peer-ip";
@@ -474,6 +560,7 @@ function getAutoMatchThreshold(object = {}) {
   const type = object.normalizedType;
 
   if (type === "interface") return 80;
+  if (type === "static-route") return 100;
 
   // port/lag는 description 의존도가 높으므로 85 이상만 자동 확정
   // 그 미만은 candidate로 보내고 Select로 확정한다.
@@ -546,6 +633,10 @@ function findBestWeightedMatch(oldObject, candidates) {
 
 function findBestDescriptionMatch(oldObject, candidates) {
   let best = null;
+
+  if (oldObject?.normalizedType === "static-route") {
+    return null;
+  }
 
   for (const newObject of candidates) {
     if (!isSameType(oldObject, newObject)) continue;

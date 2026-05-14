@@ -723,7 +723,7 @@ label {
   display: none;
   position: absolute;
   inset: 0;
-  z-index: 8;
+  z-index: 30;
   pointer-events: none;
   overflow: visible;
 }
@@ -771,6 +771,102 @@ label {
   stroke-linecap: round;
   stroke-width: 1.25;
   pointer-events: none;
+}
+
+.line-mapping-connector {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0.72;
+  transition: opacity 140ms ease, stroke-width 140ms ease, filter 140ms ease;
+}
+
+.line-mapping-connector.equal {
+  stroke: rgba(22, 163, 74, 0.54);
+}
+
+.line-mapping-connector.changed {
+  stroke: rgba(202, 138, 4, 0.62);
+}
+
+.line-mapping-connector.candidate {
+  stroke: rgba(234, 88, 12, 0.58);
+}
+
+.line-mapping-connector.conflict {
+  stroke: rgba(220, 38, 38, 0.68);
+}
+
+.line-mapping-connector.style-straight {
+  stroke-width: 1.3;
+}
+
+.line-mapping-connector.style-chain {
+  stroke-width: 1.35;
+  stroke-dasharray: 8 5;
+}
+
+.line-mapping-connector.style-slime {
+  stroke-width: 5.5;
+  stroke-opacity: 0.24;
+  filter: drop-shadow(0 0 5px rgba(20, 184, 166, 0.18));
+}
+
+.line-mapping-connector.line-relation-hover,
+.line-mapping-connector.line-relation-selected {
+  opacity: 0.94;
+  stroke-width: 2.25;
+  filter: drop-shadow(0 0 8px rgba(14, 116, 144, 0.18));
+}
+
+.line-mapping-connector.style-slime.line-relation-hover,
+.line-mapping-connector.style-slime.line-relation-selected {
+  stroke-width: 7;
+  stroke-opacity: 0.36;
+}
+
+.line-mapping-connector.is-animated {
+  animation: line-flow-pulse 1.9s linear infinite;
+}
+
+.line-mapping-connector.style-chain.is-animated {
+  animation: line-chain-flow 1.2s linear infinite;
+}
+
+@keyframes line-flow-pulse {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 0.78; }
+}
+
+@keyframes line-chain-flow {
+  to { stroke-dashoffset: -26; }
+}
+
+.semantic-diff-config-line.is-line-related {
+  position: relative;
+}
+
+.semantic-diff-config-line.line-relation-hover,
+.diff-line.line-relation-hover {
+  background: rgba(236, 253, 245, 0.86) !important;
+  box-shadow: inset 3px 0 0 rgba(22, 163, 74, 0.42);
+}
+
+.semantic-diff-config-line.line-relation-selected,
+.diff-line.line-relation-selected {
+  background: rgba(240, 253, 250, 0.96) !important;
+  outline: 1px solid rgba(13, 148, 136, 0.42);
+  outline-offset: -1px;
+}
+
+.semantic-diff-config-line.line-relation-hover .diff-token-match,
+.semantic-diff-config-line.line-relation-selected .diff-token-match,
+.diff-line.line-relation-hover .diff-token-match,
+.diff-line.line-relation-selected .diff-token-match {
+  border-color: rgba(13, 148, 136, 0.58);
+  background: rgba(204, 251, 241, 0.86);
 }
 
 .result-layout {

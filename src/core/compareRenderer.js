@@ -14,18 +14,29 @@ function escapeHtml(value) {
 }
 
 function getStatusLabel(status) {
-  if (status === "matched") return "MATCHED";
-  if (status === "candidate") return "CANDIDATE";
-  if (status === "old-only") return "OLD ONLY";
-  if (status === "new-only") return "NEW ONLY";
-  return String(status || "UNKNOWN").toUpperCase();
+  if (status === "matched") return "매칭";
+  if (status === "candidate") return "후보";
+  if (status === "old-only") return "기존만 있음";
+  if (status === "new-only") return "신규만 있음";
+  return String(status || "알 수 없음").toUpperCase();
 }
 
 function getFieldDisplayStatus(fieldSummary) {
-  if (fieldSummary?.violation) return fieldSummary.violationReason || "violation";
-  if (fieldSummary?.ignored) return "ignored";
-  if (fieldSummary?.effectiveStatus === "present") return "present";
-  return fieldSummary?.effectiveStatus || fieldSummary?.status || "unknown";
+  if (fieldSummary?.violation) return fieldSummary.violationReason || "정책 위반";
+  if (fieldSummary?.ignored) return "무시";
+  const status = fieldSummary?.effectiveStatus || fieldSummary?.status || "unknown";
+  return ({
+    equal: "동일",
+    matched: "매칭",
+    changed: "변경",
+    present: "존재",
+    missing: "누락",
+    added: "추가",
+    candidate: "후보",
+    conflict: "충돌",
+    ambiguous: "불명확",
+    unknown: "알 수 없음",
+  })[status] || status;
 }
 
 function getFieldCompactValue(fieldSummary) {
@@ -38,7 +49,7 @@ function getFieldCompactValue(fieldSummary) {
 
 function renderFieldSummary(fieldSummary = {}) {
   const fields = Object.values(fieldSummary);
-  if (!fields.length) return `<div class="semantic-empty">No comparable fields</div>`;
+  if (!fields.length) return `<div class="semantic-empty">비교 가능한 필드 없음</div>`;
 
   return `
     <div class="semantic-field-list">
@@ -49,7 +60,7 @@ function renderFieldSummary(fieldSummary = {}) {
             <span class="semantic-field-status">${escapeHtml(getFieldDisplayStatus(field))}</span>
           </div>
           <div class="semantic-field-values compact">${getFieldCompactValue(field)}</div>
-          ${field.violation ? `<div class="semantic-violation">Violation: ${escapeHtml(field.violationReason)}</div>` : ""}
+          ${field.violation ? `<div class="semantic-violation">위반: ${escapeHtml(field.violationReason)}</div>` : ""}
         </div>
       `).join("")}
     </div>
@@ -57,7 +68,18 @@ function renderFieldSummary(fieldSummary = {}) {
 }
 
 function getLineDisplayStatus(lineMatch) {
-  return lineMatch?.semanticCovered ? "SEMANTIC EQUAL" : String(lineMatch?.status || "unknown").toUpperCase();
+  if (lineMatch?.semanticCovered) return "의미 동일";
+  const status = String(lineMatch?.status || "unknown").toLowerCase();
+  return ({
+    equal: "동일",
+    changed: "변경",
+    candidate: "후보",
+    "old-only": "기존만",
+    "new-only": "신규만",
+    conflict: "충돌",
+    ambiguous: "불명확",
+    unknown: "알 수 없음",
+  })[status] || status.toUpperCase();
 }
 
 function formatLineText(lines = []) {
@@ -67,12 +89,12 @@ function formatLineText(lines = []) {
 
 function renderLineMatches(lineMatches = []) {
   if (!Array.isArray(lineMatches) || lineMatches.length === 0) {
-    return `<div class="semantic-empty">No line comparison</div>`;
+    return `<div class="semantic-empty">라인 비교 없음</div>`;
   }
 
   return `
     <details class="semantic-line-section">
-      <summary>Line compare (${lineMatches.length})</summary>
+      <summary>라인 비교 (${lineMatches.length})</summary>
       <div class="semantic-line-grid">
         ${lineMatches.map((lineMatch) => `
           <div class="semantic-line-row semantic-line-${escapeHtml(lineMatch.status)} ${lineMatch.semanticCovered ? "semantic-line-covered" : ""}">
@@ -99,9 +121,9 @@ function renderCandidateList(candidates = [], getIds) {
           return `
             <li class="semantic-candidate-option">
               <span>${escapeHtml(candidate.sourceName || candidate.id || "-")}</span>
-              <span>score: ${escapeHtml(candidate.score ?? "-")}</span>
-              <span>reason: ${escapeHtml(candidate.reason || "-")}</span>
-              <button type="button" class="semantic-candidate-select-btn" data-old-object-id="${escapeHtml(ids.oldObjectId)}" data-new-object-id="${escapeHtml(ids.newObjectId)}">Select</button>
+              <span>점수: ${escapeHtml(candidate.score ?? "-")}</span>
+              <span>사유: ${escapeHtml(candidate.reason || "-")}</span>
+              <button type="button" class="semantic-candidate-select-btn" data-old-object-id="${escapeHtml(ids.oldObjectId)}" data-new-object-id="${escapeHtml(ids.newObjectId)}">선택</button>
             </li>
           `;
         }).join("")}
@@ -141,15 +163,15 @@ function renderRelationshipSummary(relationships = []) {
 
   return `
     <details class="semantic-detail-block">
-      <summary>Relationship Compare (${relationships.length})</summary>
+      <summary>관계 비교 (${relationships.length})</summary>
       <div class="semantic-relationship-list">
         ${relationships.map((item) => `
           <div class="semantic-relationship-item">
             <strong>${escapeHtml(item.label || item.type)}</strong>
-            <span>old: ${escapeHtml(String(item.oldValue || "-"))}</span>
-            <span>new: ${escapeHtml(String(item.newValue || "-"))}</span>
-            <span>status: ${escapeHtml(item.status || "-")}</span>
-            <span>reason: ${escapeHtml(item.reason || "-")}</span>
+            <span>기존: ${escapeHtml(String(item.oldValue || "-"))}</span>
+            <span>신규: ${escapeHtml(String(item.newValue || "-"))}</span>
+            <span>상태: ${escapeHtml(getStatusLabel(item.status))}</span>
+            <span>사유: ${escapeHtml(item.reason || "-")}</span>
           </div>
         `).join("")}
       </div>
@@ -165,7 +187,17 @@ function renderManualMatchActions(item = {}) {
   const oldObjectId = item.oldObject?.id || item.oldObject?.objectId || item.oldObject?.sourceName || "";
   if (!oldObjectId) return "";
 
-  return `<button type="button" class="semantic-manual-remove-btn" data-old-object-id="${escapeHtml(oldObjectId)}">Remove manual match</button>`;
+  return `<button type="button" class="semantic-manual-remove-btn" data-old-object-id="${escapeHtml(oldObjectId)}">수동 매핑 삭제</button>`;
+}
+
+function getStateDisplayLabel(state) {
+  return ({
+    matched: "매칭",
+    partial: "부분 일치",
+    ambiguous: "불명확",
+    unmatched: "미매칭",
+    manual: "수동",
+  })[state] || state || "-";
 }
 
 function getCompactObjectName(item = {}) {
@@ -217,7 +249,7 @@ function summarizePlan(plan = []) {
 
 export function renderComparisonPlanHtml(plan = []) {
   if (!Array.isArray(plan) || plan.length === 0) {
-    return `<div class="semantic-empty">No comparison result</div>`;
+    return `<div class="semantic-empty">비교 결과 없음</div>`;
   }
 
   const summary = summarizePlan(plan);
@@ -225,18 +257,18 @@ export function renderComparisonPlanHtml(plan = []) {
   return `
     <div class="semantic-compare-result">
       <div class="semantic-state-legend">
-        <span class="semantic-status-badge semantic-state-matched">matched</span>
-        <span class="semantic-status-badge semantic-state-partial">partial</span>
-        <span class="semantic-status-badge semantic-state-ambiguous">ambiguous</span>
-        <span class="semantic-status-badge semantic-state-unmatched">unmatched</span>
-        <span class="semantic-status-badge semantic-state-manual">manual</span>
+        <span class="semantic-status-badge semantic-state-matched">매칭</span>
+        <span class="semantic-status-badge semantic-state-partial">부분 일치</span>
+        <span class="semantic-status-badge semantic-state-ambiguous">불명확</span>
+        <span class="semantic-status-badge semantic-state-unmatched">미매칭</span>
+        <span class="semantic-status-badge semantic-state-manual">수동</span>
       </div>
       <div class="semantic-preview-summary">
-        <div class="semantic-summary-item"><div class="semantic-summary-label">Objects</div><div class="semantic-summary-value">${summary.total}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">Matched</div><div class="semantic-summary-value">${summary.matched}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">Unmatched</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">Ambiguous</div><div class="semantic-summary-value">${summary.ambiguous}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">Violations</div><div class="semantic-summary-value">${summary.violations}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">객체</div><div class="semantic-summary-value">${summary.total}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">매칭</div><div class="semantic-summary-value">${summary.matched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">미매칭</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">불명확</div><div class="semantic-summary-value">${summary.ambiguous}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">위반</div><div class="semantic-summary-value">${summary.violations}</div></div>
       </div>
 
       ${plan.map((item) => {
@@ -249,33 +281,33 @@ export function renderComparisonPlanHtml(plan = []) {
         return `
           <details class="semantic-object-card ${violations ? "has-violation" : "no-violation"} ${stateClass}">
             <summary class="semantic-object-summary-row">
-              <span class="semantic-status-badge ${stateClass}">${escapeHtml(stateLabel)}</span>
+              <span class="semantic-status-badge ${stateClass}">${escapeHtml(getStateDisplayLabel(stateLabel))}</span>
               <span class="semantic-object-title">${escapeHtml(item.objectType)} ${escapeHtml(getCompactObjectName(item))}</span>
               <span class="semantic-object-map">
                 <span class="semantic-object-side old">${escapeHtml(getObjectSideLabel(item.oldObject))}</span>
                 <span class="semantic-object-arrow">↔</span>
                 <span class="semantic-object-side new">${escapeHtml(getObjectSideLabel(item.newObject))}</span>
               </span>
-              <span class="semantic-object-metric">score ${item.score ?? "-"}</span>
-              <span class="semantic-object-metric">viol ${violations}</span>
-              <span class="semantic-object-metric">rel ${relationshipIssues}</span>
-              <span class="semantic-object-metric">fields ${changedFields}/${item.fieldStats?.totalFields ?? 0}</span>
+              <span class="semantic-object-metric">점수 ${item.score ?? "-"}</span>
+              <span class="semantic-object-metric">위반 ${violations}</span>
+              <span class="semantic-object-metric">관계 ${relationshipIssues}</span>
+              <span class="semantic-object-metric">필드 ${changedFields}/${item.fieldStats?.totalFields ?? 0}</span>
             </summary>
             <div class="semantic-object-details">
               <div class="semantic-object-meta">
-                <span>old: ${escapeHtml(item.oldObject?.sourceName || item.oldObject?.id || "-")}</span>
-                <span>new: ${escapeHtml(item.newObject?.sourceName || item.newObject?.id || "-")}</span>
-                <span>old identity: ${escapeHtml(item.oldObject?.normalizedIdentity || "-")}</span>
-                <span>new identity: ${escapeHtml(item.newObject?.normalizedIdentity || "-")}</span>
-                <span>match key: ${escapeHtml((item.matchKeyFields || []).join(", ") || "-")}</span>
-                <span>method: ${escapeHtml(item.reason || "-")}</span>
-                <span>status: ${escapeHtml(getStatusLabel(item.status))}</span>
-                <span>score reason: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
+                <span>기존: ${escapeHtml(item.oldObject?.sourceName || item.oldObject?.id || "-")}</span>
+                <span>신규: ${escapeHtml(item.newObject?.sourceName || item.newObject?.id || "-")}</span>
+                <span>기존 식별값: ${escapeHtml(item.oldObject?.normalizedIdentity || "-")}</span>
+                <span>신규 식별값: ${escapeHtml(item.newObject?.normalizedIdentity || "-")}</span>
+                <span>매칭 키: ${escapeHtml((item.matchKeyFields || []).join(", ") || "-")}</span>
+                <span>방식: ${escapeHtml(item.reason || "-")}</span>
+                <span>상태: ${escapeHtml(getStatusLabel(item.status))}</span>
+                <span>점수 사유: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
               </div>
               <div class="semantic-object-actions">${renderManualMatchActions(item)}</div>
-              ${item.ambiguousAlternatives?.length ? `<details class="semantic-detail-block"><summary>Candidate Alternatives (${item.ambiguousAlternatives.length})</summary>${renderAmbiguousAlternatives(item)}</details>` : ""}
-              ${item.manualCandidates?.length ? `<details class="semantic-detail-block" open><summary>Manual Match Candidates (${item.manualCandidates.length})</summary>${renderManualCandidates(item)}</details>` : ""}
-              <details class="semantic-detail-block"><summary>Field Compare (${item.fieldStats?.totalFields ?? 0})</summary>${renderFieldSummary(item.fieldSummary)}</details>
+              ${item.ambiguousAlternatives?.length ? `<details class="semantic-detail-block"><summary>대체 후보 (${item.ambiguousAlternatives.length})</summary>${renderAmbiguousAlternatives(item)}</details>` : ""}
+              ${item.manualCandidates?.length ? `<details class="semantic-detail-block" open><summary>수동 매핑 후보 (${item.manualCandidates.length})</summary>${renderManualCandidates(item)}</details>` : ""}
+              <details class="semantic-detail-block"><summary>필드 비교 (${item.fieldStats?.totalFields ?? 0})</summary>${renderFieldSummary(item.fieldSummary)}</details>
               ${renderRelationshipSummary(item.relationshipSummary)}
               ${renderLineMatches(item.lineMatches)}
             </div>

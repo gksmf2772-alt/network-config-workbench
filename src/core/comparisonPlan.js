@@ -32,6 +32,10 @@ function inferMatchKeyFields(match) {
     fields.push("prefix");
   }
 
+  if (match.reason === "prefix-next-hop") {
+    fields.push("prefix", "next-hop");
+  }
+
   if (match.reason === "ip-address") {
     fields.push("ipAddress");
   }
@@ -180,6 +184,7 @@ function collectObjectFields(object) {
   const fields = {};
 
   if (!object || typeof object !== "object") return fields;
+  const objectType = object.normalizedType || object.type || object.sourceType || "";
 
   const candidateFields = {
     description: object.description,
@@ -187,9 +192,11 @@ function collectObjectFields(object) {
     // UI/fieldSummary에서는 address 하나로 통일한다.
     // prefix가 있으면 반드시 prefix를 우선한다.
     // 예: Nokia MD-CLI address + prefix-length => 10.10.10.1/30
-    address: object.prefix || object.fields?.prefix || object.fields?.address || object.ipAddress,
+    address: objectType === "static-route"
+      ? null
+      : object.prefix || object.fields?.prefix || object.fields?.address || object.ipAddress,
 
-    peerIp: object.peerIp,
+    peerIp: object.fields?.neighbor ? null : object.peerIp,
     "peer-as": object.peerAs,
   };
 
@@ -207,6 +214,12 @@ function collectObjectFields(object) {
     for (const [field, value] of Object.entries(object.fields)) {
       if (value == null || value === "") continue;
       if (fields[field]) continue;
+      if (
+        objectType === "static-route" &&
+        ["address", "prefix", "admin-state"].includes(field)
+      ) {
+        continue;
+      }
       if (!isVisibleCompareField(field)) continue;
 
       fields[field] = {
@@ -230,6 +243,7 @@ const VISIBLE_COMPARE_FIELDS = new Set([
   "neighbor",
   "route",
   "next-hop",
+  "metric",
   "tag",
   "ingress-filter",
   "egress-qos",

@@ -12,8 +12,8 @@ export default function ManualMatchDrawer() {
       transition={{ duration: 0.18, ease: "easeOut" }}
     >
       <div className="semantic-preview-header">
-        <strong><Link2 className="h-4 w-4" />Manual Match Drawer</strong>
-        <span>Run compare to populate semantic candidates</span>
+        <strong><Link2 className="h-4 w-4" />수동 매핑 패널</strong>
+        <span>비교 실행 후 의미 후보가 표시됨</span>
       </div>
     </motion.section>
   );

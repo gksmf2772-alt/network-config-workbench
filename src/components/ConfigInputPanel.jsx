@@ -42,53 +42,53 @@ export default function ConfigInputPanel() {
             id="toggleControlsBtn"
             className="control-collapse-btn"
             type="button"
-            title="Hide compare options"
-            aria-label="Hide compare options"
+            title="비교 옵션 숨기기"
+            aria-label="비교 옵션 숨기기"
             onClick={() => setControlsCollapsed((value) => !value)}
           >
             <ChevronLeft className="h-4 w-4" />
           </AppIconButton>
 
           <AppPanel className="ncw-side-card">
-            <AppSectionHeader icon={SlidersHorizontal} title="Compare Options" description="Normalize, align, and filter semantic diff output." />
+            <AppSectionHeader icon={SlidersHorizontal} title="비교 옵션" description="정규화, 정렬, 의미 기반 차이점 필터" />
             <div className="app-panel__content grid gap-3">
-              <SwitchRow id="normalizeSpacingToggle" defaultChecked>Normalize spacing</SwitchRow>
-              <SwitchRow id="sortObjectsToggle">Sort object keys</SwitchRow>
-              <SwitchRow id="autoAlignToggle">Auto-align normalized objects</SwitchRow>
-              <SwitchRow id="ignoreCommentsToggle" defaultChecked>Ignore comments and blank lines</SwitchRow>
-              <SwitchRow id="ignoreGeneratedToggle" defaultChecked>Ignore generated lines</SwitchRow>
-              <SwitchRow id="semanticDebugToggle">Show semantic debug keys</SwitchRow>
+              <SwitchRow id="normalizeSpacingToggle" defaultChecked>공백 정규화</SwitchRow>
+              <SwitchRow id="sortObjectsToggle">객체 키 정렬</SwitchRow>
+              <SwitchRow id="autoAlignToggle">정규화 객체 자동 정렬</SwitchRow>
+              <SwitchRow id="ignoreCommentsToggle" defaultChecked>주석/빈 줄 무시</SwitchRow>
+              <SwitchRow id="ignoreGeneratedToggle" defaultChecked>생성성 라인 무시</SwitchRow>
+              <SwitchRow id="semanticDebugToggle">의미 키 디버그 표시</SwitchRow>
             </div>
           </AppPanel>
 
           <AppPanel className="ncw-side-card">
-            <AppSectionHeader title="Profile" description="Apply vendor mapping and semantic rules." />
+            <AppSectionHeader title="프로파일" description="벤더 매핑 및 의미 규칙 적용" />
             <div className="app-panel__content grid gap-3">
-              <label>Profile<AppSelect id="profileSelect" /></label>
-              <AppButton id="loadProfileBtn" type="button" variant="secondary">Apply profile</AppButton>
+              <label>프로파일<AppSelect id="profileSelect" /></label>
+              <AppButton id="loadProfileBtn" type="button" variant="secondary">프로파일 적용</AppButton>
             </div>
           </AppPanel>
 
           <AppPanel className="ncw-side-card">
-            <AppSectionHeader title="Object Scope" />
+            <AppSectionHeader title="객체 범위" />
             <div className="app-panel__content">
               <div id="objectToggles" className="chip-grid" />
             </div>
           </AppPanel>
 
           <AppPanel className="ncw-side-card">
-            <AppSectionHeader title="View" />
+            <AppSectionHeader title="보기" />
             <div className="app-panel__content grid gap-3">
               <label>
-                Theme
+                테마
                 <AppSelect id="themeSelect">
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                  <option value="contrast">High contrast</option>
+                  <option value="light">라이트</option>
+                  <option value="dark">다크</option>
+                  <option value="contrast">고대비</option>
                 </AppSelect>
               </label>
               <label>
-                Editor font
+                에디터 글꼴
                 <AppSelect id="fontSelect">
                   <option value="Consolas">Consolas</option>
                   <option value="D2Coding">D2Coding</option>
@@ -96,28 +96,38 @@ export default function ConfigInputPanel() {
                   <option value="monospace">Monospace</option>
                 </AppSelect>
               </label>
-              <label>Search<input id="filterInput" placeholder="interface, static-route, missing" /></label>
-              <SwitchRow id="fieldHighlightToggle" defaultChecked>Field highlight</SwitchRow>
+              <label>검색<input id="filterInput" placeholder="interface, static-route, 누락" /></label>
+              <SwitchRow id="fieldHighlightToggle" defaultChecked>필드 강조</SwitchRow>
               <label>
-                Result filter
+                라인 연결 스타일
+                <AppSelect id="lineMappingStyleSelect">
+                  <option value="straight">직선 연결</option>
+                  <option value="chain">체인 연결</option>
+                  <option value="slime">슬라임 연결</option>
+                </AppSelect>
+              </label>
+              <SwitchRow id="lineMappingVisibleToggle" defaultChecked>라인 연결 표시</SwitchRow>
+              <SwitchRow id="lineMappingAnimationToggle">라인 연결 애니메이션</SwitchRow>
+              <label>
+                결과 필터
                 <AppSelect id="resultFilterSelect">
-                  <option value="all">All</option>
-                  <option value="changed">Changed</option>
-                  <option value="missing">Missing</option>
-                  <option value="added">Added</option>
-                  <option value="syntax">Syntax</option>
-                  <option value="required">Required</option>
+                  <option value="all">전체</option>
+                  <option value="changed">변경</option>
+                  <option value="missing">누락</option>
+                  <option value="added">추가</option>
+                  <option value="syntax">문법</option>
+                  <option value="required">필수</option>
                 </AppSelect>
               </label>
             </div>
           </AppPanel>
 
           <AppPanel className="ncw-side-card">
-            <AppSectionHeader title="Status" />
+            <AppSectionHeader title="상태" />
             <div className="app-panel__content">
               <div className="status-card">
-                <strong id="compareStatus">Ready</strong>
-                <span id="lastComparedAt">Last compare: none</span>
+                <strong id="compareStatus">대기</strong>
+                <span id="lastComparedAt">마지막 비교: 없음</span>
               </div>
             </div>
           </AppPanel>
@@ -131,20 +141,20 @@ export default function ConfigInputPanel() {
             transition={{ duration: 0.16, ease: "easeOut", delay: 0.04 }}
           >
             <AppToolbar>
-              <AppButton id="compareBtn" type="button"><GitCompare />Run compare</AppButton>
-              <AppButton id="alignBtn" type="button" variant="secondary">Align objects</AppButton>
-              <AppIconButton id="restoreInitialBtn" type="button" title="Restore initial config"><RotateCcw /></AppIconButton>
-              <AppIconButton id="exportReportBtn" type="button" title="Export report"><Download /></AppIconButton>
-              <AppIconButton id="clearAllBtn" type="button" title="Clear all"><Eraser /></AppIconButton>
+              <AppButton id="compareBtn" type="button"><GitCompare />비교 실행</AppButton>
+              <AppButton id="alignBtn" type="button" variant="secondary">객체 정렬</AppButton>
+              <AppIconButton id="restoreInitialBtn" type="button" title="초기 입력 원복"><RotateCcw /></AppIconButton>
+              <AppIconButton id="exportReportBtn" type="button" title="리포트 저장"><Download /></AppIconButton>
+              <AppIconButton id="clearAllBtn" type="button" title="전체 비우기"><Eraser /></AppIconButton>
             </AppToolbar>
           </motion.div>
 
           <div className="editor-grid">
-            <ConfigEditor side="old" title="Source Config" icon={FileCode2} />
+            <ConfigEditor side="old" title="기존 Config" icon={FileCode2} />
             <div className="diff-gutter" aria-hidden="true">
               <div className="diff-gutter__rail" />
             </div>
-            <ConfigEditor side="new" title="Target Config" icon={FileCode2} />
+            <ConfigEditor side="new" title="신규 Config" icon={FileCode2} />
             <svg id="diffConnectorSvg" className="diff-connector-overlay" aria-hidden="true" />
           </div>
         </section>

@@ -14,11 +14,11 @@ function cx(...items) {
 
 function labelForLineKind(kind) {
   return ({
-    "line-to-line": "line",
-    "group-to-group": "group",
-    "group-to-line": "group-line",
-    "line-to-group": "line-group",
-  })[kind] || "line";
+    "line-to-line": "라인",
+    "group-to-group": "그룹",
+    "group-to-line": "그룹-라인",
+    "line-to-group": "라인-그룹",
+  })[kind] || "라인";
 }
 
 function groupBySource(groups, source) {
@@ -30,14 +30,14 @@ function Header({ snapshot, onClear }) {
   return (
     <div className="pm-header">
       <div>
-        <div className="pm-eyebrow">Profile Mapping Studio</div>
+        <div className="pm-eyebrow">프로파일 매핑 스튜디오</div>
         <h4>{snapshot.objectType || "-"}</h4>
       </div>
       <AppToolbar className="pm-stat-row">
-        <span><strong>{counts.lineMappings || 0}</strong> lines</span>
-        <span><strong>{counts.tokenMappings || 0}</strong> tokens</span>
-        <span><strong>{(counts.oldLineGroups || 0) + (counts.newLineGroups || 0)}</strong> groups</span>
-        <AppButton type="button" variant="ghost" onClick={onClear}>Clear selection</AppButton>
+        <span><strong>{counts.lineMappings || 0}</strong> 라인</span>
+        <span><strong>{counts.tokenMappings || 0}</strong> 토큰</span>
+        <span><strong>{(counts.oldLineGroups || 0) + (counts.newLineGroups || 0)}</strong> 그룹</span>
+        <AppButton type="button" variant="ghost" onClick={onClear}>선택 해제</AppButton>
       </AppToolbar>
     </div>
   );
@@ -47,17 +47,17 @@ function SelectionState({ snapshot }) {
   const pending = snapshot.selected?.pendingLineRef;
   const link = snapshot.selected?.selectedLineLink;
   const tokens = snapshot.selected?.semanticTokens || { old: [], new: [] };
-  let label = "ready";
-  let detail = "Select source/target lines, groups, or tokens from preview.";
+  let label = "대기";
+  let detail = "미리보기에서 기존/신규 라인, 그룹, 토큰을 선택하세요.";
 
   if (pending) {
-    label = "line selected";
+    label = "라인 선택";
     detail = `${pending.source} ${pending.label || pending.lineNumber || pending.groupId || ""}`;
   } else if (link) {
-    label = "mapping selected";
+    label = "매핑 선택";
     detail = `${link.oldRef?.label || "old"} -> ${link.newRef?.label || "new"}`;
   } else if ((tokens.old || []).length || (tokens.new || []).length) {
-    label = "token selected";
+    label = "토큰 선택";
     detail = `old ${(tokens.old || []).length} / new ${(tokens.new || []).length}`;
   }
 
@@ -77,7 +77,7 @@ function MappingRail({ snapshot, bridge }) {
 
   return (
     <section className="pm-panel pm-rail-panel">
-      <div className="pm-panel-title">Mapping Rail</div>
+      <div className="pm-panel-title">매핑 레일</div>
       <div className="pm-rail">
         {visible.length ? visible.map((item) => (
           <AppButton
@@ -90,9 +90,9 @@ function MappingRail({ snapshot, bridge }) {
           >
             <span className={cx("pm-node", item.railType)}>{item.railType === "token" ? item.field || "token" : labelForLineKind(item.kind)}</span>
             <span className="pm-edge" />
-            <span className={cx("pm-node", item.railType)}>{item.railType === "token" ? item.cardinality || "1:1" : "mapped"}</span>
+            <span className={cx("pm-node", item.railType)}>{item.railType === "token" ? item.cardinality || "1:1" : "매핑됨"}</span>
           </AppButton>
-        )) : <div className="pm-empty">No mappings</div>}
+        )) : <div className="pm-empty">매핑 없음</div>}
       </div>
     </section>
   );
@@ -108,16 +108,16 @@ function GroupColumn({ title, groups, bridge }) {
             <input
               className="pm-group-name"
               defaultValue={group.label}
-              title="Group label"
+              title="그룹 라벨"
               onBlur={(event) => bridge.renameLineGroup(group.id, event.currentTarget.value)}
             />
-            <AppButton type="button" variant="ghost" onClick={() => bridge.selectLineGroup(group.id)} title="Select group as mapping target">Select</AppButton>
-            <AppIconButton type="button" onClick={() => bridge.deleteLineGroup(group.id)} title="Delete group"><X /></AppIconButton>
+            <AppButton type="button" variant="ghost" onClick={() => bridge.selectLineGroup(group.id)} title="그룹을 매핑 대상으로 선택">선택</AppButton>
+            <AppIconButton type="button" onClick={() => bridge.deleteLineGroup(group.id)} title="그룹 삭제"><X /></AppIconButton>
           </div>
-          <div className="pm-group-lines">lines {group.linesLabel || "-"}</div>
+          <div className="pm-group-lines">라인 {group.linesLabel || "-"}</div>
           <div className="pm-group-text">{group.text || "-"}</div>
         </div>
-      )) : <div className="pm-empty">No groups</div>}
+      )) : <div className="pm-empty">그룹 없음</div>}
     </div>
   );
 }
@@ -126,10 +126,10 @@ function GroupManager({ snapshot, bridge }) {
   const groups = snapshot.lineGroups || [];
   return (
     <section className="pm-panel pm-groups-panel">
-      <div className="pm-panel-title">Line Groups</div>
+      <div className="pm-panel-title">라인 그룹</div>
       <div className="pm-group-grid">
-        <GroupColumn title="Source" groups={groupBySource(groups, "old")} bridge={bridge} />
-        <GroupColumn title="Target" groups={groupBySource(groups, "new")} bridge={bridge} />
+        <GroupColumn title="기존" groups={groupBySource(groups, "old")} bridge={bridge} />
+        <GroupColumn title="신규" groups={groupBySource(groups, "new")} bridge={bridge} />
       </div>
     </section>
   );
@@ -146,16 +146,16 @@ function RuleRow({ item, type, bridge }) {
         className="pm-rule-main"
         onClick={() => isToken ? bridge.focusTokenMapping(item.index) : bridge.focusLineMapping(item.index)}
       >
-        <span className={cx("pm-kind", isToken ? "pm-kind-token" : "pm-kind-line")}>{isToken ? "token" : labelForLineKind(item.kind)}</span>
+        <span className={cx("pm-kind", isToken ? "pm-kind-token" : "pm-kind-line")}>{isToken ? "토큰" : labelForLineKind(item.kind)}</span>
         <span className="pm-rule-label">{item.oldLabel || "-"}</span>
         <span className="pm-arrow">-&gt;</span>
         <span className="pm-rule-label">{item.newLabel || "-"}</span>
-        {isToken ? <span className="pm-field">{item.field || "field"}</span> : null}
+        {isToken ? <span className="pm-field">{item.field || "필드"}</span> : null}
       </AppButton>
       <AppIconButton
         type="button"
         onClick={() => isToken ? bridge.deleteTokenMapping(item.index) : bridge.deleteLineMapping(item.index)}
-        title="Delete mapping"
+        title="매핑 삭제"
       >
         <Trash2 />
       </AppIconButton>
@@ -169,10 +169,10 @@ function RuleList({ snapshot, bridge }) {
 
   return (
     <section className="pm-panel pm-rules-panel">
-      <div className="pm-panel-title">Mapping Rules</div>
+      <div className="pm-panel-title">매핑 규칙</div>
       <div className="pm-rule-list">
-        {lineMappings.length ? lineMappings.map((item) => <RuleRow key={item.id} item={item} type="line" bridge={bridge} />) : <div className="pm-empty">No line or group mappings</div>}
-        {tokenMappings.length ? tokenMappings.map((item) => <RuleRow key={item.id} item={item} type="token" bridge={bridge} />) : <div className="pm-empty">No token mappings</div>}
+        {lineMappings.length ? lineMappings.map((item) => <RuleRow key={item.id} item={item} type="line" bridge={bridge} />) : <div className="pm-empty">라인/그룹 매핑 없음</div>}
+        {tokenMappings.length ? tokenMappings.map((item) => <RuleRow key={item.id} item={item} type="token" bridge={bridge} />) : <div className="pm-empty">토큰 매핑 없음</div>}
       </div>
     </section>
   );

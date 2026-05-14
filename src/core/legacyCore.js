@@ -59,6 +59,9 @@ const selectors = {
   ignoreGeneratedToggle: document.querySelector("#ignoreGeneratedToggle"),
   semanticDebugToggle: document.querySelector("#semanticDebugToggle"),
   fieldHighlightToggle: document.querySelector("#fieldHighlightToggle"),
+  lineMappingStyleSelect: document.querySelector("#lineMappingStyleSelect"),
+  lineMappingVisibleToggle: document.querySelector("#lineMappingVisibleToggle"),
+  lineMappingAnimationToggle: document.querySelector("#lineMappingAnimationToggle"),
   objectToggles: document.querySelector("#objectToggles"),
   themeSelect: document.querySelector("#themeSelect"),
   fontSelect: document.querySelector("#fontSelect"),
@@ -202,7 +205,9 @@ const state = {
   pendingSemanticMapping: null,
   activeDiffObjectKey: "",
   activeSemanticPairKey: "",
+  activeLineRelationKey: "",
   semanticPairKeyboardBound: false,
+  lineRelationDelegationBound: false,
   profileDraft: createDefaultProfile(),
 };
 
@@ -610,6 +615,18 @@ function bindEvents() {
   selectors.fontSelect.addEventListener("input", saveUiPreferences);
   selectors.fieldHighlightToggle?.addEventListener("input", saveUiPreferences);
   selectors.semanticDebugToggle?.addEventListener("input", saveUiPreferences);
+  selectors.lineMappingStyleSelect?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleDiffConnectorRender();
+  });
+  selectors.lineMappingVisibleToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleDiffConnectorRender();
+  });
+  selectors.lineMappingAnimationToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleDiffConnectorRender();
+  });
 }
 
 function setActiveTab(tab, options = {}) {
@@ -2754,6 +2771,11 @@ function inferSemanticFieldName(line) {
   if (/\bnext-hop\b/.test(normalized)) return "next-hop";
   if (/\btag\b/.test(normalized)) return "tag";
   if (/\bno\s+shutdown\b|\badmin-state\b/.test(normalized)) return "state";
+  if (/\bdescription\b/.test(normalized)) return "description";
+  if (/\bauthentication-key\b/.test(normalized)) return "authentication-key";
+  if (/\bgroup\b/.test(normalized)) return "group";
+  if (/\b(?:peer-as|remote-as)\b/.test(normalized)) return "peer-as";
+  if (/\bneighbor\b/.test(normalized)) return "neighbor";
   return extractFieldName(normalized);
 }
 
@@ -3917,6 +3939,18 @@ function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
     return true;
   }
 
+  if (current.type === "bgp" && /^neighbor\s+"?[^"\s{}]+/.test(line)) {
+    return false;
+  }
+
+  if (
+    current.type === "static-route" &&
+    current.rawLines?.length &&
+    isStaticRouteBlockHeaderLine(line)
+  ) {
+    return false;
+  }
+
   if (isObjectTerminatorLine(line)) return true;
 
   // 가장 중요한 공통 규칙: 들여쓰기 된 라인은 현재 객체 내부 설정이다.
@@ -4137,14 +4171,18 @@ function buildCanonicalObject(rawLine, options, source, lineNumber = 1) {
   const objectField = defaultObjectFieldForType(canonicalType);
   const objectName = fields[objectField] || fields.route || fields.neighbor || fields.interface || "";
   if (!objectName) return null;
+  const objectIdentity =
+    canonicalType === "static-route"
+      ? buildStaticRouteIdentityFromFields(fields, objectName)
+      : objectName;
 
   const lines = [normalized];
   const fieldOccurrences = extractFieldOccurrencesFromLine(rawLine, canonicalType, 0);
   const object = {
     type: canonicalType,
     sourceType: type,
-    name: objectName,
-    key: `${canonicalType}:${objectName}`,
+    name: objectIdentity,
+    key: `${canonicalType}:${objectIdentity}`,
     startLine: lineNumber,
     endLine: lineNumber,
     lines,
@@ -4197,6 +4235,7 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
     setField("route", normalized.match(/(?:^|[\s{])(?:static-route-entry|route)\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?/)?.[1]);
     setField("next-hop", normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1]);
     setField("tag", normalized.match(/\btag\s+([^"\s{}]+)/)?.[1]);
+    setField("metric", normalized.match(/\bmetric\s+([^"\s{}]+)/)?.[1]);
     setField("description", extractDescriptionValue(line));
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
     if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
@@ -4269,6 +4308,11 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
     if (tag) {
       add("tag", tag[1], "tag", "terminal");
       add("tag", tag[1], tag[1], "terminal");
+    }
+    const metric = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+    if (metric) {
+      add("metric", metric[1], "metric", "terminal");
+      add("metric", metric[1], metric[1], "terminal");
     }
     if (/\bno\s+shutdown\b/.test(normalized)) {
       add("state", "enabled", "no shutdown", "terminal");
@@ -4652,7 +4696,11 @@ function finalizeObject(object, options, source) {
   };
   const lines = buildComparableLines(finalizedObject, options, source);
   const comparableLines = options.sortObjects ? sortComparableLines(lines) : lines;
-  const identityName = buildProfileObjectIdentity(finalizedObject, options);
+  const profileIdentityName = buildProfileObjectIdentity(finalizedObject, options);
+  const identityName =
+    canonicalType === "static-route"
+      ? canonicalIdentity.name
+      : profileIdentityName;
   const finalName = identityName || canonicalIdentity.name;
   return {
     ...finalizedObject,
@@ -4667,6 +4715,17 @@ function finalizeObject(object, options, source) {
 
 function computeCanonicalObjectIdentity(object, profile, source) {
   const fields = extractCanonicalFields(object, profile, source);
+  if (object.type === "static-route") {
+    const identity = buildStaticRouteIdentityFromFields(fields, object.name);
+    if (identity) {
+      return {
+        name: identity,
+        key: `${object.type}:${identity}`,
+        fields,
+      };
+    }
+  }
+
   const keyFields = profile?.objects?.[object.type]?.objectKey || getDefaultObjectKeyFields(object.type);
   for (const field of keyFields) {
     const normalizedField = canonicalizeComparableLine(field);
@@ -4691,7 +4750,7 @@ function getDefaultObjectKeyFields(type) {
     port: ["port"],
     lag: ["lag"],
     interface: ["interface"],
-    "static-route": ["route"],
+    "static-route": ["route", "next-hop"],
     pim: ["interface"],
     bgp: ["neighbor"],
   }[type] || ["name"];
@@ -5153,13 +5212,15 @@ function buildStaticRouteComparableLines(object, profile = state.profileDraft, s
   const result = [`route ${route}`];
   const nextHop = semanticFields["next-hop"] || parserFields["next-hop"] || parserFields.nextHop || findStaticRouteNextHop(lines);
   const tag = semanticFields.tag || parserFields.tag || findStaticRouteTag(lines);
+  const metric = semanticFields.metric || parserFields.metric || findStaticRouteMetric(lines);
   const state = semanticFields.state || parserFields.state || parserFields["admin-state"] || findStaticRouteState(lines);
 
   if (nextHop) result.push(`next-hop ${nextHop}`);
   if (tag) result.push(`tag ${tag}`);
+  if (metric) result.push(`metric ${metric}`);
   if (state) result.push(`state ${state}`);
   Object.entries(contextFields).forEach(([field, value]) => {
-    if (!["route", "next-hop", "tag", "state"].includes(field)) result.push(`${field} ${value}`);
+    if (!["route", "next-hop", "tag", "metric", "state"].includes(field)) result.push(`${field} ${value}`);
   });
   return result;
 }
@@ -5246,6 +5307,14 @@ function findStaticRoutePrefix(lines) {
 function findStaticRouteTag(lines) {
   for (const line of lines) {
     const match = line.match(/\btag\s+([^"\s{}]+)/);
+    if (match) return stripTrailingSyntax(match[1]);
+  }
+  return "";
+}
+
+function findStaticRouteMetric(lines) {
+  for (const line of lines) {
+    const match = line.match(/\bmetric\s+([^"\s{}]+)/);
     if (match) return stripTrailingSyntax(match[1]);
   }
   return "";
@@ -5941,16 +6010,17 @@ function buildDiffRows(oldText, newText, options) {
 
 const semanticFieldOrder = [
   "route",
-  "neighbor",
-  "interface",
-  "description",
-  "authentication-key",
-  "group",
-  "peer-as",
   "next-hop",
   "tag",
+  "description",
+  "metric",
+  "neighbor",
+  "authentication-key",
+  "group",
   "state",
   "admin-state",
+  "peer-as",
+  "interface",
 ];
 
 const commonFieldAliases = {
@@ -5992,6 +6062,12 @@ function stripConfigureEnvelope(line = "") {
     .replace(/^\/configure\s*\{\s*/i, "")
     .replace(/\s*\}\s*$/i, "")
     .trim();
+}
+
+function buildStaticRouteIdentityFromFields(fields = {}, fallback = "") {
+  const route = canonicalizeComparableLine(fields.route || fields.prefix || fallback || "");
+  const nextHop = canonicalizeComparableLine(fields["next-hop"] || fields.nextHop || "");
+  return route && nextHop ? `${route}|${nextHop}` : route;
 }
 
 function normalizeFieldName(field = "") {
@@ -6189,7 +6265,7 @@ function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
   const rawLines = getSemanticObjectRawLines(object);
   const fields = object.fields || object.canonicalFields || {};
   const lineMatches = Array.isArray(item.lineMatches) ? item.lineMatches : [];
-  const matchIndex = buildSemanticLineMatchIndex(lineMatches, side);
+  const matchIndex = buildSemanticLineMatchIndex(lineMatches, side, item);
 
   return {
     number: "",
@@ -6231,15 +6307,16 @@ function semanticBlockState(item = {}, side = "") {
   return "changed";
 }
 
-function buildSemanticLineMatchIndex(lineMatches = [], side = "") {
+function buildSemanticLineMatchIndex(lineMatches = [], side = "", item = {}) {
   const index = new Map();
 
-  lineMatches.forEach((lineMatch) => {
+  lineMatches.forEach((lineMatch, matchIndex) => {
     const lines = side === "old" ? lineMatch.oldLines : lineMatch.newLines;
     const field =
       lineMatch.field ||
       lineMatch.semanticField ||
       inferSemanticFieldFromLineMatch(lineMatch);
+    const relationKey = `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(lineMatch, matchIndex)}`;
 
     (Array.isArray(lines) ? lines : []).forEach((line) => {
       const key = canonicalizeComparableLine(line);
@@ -6248,11 +6325,88 @@ function buildSemanticLineMatchIndex(lineMatches = [], side = "") {
         field,
         status: lineMatch.status || "equal",
         reason: lineMatch.reason || "semantic-line-match",
+        relationKey,
+        relationState: semanticLineRelationState(lineMatch, field),
       });
     });
   });
 
   return index;
+}
+
+function buildLineRelationKeyFromMatch(lineMatch = {}, matchIndex = 0) {
+  const field =
+    lineMatch.field ||
+    lineMatch.semanticField ||
+    inferSemanticFieldFromLineMatch(lineMatch) ||
+    `line-${matchIndex}`;
+  const oldValue = lineMatch.oldValue ?? lineMatch.oldLines?.[0] ?? "";
+  const newValue = lineMatch.newValue ?? lineMatch.newLines?.[0] ?? "";
+  return `${cssSafeClassName(field)}:${matchIndex}:${canonicalizeComparableLine(oldValue)}:${canonicalizeComparableLine(newValue)}`;
+}
+
+function semanticLineRelationState(lineMatch = {}, field = "") {
+  const status = String(lineMatch.status || "").toLowerCase();
+  const reason = String(lineMatch.reason || "").toLowerCase();
+  if (reason.includes("ambiguous") || reason.includes("conflict")) return "conflict";
+  if (status === "equal") return "equal";
+  if (status === "changed") return "changed";
+  if (status === "candidate") return "candidate";
+  if (status === "added" || status === "missing") return "candidate";
+  return field ? "candidate" : "changed";
+}
+
+function findSemanticLineRelationForRawLine({ line, objectType, item, matchIndex }) {
+  const normalized = canonicalizeComparableLine(line);
+  const exact = matchIndex.get(normalized);
+  const field = exact?.field || inferSemanticFieldName(line) || "";
+
+  if (!field || isSemanticStructuralLine(line)) {
+    return {
+      field,
+      relationKey: "",
+      relationState: "",
+    };
+  }
+
+  if (exact?.relationKey) {
+    return exact;
+  }
+
+  const lineMatches = Array.isArray(item?.lineMatches) ? item.lineMatches : [];
+  const fieldMatches = lineMatches
+    .map((lineMatch, index) => ({
+      lineMatch,
+      index,
+      inferredField:
+        lineMatch.field ||
+        lineMatch.semanticField ||
+        inferSemanticFieldFromLineMatch(lineMatch),
+    }))
+    .filter(({ lineMatch, inferredField }) =>
+      inferredField === field &&
+      Array.isArray(lineMatch.oldLines) &&
+      Array.isArray(lineMatch.newLines) &&
+      lineMatch.oldLines.length &&
+      lineMatch.newLines.length
+    );
+
+  if (!fieldMatches.length) {
+    return {
+      field,
+      relationKey: "",
+      relationState: "",
+    };
+  }
+
+  const best = fieldMatches[0];
+  return {
+    field,
+    status: best.lineMatch.status || "equal",
+    reason: best.lineMatch.reason || "semantic-field-relation",
+    relationKey: `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(best.lineMatch, best.index)}`,
+    relationState: semanticLineRelationState(best.lineMatch, field),
+  };
 }
 
 function inferSemanticFieldFromLineMatch(lineMatch = {}) {
@@ -6275,11 +6429,11 @@ function renderSemanticObjectBlockHtml({
   matchIndex,
 }) {
   const state = semanticObjectVisualState(item);
-  const stateLabel = String(item.status || "unknown").toUpperCase();
+  const stateLabel = getSemanticDiffStatusLabel(item.status);
   const score = item.score ?? "-";
   const reason = item.reason || "-";
   const fieldCount = Object.keys(fields || {}).length;
-  const sideLabel = side === "old" ? "SOURCE" : "TARGET";
+  const sideLabel = side === "old" ? "기존" : "신규";
 
   return `
     <section class="semantic-diff-object-block semantic-diff-object-${escapeHtml(state)}" data-semantic-object-block="true">
@@ -6291,24 +6445,26 @@ function renderSemanticObjectBlockHtml({
         <div class="semantic-diff-object-badges">
           <span class="semantic-diff-badge side">${escapeHtml(sideLabel)}</span>
           <span class="semantic-diff-badge">${escapeHtml(stateLabel)}</span>
-          <span class="semantic-diff-badge muted">score ${escapeHtml(score)}</span>
-          <span class="semantic-diff-badge muted">fields ${escapeHtml(fieldCount)}</span>
+          <span class="semantic-diff-badge muted">점수 ${escapeHtml(score)}</span>
+          <span class="semantic-diff-badge muted">필드 ${escapeHtml(fieldCount)}</span>
         </div>
       </header>
       <div class="semantic-diff-object-meta">
-        <span>${escapeHtml(side === "old" ? "Source" : "Target")}</span>
-        <span>method ${escapeHtml(reason)}</span>
+        <span>${escapeHtml(side === "old" ? "기존" : "신규")}</span>
+        <span>방식 ${escapeHtml(reason)}</span>
       </div>
       <div class="semantic-diff-object-body">
         ${rawLines.length
       ? rawLines.map((line, index) => renderSemanticObjectConfigLine({
+        side,
         line,
         index,
+        item,
         objectType,
         fields,
         matchIndex,
       })).join("")
-      : `<div class="semantic-diff-empty-line">No object lines</div>`}
+      : `<div class="semantic-diff-empty-line">객체 라인 없음</div>`}
       </div>
     </section>
   `;
@@ -6323,31 +6479,81 @@ function semanticObjectVisualState(item = {}) {
 }
 
 function renderSemanticObjectConfigLine({
+  side,
   line,
   index,
+  item,
   objectType,
   fields,
   matchIndex,
 }) {
   const normalized = canonicalizeComparableLine(line);
-  const matched = matchIndex.get(normalized);
+  const matched = findSemanticLineRelationForRawLine({
+    line,
+    objectType,
+    item,
+    matchIndex,
+  });
+  const relationByField = buildSemanticRelationMapByField(item);
   const field = matched?.field || inferSemanticFieldName(line) || "";
   const depth = semanticLineDepth(line);
   const structural = isSemanticStructuralLine(line);
+  const relationKey = matched?.relationKey || "";
+  const relationState = matched?.relationState || "";
   const classes = [
     "semantic-diff-config-line",
-    matched ? "is-matched" : "is-covered",
+    relationKey ? "is-line-related" : "",
+    matched?.status ? "is-matched" : "is-covered",
+    relationState ? `line-relation-${cssSafeClassName(relationState)}` : "",
     structural ? "is-structural" : "",
     field ? `field-${cssSafeClassName(field)}` : "",
   ].filter(Boolean);
 
   return `
-    <div class="${classes.join(" ")}" data-semantic-line-index="${index}" data-semantic-field="${escapeHtml(field)}" style="padding-left:${10 + depth * 16}px">
+    <div class="${classes.join(" ")}"
+      data-side="${escapeHtml(side || "")}"
+      data-semantic-line-index="${index}"
+      data-semantic-field="${escapeHtml(field)}"
+      data-line-relation-key="${escapeHtml(relationKey)}"
+      data-line-relation-state="${escapeHtml(relationState)}"
+      data-line-relation-reason="${escapeHtml(matched?.reason || "")}"
+      data-semantic-pair-key="${escapeHtml(item?.id || "")}"
+      style="padding-left:${10 + depth * 16}px">
       <span class="semantic-diff-line-no">${index + 1}</span>
-      <code>${renderSemanticLineTokens(line, objectType, fields)}</code>
+      <code>${renderSemanticLineTokens(line, objectType, fields, relationByField)}</code>
       ${field && !structural ? `<span class="semantic-diff-line-field">${escapeHtml(field)}</span>` : ""}
     </div>
   `;
+}
+
+function getSemanticDiffStatusLabel(status = "") {
+  return ({
+    matched: "매칭",
+    candidate: "후보",
+    "old-only": "기존만",
+    "new-only": "신규만",
+    ambiguous: "불명확",
+    partial: "부분 일치",
+    unknown: "알 수 없음",
+  })[String(status || "unknown").toLowerCase()] || String(status || "알 수 없음").toUpperCase();
+}
+
+function buildSemanticRelationMapByField(item = {}) {
+  const map = new Map();
+  (item.lineMatches || []).forEach((lineMatch, index) => {
+    const field =
+      lineMatch.field ||
+      lineMatch.semanticField ||
+      inferSemanticFieldFromLineMatch(lineMatch);
+    if (!field || !lineMatch.oldLines?.length || !lineMatch.newLines?.length) return;
+    if (map.has(field)) return;
+    map.set(field, {
+      key: `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(lineMatch, index)}`,
+      state: semanticLineRelationState(lineMatch, field),
+      reason: lineMatch.reason || "semantic-field-relation",
+    });
+  });
+  return map;
 }
 
 function semanticLineDepth(line = "") {
@@ -6361,62 +6567,56 @@ function isSemanticStructuralLine(line = "") {
   return text === "exit" || text === "}" || text === "{";
 }
 
-function renderHighlightedLine(line = "", highlights = []) {
+function renderHighlightedLine(line = "", highlights = [], relationByField = new Map()) {
   if (!Array.isArray(highlights) || highlights.length === 0) {
     return escapeHtml(line);
   }
 
-  const text = String(line || "");
-  const safeHighlights = highlights
+  const source = String(line || "");
+  const visualTokens = highlights
     .map((item) => ({
-      start: Number(item.start),
-      end: Number(item.end),
+      token: String(item.token || item.value || "").trim(),
       kind: item.kind || item.type || "",
       field: item.field || item.semanticField || "",
       className: item.className || "",
     }))
-    .filter((item) =>
-      Number.isInteger(item.start) &&
-      Number.isInteger(item.end) &&
-      item.start >= 0 &&
-      item.end > item.start &&
-      item.start < text.length
-    )
-    .sort((a, b) => a.start - b.start);
+    .filter((item) => item.token)
+    .sort((left, right) => right.token.length - left.token.length);
 
-  let cursor = 0;
-  let html = "";
+  if (!visualTokens.length) return escapeHtml(source);
 
-  safeHighlights.forEach((item) => {
-    const start = Math.max(cursor, item.start);
-    const end = Math.min(text.length, item.end);
-
-    if (start > cursor) {
-      html += escapeHtml(text.slice(cursor, start));
-    }
-
-    if (end > start) {
-      const token = text.slice(start, end);
-      const className = [
-        "diff-token-match",
-        item.className,
-        item.kind ? `token-kind-${cssSafeClassName(item.kind)}` : "",
-        item.field ? `field-${cssSafeClassName(item.field)}` : "",
-      ].filter(Boolean).join(" ");
-
-      html += `<span class="${className}" data-semantic-field="${escapeHtml(item.field)}">${escapeHtml(token)}</span>`;
-      cursor = end;
-    }
+  const placeholders = [];
+  let temp = source;
+  dedupeVisualTokens(visualTokens).forEach((item, index) => {
+    const marker = `__SEMANTIC_TOKEN_${index}__`;
+    temp = temp.replace(buildTokenHighlightRegex(item.token), marker);
+    placeholders.push({ marker, item });
   });
 
-  if (cursor < text.length) {
-    html += escapeHtml(text.slice(cursor));
-  }
+  let html = escapeHtml(temp);
+  placeholders.forEach(({ marker, item }) => {
+    const relation = relationByField.get(item.field);
+    const relationAttrs = relation
+      ? ` data-line-relation-key="${escapeHtml(relation.key)}" data-line-relation-state="${escapeHtml(relation.state)}" data-line-relation-reason="${escapeHtml(relation.reason)}"`
+      : "";
+    const className = [
+      "diff-token-match",
+      `token-color-${tokenColorIndex(item.field || item.token)}`,
+      item.className,
+      item.kind ? `token-kind-${cssSafeClassName(item.kind)}` : "",
+      item.field ? `field-${cssSafeClassName(item.field)}` : "",
+    ].filter(Boolean).join(" ");
+
+    html = html.replaceAll(
+      marker,
+      `<span class="${className}" data-token-kind="${escapeHtml(item.kind)}" data-token-match="semantic" data-semantic-field="${escapeHtml(item.field)}" data-token="${escapeHtml(item.token)}"${relationAttrs}>${escapeHtml(item.token)}</span>`
+    );
+  });
 
   return html;
 }
 
-function renderSemanticLineTokens(line, objectType, fields) {
+function renderSemanticLineTokens(line, objectType, fields, relationByField = new Map()) {
   if (selectors.fieldHighlightToggle?.checked === false) {
     return escapeHtml(line);
   }
@@ -6432,7 +6632,7 @@ function renderSemanticLineTokens(line, objectType, fields) {
     return escapeHtml(line);
   }
 
-  return renderHighlightedLine(line, highlights);
+  return renderHighlightedLine(line, highlights, relationByField);
 }
 
 function cssSafeClassName(value = "") {
@@ -7872,6 +8072,9 @@ function buildSemanticLineKey(line, objectType) {
   const tagMatch = normalized.match(/\btag\s+([^"\s{}]+)/);
   if (tagMatch) return `tag:${stripTrailingSyntax(tagMatch[1])}`;
 
+  const metricMatch = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+  if (metricMatch) return `metric:${stripTrailingSyntax(metricMatch[1])}`;
+
   if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "state:enabled";
   if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "state:disabled";
   return normalized;
@@ -8019,6 +8222,7 @@ function renderDiff(rows) {
 
 function bindSemanticDiffInteractions() {
   ensureSemanticPairKeyboardBinding();
+  ensureLineRelationDelegation();
   const targets = [
     ...selectors.oldDiffPane.querySelectorAll("[data-semantic-pair-key]"),
     ...selectors.newDiffPane.querySelectorAll("[data-semantic-pair-key]"),
@@ -8036,6 +8240,80 @@ function ensureSemanticPairKeyboardBinding() {
   state.semanticPairKeyboardBound = true;
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") clearSemanticPairSelection();
+  });
+}
+
+function ensureLineRelationDelegation() {
+  if (state.lineRelationDelegationBound) return;
+  state.lineRelationDelegationBound = true;
+
+  [selectors.oldDiffPane, selectors.newDiffPane].filter(Boolean).forEach((pane) => {
+    pane.addEventListener("mouseover", (event) => {
+      const target = lineRelationEventTarget(event.target);
+      if (!target) return;
+      setLineRelationHover(getLineRelationKey(target), true);
+    });
+
+    pane.addEventListener("mouseout", (event) => {
+      const target = lineRelationEventTarget(event.target);
+      if (!target) return;
+      const nextTarget = lineRelationEventTarget(event.relatedTarget);
+      const relationKey = getLineRelationKey(target);
+      if (nextTarget && getLineRelationKey(nextTarget) === relationKey) return;
+      setLineRelationHover(relationKey, false);
+    });
+
+    pane.addEventListener("click", (event) => {
+      const target = lineRelationEventTarget(event.target);
+      if (!target) return;
+      setLineRelationSelected(getLineRelationKey(target));
+    });
+  });
+}
+
+function lineRelationEventTarget(target) {
+  return target?.closest?.(".diff-token-match[data-line-relation-key], [data-line-relation-key], [data-semantic-line-mapping-key]");
+}
+
+function getLineRelationKey(element) {
+  return element?.dataset?.lineRelationKey || element?.dataset?.semanticLineMappingKey || "";
+}
+
+function setLineRelationHover(relationKey, active) {
+  if (!relationKey) return;
+  applyLineRelationClass(relationKey, "line-relation-hover", active);
+  applySvgLineRelationClass(relationKey, "line-relation-hover", active);
+}
+
+function setLineRelationSelected(relationKey) {
+  if (!relationKey) return;
+  clearLineRelationSelection(false);
+  state.activeLineRelationKey = relationKey;
+  applyLineRelationClass(relationKey, "line-relation-selected", true);
+  applySvgLineRelationClass(relationKey, "line-relation-selected", true);
+  scheduleDiffConnectorRender();
+}
+
+function clearLineRelationSelection(clearState = true) {
+  document.querySelectorAll(".line-relation-selected").forEach((element) => {
+    element.classList.remove("line-relation-selected");
+  });
+  if (clearState) state.activeLineRelationKey = "";
+}
+
+function applyLineRelationClass(relationKey, className, active) {
+  const selector = [
+    `[data-line-relation-key="${cssEscape(relationKey)}"]`,
+    `[data-semantic-line-mapping-key="${cssEscape(relationKey)}"]`,
+  ].join(",");
+  document.querySelectorAll(selector).forEach((element) => {
+    element.classList.toggle(className, active);
+  });
+}
+
+function applySvgLineRelationClass(relationKey, className, active) {
+  selectors.diffConnectorSvg?.querySelectorAll(`[data-line-relation-key="${cssEscape(relationKey)}"]`).forEach((element) => {
+    element.classList.toggle(className, active);
   });
 }
 
@@ -8062,6 +8340,7 @@ function clearSemanticPairSelection(clearState = true) {
   });
   selectors.diffConnectorSvg?.closest(".editor-grid")?.classList.remove("semantic-pair-focus-active");
   if (clearState) state.activeSemanticPairKey = "";
+  clearLineRelationSelection(clearState);
 }
 
 function applySemanticPairClass(pairKey, className, active) {
@@ -8168,11 +8447,16 @@ function renderDiffConnectors() {
     objectPaths.push(buildObjectConnectorBand(oldGroup, newGroup, gridRect));
   });
 
+  state.lineMappingDebugAnchorCount = 0;
   const fieldPaths = buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect);
 
   svg.innerHTML = [...objectPaths, ...fieldPaths].filter(Boolean).join("");
   if (state.activeSemanticPairKey) {
     applySemanticPairClass(state.activeSemanticPairKey, "semantic-pair-selected", true);
+  }
+  if (state.activeLineRelationKey) {
+    applyLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
+    applySvgLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
   }
   } catch (error) {
     console.error("renderDiffConnectors failed", error);
@@ -8270,8 +8554,13 @@ function connectorLabelText(oldGroup = {}, newGroup = {}) {
 }
 
 function buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
+  if (!isLineMappingVisible()) {
+    lineMappingDebug("relations: hidden");
+    return [];
+  }
+
+  const paths = buildVisibleSemanticConfigLineConnectorPaths(gridRect, oldPaneRect, newPaneRect);
   const newLineMap = new Map();
-  const paths = [];
 
   [...selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((line) => {
     const key = line.dataset.semanticLineMappingKey || "";
@@ -8295,17 +8584,342 @@ function buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
       return;
     }
 
-    const oldAnchor = diffLineTextAnchor(oldLine, oldPaneRect, "right");
-    const newAnchor = diffLineTextAnchor(newLine, newPaneRect, "left");
-    const x1 = oldAnchor.x - gridRect.left;
-    const x2 = newAnchor.x - gridRect.left;
-    const y1 = oldAnchor.y - gridRect.top;
-    const y2 = newAnchor.y - gridRect.top;
-    const mid = x1 + (x2 - x1) / 2;
-    paths.push(`<path class="diff-field-connector" d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}" />`);
+    paths.push(buildLineMappingConnectorPath({
+      oldElement: oldLine,
+      newElement: newLine,
+      gridRect,
+      oldPaneRect,
+      newPaneRect,
+      relationKey: key,
+      relationState: lineRelationStateFromElements(oldLine, newLine),
+      oldAnchorFn: diffLineTextAnchor,
+      newAnchorFn: diffLineTextAnchor,
+    }));
+  });
+
+  lineMappingDebug("relations", {
+    paths: paths.length,
+    oldDomRelations: selectors.oldDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
+    newDomRelations: selectors.newDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
   });
 
   return paths;
+}
+
+function buildVisibleSemanticConfigLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
+  const paths = [];
+  const oldElements = collectSemanticRelationElements(selectors.oldDiffPane);
+  const newElements = collectSemanticRelationElements(selectors.newDiffPane);
+  const coveredFieldPairs = new Set();
+
+  oldElements.forEach((oldLine, relationKey) => {
+    const key = oldLine.dataset.lineRelationKey || relationKey || "";
+    if (!key) return;
+    const newLine = newElements.get(key);
+    if (!newLine) return;
+
+    const oldRect = oldLine.getBoundingClientRect();
+    const newRect = newLine.getBoundingClientRect();
+    if (
+      oldRect.bottom < oldPaneRect.top ||
+      oldRect.top > oldPaneRect.bottom ||
+      newRect.bottom < newPaneRect.top ||
+      newRect.top > newPaneRect.bottom
+    ) {
+      return;
+    }
+
+    coveredFieldPairs.add(lineRelationFieldPairKey(oldLine));
+    paths.push(buildLineMappingConnectorPath({
+      oldElement: oldLine,
+      newElement: newLine,
+      gridRect,
+      oldPaneRect,
+      newPaneRect,
+      relationKey: key,
+      relationState: lineRelationStateFromElements(oldLine, newLine),
+      oldAnchorFn: semanticConfigLineAnchor,
+      newAnchorFn: semanticConfigLineAnchor,
+    }));
+  });
+
+  paths.push(...buildFallbackSemanticFieldConnectorPaths({
+    gridRect,
+    oldPaneRect,
+    newPaneRect,
+    coveredFieldPairs,
+  }));
+
+  return paths;
+}
+
+function isLineMappingVisible() {
+  return selectors.lineMappingVisibleToggle?.checked !== false;
+}
+
+function lineMappingDebug(message, payload = null) {
+  if (!selectors.semanticDebugToggle?.checked) return;
+  if (payload) console.debug(`[line-mapping] ${message}:`, payload);
+  else console.debug(`[line-mapping] ${message}`);
+}
+
+function lineRelationFieldPairKey(element) {
+  const wrapper = element?.closest?.(".semantic-object-block-wrapper");
+  const pairKey =
+    wrapper?.dataset?.semanticPairKey ||
+    element?.dataset?.semanticPairKey ||
+    "";
+  const field = normalizeRelationField(element?.dataset?.semanticField || "");
+  return pairKey && field ? `${pairKey}:${field}` : "";
+}
+
+function buildFallbackSemanticFieldConnectorPaths({
+  gridRect,
+  oldPaneRect,
+  newPaneRect,
+  coveredFieldPairs,
+}) {
+  const paths = [];
+  const oldBlocks = collectVisibleSemanticObjectBlocks(selectors.oldDiffPane, oldPaneRect);
+  const newBlocks = collectVisibleSemanticObjectBlocks(selectors.newDiffPane, newPaneRect);
+
+  oldBlocks.forEach((oldBlock, pairKey) => {
+    const newBlock = newBlocks.get(pairKey);
+    if (!newBlock) return;
+
+    const oldLinesByField = collectSemanticConfigLinesByField(oldBlock);
+    const newLinesByField = collectSemanticConfigLinesByField(newBlock);
+    const fields = orderedRelationFields(
+      oldBlock.dataset.objectType || newBlock.dataset.objectType || "",
+      oldLinesByField,
+      newLinesByField
+    );
+
+    fields.forEach((field) => {
+      const fieldPairKey = `${pairKey}:${field}`;
+      if (coveredFieldPairs.has(fieldPairKey)) return;
+
+      const oldLines = oldLinesByField.get(field) || [];
+      const newLines = newLinesByField.get(field) || [];
+      const pairCount = Math.min(oldLines.length, newLines.length);
+
+      for (let index = 0; index < pairCount; index += 1) {
+        const oldLine = oldLines[index];
+        const newLine = newLines[index];
+        if (!oldLine || !newLine) continue;
+
+        const oldRect = oldLine.getBoundingClientRect();
+        const newRect = newLine.getBoundingClientRect();
+        if (
+          oldRect.bottom < oldPaneRect.top ||
+          oldRect.top > oldPaneRect.bottom ||
+          newRect.bottom < newPaneRect.top ||
+          newRect.top > newPaneRect.bottom
+        ) {
+          continue;
+        }
+
+        const relationKey = `field:${pairKey}:${field}:${index}`;
+        const relationState = semanticFieldRelationStateFromLines(oldLine, newLine, field);
+        applyFallbackLineRelation(oldLine, relationKey, relationState, field);
+        applyFallbackLineRelation(newLine, relationKey, relationState, field);
+        paths.push(buildLineMappingConnectorPath({
+          oldElement: oldLine,
+          newElement: newLine,
+          gridRect,
+          oldPaneRect,
+          newPaneRect,
+          relationKey,
+          relationState,
+          oldAnchorFn: semanticConfigLineAnchor,
+          newAnchorFn: semanticConfigLineAnchor,
+        }));
+      }
+    });
+  });
+
+  if (paths.length) {
+    lineMappingDebug("fallback paths", {
+      paths: paths.length,
+      oldObjects: oldBlocks.size,
+      newObjects: newBlocks.size,
+    });
+  }
+
+  return paths;
+}
+
+function collectVisibleSemanticObjectBlocks(pane, paneRect) {
+  const result = new Map();
+  if (!pane) return result;
+
+  pane.querySelectorAll(".semantic-object-block-wrapper[data-semantic-pair-key]").forEach((block) => {
+    const pairKey = block.dataset.semanticPairKey || "";
+    if (!pairKey || block.classList.contains("semantic-placeholder-line")) return;
+    const rect = block.getBoundingClientRect();
+    if (rect.bottom < paneRect.top || rect.top > paneRect.bottom) return;
+    result.set(pairKey, block);
+  });
+
+  return result;
+}
+
+function collectSemanticConfigLinesByField(block) {
+  const result = new Map();
+  block.querySelectorAll(".semantic-diff-config-line[data-semantic-field]").forEach((line) => {
+    const field = normalizeRelationField(line.dataset.semanticField || "");
+    if (!field || line.classList.contains("is-structural")) return;
+    if (!result.has(field)) result.set(field, []);
+    result.get(field).push(line);
+  });
+  return result;
+}
+
+function orderedRelationFields(objectType, oldLinesByField, newLinesByField) {
+  const preferred = {
+    "static-route": ["description", "next-hop", "tag", "state", "route"],
+    bgp: ["neighbor", "description", "authentication-key", "group", "state", "peer-as"],
+  }[objectType] || [];
+  const fields = new Set([...oldLinesByField.keys(), ...newLinesByField.keys()]);
+  return [
+    ...preferred.filter((field) => fields.has(field)),
+    ...[...fields].filter((field) => !preferred.includes(field)).sort(),
+  ];
+}
+
+function normalizeRelationField(field = "") {
+  const normalized = String(field || "").trim();
+  if (normalized === "admin-state") return "state";
+  return normalized;
+}
+
+function applyFallbackLineRelation(line, relationKey, relationState, field) {
+  if (!line || line.dataset.lineRelationKey) return;
+  line.dataset.lineRelationKey = relationKey;
+  line.dataset.lineRelationState = relationState;
+  line.dataset.lineRelationReason = "field-fallback";
+  line.dataset.semanticField = field;
+  line.classList.add("is-line-related", `line-relation-${cssSafeClassName(relationState)}`);
+}
+
+function semanticFieldRelationStateFromLines(oldLine, newLine, field) {
+  const oldText = oldLine.querySelector?.("code")?.textContent || oldLine.textContent || "";
+  const newText = newLine.querySelector?.("code")?.textContent || newLine.textContent || "";
+  const oldValue = inferValueForField(oldText, field);
+  const newValue = inferValueForField(newText, field);
+  if (oldValue && newValue) return oldValue === newValue ? "equal" : "changed";
+  return "candidate";
+}
+
+function collectSemanticRelationElements(pane) {
+  const result = new Map();
+  if (!pane) return result;
+
+  pane
+    .querySelectorAll(".semantic-diff-config-line[data-line-relation-key], .diff-token-match[data-line-relation-key]")
+    .forEach((element) => {
+      const key = element.dataset.lineRelationKey || "";
+      if (!key) return;
+      const existing = result.get(key);
+      if (!existing || element.classList.contains("diff-token-match")) {
+        result.set(key, element);
+      }
+    });
+
+  return result;
+}
+
+function lineRelationStateFromElements(oldElement, newElement) {
+  const stateValue =
+    oldElement?.dataset?.lineRelationState ||
+    newElement?.dataset?.lineRelationState ||
+    oldElement?.dataset?.semanticLineState ||
+    newElement?.dataset?.semanticLineState ||
+    "";
+  if (["equal", "changed", "candidate", "conflict"].includes(stateValue)) return stateValue;
+  if (oldElement?.classList?.contains("changed") || newElement?.classList?.contains("changed")) return "changed";
+  if (oldElement?.classList?.contains("added") || newElement?.classList?.contains("added")) return "candidate";
+  if (oldElement?.classList?.contains("missing") || newElement?.classList?.contains("missing")) return "candidate";
+  return "equal";
+}
+
+function currentLineMappingStyle() {
+  const style = selectors.lineMappingStyleSelect?.value || "chain";
+  return ["straight", "chain", "slime"].includes(style) ? style : "chain";
+}
+
+function buildLineMappingConnectorPath({
+  oldElement,
+  newElement,
+  gridRect,
+  oldPaneRect,
+  newPaneRect,
+  relationKey,
+  relationState,
+  oldAnchorFn,
+  newAnchorFn,
+}) {
+  const oldAnchor = oldAnchorFn(oldElement, oldPaneRect, "right");
+  const newAnchor = newAnchorFn(newElement, newPaneRect, "left");
+  const x1 = oldAnchor.x - gridRect.left;
+  const x2 = newAnchor.x - gridRect.left;
+  const y1 = oldAnchor.y - gridRect.top;
+  const y2 = newAnchor.y - gridRect.top;
+  const style = currentLineMappingStyle();
+  const active = relationKey && relationKey === state.activeLineRelationKey ? "line-relation-selected" : "";
+  const animated = selectors.lineMappingAnimationToggle?.checked ? "is-animated" : "";
+  const path = buildLineMappingPathD({ x1, y1, x2, y2, style });
+
+  if (selectors.semanticDebugToggle?.checked && state.lineMappingDebugAnchorCount < 5) {
+    state.lineMappingDebugAnchorCount += 1;
+    lineMappingDebug("anchors", {
+      relationKey,
+      relationState,
+      style,
+      left: { x: Math.round(x1), y: Math.round(y1) },
+      right: { x: Math.round(x2), y: Math.round(y2) },
+    });
+  }
+
+  return `<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${active} ${animated}"
+    data-line-relation-key="${escapeHtml(relationKey)}"
+    d="${path}" />`;
+}
+
+function buildLineMappingPathD({ x1, y1, x2, y2, style }) {
+  if (style === "straight") {
+    return `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+
+  if (style === "chain") {
+    const gap = Math.max(24, Math.min(92, Math.abs(x2 - x1) * 0.24));
+    const mid = x1 + (x2 - x1) / 2;
+    return `M ${x1} ${y1} L ${mid - gap} ${y1} L ${mid + gap} ${y2} L ${x2} ${y2}`;
+  }
+
+  const tension = Math.max(54, Math.min(180, Math.abs(x2 - x1) * 0.42));
+  return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
+}
+
+function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
+  const field = line?.dataset?.semanticField || "";
+  const fieldSelector = field ? `[data-semantic-field="${cssEscape(field)}"]` : "";
+  const tokenElement = fieldSelector
+    ? line.querySelector(`.diff-token-match${fieldSelector}, .semantic-diff-line-field${fieldSelector}`)
+    : null;
+  const textElement = tokenElement || line.querySelector("code") || line;
+  const textRect = textElement.getBoundingClientRect();
+  const lineRect = line.getBoundingClientRect();
+  const visibleLeft = Math.max(textRect.left, paneRect.left);
+  const visibleRight = Math.min(textRect.right, paneRect.right);
+  const hasVisibleWidth = visibleRight > visibleLeft;
+  const x = preferredEdge === "left"
+    ? (hasVisibleWidth ? visibleLeft : Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
+    : (hasVisibleWidth ? visibleRight : Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
+  return {
+    x,
+    y: lineRect.top + (lineRect.height / 2),
+  };
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
@@ -9732,17 +10346,23 @@ function saveUiPreferences() {
   document.body.dataset.theme = selectors.themeSelect.value;
   document.documentElement.style.setProperty("--editor-font", `${selectors.fontSelect.value}, monospace`);
   document.body.dataset.fieldHighlight = selectors.fieldHighlightToggle?.checked === false ? "off" : "on";
+  document.body.dataset.lineMappingStyle = selectors.lineMappingStyleSelect?.value || "chain";
+  document.body.dataset.lineMappingVisible = selectors.lineMappingVisibleToggle?.checked === false ? "off" : "on";
+  document.body.dataset.lineMappingAnimation = selectors.lineMappingAnimationToggle?.checked ? "on" : "off";
   localStorage.setItem("configWorkbenchUi", JSON.stringify({
     theme: selectors.themeSelect.value,
     font: selectors.fontSelect.value,
     fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
     semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
+    lineMappingStyle: selectors.lineMappingStyleSelect?.value || "chain",
+    lineMappingVisible: selectors.lineMappingVisibleToggle?.checked !== false,
+    lineMappingAnimation: Boolean(selectors.lineMappingAnimationToggle?.checked),
   }));
 }
 
 function loadUiPreferences() {
   try {
-    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas" };
+    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas", lineMappingStyle: "chain" };
     selectors.themeSelect.value = prefs.theme;
     selectors.fontSelect.value = prefs.font;
     if (selectors.fieldHighlightToggle) {
@@ -9750,6 +10370,17 @@ function loadUiPreferences() {
     }
     if (selectors.semanticDebugToggle) {
       selectors.semanticDebugToggle.checked = Boolean(prefs.semanticDebug);
+    }
+    if (selectors.lineMappingStyleSelect) {
+      selectors.lineMappingStyleSelect.value = ["straight", "chain", "slime"].includes(prefs.lineMappingStyle)
+        ? prefs.lineMappingStyle
+        : "chain";
+    }
+    if (selectors.lineMappingVisibleToggle) {
+      selectors.lineMappingVisibleToggle.checked = prefs.lineMappingVisible !== false;
+    }
+    if (selectors.lineMappingAnimationToggle) {
+      selectors.lineMappingAnimationToggle.checked = Boolean(prefs.lineMappingAnimation);
     }
   } catch {}
   saveUiPreferences();

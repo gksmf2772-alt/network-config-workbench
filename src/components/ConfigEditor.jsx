@@ -8,6 +8,7 @@ import { AppToolbar } from "./ui/AppToolbar.jsx";
 export default function ConfigEditor({ side, title, icon: Icon }) {
   const prefix = side === "old" ? "old" : "new";
   const cap = side === "old" ? "Old" : "New";
+  const fileLabel = "파일 없음";
 
   return (
     <motion.article
@@ -19,17 +20,17 @@ export default function ConfigEditor({ side, title, icon: Icon }) {
       <div className="editor-header">
         <div>
           <h2>{Icon ? <Icon className="h-4 w-4" /> : null}{title}</h2>
-          <span id={`${prefix}Meta`}>No file</span>
+          <span id={`${prefix}Meta`}>{fileLabel}</span>
         </div>
         <AppToolbar className="header-actions">
-          <AppIconButton id={`restore${cap}Btn`} type="button" title="Restore"><RotateCcw /></AppIconButton>
-          <AppIconButton id={`move${cap}UpBtn`} type="button" title="Move up"><ArrowUp /></AppIconButton>
-          <AppIconButton id={`move${cap}DownBtn`} type="button" title="Move down"><ArrowDown /></AppIconButton>
-          <AppIconButton id={`clear${cap}Btn`} type="button" title="Clear"><Eraser /></AppIconButton>
-          <AppIconButton id={`save${cap}Btn`} type="button" title="Save"><Save /></AppIconButton>
+          <AppIconButton id={`restore${cap}Btn`} type="button" title="원복"><RotateCcw /></AppIconButton>
+          <AppIconButton id={`move${cap}UpBtn`} type="button" title="위로 이동"><ArrowUp /></AppIconButton>
+          <AppIconButton id={`move${cap}DownBtn`} type="button" title="아래로 이동"><ArrowDown /></AppIconButton>
+          <AppIconButton id={`clear${cap}Btn`} type="button" title="비우기"><Eraser /></AppIconButton>
+          <AppIconButton id={`save${cap}Btn`} type="button" title="저장"><Save /></AppIconButton>
         </AppToolbar>
       </div>
-      <div id={`${prefix}DropZone`} className="drop-zone">Drop a file or paste config text</div>
+      <div id={`${prefix}DropZone`} className="drop-zone">파일을 드롭하거나 설정 텍스트를 붙여넣기</div>
       <AppCodeEditorFrame>
         <pre id={`${prefix}LineNumbers`} className="line-numbers">1</pre>
         <textarea id={`${prefix}ConfigInput`} spellCheck="false" wrap="off" />

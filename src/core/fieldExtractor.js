@@ -9,6 +9,50 @@ function stripQuotes(value) {
 export function extractComparableFieldsFromLine(line) {
   const trimmed = String(line || "").trim();
   const fields = [];
+  const addField = (field, value, rawValue = value) => {
+    const cleanValue = stripQuotes(value);
+    if (!field || !cleanValue) return;
+    if (fields.some((item) => item.field === field && item.value === cleanValue)) return;
+    fields.push({
+      field,
+      value: cleanValue,
+      rawValue,
+      rawLine: line,
+    });
+  };
+
+  const mdCliOneLine = trimmed.replace(/^\/configure\s*\{\s*/i, "").replace(/\s*\}\s*$/i, "");
+  if (/^router\s+"?[^"\s{}]+"?\s+static-routes\s+route\b/i.test(mdCliOneLine)) {
+    addField("route", mdCliOneLine.match(/\broute\s+"?([^"\s{}]+)"?/i)?.[1]);
+    addField("next-hop", mdCliOneLine.match(/\bnext-hop\s+"?([^"\s{}]+)"?/i)?.[1]);
+    addField("metric", mdCliOneLine.match(/\bmetric\s+([^"\s{}]+)/i)?.[1]);
+    addField("tag", mdCliOneLine.match(/\btag\s+([^"\s{}]+)/i)?.[1]);
+    addField("description", mdCliOneLine.match(/\bdescription\s+"([^"]+)"/i)?.[1]);
+    if (/\badmin-state\s+enable\b/i.test(mdCliOneLine)) {
+      addField("admin-state", "enabled", "admin-state enable");
+      addField("state", "enabled", "admin-state enable");
+    }
+    if (/\badmin-state\s+disable\b/i.test(mdCliOneLine)) {
+      addField("admin-state", "disabled", "admin-state disable");
+      addField("state", "disabled", "admin-state disable");
+    }
+  }
+
+  if (/^router\s+"?[^"\s{}]+"?\s+bgp\s+neighbor\b/i.test(mdCliOneLine)) {
+    addField("neighbor", mdCliOneLine.match(/\bneighbor\s+"?([^"\s{}]+)"?/i)?.[1]);
+    addField("description", mdCliOneLine.match(/\bdescription\s+"([^"]+)"/i)?.[1]);
+    addField("group", mdCliOneLine.match(/\bgroup\s+"([^"]+)"/i)?.[1]);
+    addField("authentication-key", mdCliOneLine.match(/\bauthentication-key\s+"?([^"\s{}]+)"?/i)?.[1]);
+    addField("peer-as", mdCliOneLine.match(/\b(?:peer-as|remote-as)\s+([^"\s{}]+)/i)?.[1]);
+    if (/\badmin-state\s+enable\b/i.test(mdCliOneLine)) {
+      addField("admin-state", "enabled", "admin-state enable");
+      addField("state", "enabled", "admin-state enable");
+    }
+    if (/\badmin-state\s+disable\b/i.test(mdCliOneLine)) {
+      addField("admin-state", "disabled", "admin-state disable");
+      addField("state", "disabled", "admin-state disable");
+    }
+  }
 
   const description = trimmed.match(/^description\s+(.+)$/i);
   if (description) {

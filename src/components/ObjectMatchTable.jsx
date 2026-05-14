@@ -14,13 +14,13 @@ export default function ObjectMatchTable() {
       <div className="object-tools">
         <label className="ncw-search-label">
           <Search className="h-4 w-4" />
-          <input id="objectSearchInput" placeholder="Object, type, next-hop, tag, description" />
+          <input id="objectSearchInput" placeholder="객체명, 유형, next-hop, tag, description" />
         </label>
-        <AppSelect id="objectSortSelect" title="Object sort">
-          <option value="identity">Identity</option>
-          <option value="source">Source / target</option>
-          <option value="line">Line</option>
-          <option value="field">Semantic field</option>
+        <AppSelect id="objectSortSelect" title="객체 정렬">
+          <option value="identity">식별값</option>
+          <option value="source">기존 / 신규</option>
+          <option value="line">라인</option>
+          <option value="field">의미 필드</option>
         </AppSelect>
       </div>
       <motion.div

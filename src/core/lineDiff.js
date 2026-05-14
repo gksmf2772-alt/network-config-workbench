@@ -40,6 +40,95 @@ function makeLineMatch({
   };
 }
 
+const CANONICAL_LINE_FIELD_ORDER = {
+  "static-route": ["route", "next-hop", "tag", "description", "metric", "state"],
+  bgp: ["neighbor", "description", "authentication-key", "group", "state", "peer-as"],
+};
+
+function canonicalFieldValue(object = {}, field = "") {
+  if (!object) return null;
+  if (field === "state") {
+    return (
+      object.fields?.state ??
+      object.fields?.["admin-state"] ??
+      object.state ??
+      null
+    );
+  }
+  if (field === "route") {
+    return object.fields?.route ?? object.prefix ?? null;
+  }
+  if (field === "neighbor") {
+    return object.fields?.neighbor ?? object.peerIp ?? null;
+  }
+  if (field === "next-hop") {
+    return object.fields?.["next-hop"] ?? object.fields?.nextHop ?? object.nextHop ?? null;
+  }
+  if (field === "description") {
+    return object.fields?.description ?? object.description ?? null;
+  }
+  if (field === "peer-as") {
+    return object.fields?.["peer-as"] ?? object.fields?.peerAs ?? object.peerAs ?? null;
+  }
+  return object.fields?.[field] ?? object[field] ?? null;
+}
+
+function hasCanonicalFieldRows(planItem = {}) {
+  const type = planItem.objectType || planItem.oldObject?.normalizedType || planItem.newObject?.normalizedType;
+  if (!CANONICAL_LINE_FIELD_ORDER[type]) return false;
+  return ["matched", "candidate"].includes(planItem.status);
+}
+
+function formatCanonicalLine(field, value) {
+  if (value == null || value === "") return "";
+  return `${field} ${value}`;
+}
+
+function compareCanonicalFieldRows(planItem = {}) {
+  const type = planItem.objectType || planItem.oldObject?.normalizedType || planItem.newObject?.normalizedType;
+  const ordered = CANONICAL_LINE_FIELD_ORDER[type] || [];
+  const dynamicFields = new Set([
+    ...Object.keys(planItem.oldObject?.fields || {}),
+    ...Object.keys(planItem.newObject?.fields || {}),
+  ]);
+  const duplicateFields = new Set(["admin-state", "peerIp", "nextHop", "prefix", "address"]);
+  const fields = [
+    ...ordered,
+    ...[...dynamicFields].filter((field) => !ordered.includes(field) && !duplicateFields.has(field)),
+  ];
+
+  return fields
+    .map((field) => {
+      const oldValue = canonicalFieldValue(planItem.oldObject, field);
+      const newValue = canonicalFieldValue(planItem.newObject, field);
+      if ((oldValue == null || oldValue === "") && (newValue == null || newValue === "")) return null;
+
+      const oldLine = formatCanonicalLine(field, oldValue);
+      const newLine = formatCanonicalLine(field, newValue);
+      const same = oldLine && newLine && String(oldValue) === String(newValue);
+      const status = oldLine && newLine ? (same ? "equal" : "changed") : oldLine ? "missing" : "added";
+
+      return makeLineMatch({
+        oldLines: oldLine ? [oldLine] : [],
+        newLines: newLine ? [newLine] : [],
+        status,
+        reason: "canonical-field-align",
+        score: same ? 100 : 0,
+        fieldMatches: [{
+          field,
+          status,
+          oldValue: oldValue ?? null,
+          newValue: newValue ?? null,
+          oldRawValue: oldValue ?? null,
+          newRawValue: newValue ?? null,
+          oldLine: oldLine || null,
+          newLine: newLine || null,
+        }],
+      });
+    })
+    .filter(Boolean);
+}
+
 function hasComparableFieldOverlap(oldLine, newLine) {
   const oldFields = extractComparableFieldsFromLine(oldLine);
   const newFields = extractComparableFieldsFromLine(newLine);
@@ -287,6 +376,10 @@ export function compareObjectLines({
 
 export function compareObjectPlanLines(planItem, profile = {}) {
   if (!planItem) return [];
+
+  if (hasCanonicalFieldRows(planItem)) {
+    return compareCanonicalFieldRows(planItem);
+  }
 
   if (planItem.status === "old-only") {
     return compareObjectLines({

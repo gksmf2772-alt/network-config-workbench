@@ -16,20 +16,20 @@ export default function HeaderBar() {
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-xs font-medium text-cyan-700">
           <Database className="h-4 w-4" />
-          Cross-vendor semantic validation
+          벤더 간 의미 기반 검증
         </div>
         <h1>Network Config Workbench</h1>
-        <p>Semantic-aware migration validation for parser, object, policy, and relationship checks.</p>
+        <p>파서, 객체, 정책, 관계를 기준으로 네트워크 설정 마이그레이션을 검증.</p>
       </div>
       <AppToolbar className="topbar-actions ncw-header-actions">
-        <AppSelect id="historySelect" title="Saved comparison history" />
+        <AppSelect id="historySelect" title="저장된 비교 이력" />
         <AppButton id="loadHistoryBtn" type="button" variant="secondary">
           <Clock className="h-4 w-4" />
-          Load
+          불러오기
         </AppButton>
         <AppButton id="saveSessionBtn" type="button">
           <Save className="h-4 w-4" />
-          Save
+          저장
         </AppButton>
       </AppToolbar>
     </motion.header>

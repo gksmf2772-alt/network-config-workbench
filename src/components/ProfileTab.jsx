@@ -20,11 +20,11 @@ export default function ProfileTab() {
   const handleExportProfiles = async () => {
     try {
       const count = await exportProfiles();
-      setBackupStatus(`${count} profiles exported.`);
+      setBackupStatus(`프로파일 ${count}개 내보냄`);
     } catch (error) {
       console.error(error);
-      setBackupStatus(`Export failed: ${error.message}`);
-      alert(`Profile export failed\n${error.message}`);
+      setBackupStatus(`내보내기 실패: ${error.message}`);
+      alert(`프로파일 내보내기 실패\n${error.message}`);
     }
   };
 
@@ -39,18 +39,18 @@ export default function ProfileTab() {
     if (!file) return;
 
     const overwrite = window.confirm(
-      "Overwrite existing profiles with the same ID?\n\nOK: overwrite\nCancel: import as new IDs"
+      "같은 ID의 기존 프로파일을 덮어쓸까요?\n\n확인: 덮어쓰기\n취소: 새 ID로 가져오기"
     );
 
     try {
       const count = await importProfilesFromFile(file, { overwrite });
-      setBackupStatus(`${count} profiles imported. Reloading refreshes the legacy profile list.`);
-      alert(`${count} profiles imported.`);
+      setBackupStatus(`프로파일 ${count}개 가져옴. 목록 갱신을 위해 새로고침합니다.`);
+      alert(`프로파일 ${count}개 가져옴`);
       window.location.reload();
     } catch (error) {
       console.error(error);
-      setBackupStatus(`Import failed: ${error.message}`);
-      alert(`Profile import failed\n${error.message}`);
+      setBackupStatus(`가져오기 실패: ${error.message}`);
+      alert(`프로파일 가져오기 실패\n${error.message}`);
     }
   };
 
@@ -60,14 +60,14 @@ export default function ProfileTab() {
         <ProfileEditor />
 
         <AppPanel as="article" className="profile-library">
-          <AppSectionHeader title="Saved Profiles" description="Import, export, and remove stored profile presets." />
+          <AppSectionHeader title="저장된 프로파일" description="프로파일을 가져오기, 내보내기, 삭제합니다." />
 
           <AppToolbar className="profile-backup-actions">
             <AppButton type="button" onClick={handleExportProfiles} variant="secondary">
-              <Download />Export
+              <Download />내보내기
             </AppButton>
             <AppButton type="button" onClick={handleImportClick} variant="secondary">
-              <Upload />Import
+              <Upload />가져오기
             </AppButton>
             <input
               ref={fileInputRef}
@@ -81,7 +81,7 @@ export default function ProfileTab() {
             ) : null}
           </AppToolbar>
 
-          <AppIconButton id="deleteProfileBtn" type="button" title="Delete selected profile">
+          <AppIconButton id="deleteProfileBtn" type="button" title="선택한 프로파일 삭제">
             <Trash2 />
           </AppIconButton>
           <div id="savedProfilesList" className="saved-profile-list" />

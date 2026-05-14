@@ -1,7 +1,13 @@
 // src/components/ProfileTab.jsx
 
 import React, { useRef, useState } from "react";
+import { Download, Trash2, Upload } from "lucide-react";
 import ProfileEditor from "./ProfileEditor.jsx";
+import { AppButton } from "./ui/AppButton.jsx";
+import { AppIconButton } from "./ui/AppIconButton.jsx";
+import { AppPanel } from "./ui/AppPanel.jsx";
+import { AppSectionHeader } from "./ui/AppSectionHeader.jsx";
+import { AppToolbar } from "./ui/AppToolbar.jsx";
 import {
   exportProfiles,
   importProfilesFromFile,
@@ -14,11 +20,11 @@ export default function ProfileTab() {
   const handleExportProfiles = async () => {
     try {
       const count = await exportProfiles();
-      setBackupStatus(`${count}개 프로파일을 내보냈습니다.`);
+      setBackupStatus(`${count} profiles exported.`);
     } catch (error) {
       console.error(error);
-      setBackupStatus(`내보내기 실패: ${error.message}`);
-      alert(`프로파일 내보내기 실패\n${error.message}`);
+      setBackupStatus(`Export failed: ${error.message}`);
+      alert(`Profile export failed\n${error.message}`);
     }
   };
 
@@ -33,20 +39,18 @@ export default function ProfileTab() {
     if (!file) return;
 
     const overwrite = window.confirm(
-      "같은 ID의 프로파일이 있으면 덮어쓸까요?\n\n확인: 덮어쓰기\n취소: 새 ID로 추가"
+      "Overwrite existing profiles with the same ID?\n\nOK: overwrite\nCancel: import as new IDs"
     );
 
     try {
       const count = await importProfilesFromFile(file, { overwrite });
-      setBackupStatus(`${count}개 프로파일을 가져왔습니다. 페이지를 새로고침합니다.`);
-      alert(`${count}개 프로파일을 가져왔습니다.`);
-
-      // 기존 legacy 렌더링/목록 갱신 로직을 확실히 다시 태우기 위해 새로고침
+      setBackupStatus(`${count} profiles imported. Reloading refreshes the legacy profile list.`);
+      alert(`${count} profiles imported.`);
       window.location.reload();
     } catch (error) {
       console.error(error);
-      setBackupStatus(`가져오기 실패: ${error.message}`);
-      alert(`프로파일 가져오기 실패\n${error.message}`);
+      setBackupStatus(`Import failed: ${error.message}`);
+      alert(`Profile import failed\n${error.message}`);
     }
   };
 
@@ -55,16 +59,16 @@ export default function ProfileTab() {
       <div className="profiles-layout">
         <ProfileEditor />
 
-        <article className="profile-library">
-          <h2>저장된 프로파일</h2>
+        <AppPanel as="article" className="profile-library">
+          <AppSectionHeader title="Saved Profiles" description="Import, export, and remove stored profile presets." />
 
-          <div className="profile-backup-actions">
-            <button type="button" onClick={handleExportProfiles}>
-              프로파일 내보내기
-            </button>
-            <button type="button" onClick={handleImportClick}>
-              프로파일 가져오기
-            </button>
+          <AppToolbar className="profile-backup-actions">
+            <AppButton type="button" onClick={handleExportProfiles} variant="secondary">
+              <Download />Export
+            </AppButton>
+            <AppButton type="button" onClick={handleImportClick} variant="secondary">
+              <Upload />Import
+            </AppButton>
             <input
               ref={fileInputRef}
               type="file"
@@ -75,13 +79,13 @@ export default function ProfileTab() {
             {backupStatus ? (
               <div className="profile-backup-status">{backupStatus}</div>
             ) : null}
-          </div>
+          </AppToolbar>
 
-          <button id="deleteProfileBtn" type="button">
-            선택 프로파일 삭제
-          </button>
+          <AppIconButton id="deleteProfileBtn" type="button" title="Delete selected profile">
+            <Trash2 />
+          </AppIconButton>
           <div id="savedProfilesList" className="saved-profile-list" />
-        </article>
+        </AppPanel>
       </div>
     </section>
   );

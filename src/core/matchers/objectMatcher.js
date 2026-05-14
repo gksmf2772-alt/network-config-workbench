@@ -255,6 +255,21 @@ function addWeightedScore(result, field, score, reason) {
   result.scoreReasons.push(reason || field);
 }
 
+const CANONICAL_SERVICE_FIELDS = [
+  "interface",
+  "subscriber-interface",
+  "group-interface",
+  "sap",
+  "ingress-filter",
+  "egress-qos",
+  "auth-policy",
+  "icmp.redirects",
+  "dhcp.allow-unmatching-subnets",
+  "static-host",
+  "default-host",
+  "sub-sla-mgmt",
+];
+
 function scoreSemanticObjectPair(oldObject, newObject) {
   const result = {
     score: 0,
@@ -405,6 +420,16 @@ function scoreSemanticObjectPair(oldObject, newObject) {
     addWeightedScore(result, "normalizedIdentity", 40, "normalized-identity");
   }
 
+  for (const field of CANONICAL_SERVICE_FIELDS) {
+    const oldValue = normalizeValue(getFieldValue(oldObject, field));
+    const newValue = normalizeValue(getFieldValue(newObject, field));
+
+    if (oldValue && newValue && oldValue === newValue) {
+      const weight = field === "interface" && objectType === "interface" ? 80 : 25;
+      addWeightedScore(result, field, weight, `canonical-field:${field}`);
+    }
+  }
+
   if (objectType === "interface") {
     const hasAddressMatch =
       result.matchKeyFields.includes("prefix") ||
@@ -428,6 +453,9 @@ function getBestWeightedReason(matchKeyFields = []) {
   if (matchKeyFields.includes("peerIp")) return "peer-ip";
   if (matchKeyFields.includes("ipAddress")) return "ip-address";
   if (matchKeyFields.includes("next-hop")) return "next-hop";
+  if (matchKeyFields.some((field) => CANONICAL_SERVICE_FIELDS.includes(field))) {
+    return "canonical-service-field";
+  }
   if (matchKeyFields.includes("description")) return "description-similarity";
   return "weighted-semantic-score";
 }

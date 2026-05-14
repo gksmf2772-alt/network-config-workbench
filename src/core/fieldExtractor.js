@@ -148,6 +148,16 @@ export function extractComparableFieldsFromLine(line) {
     });
   }
 
+  const neighbor = trimmed.match(/^neighbor\s+"?([^"\s{]+)"?/i);
+  if (neighbor) {
+    fields.push({
+      field: "neighbor",
+      value: stripQuotes(neighbor[1]),
+      rawValue: neighbor[1],
+      rawLine: line,
+    });
+  }
+
   return fields;
 }
 

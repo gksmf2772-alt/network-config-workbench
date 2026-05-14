@@ -231,6 +231,17 @@ const VISIBLE_COMPARE_FIELDS = new Set([
   "route",
   "next-hop",
   "tag",
+  "ingress-filter",
+  "egress-qos",
+  "auth-policy",
+  "icmp.redirects",
+  "dhcp.allow-unmatching-subnets",
+  "static-host",
+  "default-host",
+  "sub-sla-mgmt",
+  "subscriber-interface",
+  "group-interface",
+  "sap",
 ]);
 
 function isVisibleCompareField(field) {
@@ -658,6 +669,10 @@ export function createObjectComparePlan(
       status: match.status,
       oldLines,
       newLines,
+      oldObject: match.oldObject || null,
+      newObject: match.newObject || null,
+      reason: match.reason,
+      matchKeyFields: match.matchKeyFields || [],
     },
     profile
   );

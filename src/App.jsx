@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import Layout from "./components/Layout.jsx";
+import AppShell from "./components/AppShell.jsx";
 
 export default function App() {
   const [legacyError, setLegacyError] = useState("");
@@ -18,7 +18,7 @@ export default function App() {
 
   return (
     <>
-      <Layout />
+      <AppShell />
       {legacyError ? (
         <div className="startup-error">
           <strong>시작 오류</strong>

@@ -1,6 +1,12 @@
 // src/core/parsers/nokiaMdCliParser.js
 
 import { createNormalizedObject } from "./index.js";
+import {
+  buildHierarchyKey,
+  canonicalInterfaceName,
+  canonicalServiceName,
+  normalizeNokiaSemanticFields,
+} from "../semanticFieldNormalizer.js";
 
 function splitLines(configText) {
   return typeof configText === "string" ? configText.split(/\r?\n/) : [];
@@ -116,6 +122,29 @@ function collectBraceBlocks(lines, startRegex) {
   if (current) blocks.push(current);
 
   return blocks;
+}
+
+function findMdCliBlockLines(lines = [], startIndex = 0) {
+  const first = lines[startIndex];
+  if (first == null) return [];
+
+  const block = [first];
+  let depth = (first.match(/\{/g) || []).length - (first.match(/\}/g) || []).length;
+
+  if (depth <= 0 && !first.includes("{")) {
+    return block;
+  }
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    block.push(line);
+    depth += (line.match(/\{/g) || []).length;
+    depth -= (line.match(/\}/g) || []).length;
+
+    if (depth <= 0) break;
+  }
+
+  return block;
 }
 
 function parseMdCliPorts(lines) {
@@ -394,15 +423,351 @@ function parseMdCliBgpNeighbors(lines) {
   });
 }
 
+function createMdServiceObject({ type, name, fields, rawLines, index }) {
+  const normalizedFields = normalizeNokiaSemanticFields(fields);
+  const identity =
+    normalizedFields["default-host"] ||
+    normalizedFields["static-host"] ||
+    normalizedFields.sap ||
+    normalizedFields["group-interface"] ||
+    normalizedFields["subscriber-interface"] ||
+    normalizedFields.interface ||
+    canonicalServiceName(name);
+
+  const object = createNormalizedObject({
+    id: `nokia-md-${type}-${index}-${identity}`,
+    vendor: "nokia-md-cli",
+    sourceType: type,
+    sourceName: name || identity,
+    normalizedType: type,
+    normalizedIdentity: identity,
+    rawLines,
+    fields: normalizedFields,
+  });
+
+  object.prefix = normalizedFields["default-host"] || normalizedFields["static-host"] || null;
+  object.ipAddress = object.prefix?.split("/")?.[0] || null;
+
+  return object;
+}
+
+function parseMdCliServiceObjects(lines) {
+  const objects = [];
+  const context = { interface: "", subscriber: "", group: "", sap: "" };
+  const stack = [];
+  let pendingDefaultHost = null;
+  let pendingStaticHost = null;
+
+  lines.forEach((raw, index) => {
+    const text = raw.trim();
+    if (!text) return;
+
+    const closeCount = (text.match(/\}/g) || []).length;
+    if (closeCount) {
+      for (let count = 0; count < closeCount; count += 1) {
+        const scope = stack.pop();
+        if (scope === "sap") context.sap = "";
+        if (scope === "group-interface") {
+          context.group = "";
+          context.sap = "";
+        }
+        if (scope === "subscriber-interface") {
+          context.subscriber = "";
+          context.group = "";
+          context.sap = "";
+        }
+        if (scope === "interface") {
+          context.interface = "";
+          context.subscriber = "";
+          context.group = "";
+          context.sap = "";
+        }
+        if (scope === "default-host") pendingDefaultHost = null;
+        if (scope === "static-host") pendingStaticHost = null;
+      }
+      if (text === "}") return;
+    }
+
+    let match = text.match(/^interface\s+"?([^"\s{]+)"?\s*\{/i);
+    if (match) {
+      context.interface = canonicalInterfaceName(match[1]);
+      stack.push("interface");
+      objects.push(createMdServiceObject({
+        type: "interface",
+        name: context.interface,
+        fields: { interface: context.interface },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^subscriber-interface\s+"?([^"\s{]+)"?\s*\{/i);
+    if (match) {
+      context.subscriber = canonicalServiceName(match[1]);
+      context.group = "";
+      context.sap = "";
+      stack.push("subscriber-interface");
+      objects.push(createMdServiceObject({
+        type: "subscriber-interface",
+        name: context.subscriber,
+        fields: { interface: context.interface, "subscriber-interface": context.subscriber },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^group-interface\s+"?([^"\s{]+)"?\s*\{/i);
+    if (match) {
+      context.group = canonicalServiceName(match[1]);
+      context.sap = "";
+      stack.push("group-interface");
+      objects.push(createMdServiceObject({
+        type: "group-interface",
+        name: context.group,
+        fields: {
+          interface: context.interface,
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^sap\s+"?([^"\s{]+)"?\s*\{/i);
+    if (match) {
+      context.sap = canonicalServiceName(match[1]);
+      stack.push("sap");
+      objects.push(createMdServiceObject({
+        type: "sap",
+        name: context.sap,
+        fields: {
+          interface: context.interface,
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          sap: context.sap,
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^ip\s+"?([^"\s{]+)"?/i);
+    if (match && stack.includes("filter") && stack.includes("ingress") && context.sap) {
+      objects.push(createMdServiceObject({
+        type: "sap",
+        name: context.sap,
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          sap: context.sap,
+          "ingress.filter.ip": stripQuotes(match[1]),
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^policy-name\s+"?([^"\s{]+)"?/i);
+    if (match && stack.includes("sap-egress") && context.sap) {
+      objects.push(createMdServiceObject({
+        type: "sap",
+        name: context.sap,
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          sap: context.sap,
+          "egress.qos.sap-egress.policy-name": stripQuotes(match[1]),
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^radius-auth-policy\s+"?([^"\s{]+)"?/i);
+    if (match && context.group) {
+      objects.push(createMdServiceObject({
+        type: "group-interface",
+        name: context.group,
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          "radius-auth-policy": stripQuotes(match[1]),
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    if (/^admin-state\s+disable$/i.test(text) && stack.includes("redirects") && context.group) {
+      objects.push(createMdServiceObject({
+        type: "icmp-options",
+        name: buildHierarchyKey([context.subscriber, context.group]),
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          "icmp.redirects.disabled": true,
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^allow-unmatching-subnets\s+(true|false)$/i);
+    if (match && context.group) {
+      objects.push(createMdServiceObject({
+        type: "dhcp",
+        name: buildHierarchyKey([context.subscriber, context.group]),
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          "dhcp.allow-unmatching-subnets": match[1],
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    match = text.match(/^ipv4\s+(\S+)\s+prefix-length\s+(\d+)\s*\{/i);
+    if (match && stack.includes("default-host")) {
+      pendingDefaultHost = `${stripQuotes(match[1])}/${match[2]}`;
+      return;
+    }
+
+    if (match && stack.includes("static-host")) {
+      pendingStaticHost = `${stripQuotes(match[1])}/${match[2]}`;
+      return;
+    }
+
+    if (/^default-host\s*\{/i.test(text)) {
+      stack.push("default-host");
+      return;
+    }
+
+    if (/^static-host\s*\{/i.test(text)) {
+      stack.push("static-host");
+      return;
+    }
+
+    match = text.match(/^next-hop\s+(\S+)/i);
+    if (match && pendingDefaultHost) {
+      objects.push(createMdServiceObject({
+        type: "default-host",
+        name: pendingDefaultHost,
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          "default-host": pendingDefaultHost,
+          "next-hop": stripQuotes(match[1]),
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    if (match && pendingStaticHost) {
+      objects.push(createMdServiceObject({
+        type: "static-host",
+        name: pendingStaticHost,
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          "static-host": pendingStaticHost,
+          "next-hop": stripQuotes(match[1]),
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+      return;
+    }
+
+    if (/^sub-sla-mgmt\s*\{/i.test(text) && context.sap) {
+      objects.push(createMdServiceObject({
+        type: "sub-sla-mgmt",
+        name: context.sap,
+        fields: {
+          "subscriber-interface": context.subscriber,
+          "group-interface": context.group,
+          sap: context.sap,
+          "sub-sla-mgmt": "present",
+        },
+        rawLines: findMdCliBlockLines(lines, index),
+        index,
+      }));
+    }
+
+    const openCount = (text.match(/\{/g) || []).length;
+    if (openCount) {
+      const scopeName = text.match(/^([a-z0-9-]+)/i)?.[1];
+      if (scopeName && !["interface", "subscriber-interface", "group-interface", "sap", "default-host", "static-host"].includes(scopeName)) {
+        stack.push(scopeName);
+      }
+    }
+  });
+
+  return objects;
+}
+
+function mergeObjectsBySemanticIdentity(objects = []) {
+  const merged = new Map();
+
+  objects.forEach((object) => {
+    const key = `${object.normalizedType}:${object.normalizedIdentity}`;
+    if (!merged.has(key)) {
+      merged.set(key, { ...object, fields: { ...(object.fields || {}) }, rawLines: [...(object.rawLines || [])] });
+      return;
+    }
+
+    const target = merged.get(key);
+    target.fields = normalizeNokiaSemanticFields({
+      ...(target.fields || {}),
+      ...(object.fields || {}),
+    });
+    target.rawLines = mergeRawLines(target.rawLines, object.rawLines);
+    target.description ||= object.description;
+    target.ipAddress ||= object.ipAddress;
+    target.prefix ||= object.prefix;
+    target.peerIp ||= object.peerIp;
+    target.peerAs ||= object.peerAs;
+  });
+
+  return [...merged.values()];
+}
+
+function mergeRawLines(base = [], next = []) {
+  const result = [...(base || [])];
+  const seen = new Set(result.map((line) => String(line || "")));
+
+  for (const line of next || []) {
+    const key = String(line || "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(line);
+  }
+
+  return result;
+}
+
 export function parseNokiaMdCliConfig(configText) {
   const lines = splitLines(configText);
 
-  return [
+  return mergeObjectsBySemanticIdentity([
     ...parseMdCliPorts(lines),
     ...parseMdCliLags(lines),
     ...parseMdCliInterfaces(lines),
     ...parseMdCliStaticRoutes(lines),
     ...parseMdCliBgpNeighbors(lines),
     ...parseMdCliPimInterfaces(lines),
-  ];
+    ...parseMdCliServiceObjects(lines),
+  ]);
 }

@@ -51,6 +51,15 @@ function normalizeIpAddressLine(line) {
   return null;
 }
 
+function normalizeNeighborLine(line) {
+  const trimmed = String(line || "").trim();
+  const neighbor = trimmed.match(/^neighbor\s+"?([^"\s{]+)"?/i);
+
+  if (!neighbor) return null;
+
+  return `neighbor ${stripQuotes(neighbor[1])}`.toLowerCase();
+}
+
 export function normalizeComparableLine(line) {
   const description = normalizeDescriptionLine(line);
   if (description) return description;
@@ -60,6 +69,9 @@ export function normalizeComparableLine(line) {
 
   const ipAddress = normalizeIpAddressLine(line);
   if (ipAddress) return ipAddress;
+
+  const neighbor = normalizeNeighborLine(line);
+  if (neighbor) return neighbor;
 
   return normalizeBasicText(line)
     .replace(/^["']|["']$/g, "")

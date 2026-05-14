@@ -112,6 +112,96 @@ function getLineMatchReason(score) {
   return "line-similarity";
 }
 
+function normalizeAnchorIdentity(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/[{};,]+$/g, "")
+    .toLowerCase();
+}
+
+function getObjectAnchorIdentity(object = {}) {
+  const fields = object?.fields || {};
+
+  return normalizeAnchorIdentity(
+    object?.peerIp ||
+      fields.neighbor ||
+      object?.prefix ||
+      fields.route ||
+      fields.prefix ||
+      object?.ipAddress ||
+      fields.ipAddress ||
+      fields.interface ||
+      object?.normalizedIdentity ||
+      object?.sourceName ||
+      ""
+  );
+}
+
+function lineContainsIdentity(line = "", identity = "") {
+  if (!identity) return false;
+
+  const normalizedLine = normalizeAnchorIdentity(line)
+    .replace(/[{}"]/g, " ")
+    .replace(/\s+/g, " ");
+
+  return normalizedLine.split(/\s+/).includes(identity) ||
+    normalizedLine.includes(identity);
+}
+
+function firstUsefulLine(lines = []) {
+  return lines.find((line) => !isIgnorableLine(line)) || "";
+}
+
+function isSameSemanticAnchor(planItem = {}, oldLine = "", newLine = "") {
+  if (!oldLine || !newLine) return false;
+  if (!["matched", "candidate"].includes(planItem.status)) return false;
+
+  const oldIdentity = getObjectAnchorIdentity(planItem.oldObject);
+  const newIdentity = getObjectAnchorIdentity(planItem.newObject);
+
+  if (oldIdentity && newIdentity && oldIdentity === newIdentity) {
+    return (
+      lineContainsIdentity(oldLine, oldIdentity) &&
+      lineContainsIdentity(newLine, newIdentity)
+    );
+  }
+
+  return planItem.status === "matched";
+}
+
+function applyObjectAnchorLineCoverage(lineMatches = [], planItem = {}) {
+  const oldLine = firstUsefulLine(planItem.oldLines || []);
+  const newLine = firstUsefulLine(planItem.newLines || []);
+
+  if (!isSameSemanticAnchor(planItem, oldLine, newLine)) {
+    return lineMatches;
+  }
+
+  const anchorMatch = makeLineMatch({
+    oldLines: [oldLine],
+    newLines: [newLine],
+    status: "equal",
+    reason: `semantic-object-anchor:${planItem.reason || "matched"}`,
+    score: 100,
+    fieldMatches: compareLineFields(oldLine, newLine),
+  });
+
+  anchorMatch.semanticCovered = true;
+
+  const withoutAnchorFragments = lineMatches.filter((lineMatch) => {
+    const oldLines = Array.isArray(lineMatch.oldLines) ? lineMatch.oldLines : [];
+    const newLines = Array.isArray(lineMatch.newLines) ? lineMatch.newLines : [];
+
+    const hasOldAnchor = oldLines.includes(oldLine);
+    const hasNewAnchor = newLines.includes(newLine);
+
+    return !hasOldAnchor && !hasNewAnchor;
+  });
+
+  return [anchorMatch, ...withoutAnchorFragments];
+}
+
 export function compareObjectLines({
   oldLines = [],
   newLines = [],
@@ -212,11 +302,13 @@ export function compareObjectPlanLines(planItem, profile = {}) {
     });
   }
 
-  return compareObjectLines({
+  const lineMatches = compareObjectLines({
     oldLines: planItem.oldLines || [],
     newLines: planItem.newLines || [],
     profile,
   });
+
+  return applyObjectAnchorLineCoverage(lineMatches, planItem);
 }
 
 export function attachLineMatchesToPlan(plan = []) {

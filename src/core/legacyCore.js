@@ -7,6 +7,10 @@
 } from "./vendorPresets.js";
 
 import {
+  getSemanticStateClass,
+} from "./semanticTheme.js";
+
+import {
   normalizeConfig,
   matchNormalizedObjects,
   createComparisonPlan,
@@ -17,7 +21,23 @@ import {
   applyManualSelectionToStorage,
 } from "./comparator.js";
 
-const objectTypes = ["port", "lag", "interface", "static-route", "pim", "bgp"];
+const objectTypes = [
+  "port",
+  "lag",
+  "interface",
+  "static-route",
+  "pim",
+  "bgp",
+  "subscriber-interface",
+  "group-interface",
+  "sap",
+  "static-host",
+  "default-host",
+  "dhcp",
+  "icmp-options",
+  "sub-sla-mgmt",
+  "cpu-protection",
+];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
 
 const selectors = {
@@ -37,6 +57,8 @@ const selectors = {
   autoAlignToggle: document.querySelector("#autoAlignToggle"),
   ignoreCommentsToggle: document.querySelector("#ignoreCommentsToggle"),
   ignoreGeneratedToggle: document.querySelector("#ignoreGeneratedToggle"),
+  semanticDebugToggle: document.querySelector("#semanticDebugToggle"),
+  fieldHighlightToggle: document.querySelector("#fieldHighlightToggle"),
   objectToggles: document.querySelector("#objectToggles"),
   themeSelect: document.querySelector("#themeSelect"),
   fontSelect: document.querySelector("#fontSelect"),
@@ -163,6 +185,7 @@ const state = {
   syncingEditorScroll: false,
   syncingDiffScroll: false,
   connectorFrame: null,
+  semanticObjectAlignFrame: null,
   draggingProfileLine: null,
   selectedProfileLineLink: null,
   pendingProfileLineRef: null,
@@ -178,6 +201,8 @@ const state = {
   suppressNextPreviewTokenClick: false,
   pendingSemanticMapping: null,
   activeDiffObjectKey: "",
+  activeSemanticPairKey: "",
+  semanticPairKeyboardBound: false,
   profileDraft: createDefaultProfile(),
 };
 
@@ -514,7 +539,7 @@ function bindEvents() {
   window.addEventListener("pointerup", finishSemanticPreviewTokenDrag);
   selectors.oldDiffPane.addEventListener("dblclick", showEditMode);
   selectors.newDiffPane.addEventListener("dblclick", showEditMode);
-  window.addEventListener("resize", scheduleDiffConnectorRender);
+  window.addEventListener("resize", scheduleSemanticObjectStartAlignment);
   window.addEventListener("resize", scheduleProfileExampleConnectorRender);
 
   [
@@ -548,9 +573,11 @@ function bindEvents() {
     selectors.autoAlignToggle,
     selectors.ignoreCommentsToggle,
     selectors.ignoreGeneratedToggle,
+    selectors.semanticDebugToggle,
+    selectors.fieldHighlightToggle,
     selectors.filterInput,
     selectors.resultFilterSelect,
-  ].forEach((control) => control.addEventListener("input", markCompareStale));
+  ].filter(Boolean).forEach((control) => control.addEventListener("input", markCompareStale));
 
   selectors.profileNameInput.addEventListener("focus", () => pushProfileUndoSnapshot("profile-name"));
   selectors.profileNameInput.addEventListener("input", () => {
@@ -581,6 +608,8 @@ function bindEvents() {
   });
   selectors.themeSelect.addEventListener("input", saveUiPreferences);
   selectors.fontSelect.addEventListener("input", saveUiPreferences);
+  selectors.fieldHighlightToggle?.addEventListener("input", saveUiPreferences);
+  selectors.semanticDebugToggle?.addEventListener("input", saveUiPreferences);
 }
 
 function setActiveTab(tab, options = {}) {
@@ -602,7 +631,13 @@ function setActiveTab(tab, options = {}) {
 
 function renderObjectToggles() {
   selectors.objectToggles.innerHTML = objectTypes
-    .map((type) => `<label><input type="checkbox" data-object-type="${type}" checked />${type}</label>`)
+    .map((type) => `
+      <label class="object-scope-chip" title="${escapeHtml(type)}">
+        <input class="object-scope-chip__input" type="checkbox" data-object-type="${escapeHtml(type)}" checked aria-label="${escapeHtml(type)}" />
+        <span class="object-scope-chip__indicator" aria-hidden="true"></span>
+        <span class="object-scope-chip__label">${escapeHtml(type)}</span>
+      </label>
+    `)
     .join("");
   selectors.objectToggles.querySelectorAll("input").forEach((input) => input.addEventListener("input", markCompareStale));
 }
@@ -3230,9 +3265,9 @@ function markCompareStale() {
 function toggleCompareControls() {
   const workspace = selectors.compareTab.querySelector(".workspace");
   const hidden = workspace.classList.toggle("controls-hidden");
-  selectors.toggleControlsBtn.textContent = hidden ? "›" : "‹";
   selectors.toggleControlsBtn.title = hidden ? "비교 옵션 보이기" : "비교 옵션 숨기기";
   selectors.toggleControlsBtn.setAttribute("aria-label", selectors.toggleControlsBtn.title);
+  selectors.toggleControlsBtn.classList.toggle("is-collapsed", hidden);
   scheduleDiffConnectorRender();
 }
 
@@ -3425,6 +3460,8 @@ function getOptions() {
     autoAlignObjects: selectors.autoAlignToggle.checked,
     ignoreComments: selectors.ignoreCommentsToggle.checked,
     ignoreGenerated: selectors.ignoreGeneratedToggle.checked,
+    semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
+    fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
     selectedObjects: [...selectors.objectToggles.querySelectorAll("input:checked")].map((input) => input.dataset.objectType),
     filter: selectors.filterInput.value.trim().toLowerCase(),
     resultFilter: selectors.resultFilterSelect.value,
@@ -3450,6 +3487,10 @@ function runCompare() {
       compareObjects(oldObjects, newObjects, options)
     );
 
+    if (options.semanticDebug) {
+      logStaticRouteCoverageSummary(oldObjects, newObjects, report);
+    }
+
     state.lastReport = report;
 
     safeStep("리포트 렌더링", () => renderReportV2(report));
@@ -3469,6 +3510,29 @@ function runCompare() {
   } catch (error) {
     handleCompareError(error);
   }
+}
+
+function countRawRowLines(row = {}) {
+  return [row.oldRow?.text, row.newRow?.text]
+    .filter(Boolean)
+    .reduce((count, text) => count + String(text).split(/\r?\n/).filter((line) => line.trim()).length, 0);
+}
+
+function logStaticRouteCoverageSummary(oldObjects = [], newObjects = [], report = {}) {
+  const oldStaticRoutes = oldObjects.filter((object) => object.type === "static-route");
+  const newStaticRoutes = newObjects.filter((object) => object.type === "static-route");
+  const oldKeys = new Set(oldStaticRoutes.map((object) => object.key));
+  const matchedCount = newStaticRoutes.filter((object) => oldKeys.has(object.key)).length;
+  const unmatchedLineCount = (report.diffRows || [])
+    .filter((row) => row.semanticReason === "raw-block-unmatched")
+    .reduce((count, row) => count + countRawRowLines(row), 0);
+
+  console.table([{
+    oldStaticRouteObjects: oldStaticRoutes.length,
+    newStaticRouteObjects: newStaticRoutes.length,
+    matchedStaticRoutes: matchedCount,
+    unmatchedRawLineCount: unmatchedLineCount,
+  }]);
 }
 
 function getCurrentVendorPresetForSemanticPreview() {
@@ -3501,11 +3565,13 @@ function getCurrentVendorPresetForSemanticPreview() {
 
   const oldLooksNokiaClassic =
     /^\s*configure\s+router\s+/im.test(oldText) ||
-    /^\s*static-route-entry\s+/im.test(oldText);
+    /^\s*static-route-entry\s+/im.test(oldText) ||
+    /^\s*neighbor\s+"?\d{1,3}(?:\.\d{1,3}){3}"?/im.test(oldText);
 
   const newLooksNokiaMdCli =
     /^\s*route\s+\S+\/\d+\s+route-type\s+/im.test(newText) ||
-    /^\s*interface\s+"[^"]+"\s*\{/im.test(newText);
+    /^\s*interface\s+"[^"]+"\s*\{/im.test(newText) ||
+    /^\s*neighbor\s+"?\d{1,3}(?:\.\d{1,3}){3}"?\s*\{/im.test(newText);
 
   // 2순위:
   // heuristic fallback
@@ -3670,32 +3736,36 @@ function renderSemanticPreview() {
     manualMap,
   });
 
-  const plan = attachManualCandidatesToPlan(
+  const plan = sortSemanticComparisonPlan(attachManualCandidatesToPlan(
     createComparisonPlan(matches, state.profileDraft || {}),
     oldResult.objects,
     newResult.objects
-  );
+  ));
 
-  console.log("[relationship-debug]", {
-  oldObjects: oldResult.objects.map((o) => ({
-    id: o.id,
-    type: o.normalizedType,
-    sourceName: o.sourceName,
-    fields: o.fields,
-  })),
-  newObjects: newResult.objects.map((o) => ({
-    id: o.id,
-    type: o.normalizedType,
-    sourceName: o.sourceName,
-    fields: o.fields,
-  })),
-  plan: plan.map((p) => ({
-    title: `${p.oldObject?.sourceName || "-"} -> ${p.newObject?.sourceName || "-"}`,
-    type: p.objectType,
-    status: p.status,
-    relationships: p.relationshipSummary,
-  })),
-});
+  if (selectors.semanticDebugToggle?.checked) {
+    console.groupCollapsed("[semantic-object-debug]");
+    console.table(plan.map((item, index) => {
+      const oldObject = item.oldObject || null;
+      const newObject = item.newObject || null;
+      const identity = oldObject?.normalizedIdentity || newObject?.normalizedIdentity || "";
+      const sourceName = oldObject?.sourceName || newObject?.sourceName || "";
+      return {
+        index,
+        type: item.objectType,
+        status: item.status,
+        score: item.score,
+        reason: item.reason || "",
+        oldId: oldObject?.id || "",
+        newId: newObject?.id || "",
+        oldIdentity: oldObject?.normalizedIdentity || "",
+        newIdentity: newObject?.normalizedIdentity || "",
+        normalizedIdentity: identity,
+        sortKey: `${item.objectType}:${identity || sourceName}`,
+        ambiguityReason: (item.scoreReasons || []).join(", "),
+      };
+    }));
+    console.groupEnd();
+  }
 
   const html = renderComparisonPlanHtml(plan);
 
@@ -3785,6 +3855,45 @@ function isObjectTerminatorLine(normalizedLine = "") {
   return line === "exit" || line === "}" || line === "!";
 }
 
+function isStaticRouteBlockHeaderLine(normalizedLine = "") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  if (/\bnext-hop\b/.test(line) && !/^static-route-entry\s+\S+\s+create\b/.test(line)) {
+    return false;
+  }
+  return (
+    /^static-route-entry\s+\S+(?:\s+create\b|\s*\{|$)/.test(line) ||
+    /^route\s+"?[^"\s{}]+"?(?:\s+route-type\b|\s+create\b|\s*\{|$)/.test(line) ||
+    /^configure\s+router\s+(?:\S+\s+)?static-routes\s+route\s+"?\S+"?/.test(line) ||
+    /^\/?configure\s*\{.*\bstatic-routes\s+route\s+"?\S+"?/.test(line)
+  );
+}
+
+function appendLineToParsedObject(current, rawLine, normalizedLine) {
+  if (!current) return false;
+
+  const line = canonicalizeComparableLine(normalizedLine);
+
+  if (
+    current.type === "static-route" &&
+    current.blockDepth > 0 &&
+    isStaticRouteBlockHeaderLine(line) &&
+    current.rawLines.length > 0
+  ) {
+    current.blockDepth += 1;
+  }
+
+  current.lines.push(normalizedLine);
+  current.rawLines.push(rawLine);
+
+  if (!isObjectTerminatorLine(line)) return false;
+
+  if (current.type === "static-route" && current.blockDepth > 0) {
+    current.blockDepth -= 1;
+  }
+
+  return false;
+}
+
 function isInsideConfigBlock(current) {
   return Boolean(current && current.type && current.type !== "global");
 }
@@ -3803,6 +3912,10 @@ function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
 
   const line = canonicalizeComparableLine(normalizedLine);
   if (!line) return true;
+
+  if (current.type === "static-route" && current.blockDepth > 0) {
+    return true;
+  }
 
   if (isObjectTerminatorLine(line)) return true;
 
@@ -3828,10 +3941,7 @@ function parseConfig(text, options, source) {
 
     // 현재 객체 내부의 하위 설정 라인은 canonical object / detected object로 분리하지 않는다.
     if (shouldKeepLineInCurrentObject(current, rawLine, normalized)) {
-      current.lines.push(normalized);
-      current.rawLines.push(rawLine);
-
-      if (isObjectTerminatorLine(normalized)) {
+      if (appendLineToParsedObject(current, rawLine, normalized)) {
         flushCurrent();
       }
 
@@ -3841,6 +3951,14 @@ function parseConfig(text, options, source) {
     const canonicalObject = buildCanonicalObject(rawLine, options, source, index + 1);
     if (canonicalObject) {
       flushCurrent();
+      if (canonicalObject.type === "static-route" && isStaticRouteBlockHeaderLine(normalized)) {
+        current = {
+          ...canonicalObject,
+          canonicalOnly: false,
+          blockDepth: 1,
+        };
+        return;
+      }
       objects.push(canonicalObject);
       return;
     }
@@ -3856,6 +3974,7 @@ function parseConfig(text, options, source) {
         startLine: index + 1,
         lines: [normalized],
         rawLines: [rawLine],
+        blockDepth: detected.type === "static-route" && isStaticRouteBlockHeaderLine(normalized) ? 1 : 0,
       };
       return;
     }
@@ -5312,10 +5431,7 @@ function compareObjects(oldObjects, newObjects, options) {
     visibleItems: filterItems(mergedItems, options),
 
     // Semantic Preview와 상단 diff 창의 source-of-truth를 통일한다.
-    diffRows: buildSemanticPlanDiffRows(
-      selectors.oldInput.value,
-      selectors.newInput.value
-    ),
+    diffRows: buildPairedObjectDiffRows(oldMap, newMap, comparedObjectKeys),
 
     oldObjects,
     newObjects,
@@ -5328,6 +5444,94 @@ function compareObjects(oldObjects, newObjects, options) {
       syntax: 0,
       required: mergedItems.filter((item) => item.type === "required").length,
     },
+  };
+}
+
+function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
+  const rows = [];
+
+  keys.forEach((key, objectIndex) => {
+    const oldObject = oldMap.get(key) || null;
+    const newObject = newMap.get(key) || null;
+
+    const oldLines = getObjectDisplayLines(oldObject);
+    const newLines = getObjectDisplayLines(newObject);
+    const maxLines = Math.max(oldLines.length, newLines.length, 1);
+
+    for (let lineIndex = 0; lineIndex < maxLines; lineIndex += 1) {
+      const oldLine = oldLines[lineIndex] || null;
+      const newLine = newLines[lineIndex] || null;
+
+      rows.push({
+        oldRow: oldLine
+          ? buildPairedObjectLineRow(oldObject, oldLine, objectIndex, lineIndex, "old")
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, "old"),
+        newRow: newLine
+          ? buildPairedObjectLineRow(newObject, newLine, objectIndex, lineIndex, "new")
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, "new"),
+        oldState: oldLine ? "equal" : "placeholder",
+        newState: newLine ? "equal" : "placeholder",
+        semanticCovered: true,
+        semanticReason: "paired-object-block",
+        objectMatched: Boolean(oldObject && newObject),
+        semanticObjectLine: true,
+        semanticObjectStart: lineIndex === 0,
+        semanticObjectEnd: lineIndex === maxLines - 1,
+      });
+    }
+  });
+
+  return rows;
+}
+
+function getObjectDisplayLines(object) {
+  if (!object) return [];
+  if (Array.isArray(object.rawLines) && object.rawLines.length) return object.rawLines;
+  if (Array.isArray(object.lines) && object.lines.length) return object.lines;
+  return [];
+}
+
+function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, side) {
+  const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
+  const objectKey = object?.key || `${objectType}:${object?.name || object?.normalizedIdentity || objectIndex}`;
+  const lineText = String(line || "");
+
+  return {
+    number: lineIndex + 1,
+    text: lineText,
+    key: `${objectKey}:${side}:${lineIndex}`,
+    objectKey,
+    normalized: canonicalizeComparableLine(lineText),
+    semanticField: inferSemanticFieldName(lineText),
+    highlights: buildLineSemanticHighlights(
+      lineText,
+      objectType,
+      object?.canonicalFields || object?.fields || {},
+      []
+    ),
+    objectMatched: true,
+    semanticCovered: true,
+    semanticReason: "paired-object-block-line",
+  };
+}
+
+function buildPairedPlaceholderRow(object, objectIndex, lineIndex, side) {
+  const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
+  const objectKey = object?.key || `${objectType}:placeholder:${objectIndex}`;
+
+  return {
+    number: "",
+    text: "",
+    key: `${objectKey}:${side}:placeholder:${lineIndex}`,
+    objectKey,
+    normalized: "",
+    semanticField: "",
+    highlights: [],
+    placeholder: true,
+    hidden: true,
+    objectMatched: true,
+    semanticCovered: true,
+    semanticReason: "paired-object-placeholder",
   };
 }
 
@@ -5796,10 +6000,10 @@ function normalizeFieldName(field = "") {
 }
 
 function buildSemanticObjectDiffRows(oldText, newText, options) {
-  return buildSemanticPlanDiffRows(oldText, newText);
+  return buildSemanticPlanDiffRows(oldText, newText, options);
 }
 
-function buildSemanticPlanDiffRows(oldText, newText) {
+function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
   const { oldVendor, newVendor } = getCurrentVendorPresetForSemanticPreview();
 
   const oldResult = normalizeConfig({
@@ -5828,19 +6032,423 @@ function buildSemanticPlanDiffRows(oldText, newText) {
     manualMap,
   });
 
-  const plan = createComparisonPlan(matches, state.profileDraft || {});
+  const rawPlan = createComparisonPlan(matches, state.profileDraft || {});
+  const scopedPlan = filterSemanticPlanByScope(rawPlan, options.selectedObjects);
+  const plan = options.sortObjects === false
+    ? scopedPlan
+    : sortSemanticComparisonPlan(scopedPlan);
+  const rows = buildSemanticObjectBlockRows(plan);
+
+  return appendUnmatchedRawLinesToSemanticRows(rows, oldText, newText, plan);
+}
+
+function semanticPlanSortKey(item = {}) {
+  const object = item.oldObject || item.newObject || {};
+  const type = item.objectType || object.normalizedType || object.type || object.sourceType || "unknown";
+  const identity =
+    object.normalizedIdentity ||
+    object.identity ||
+    object.name ||
+    object.sourceName ||
+    object.id ||
+    "";
+  const line = Number(object.startLine || object.lineNo || 0);
+
+  return {
+    type,
+    identity: String(identity),
+    line,
+    rank: objectTypeRank(type),
+  };
+}
+
+function filterSemanticPlanByScope(plan = [], selectedObjects = objectTypes) {
+  const allowed = new Set(Array.isArray(selectedObjects) && selectedObjects.length ? selectedObjects : objectTypes);
+  return plan.filter((item) => allowed.has(item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType));
+}
+
+function sortSemanticComparisonPlan(plan = []) {
+  return [...plan].sort((left, right) => {
+    const a = semanticPlanSortKey(left);
+    const b = semanticPlanSortKey(right);
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    const identityCompare = a.identity.localeCompare(b.identity, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+    if (identityCompare !== 0) return identityCompare;
+    return a.line - b.line;
+  });
+}
+
+function buildSemanticObjectBlockRows(plan = []) {
   const rows = [];
 
-  plan.forEach((item, index) => {
-    rows.push(...buildSemanticObjectLineRows(item, index));
+  plan.forEach((item, objectIndex) => {
+    const oldObject = item.oldObject || null;
+    const newObject = item.newObject || null;
+
+    if (objectIndex > 0) {
+      rows.push(buildSemanticObjectGapRow(item, objectIndex));
+    }
+
+    rows.push({
+      semanticBlockRow: true,
+      oldRow: buildSemanticObjectBlockRow({
+        side: "old",
+        item,
+        object: oldObject,
+        objectIndex,
+      }),
+      newRow: buildSemanticObjectBlockRow({
+        side: "new",
+        item,
+        object: newObject,
+        objectIndex,
+      }),
+      oldState: oldObject ? semanticBlockState(item, "old") : "placeholder",
+      newState: newObject ? semanticBlockState(item, "new") : "placeholder",
+      semanticCovered: item.status === "matched",
+      semanticReason: item.reason || "",
+      objectMatched: item.status === "matched",
+      semanticObjectLine: true,
+      semanticObjectStart: true,
+      semanticObjectEnd: true,
+    });
   });
 
-  return appendUnmatchedRawLinesToSemanticRows(rows, oldText, newText);
+  return rows;
+}
+
+function buildSemanticObjectGapRow(item = {}, objectIndex = 0) {
+  const key = `${item.id || "semantic-object"}:gap:${objectIndex}`;
+  return {
+    semanticGapRow: true,
+    oldRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}:old`,
+      objectKey: `${item.objectType || "object"}:gap:${objectIndex}`,
+      semanticPairKey: "",
+      placeholder: true,
+      hidden: true,
+    },
+    newRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}:new`,
+      objectKey: `${item.objectType || "object"}:gap:${objectIndex}`,
+      semanticPairKey: "",
+      placeholder: true,
+      hidden: true,
+    },
+    oldState: "semantic-gap",
+    newState: "semantic-gap",
+    semanticCovered: true,
+    objectMatched: false,
+  };
+}
+
+function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
+  if (!object) {
+    return {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${item.id || "semantic-object"}:${side}:empty:${objectIndex}`,
+      objectKey: `${item.objectType || "object"}:empty:${objectIndex}`,
+      semanticObjectIndex: objectIndex,
+      semanticPairKey: item.id || "",
+      semanticField: "",
+      objectMatched: false,
+      semanticCovered: true,
+      semanticReason: "semantic-object-placeholder",
+      highlights: [],
+      placeholder: true,
+      semanticObjectBlock: true,
+      semanticObjectStart: true,
+      semanticObjectEnd: true,
+    };
+  }
+
+  const objectType = item.objectType || object.normalizedType || object.type || object.sourceType || "object";
+  const identity =
+    object.normalizedIdentity ||
+    object.identity ||
+    object.name ||
+    object.sourceName ||
+    object.id ||
+    "-";
+
+  const objectKey =
+    object.key ||
+    `${objectType}:${identity}`;
+
+  const rawLines = getSemanticObjectRawLines(object);
+  const fields = object.fields || object.canonicalFields || {};
+  const lineMatches = Array.isArray(item.lineMatches) ? item.lineMatches : [];
+  const matchIndex = buildSemanticLineMatchIndex(lineMatches, side);
+
+  return {
+    number: "",
+    text: renderSemanticObjectBlockHtml({
+      side,
+      item,
+      object,
+      objectType,
+      identity,
+      rawLines,
+      fields,
+      matchIndex,
+    }),
+    rawHtml: true,
+    normalized: canonicalizeComparableLine(`${objectType} ${identity}`),
+    key: `${item.id || "semantic-object"}:${side}:block:${objectIndex}`,
+    objectKey,
+    objectIdentity: identity,
+    semanticObjectIndex: objectIndex,
+    objectStatus: item.status || "",
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    semanticPairKey: item.id || "",
+    semanticField: "",
+    objectMatched: item.status === "matched",
+    semanticCovered: true,
+    semanticReason: item.reason || "",
+    highlights: [],
+    semanticObjectBlock: true,
+    semanticObjectStart: true,
+    semanticObjectEnd: true,
+  };
+}
+
+function semanticBlockState(item = {}, side = "") {
+  if (item.status === "matched" || item.status === "candidate") return "equal";
+  if (item.status === "old-only") return side === "old" ? "missing" : "placeholder";
+  if (item.status === "new-only") return side === "new" ? "added" : "placeholder";
+  return "changed";
+}
+
+function buildSemanticLineMatchIndex(lineMatches = [], side = "") {
+  const index = new Map();
+
+  lineMatches.forEach((lineMatch) => {
+    const lines = side === "old" ? lineMatch.oldLines : lineMatch.newLines;
+    const field =
+      lineMatch.field ||
+      lineMatch.semanticField ||
+      inferSemanticFieldFromLineMatch(lineMatch);
+
+    (Array.isArray(lines) ? lines : []).forEach((line) => {
+      const key = canonicalizeComparableLine(line);
+      if (!key) return;
+      index.set(key, {
+        field,
+        status: lineMatch.status || "equal",
+        reason: lineMatch.reason || "semantic-line-match",
+      });
+    });
+  });
+
+  return index;
+}
+
+function inferSemanticFieldFromLineMatch(lineMatch = {}) {
+  const sample =
+    lineMatch.oldLines?.[0] ||
+    lineMatch.newLines?.[0] ||
+    "";
+
+  return inferSemanticFieldName(sample) || "";
+}
+
+function renderSemanticObjectBlockHtml({
+  side,
+  item,
+  object,
+  objectType,
+  identity,
+  rawLines,
+  fields,
+  matchIndex,
+}) {
+  const state = semanticObjectVisualState(item);
+  const stateLabel = String(item.status || "unknown").toUpperCase();
+  const score = item.score ?? "-";
+  const reason = item.reason || "-";
+  const fieldCount = Object.keys(fields || {}).length;
+  const sideLabel = side === "old" ? "SOURCE" : "TARGET";
+
+  return `
+    <section class="semantic-diff-object-block semantic-diff-object-${escapeHtml(state)}" data-semantic-object-block="true">
+      <header class="semantic-diff-object-head">
+        <div class="semantic-diff-object-title">
+          <span class="semantic-diff-object-type">${escapeHtml(objectType)}</span>
+          <strong>${escapeHtml(identity)}</strong>
+        </div>
+        <div class="semantic-diff-object-badges">
+          <span class="semantic-diff-badge side">${escapeHtml(sideLabel)}</span>
+          <span class="semantic-diff-badge">${escapeHtml(stateLabel)}</span>
+          <span class="semantic-diff-badge muted">score ${escapeHtml(score)}</span>
+          <span class="semantic-diff-badge muted">fields ${escapeHtml(fieldCount)}</span>
+        </div>
+      </header>
+      <div class="semantic-diff-object-meta">
+        <span>${escapeHtml(side === "old" ? "Source" : "Target")}</span>
+        <span>method ${escapeHtml(reason)}</span>
+      </div>
+      <div class="semantic-diff-object-body">
+        ${rawLines.length
+      ? rawLines.map((line, index) => renderSemanticObjectConfigLine({
+        line,
+        index,
+        objectType,
+        fields,
+        matchIndex,
+      })).join("")
+      : `<div class="semantic-diff-empty-line">No object lines</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function semanticObjectVisualState(item = {}) {
+  if (item.status === "matched" && String(item.reason || "").toLowerCase() === "manual") return "manual";
+  if (item.status === "matched" || item.status === "candidate") return "matched";
+  if (item.status === "old-only" || item.status === "new-only") return "unmatched";
+  if (Array.isArray(item.ambiguousAlternatives) && item.ambiguousAlternatives.length) return "ambiguous";
+  return "partial";
+}
+
+function renderSemanticObjectConfigLine({
+  line,
+  index,
+  objectType,
+  fields,
+  matchIndex,
+}) {
+  const normalized = canonicalizeComparableLine(line);
+  const matched = matchIndex.get(normalized);
+  const field = matched?.field || inferSemanticFieldName(line) || "";
+  const depth = semanticLineDepth(line);
+  const structural = isSemanticStructuralLine(line);
+  const classes = [
+    "semantic-diff-config-line",
+    matched ? "is-matched" : "is-covered",
+    structural ? "is-structural" : "",
+    field ? `field-${cssSafeClassName(field)}` : "",
+  ].filter(Boolean);
+
+  return `
+    <div class="${classes.join(" ")}" data-semantic-line-index="${index}" data-semantic-field="${escapeHtml(field)}" style="padding-left:${10 + depth * 16}px">
+      <span class="semantic-diff-line-no">${index + 1}</span>
+      <code>${renderSemanticLineTokens(line, objectType, fields)}</code>
+      ${field && !structural ? `<span class="semantic-diff-line-field">${escapeHtml(field)}</span>` : ""}
+    </div>
+  `;
+}
+
+function semanticLineDepth(line = "") {
+  const raw = String(line || "");
+  const leading = raw.match(/^\s*/)?.[0]?.length || 0;
+  return Math.min(6, Math.floor(leading / 4));
+}
+
+function isSemanticStructuralLine(line = "") {
+  const text = String(line || "").trim();
+  return text === "exit" || text === "}" || text === "{";
+}
+
+function renderHighlightedLine(line = "", highlights = []) {
+  if (!Array.isArray(highlights) || highlights.length === 0) {
+    return escapeHtml(line);
+  }
+
+  const text = String(line || "");
+  const safeHighlights = highlights
+    .map((item) => ({
+      start: Number(item.start),
+      end: Number(item.end),
+      kind: item.kind || item.type || "",
+      field: item.field || item.semanticField || "",
+      className: item.className || "",
+    }))
+    .filter((item) =>
+      Number.isInteger(item.start) &&
+      Number.isInteger(item.end) &&
+      item.start >= 0 &&
+      item.end > item.start &&
+      item.start < text.length
+    )
+    .sort((a, b) => a.start - b.start);
+
+  let cursor = 0;
+  let html = "";
+
+  safeHighlights.forEach((item) => {
+    const start = Math.max(cursor, item.start);
+    const end = Math.min(text.length, item.end);
+
+    if (start > cursor) {
+      html += escapeHtml(text.slice(cursor, start));
+    }
+
+    if (end > start) {
+      const token = text.slice(start, end);
+      const className = [
+        "diff-token-match",
+        item.className,
+        item.kind ? `token-kind-${cssSafeClassName(item.kind)}` : "",
+        item.field ? `field-${cssSafeClassName(item.field)}` : "",
+      ].filter(Boolean).join(" ");
+
+      html += `<span class="${className}" data-semantic-field="${escapeHtml(item.field)}">${escapeHtml(token)}</span>`;
+      cursor = end;
+    }
+  });
+
+  if (cursor < text.length) {
+    html += escapeHtml(text.slice(cursor));
+  }
+
+  return html;
+}
+
+function renderSemanticLineTokens(line, objectType, fields) {
+  if (selectors.fieldHighlightToggle?.checked === false) {
+    return escapeHtml(line);
+  }
+
+  const highlights = buildLineSemanticHighlights(
+    line,
+    objectType,
+    fields || {},
+    []
+  );
+
+  if (!highlights.length) {
+    return escapeHtml(line);
+  }
+
+  return renderHighlightedLine(line, highlights);
+}
+
+function cssSafeClassName(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "unknown";
 }
 
 function buildSemanticObjectLineRows(item = {}, objectIndex = 0) {
   const oldObject = item.oldObject || null;
   const newObject = item.newObject || null;
+
+  if (Array.isArray(item.lineMatches) && item.lineMatches.length) {
+    return buildSemanticMappedLineRows(item, objectIndex, oldObject, newObject);
+  }
 
   const oldLines = getSemanticObjectRawLines(oldObject);
   const newLines = getSemanticObjectRawLines(newObject);
@@ -5913,10 +6521,246 @@ function buildSemanticObjectLineRows(item = {}, objectIndex = 0) {
       objectMatched: item.status === "matched",
       semanticObjectLine: true,
       semanticObjectStart: lineIndex === 0,
+      semanticObjectEnd: lineIndex === maxLines - 1,
     });
+
+    rows[rows.length - 1].oldRow.semanticObjectEnd = lineIndex === maxLines - 1;
+    rows[rows.length - 1].newRow.semanticObjectEnd = lineIndex === maxLines - 1;
   }
 
   return rows;
+}
+
+function getLineMatchStates(lineMatch = {}, item = {}) {
+  const status = String(lineMatch.status || "").toLowerCase();
+  const objectMatched = item.status === "matched" || item.status === "candidate";
+
+  if (status === "missing") return { oldState: "missing", newState: "placeholder" };
+  if (status === "added") return { oldState: "placeholder", newState: "added" };
+  if (status === "changed") return { oldState: "changed", newState: "changed" };
+  if (status === "ignored") return { oldState: "ignored", newState: "ignored" };
+  if (objectMatched || status === "equal") return { oldState: "equal", newState: "equal" };
+
+  return { oldState: status || "changed", newState: status || "changed" };
+}
+
+function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = null, newObject = null) {
+  const rows = [];
+  const oldRawLines = getSemanticObjectRawLines(oldObject);
+  const newRawLines = getSemanticObjectRawLines(newObject);
+
+  const oldConsumed = new Set();
+  const newConsumed = new Set();
+
+  const oldMatchedByNormalized = new Map();
+  const newMatchedByNormalized = new Map();
+
+  (item.lineMatches || []).forEach((lineMatch, matchIndex) => {
+    (lineMatch.oldLines || []).forEach((line) => {
+      const key = canonicalizeComparableLine(line);
+      if (key) oldMatchedByNormalized.set(key, { lineMatch, matchIndex });
+    });
+
+    (lineMatch.newLines || []).forEach((line) => {
+      const key = canonicalizeComparableLine(line);
+      if (key) newMatchedByNormalized.set(key, { lineMatch, matchIndex });
+    });
+  });
+
+  function findOldLineIndexForNewLine(newLine) {
+    const newKey = canonicalizeComparableLine(newLine);
+    const matched = newMatchedByNormalized.get(newKey);
+    if (!matched) return -1;
+
+    const oldCandidate = matched.lineMatch.oldLines?.[0];
+    const oldKey = canonicalizeComparableLine(oldCandidate);
+
+    return oldRawLines.findIndex((line, index) =>
+      !oldConsumed.has(index) && canonicalizeComparableLine(line) === oldKey
+    );
+  }
+
+  function findNewLineIndexForOldLine(oldLine) {
+    const oldKey = canonicalizeComparableLine(oldLine);
+    const matched = oldMatchedByNormalized.get(oldKey);
+    if (!matched) return -1;
+
+    const newCandidate = matched.lineMatch.newLines?.[0];
+    const newKey = canonicalizeComparableLine(newCandidate);
+
+    return newRawLines.findIndex((line, index) =>
+      !newConsumed.has(index) && canonicalizeComparableLine(line) === newKey
+    );
+  }
+
+  function isClosingLine(line = "") {
+    const text = String(line || "").trim();
+    return text === "exit" || text === "}";
+  }
+
+  function pushRow({
+    oldLine = "",
+    newLine = "",
+    lineMatch = null,
+    visualLineIndex = rows.length,
+    reason = "object-raw-line-covered",
+  }) {
+    const mappingKey = `${item.id || "semantic-object"}:raw-line:${visualLineIndex}`;
+    const oldMatched = Boolean(lineMatch?.oldLines?.some((line) =>
+      canonicalizeComparableLine(line) === canonicalizeComparableLine(oldLine)
+    ));
+    const newMatched = Boolean(lineMatch?.newLines?.some((line) =>
+      canonicalizeComparableLine(line) === canonicalizeComparableLine(newLine)
+    ));
+
+    rows.push({
+      oldRow: oldLine
+        ? buildSemanticLineRow({
+          side: "old",
+          line: oldLine,
+          object: oldObject,
+          item,
+          objectIndex,
+          lineIndex: visualLineIndex,
+          lineMatch: {
+            status: oldMatched ? "equal" : "covered",
+            semanticCovered: true,
+            reason,
+          },
+          mappingKey,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "old",
+          item,
+          objectIndex,
+          lineIndex: visualLineIndex,
+          mappingKey,
+        }),
+
+      newRow: newLine
+        ? buildSemanticLineRow({
+          side: "new",
+          line: newLine,
+          object: newObject,
+          item,
+          objectIndex,
+          lineIndex: visualLineIndex,
+          lineMatch: {
+            status: newMatched ? "equal" : "covered",
+            semanticCovered: true,
+            reason,
+          },
+          mappingKey,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "new",
+          item,
+          objectIndex,
+          lineIndex: visualLineIndex,
+          mappingKey,
+        }),
+
+      oldState: oldLine ? (oldMatched ? "equal" : "ignored") : "placeholder",
+      newState: newLine ? (newMatched ? "equal" : "ignored") : "placeholder",
+      semanticCovered: true,
+      semanticReason: reason,
+      objectMatched: item.status === "matched",
+      semanticObjectLine: true,
+      semanticObjectStart: rows.length === 0,
+      semanticObjectEnd: false,
+      semanticLineMapped: Boolean(lineMatch),
+      semanticLineMappingKey: mappingKey,
+    });
+  }
+
+  newRawLines.forEach((newLine, newIndex) => {
+    if (newConsumed.has(newIndex)) return;
+
+    const oldIndex = findOldLineIndexForNewLine(newLine);
+
+    if (oldIndex >= 0) {
+      oldConsumed.add(oldIndex);
+      newConsumed.add(newIndex);
+
+      const newKey = canonicalizeComparableLine(newLine);
+      const lineMatch = newMatchedByNormalized.get(newKey)?.lineMatch || null;
+
+      pushRow({
+        oldLine: oldRawLines[oldIndex],
+        newLine,
+        lineMatch,
+        reason: "semantic-line-match",
+      });
+      return;
+    }
+
+    const nextOldClosingIndex = oldRawLines.findIndex((oldLine, index) =>
+      !oldConsumed.has(index) && isClosingLine(oldLine) && isClosingLine(newLine)
+    );
+
+    if (nextOldClosingIndex >= 0) {
+      oldConsumed.add(nextOldClosingIndex);
+      newConsumed.add(newIndex);
+
+      pushRow({
+        oldLine: oldRawLines[nextOldClosingIndex],
+        newLine,
+        lineMatch: null,
+        reason: "structural-closing-line-covered",
+      });
+      return;
+    }
+
+    newConsumed.add(newIndex);
+
+    pushRow({
+      oldLine: "",
+      newLine,
+      lineMatch: null,
+      reason: "target-only-object-raw-line-covered",
+    });
+  });
+
+  oldRawLines.forEach((oldLine, oldIndex) => {
+    if (oldConsumed.has(oldIndex)) return;
+
+    const newIndex = findNewLineIndexForOldLine(oldLine);
+
+    if (newIndex >= 0 && !newConsumed.has(newIndex)) {
+      oldConsumed.add(oldIndex);
+      newConsumed.add(newIndex);
+
+      const oldKey = canonicalizeComparableLine(oldLine);
+      const lineMatch = oldMatchedByNormalized.get(oldKey)?.lineMatch || null;
+
+      pushRow({
+        oldLine,
+        newLine: newRawLines[newIndex],
+        lineMatch,
+        reason: "semantic-line-match",
+      });
+      return;
+    }
+
+    oldConsumed.add(oldIndex);
+
+    pushRow({
+      oldLine,
+      newLine: "",
+      lineMatch: null,
+      reason: "source-only-object-raw-line-covered",
+    });
+  });
+
+  if (rows.length > 0) {
+    rows[rows.length - 1].semanticObjectEnd = true;
+    rows[rows.length - 1].oldRow.semanticObjectEnd = true;
+    rows[rows.length - 1].newRow.semanticObjectEnd = true;
+  }
+
+  return objectIndex > 0
+    ? [buildSemanticObjectGapRow(item, objectIndex), ...rows]
+    : rows;
 }
 
 function getSemanticObjectRawLines(object = null) {
@@ -5933,6 +6777,28 @@ function getSemanticObjectRawLines(object = null) {
   return [];
 }
 
+function collectSemanticCoveredLines(plan = []) {
+  const covered = new Set();
+
+  plan.forEach((item) => {
+    [item.oldObject, item.newObject].forEach((object) => {
+      if (!object) return;
+
+      const rawLines = getSemanticObjectRawLines(object);
+
+      rawLines.forEach((line) => {
+        const normalized = canonicalizeComparableLine(line);
+
+        if (!normalized) return;
+
+        covered.add(normalized);
+      });
+    });
+  });
+
+  return covered;
+}
+
 function buildSemanticLineRow({
   side,
   line,
@@ -5940,6 +6806,8 @@ function buildSemanticLineRow({
   item,
   objectIndex,
   lineIndex,
+  lineMatch = null,
+  mappingKey = "",
 }) {
   return {
     number: "",
@@ -5947,11 +6815,21 @@ function buildSemanticLineRow({
     normalized: canonicalizeComparableLine(line),
     key: `${item.id || "semantic-object"}:${side}:${objectIndex}:${lineIndex}`,
     objectKey: `${item.objectType || object?.normalizedType || "object"}:${object?.sourceName || object?.id || objectIndex}`,
+    semanticObjectIndex: objectIndex,
+    semanticPairKey: item.id || "",
     semanticField: item.matchKeyFields?.[0] || "",
     objectMatched: item.status === "matched",
-    semanticCovered: item.status === "matched",
-    semanticReason: item.reason || "",
-    highlights: [],
+    semanticCovered: Boolean(lineMatch?.semanticCovered || item.status === "matched"),
+    semanticReason: lineMatch?.reason || item.reason || "",
+    semanticLineMappingKey: mappingKey,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: false,
+    highlights: buildLineSemanticHighlights(
+      line,
+      item.objectType || object?.normalizedType || "",
+      object?.fields || object?.canonicalFields || {},
+      []
+    ),
   };
 }
 
@@ -5960,6 +6838,7 @@ function buildSemanticPlaceholderLineRow({
   item,
   objectIndex,
   lineIndex,
+  mappingKey = "",
 }) {
   return {
     number: "",
@@ -5967,6 +6846,9 @@ function buildSemanticPlaceholderLineRow({
     normalized: "",
     key: `${item.id || "semantic-object"}:${side}:placeholder:${objectIndex}:${lineIndex}`,
     objectKey: `${item.objectType || "object"}:placeholder:${objectIndex}`,
+    semanticObjectIndex: objectIndex,
+    semanticPairKey: item.id || "",
+    semanticLineMappingKey: mappingKey,
     semanticField: "",
     objectMatched: item.status === "matched",
     semanticCovered: true,
@@ -5974,6 +6856,8 @@ function buildSemanticPlaceholderLineRow({
     highlights: [],
     placeholder: true,
     hidden: true,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: false,
   };
 }
 
@@ -6056,7 +6940,8 @@ function consumeLineIfMatched(counts, line = "") {
 function appendUnmatchedRawLinesToSemanticRows(
   rows = [],
   oldText = "",
-  newText = ""
+  newText = "",
+  plan = []
 ) {
   const oldConsumed = new Map();
   const newConsumed = new Map();
@@ -6066,29 +6951,67 @@ function appendUnmatchedRawLinesToSemanticRows(
     addConsumedLineCounts(newConsumed, row.newRow?.text || "");
   });
 
+  plan.forEach((item) => {
+    addConsumedLineCounts(oldConsumed, (item.oldObject?.rawLines || []).join("\n"));
+    addConsumedLineCounts(newConsumed, (item.newObject?.rawLines || []).join("\n"));
+  });
+
+  const semanticCoveredLines = collectSemanticCoveredLines(plan);
+
   const oldUnmatchedLines = [];
   const newUnmatchedLines = [];
 
   String(oldText || "")
     .split(/\r?\n/)
     .forEach((line, index) => {
+      const normalized = canonicalizeComparableLine(line);
+
       if (!line.trim()) return;
-      if (consumeLineIfMatched(oldConsumed, line)) return;
+      if (semanticCoveredLines.has(normalized)) return;
+      if (consumedLineIfMatched(oldConsumed, line)) return;
+
       oldUnmatchedLines.push({ line, index });
     });
 
   String(newText || "")
     .split(/\r?\n/)
     .forEach((line, index) => {
+      const normalized = canonicalizeComparableLine(line);
+
       if (!line.trim()) return;
-      if (consumeLineIfMatched(newConsumed, line)) return;
+      if (semanticCoveredLines.has(normalized)) return;
+      if (consumedLineIfMatched(newConsumed, line)) return;
+
       newUnmatchedLines.push({ line, index });
     });
+
+  console.log("[coverage-check] semanticCoveredLines", [...semanticCoveredLines]);
+  console.log("[coverage-check] oldUnmatchedLines", oldUnmatchedLines);
+  console.log("[coverage-check] newUnmatchedLines", newUnmatchedLines);
 
   if (!oldUnmatchedLines.length && !newUnmatchedLines.length) {
     return rows;
   }
 
+  const suspiciousLines = [
+    "exit",
+    "}",
+    "admin-state enable",
+    'group "ACCESS-PEER"',
+  ];
+
+  console.table(
+    oldUnmatchedLines.filter((item) =>
+      suspiciousLines.includes(item.line.trim())
+    )
+  );
+
+  console.table(
+    newUnmatchedLines.filter((item) =>
+      suspiciousLines.includes(item.line.trim())
+    )
+  );
+  
   const unmatchedRows = buildGroupedUnmatchedRawRows(
     oldUnmatchedLines,
     newUnmatchedLines
@@ -7084,13 +8007,131 @@ function renderDiff(rows) {
     clearSelectedDiffTokens();
     selectors.oldDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.oldRow || null, row?.oldState || "placeholder", row?.newRow || null, index, "old")).join("");
     selectors.newDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.newRow || null, row?.newState || "placeholder", row?.oldRow || null, index, "new")).join("");
+    bindSemanticDiffInteractions();
     renderDiffObjectToolbars();
     if (state.activeDiffObjectKey) highlightObjectLines(state.activeDiffObjectKey);
-    scheduleDiffConnectorRender();
+    scheduleSemanticObjectStartAlignment();
   } catch (error) {
     console.error("renderDiff failed", error);
     throw error;
   }
+}
+
+function bindSemanticDiffInteractions() {
+  ensureSemanticPairKeyboardBinding();
+  const targets = [
+    ...selectors.oldDiffPane.querySelectorAll("[data-semantic-pair-key]"),
+    ...selectors.newDiffPane.querySelectorAll("[data-semantic-pair-key]"),
+  ].filter((element) => element.dataset.semanticPairKey);
+
+  targets.forEach((element) => {
+    element.addEventListener("mouseenter", () => setSemanticPairHover(element.dataset.semanticPairKey, true));
+    element.addEventListener("mouseleave", () => setSemanticPairHover(element.dataset.semanticPairKey, false));
+    element.addEventListener("click", () => setSemanticPairSelected(element.dataset.semanticPairKey));
+  });
+}
+
+function ensureSemanticPairKeyboardBinding() {
+  if (state.semanticPairKeyboardBound) return;
+  state.semanticPairKeyboardBound = true;
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") clearSemanticPairSelection();
+  });
+}
+
+function setSemanticPairHover(pairKey, active) {
+  if (!pairKey) return;
+  document.querySelectorAll(`[data-semantic-pair-key="${cssEscape(pairKey)}"]`).forEach((element) => {
+    element.classList.toggle("semantic-pair-hover", active);
+  });
+}
+
+function setSemanticPairSelected(pairKey) {
+  if (!pairKey) return;
+  clearSemanticPairSelection(false);
+  state.activeSemanticPairKey = pairKey;
+  selectors.diffConnectorSvg?.closest(".editor-grid")?.classList.add("semantic-pair-focus-active");
+  applySemanticPairClass(pairKey, "semantic-pair-selected", true);
+  centerSemanticPairInPanes(pairKey);
+  scheduleDiffConnectorRender();
+}
+
+function clearSemanticPairSelection(clearState = true) {
+  document.querySelectorAll(".semantic-pair-selected").forEach((element) => {
+    element.classList.remove("semantic-pair-selected");
+  });
+  selectors.diffConnectorSvg?.closest(".editor-grid")?.classList.remove("semantic-pair-focus-active");
+  if (clearState) state.activeSemanticPairKey = "";
+}
+
+function applySemanticPairClass(pairKey, className, active) {
+  if (!pairKey) return;
+  document.querySelectorAll(`[data-semantic-pair-key="${cssEscape(pairKey)}"]`).forEach((element) => {
+    element.classList.toggle(className, active);
+  });
+}
+
+function centerSemanticPairInPanes(pairKey) {
+  const selector = `[data-semantic-pair-key="${cssEscape(pairKey)}"]`;
+  const oldTarget = selectors.oldDiffPane.querySelector(selector);
+  const newTarget = selectors.newDiffPane.querySelector(selector);
+  if (!oldTarget && !newTarget) return;
+  state.syncingDiffScroll = true;
+  scrollPaneToLine(selectors.oldDiffPane, oldTarget);
+  scrollPaneToLine(selectors.newDiffPane, newTarget);
+  state.syncingDiffScroll = false;
+}
+
+function scheduleSemanticObjectStartAlignment() {
+  if (state.semanticObjectAlignFrame) return;
+  state.semanticObjectAlignFrame = requestAnimationFrame(() => {
+    state.semanticObjectAlignFrame = null;
+    alignSemanticObjectStartLines();
+    scheduleDiffConnectorRender();
+  });
+}
+
+function alignSemanticObjectStartLines() {
+  const oldRows = semanticAlignElementsByPairIndex(selectors.oldDiffPane);
+  const newRows = semanticAlignElementsByPairIndex(selectors.newDiffPane);
+  const pairIndexes = new Set([...oldRows.keys(), ...newRows.keys()]);
+
+  [...oldRows.values(), ...newRows.values()].forEach((element) => {
+    element.style.minHeight = "";
+    element.classList.remove("semantic-height-aligned");
+    delete element.dataset.alignedHeight;
+  });
+
+  pairIndexes.forEach((pairIndex) => {
+    const oldElement = oldRows.get(pairIndex);
+    const newElement = newRows.get(pairIndex);
+    if (!oldElement || !newElement) return;
+
+    const oldHeight = oldElement.getBoundingClientRect().height;
+    const newHeight = newElement.getBoundingClientRect().height;
+    const targetHeight = Math.ceil(Math.max(oldHeight, newHeight));
+    if (!targetHeight || Math.abs(oldHeight - newHeight) < 1) return;
+
+    oldElement.style.minHeight = `${targetHeight}px`;
+    newElement.style.minHeight = `${targetHeight}px`;
+    oldElement.classList.add("semantic-height-aligned");
+    newElement.classList.add("semantic-height-aligned");
+    oldElement.dataset.alignedHeight = String(targetHeight);
+    newElement.dataset.alignedHeight = String(targetHeight);
+  });
+}
+
+function semanticAlignElementsByPairIndex(pane) {
+  const elements = new Map();
+  if (!pane) return elements;
+
+  pane.querySelectorAll(".semantic-object-block-wrapper[data-pair-index], .diff-line[data-pair-index]").forEach((element) => {
+    const pairIndex = element.dataset.pairIndex || "";
+    if (!pairIndex) return;
+    elements.set(pairIndex, element);
+  });
+
+  return elements;
 }
 
 function scheduleDiffConnectorRender() {
@@ -7117,80 +8158,154 @@ function renderDiffConnectors() {
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
 
-  const oldLines = [...selectors.oldDiffPane.querySelectorAll(".diff-line[data-pair-index]")];
-    const newLineMap = new Map();
+  const oldGroups = collectVisibleDiffObjectGroups(selectors.oldDiffPane, oldPaneRect);
+  const newGroups = collectVisibleDiffObjectGroups(selectors.newDiffPane, newPaneRect);
+  const objectPaths = [];
 
-    newLines.forEach((line) => {
-      const objectKey = line.dataset.objectKey || "";
-      const semanticStart =
-        line.dataset.semanticObjectStart === "true";
+  oldGroups.forEach((oldGroup, key) => {
+    const newGroup = newGroups.get(key);
+    if (!newGroup) return;
+    objectPaths.push(buildObjectConnectorBand(oldGroup, newGroup, gridRect));
+  });
 
-      if (!objectKey || !semanticStart) return;
+  const fieldPaths = buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect);
 
-      newLineMap.set(objectKey, line);
-    });
-
-    const paths = oldLines
-      .map((oldLine) => {
-        const objectKey = oldLine.dataset.objectKey || "";
-        const semanticStart =
-          oldLine.dataset.semanticObjectStart === "true";
-
-        if (!objectKey || !semanticStart) return "";
-
-        const newLine = newLineMap.get(objectKey);
-
-        if (
-          !newLine ||
-          !shouldDrawConnector(
-            oldLine,
-            newLine,
-            oldPaneRect,
-            newPaneRect,
-          )
-        ) {
-          return "";
-        }
-
-        return buildConnectorPath(
-          oldLine,
-          newLine,
-          gridRect,
-          oldPaneRect,
-          newPaneRect,
-        );
-      })
-      .filter(Boolean);
-
-  svg.innerHTML = paths.join("");
+  svg.innerHTML = [...objectPaths, ...fieldPaths].filter(Boolean).join("");
+  if (state.activeSemanticPairKey) {
+    applySemanticPairClass(state.activeSemanticPairKey, "semantic-pair-selected", true);
+  }
   } catch (error) {
     console.error("renderDiffConnectors failed", error);
   }
 }
 
-function shouldDrawConnector(oldLine, newLine, oldPaneRect, newPaneRect) {
-  if (oldLine.classList.contains("placeholder") || newLine.classList.contains("placeholder")) return false;
-  if (oldLine.dataset.diffKey?.startsWith("__") || newLine.dataset.diffKey?.startsWith("__")) return false;
-  const oldRect = oldLine.getBoundingClientRect();
-  const newRect = newLine.getBoundingClientRect();
-  return oldRect.bottom >= oldPaneRect.top
-    && oldRect.top <= oldPaneRect.bottom
-    && newRect.bottom >= newPaneRect.top
-    && newRect.top <= newPaneRect.bottom;
+function collectVisibleDiffObjectGroups(pane, paneRect) {
+  const groups = new Map();
+  const lines = [...pane.querySelectorAll(".semantic-object-block-wrapper[data-pair-index], .diff-line[data-pair-index]")];
+
+  lines.forEach((line) => {
+    if (line.classList.contains("semantic-placeholder-line")) return;
+    const pairKey = line.dataset.semanticPairKey || line.dataset.objectKey || "";
+    if (!pairKey) return;
+
+    const rect = line.getBoundingClientRect();
+    if (rect.bottom < paneRect.top || rect.top > paneRect.bottom) return;
+
+    if (!groups.has(pairKey)) {
+      groups.set(pairKey, {
+        key: pairKey,
+        lines: [],
+        type: line.dataset.objectType || "",
+        pairIndex: line.dataset.pairIndex || "",
+        identity: line.dataset.objectIdentity || "",
+        status: line.dataset.objectStatus || "",
+        score: line.dataset.objectScore || "",
+        state: line.classList.contains("changed") ? "changed" : "equal",
+      });
+    }
+
+    const group = groups.get(pairKey);
+    group.lines.push(line);
+    if (!line.classList.contains("equal")) group.state = "changed";
+  });
+
+  return groups;
 }
 
-function buildConnectorPath(oldLine, newLine, gridRect, oldPaneRect, newPaneRect) {
-  const oldAnchor = diffLineTextAnchor(oldLine, oldPaneRect, "right");
-  const newAnchor = diffLineTextAnchor(newLine, newPaneRect, "left");
-  const x1 = oldAnchor.x - gridRect.left;
-  const x2 = newAnchor.x - gridRect.left;
-  const y1 = oldAnchor.y - gridRect.top;
-  const y2 = newAnchor.y - gridRect.top;
+function groupVisibleRect(group) {
+  const rects = group.lines.map((line) => line.getBoundingClientRect());
+  const first = rects[0];
+  return rects.reduce((acc, rect) => ({
+    left: Math.min(acc.left, rect.left),
+    right: Math.max(acc.right, rect.right),
+    top: Math.min(acc.top, rect.top),
+    bottom: Math.max(acc.bottom, rect.bottom),
+  }), {
+    left: first.left,
+    right: first.right,
+    top: first.top,
+    bottom: first.bottom,
+  });
+}
+
+function buildObjectConnectorBand(oldGroup, newGroup, gridRect) {
+  if (!oldGroup?.lines?.length || !newGroup?.lines?.length) return "";
+
+  const oldRect = groupVisibleRect(oldGroup);
+  const newRect = groupVisibleRect(newGroup);
+  const x1 = oldRect.right - gridRect.left;
+  const x2 = newRect.left - gridRect.left;
+  const y1Top = oldRect.top - gridRect.top;
+  const y1Bottom = oldRect.bottom - gridRect.top;
+  const y2Top = newRect.top - gridRect.top;
+  const y2Bottom = newRect.bottom - gridRect.top;
   const mid = x1 + (x2 - x1) / 2;
-  const state = oldLine.classList.contains("equal") && newLine.classList.contains("equal") ? "equal" : "changed";
-  const objectClass = oldLine.className.split(/\s+/).find((className) => className.startsWith("object-color-")) || "";
-  const path = `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`;
-  return `<path class="diff-connector ${state} ${objectClass}" d="${path}" />`;
+  const state = oldGroup.state === "equal" && newGroup.state === "equal" ? "matched" : "partial";
+  const labelY = (Math.min(y1Top, y2Top) + Math.max(y1Bottom, y2Bottom)) / 2;
+  const label = connectorLabelText(oldGroup, newGroup);
+  const labelWidth = Math.max(72, Math.min(158, label.length * 7 + 18));
+  const path = [
+    `M ${x1} ${y1Top}`,
+    `C ${mid} ${y1Top}, ${mid} ${y2Top}, ${x2} ${y2Top}`,
+    `L ${x2} ${y2Bottom}`,
+    `C ${mid} ${y2Bottom}, ${mid} ${y1Bottom}, ${x1} ${y1Bottom}`,
+    "Z",
+  ].join(" ");
+
+  return `
+    <path class="diff-object-band ${state}" d="${path}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+    <g class="diff-object-band-label ${state}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}">
+      <rect x="${mid - (labelWidth / 2)}" y="${labelY - 10}" width="${labelWidth}" height="20" rx="10" />
+      <text x="${mid}" y="${labelY + 4}">${escapeHtml(label)}</text>
+    </g>
+  `;
+}
+
+function connectorLabelText(oldGroup = {}, newGroup = {}) {
+  const type = oldGroup.type || newGroup.type || "object";
+  const identity = oldGroup.identity || newGroup.identity || "";
+  const compactIdentity = String(identity).length > 14 ? `${String(identity).slice(0, 13)}...` : identity;
+  const label = compactIdentity ? `${type} ${compactIdentity}` : type;
+  return label.length > 24 ? `${label.slice(0, 23)}...` : label;
+}
+
+function buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
+  const newLineMap = new Map();
+  const paths = [];
+
+  [...selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((line) => {
+    const key = line.dataset.semanticLineMappingKey || "";
+    if (key && !line.classList.contains("semantic-placeholder-line")) newLineMap.set(key, line);
+  });
+
+  [...selectors.oldDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((oldLine) => {
+    const key = oldLine.dataset.semanticLineMappingKey || "";
+    if (!key || oldLine.classList.contains("semantic-placeholder-line")) return;
+    const newLine = newLineMap.get(key);
+    if (!newLine) return;
+
+    const oldRect = oldLine.getBoundingClientRect();
+    const newRect = newLine.getBoundingClientRect();
+    if (
+      oldRect.bottom < oldPaneRect.top ||
+      oldRect.top > oldPaneRect.bottom ||
+      newRect.bottom < newPaneRect.top ||
+      newRect.top > newPaneRect.bottom
+    ) {
+      return;
+    }
+
+    const oldAnchor = diffLineTextAnchor(oldLine, oldPaneRect, "right");
+    const newAnchor = diffLineTextAnchor(newLine, newPaneRect, "left");
+    const x1 = oldAnchor.x - gridRect.left;
+    const x2 = newAnchor.x - gridRect.left;
+    const y1 = oldAnchor.y - gridRect.top;
+    const y2 = newAnchor.y - gridRect.top;
+    const mid = x1 + (x2 - x1) / 2;
+    paths.push(`<path class="diff-field-connector" d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}" />`);
+  });
+
+  return paths;
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
@@ -7632,11 +8747,52 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
     ? splitObjectKey(counterpart.objectKey).type
     : objectType;
 
+  if (row?.semanticObjectBlock || row?.rawHtml) {
+    const wrapperClasses = [
+      "semantic-object-block-wrapper",
+      state,
+      row?.objectMatched ? "object-matched" : "",
+      row?.semanticObjectStart ? "semantic-object-start" : "",
+      row?.semanticObjectEnd ? "semantic-object-end" : "",
+      row?.placeholder || row?.hidden ? "semantic-placeholder-line" : "",
+    ].filter(Boolean).join(" ");
+
+    return `
+      <div class="${wrapperClasses}"
+        data-pair-index="${pairIndex}"
+        data-side="${side}"
+        data-object-type="${escapeHtml(objectType)}"
+        data-object-key="${escapeHtml(row?.objectKey || "")}"
+        data-object-identity="${escapeHtml(row?.objectIdentity || "")}"
+        data-semantic-object-index="${escapeHtml(row?.semanticObjectIndex ?? "")}"
+        data-object-status="${escapeHtml(row?.objectStatus || "")}"
+        data-object-score="${escapeHtml(row?.objectScore || "")}"
+        data-object-reason="${escapeHtml(row?.objectReason || "")}"
+        data-semantic-pair-key="${escapeHtml(row?.semanticPairKey || "")}"
+        data-diff-key="${escapeHtml(key)}">
+        ${String(row?.text || "")}
+      </div>
+    `;
+  }
+
   const classes = ["diff-line", state];
 
   if (row?.objectMatched) {
-    classes.push("object-matched", `object-color-${objectColorIndex(row.objectKey)}`);
+    classes.push(
+      "object-matched",
+      getSemanticStateClass({
+        status: "matched",
+        reason: row.semanticReason || "",
+      })
+    );
   }
+
+  if (row?.semanticLineMappingKey) {
+    classes.push("semantic-line-mapped");
+  }
+
+  if (row?.semanticObjectStart) classes.push("semantic-object-start");
+  if (row?.semanticObjectEnd) classes.push("semantic-object-end");
 
   if (row?.ignoredVisual) classes.push("ignored-visual");
 
@@ -7646,15 +8802,17 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
 
   const textHtml =
     row && !row.placeholder && !row.hidden && String(row.text || "").trim()
-      ? highlightSharedTokens(
-        row.text || "",
-        counterpart?.text || "",
-        objectType,
-        counterpartType,
-        row.semanticField || "",
-        counterpart?.semanticField || "",
-        row.highlights || []
-      )
+      ? (selectors.fieldHighlightToggle?.checked === false
+        ? escapeHtml(row.text || "")
+        : highlightSharedTokens(
+          row.text || "",
+          counterpart?.text || "",
+          objectType,
+          counterpartType,
+          row.semanticField || "",
+          counterpart?.semanticField || "",
+          row.highlights || []
+        ))
       : "&nbsp;";
 
   return `<div class="${classes.join(" ")}"
@@ -7662,8 +8820,11 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
     data-side="${side}"
     data-object-type="${escapeHtml(objectType)}"
     data-object-key="${escapeHtml(row?.objectKey || "")}"
+    data-semantic-object-index="${escapeHtml(row?.semanticObjectIndex ?? "")}"
+    data-semantic-pair-key="${escapeHtml(row?.semanticPairKey || "")}"
     data-diff-key="${escapeHtml(key)}"
     data-semantic-field="${escapeHtml(row?.semanticField || "")}"
+    data-semantic-line-mapping-key="${escapeHtml(row?.semanticLineMappingKey || "")}"
     data-semantic-object-start="${row?.semanticObjectStart ? "true" : "false"}">
       <div class="diff-line-number">${row && !row.placeholder && !row.hidden ? row.number : ""}</div>
       <div class="diff-line-text">${textHtml}</div>
@@ -8570,7 +9731,13 @@ function saveTextFile(filename, content) {
 function saveUiPreferences() {
   document.body.dataset.theme = selectors.themeSelect.value;
   document.documentElement.style.setProperty("--editor-font", `${selectors.fontSelect.value}, monospace`);
-  localStorage.setItem("configWorkbenchUi", JSON.stringify({ theme: selectors.themeSelect.value, font: selectors.fontSelect.value }));
+  document.body.dataset.fieldHighlight = selectors.fieldHighlightToggle?.checked === false ? "off" : "on";
+  localStorage.setItem("configWorkbenchUi", JSON.stringify({
+    theme: selectors.themeSelect.value,
+    font: selectors.fontSelect.value,
+    fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
+    semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
+  }));
 }
 
 function loadUiPreferences() {
@@ -8578,6 +9745,12 @@ function loadUiPreferences() {
     const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas" };
     selectors.themeSelect.value = prefs.theme;
     selectors.fontSelect.value = prefs.font;
+    if (selectors.fieldHighlightToggle) {
+      selectors.fieldHighlightToggle.checked = prefs.fieldHighlight !== false;
+    }
+    if (selectors.semanticDebugToggle) {
+      selectors.semanticDebugToggle.checked = Boolean(prefs.semanticDebug);
+    }
   } catch {}
   saveUiPreferences();
 }

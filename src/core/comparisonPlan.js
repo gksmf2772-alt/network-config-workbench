@@ -184,8 +184,10 @@ function collectObjectFields(object) {
   const candidateFields = {
     description: object.description,
 
-    // UI/fieldSummary에서는 address 하나로 통일
-    address: object.prefix || object.ipAddress,
+    // UI/fieldSummary에서는 address 하나로 통일한다.
+    // prefix가 있으면 반드시 prefix를 우선한다.
+    // 예: Nokia MD-CLI address + prefix-length => 10.10.10.1/30
+    address: object.prefix || object.fields?.prefix || object.fields?.address || object.ipAddress,
 
     peerIp: object.peerIp,
     "peer-as": object.peerAs,
@@ -288,6 +290,20 @@ export function createFieldSummary(tokenMatches = []) {
     const hasOldValues = oldValueSet.size > 0;
     const hasNewValues = newValueSet.size > 0;
 
+    const oldCanonicalValue = pickCanonicalFieldValue(field, item.oldValues);
+    const newCanonicalValue = pickCanonicalFieldValue(field, item.newValues);
+
+    if (
+      oldCanonicalValue &&
+      newCanonicalValue &&
+      oldCanonicalValue === newCanonicalValue
+    ) {
+      item.status = "equal";
+      item.oldValues = [oldCanonicalValue];
+      item.newValues = [newCanonicalValue];
+      continue;
+    }
+
     const sameValueSet =
       hasOldValues &&
       hasNewValues &&
@@ -313,6 +329,24 @@ export function createFieldSummary(tokenMatches = []) {
   }
 
   return summary;
+}
+
+function pickCanonicalFieldValue(field, values = []) {
+  const normalizedValues = values
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+
+  if (!normalizedValues.length) return "";
+
+  if (field === "address") {
+    const cidrValue = normalizedValues.find((value) =>
+      /^\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}$/.test(value)
+    );
+
+    if (cidrValue) return cidrValue;
+  }
+
+  return normalizedValues[normalizedValues.length - 1];
 }
 
 export function summarizeFieldSummary(fieldSummary = {}) {
@@ -377,6 +411,184 @@ function applySemanticLineCoverage(
       semanticCovered: true,
     };
   });
+}
+
+function isInterfaceStructuralLine(line = "") {
+  const text = String(line || "")
+    .trim()
+    .replace(/[{}"]/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  if (!text) return true;
+
+  return [
+    "ipv4",
+    "primary",
+    "admin-state enable",
+    "admin-state disable",
+  ].includes(text);
+}
+
+function isOnlyInterfaceStructuralLineMatch(lineMatch = {}) {
+  const oldLines = Array.isArray(lineMatch.oldLines) ? lineMatch.oldLines : [];
+  const newLines = Array.isArray(lineMatch.newLines) ? lineMatch.newLines : [];
+
+  const visibleLines = [...oldLines, ...newLines]
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  if (!visibleLines.length) return false;
+
+  return visibleLines.every(isInterfaceStructuralLine);
+}
+
+function applyInterfaceStructuralLineCoverage(
+  lineMatches = [],
+  objectType = ""
+) {
+  if (objectType !== "interface") return lineMatches;
+
+  return lineMatches.map((lineMatch) => {
+    if (!["added", "missing"].includes(lineMatch.status)) {
+      return lineMatch;
+    }
+
+    if (!isOnlyInterfaceStructuralLineMatch(lineMatch)) {
+      return lineMatch;
+    }
+
+    return {
+      ...lineMatch,
+      status: "equal",
+      reason: "semantic-interface-structure-covered",
+      semanticCovered: true,
+    };
+  });
+}
+
+function getEqualAddressValue(fieldSummary = {}) {
+  const address = fieldSummary.address;
+  if (!address) return "";
+
+  const oldValues = Array.isArray(address.oldValues)
+    ? address.oldValues.map((value) => String(value))
+    : [];
+
+  const newValues = Array.isArray(address.newValues)
+    ? address.newValues.map((value) => String(value))
+    : [];
+
+  const oldCidr = oldValues.find((value) => value.includes("/")) || "";
+  const newCidr = newValues.find((value) => value.includes("/")) || "";
+
+  if (oldCidr && newCidr && oldCidr === newCidr) {
+    return oldCidr;
+  }
+
+  return "";
+}
+
+function isInterfaceAddressSyntaxLine(line = "") {
+  const text = String(line || "").trim().toLowerCase();
+
+  if (/^set\s+interfaces\s+\S+\s+unit\s+\S+\s+family\s+inet\s+address\s+\S+\/\d+$/.test(text)) {
+    return true;
+  }
+
+  if (/^address\s+\d{1,3}(?:\.\d{1,3}){3}$/.test(text)) {
+    return true;
+  }
+
+  if (/^prefix-length\s+\d{1,3}$/.test(text)) {
+    return true;
+  }
+
+  return false;
+}
+
+function normalizeLineTextForCoverage(line = "") {
+  return String(line || "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function applyInterfaceAddressLineCoverage(
+  lineMatches = [],
+  fieldSummary = {},
+  objectType = ""
+) {
+  if (objectType !== "interface") return lineMatches;
+
+  const equalAddress = getEqualAddressValue(fieldSummary);
+  if (!equalAddress) return lineMatches;
+
+  const oldAddressIndex = lineMatches.findIndex((lineMatch) => {
+    const oldLines = Array.isArray(lineMatch.oldLines) ? lineMatch.oldLines : [];
+
+    return oldLines.some((line) =>
+      /^set\s+interfaces\s+\S+\s+unit\s+\S+\s+family\s+inet\s+address\s+\S+\/\d+$/i.test(
+        String(line || "").trim()
+      )
+    );
+  });
+
+  if (oldAddressIndex < 0) return lineMatches;
+
+  const groupedNewLines = [];
+
+  for (const lineMatch of lineMatches) {
+    const newLines = Array.isArray(lineMatch.newLines) ? lineMatch.newLines : [];
+
+    for (const line of newLines) {
+      const text = String(line || "").trim();
+
+      if (
+        /^interface\s+"?[^"\s{]+\.\d+"?\s*\{$/i.test(text) ||
+        /^ipv4\s*\{$/i.test(text) ||
+        /^primary\s*\{$/i.test(text) ||
+        /^address\s+\d{1,3}(?:\.\d{1,3}){3}$/i.test(text) ||
+        /^prefix-length\s+\d+$/i.test(text) ||
+        /^}$/.test(text)
+      ) {
+        groupedNewLines.push(line);
+      }
+    }
+  }
+
+  const groupedNewLineSet = new Set(
+    groupedNewLines.map(normalizeLineTextForCoverage)
+  );
+
+  return lineMatches
+    .map((lineMatch, index) => {
+      if (index === oldAddressIndex) {
+        return {
+          ...lineMatch,
+          status: "equal",
+          reason: "semantic-address-covered",
+          semanticCovered: true,
+          newLines: groupedNewLines,
+        };
+      }
+
+      const oldLines = Array.isArray(lineMatch.oldLines) ? lineMatch.oldLines : [];
+      const newLines = Array.isArray(lineMatch.newLines) ? lineMatch.newLines : [];
+
+      const isGroupedNewOnlyLine =
+        oldLines.length === 0 &&
+        newLines.length > 0 &&
+        newLines.every((line) =>
+          groupedNewLineSet.has(normalizeLineTextForCoverage(line))
+        );
+
+      if (isGroupedNewOnlyLine) {
+        return null;
+      }
+
+      return lineMatch;
+    })
+    .filter(Boolean);
 }
 
 function createRelationshipSummary(match = {}) {
@@ -517,8 +729,20 @@ export function createObjectComparePlan(
     fieldSummary
   );
 
-  const coveredLineMatches = applyDefaultNoopLineSuppression(
+  const interfaceAddressCoveredLineMatches = applyInterfaceAddressLineCoverage(
     semanticallyCoveredLineMatches,
+    fieldSummary,
+    objectType
+  );
+
+  const interfaceStructureCoveredLineMatches =
+    applyInterfaceStructuralLineCoverage(
+      interfaceAddressCoveredLineMatches,
+      objectType
+    );
+
+  const coveredLineMatches = applyDefaultNoopLineSuppression(
+    interfaceStructureCoveredLineMatches,
     objectType
   );
 

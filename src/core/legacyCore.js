@@ -3472,24 +3472,49 @@ function runCompare() {
 }
 
 function getCurrentVendorPresetForSemanticPreview() {
+  // 1순위:
+  // 사용자가 프로파일에서 명시적으로 선택한 vendor preset
+  // heuristic보다 항상 우선한다.
+  const preset =
+    state.profileDraft?.vendorPreset ||
+    null;
+
+  if (preset?.oldVendor && preset?.newVendor) {
+    return {
+      oldVendor: preset.oldVendor,
+      newVendor: preset.newVendor,
+    };
+  }
+
   const oldText = selectors.oldInput?.value || "";
   const newText = selectors.newInput?.value || "";
 
   const oldLooksCisco =
     /^\s*interface\s+\S+/im.test(oldText) ||
-    /^\s*ip\s+route\s+/im.test(oldText) ||
     /^\s*router\s+bgp\s+/im.test(oldText) ||
-    /^\s*neighbor\s+\S+/im.test(oldText);
+    /^\s*ip\s+route\s+/im.test(oldText);
+
+  const oldLooksJuniper =
+    /^\s*set\s+interfaces\s+/im.test(oldText) ||
+    /^\s*set\s+protocols\s+bgp\s+/im.test(oldText) ||
+    /^\s*set\s+routing-options\s+static\s+route\s+/im.test(oldText);
 
   const oldLooksNokiaClassic =
-    /^\s*configure\s+/im.test(oldText) ||
+    /^\s*configure\s+router\s+/im.test(oldText) ||
     /^\s*static-route-entry\s+/im.test(oldText);
 
   const newLooksNokiaMdCli =
-    /\{\s*$/m.test(newText) ||
-    /^\s*admin-state\s+/im.test(newText) ||
     /^\s*route\s+\S+\/\d+\s+route-type\s+/im.test(newText) ||
     /^\s*interface\s+"[^"]+"\s*\{/im.test(newText);
+
+  // 2순위:
+  // heuristic fallback
+  if (oldLooksJuniper && newLooksNokiaMdCli) {
+    return {
+      oldVendor: "juniper-set",
+      newVendor: "nokia-md-cli",
+    };
+  }
 
   if (oldLooksCisco && newLooksNokiaMdCli) {
     return {
@@ -3505,15 +3530,7 @@ function getCurrentVendorPresetForSemanticPreview() {
     };
   }
 
-  const preset = state.profileDraft?.vendorPreset;
-
-  if (preset?.oldVendor && preset?.newVendor) {
-    return {
-      oldVendor: preset.oldVendor,
-      newVendor: preset.newVendor,
-    };
-  }
-
+  // 마지막 fallback
   return {
     oldVendor: "cisco-ios-xe",
     newVendor: "nokia-md-cli",
@@ -5293,7 +5310,13 @@ function compareObjects(oldObjects, newObjects, options) {
   return {
     items: mergedItems,
     visibleItems: filterItems(mergedItems, options),
-    diffRows: buildDiffRows(selectors.oldInput.value, selectors.newInput.value, options),
+
+    // Semantic Preview와 상단 diff 창의 source-of-truth를 통일한다.
+    diffRows: buildSemanticPlanDiffRows(
+      selectors.oldInput.value,
+      selectors.newInput.value
+    ),
+
     oldObjects,
     newObjects,
     summary: {
@@ -5773,45 +5796,422 @@ function normalizeFieldName(field = "") {
 }
 
 function buildSemanticObjectDiffRows(oldText, newText, options) {
-  const oldObjects = mergeObjectsByKey(parseConfig(oldText, options, "old"));
-  const newObjects = mergeObjectsByKey(parseConfig(newText, options, "new"));
-  
-  console.log("[semantic object diff] old objects", oldObjects.map((obj) => ({
-    type: obj.type,
-    sourceType: obj.sourceType,
-    name: obj.name,
-    key: obj.key,
-    identity: obj.identity,
-    startLine: obj.startLine,
-    lines: obj.lines,
-  })));
+  return buildSemanticPlanDiffRows(oldText, newText);
+}
 
-  console.log("[semantic object diff] new objects", newObjects.map((obj) => ({
-    type: obj.type,
-    sourceType: obj.sourceType,
-    name: obj.name,
-    key: obj.key,
-    identity: obj.identity,
-    startLine: obj.startLine,
-    lines: obj.lines,
-  })));
+function buildSemanticPlanDiffRows(oldText, newText) {
+  const { oldVendor, newVendor } = getCurrentVendorPresetForSemanticPreview();
 
-  if (!oldObjects.length && !newObjects.length) return [];
+  const oldResult = normalizeConfig({
+    vendor: oldVendor,
+    profile: state.profileDraft,
+    configText: oldText,
+    side: "old",
+  });
 
-  const oldMap = buildObjectMap(oldObjects);
-  const newMap = buildObjectMap(newObjects);
-  const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])].sort(compareObjectKeys);
+  const newResult = normalizeConfig({
+    vendor: newVendor,
+    profile: state.profileDraft,
+    configText: newText,
+    side: "new",
+  });
+
+  const manualMap =
+    state.profileDraft?.manualMap &&
+      Object.keys(state.profileDraft.manualMap).length
+      ? state.profileDraft.manualMap
+      : loadManualMapFromLocalStorage();
+
+  const matches = matchNormalizedObjects({
+    oldObjects: oldResult.objects,
+    newObjects: newResult.objects,
+    manualMap,
+  });
+
+  const plan = createComparisonPlan(matches, state.profileDraft || {});
   const rows = [];
 
-  keys.forEach((key) => {
-    const oldObject = oldMap.get(key);
-    const newObject = newMap.get(key);
-    if (oldObject && newObject) {
-      rows.push(...buildMatchedObjectDiffRows(oldObject, newObject));
-      return;
-    }
-    rows.push(...buildUnmatchedObjectDiffRows(oldObject, newObject));
+  plan.forEach((item, index) => {
+    rows.push(...buildSemanticObjectLineRows(item, index));
   });
+
+  return appendUnmatchedRawLinesToSemanticRows(rows, oldText, newText);
+}
+
+function buildSemanticObjectLineRows(item = {}, objectIndex = 0) {
+  const oldObject = item.oldObject || null;
+  const newObject = item.newObject || null;
+
+  const oldLines = getSemanticObjectRawLines(oldObject);
+  const newLines = getSemanticObjectRawLines(newObject);
+
+  const maxLines = Math.max(oldLines.length, newLines.length);
+  const rows = [];
+
+  const status =
+    item.status === "matched" || item.status === "candidate"
+      ? "equal"
+      : item.status === "old-only"
+        ? "missing"
+        : item.status === "new-only"
+          ? "added"
+          : "changed";
+
+  for (let lineIndex = 0; lineIndex < maxLines; lineIndex += 1) {
+    const oldLine = oldLines[lineIndex] || "";
+    const newLine = newLines[lineIndex] || "";
+
+    rows.push({
+      oldRow: oldLine
+        ? buildSemanticLineRow({
+          side: "old",
+          line: oldLine,
+          object: oldObject,
+          item,
+          objectIndex,
+          lineIndex,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "old",
+          item,
+          objectIndex,
+          lineIndex,
+        }),
+
+      newRow: newLine
+        ? buildSemanticLineRow({
+          side: "new",
+          line: newLine,
+          object: newObject,
+          item,
+          objectIndex,
+          lineIndex,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "new",
+          item,
+          objectIndex,
+          lineIndex,
+        }),
+
+      oldState:
+        status === "added"
+          ? "placeholder"
+          : oldLine
+            ? status
+            : "placeholder",
+
+      newState:
+        status === "missing"
+          ? "placeholder"
+          : newLine
+            ? status
+            : "placeholder",
+
+      semanticCovered: status === "equal",
+      semanticReason: item.reason || "",
+      objectMatched: item.status === "matched",
+      semanticObjectLine: true,
+      semanticObjectStart: lineIndex === 0,
+    });
+  }
+
+  return rows;
+}
+
+function getSemanticObjectRawLines(object = null) {
+  if (!object) return [];
+
+  if (Array.isArray(object.rawLines) && object.rawLines.length) {
+    return object.rawLines.map((line) => String(line || ""));
+  }
+
+  if (Array.isArray(object.lines) && object.lines.length) {
+    return object.lines.map((line) => String(line || ""));
+  }
+
+  return [];
+}
+
+function buildSemanticLineRow({
+  side,
+  line,
+  object,
+  item,
+  objectIndex,
+  lineIndex,
+}) {
+  return {
+    number: "",
+    text: line,
+    normalized: canonicalizeComparableLine(line),
+    key: `${item.id || "semantic-object"}:${side}:${objectIndex}:${lineIndex}`,
+    objectKey: `${item.objectType || object?.normalizedType || "object"}:${object?.sourceName || object?.id || objectIndex}`,
+    semanticField: item.matchKeyFields?.[0] || "",
+    objectMatched: item.status === "matched",
+    semanticCovered: item.status === "matched",
+    semanticReason: item.reason || "",
+    highlights: [],
+  };
+}
+
+function buildSemanticPlaceholderLineRow({
+  side,
+  item,
+  objectIndex,
+  lineIndex,
+}) {
+  return {
+    number: "",
+    text: "",
+    normalized: "",
+    key: `${item.id || "semantic-object"}:${side}:placeholder:${objectIndex}:${lineIndex}`,
+    objectKey: `${item.objectType || "object"}:placeholder:${objectIndex}`,
+    semanticField: "",
+    objectMatched: item.status === "matched",
+    semanticCovered: true,
+    semanticReason: "semantic-visual-padding",
+    highlights: [],
+    placeholder: true,
+    hidden: true,
+  };
+}
+
+function padSemanticBlockLines(lines = [], targetLength = 0) {
+  const padded = [...lines];
+
+  while (padded.length < targetLength) {
+    padded.push({
+      placeholder: true,
+      hidden: true,
+      text: "",
+    });
+  }
+
+  return padded;
+}
+
+function getSemanticObjectRawBlock(object = null) {
+  if (!object) return "";
+
+  if (Array.isArray(object.rawLines) && object.rawLines.length) {
+    return object.rawLines.join("\n");
+  }
+
+  if (Array.isArray(object.lines) && object.lines.length) {
+    return object.lines.join("\n");
+  }
+
+  return "";
+}
+
+function buildSemanticRawBlockRow({
+  side,
+  text,
+  object,
+  item,
+  index,
+}) {
+  return {
+    number: "",
+    text,
+    normalized: canonicalizeComparableLine(text),
+    key: `${item.id || "semantic-object"}:${side}:${index}`,
+    objectKey: `${item.objectType || object?.normalizedType || "object"}:${object?.sourceName || object?.id || index}`,
+    semanticField: item.matchKeyFields?.[0] || "",
+    objectMatched: item.status === "matched",
+    semanticCovered: item.status === "matched",
+    semanticReason: item.reason || "",
+    highlights: [],
+  };
+}
+
+function normalizeRawLineForSemanticAppend(line = "") {
+  return canonicalizeComparableLine(line)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function addConsumedLineCounts(counts, text = "") {
+  String(text || "")
+    .split(/\r?\n/)
+    .map(normalizeRawLineForSemanticAppend)
+    .filter(Boolean)
+    .forEach((line) => {
+      counts.set(line, (counts.get(line) || 0) + 1);
+    });
+}
+
+function consumeLineIfMatched(counts, line = "") {
+  const key = normalizeRawLineForSemanticAppend(line);
+  if (!key) return true;
+
+  const current = counts.get(key) || 0;
+  if (current <= 0) return false;
+
+  counts.set(key, current - 1);
+  return true;
+}
+
+function appendUnmatchedRawLinesToSemanticRows(
+  rows = [],
+  oldText = "",
+  newText = ""
+) {
+  const oldConsumed = new Map();
+  const newConsumed = new Map();
+
+  rows.forEach((row) => {
+    addConsumedLineCounts(oldConsumed, row.oldRow?.text || "");
+    addConsumedLineCounts(newConsumed, row.newRow?.text || "");
+  });
+
+  const oldUnmatchedLines = [];
+  const newUnmatchedLines = [];
+
+  String(oldText || "")
+    .split(/\r?\n/)
+    .forEach((line, index) => {
+      if (!line.trim()) return;
+      if (consumeLineIfMatched(oldConsumed, line)) return;
+      oldUnmatchedLines.push({ line, index });
+    });
+
+  String(newText || "")
+    .split(/\r?\n/)
+    .forEach((line, index) => {
+      if (!line.trim()) return;
+      if (consumeLineIfMatched(newConsumed, line)) return;
+      newUnmatchedLines.push({ line, index });
+    });
+
+  if (!oldUnmatchedLines.length && !newUnmatchedLines.length) {
+    return rows;
+  }
+
+  const unmatchedRows = buildGroupedUnmatchedRawRows(
+    oldUnmatchedLines,
+    newUnmatchedLines
+  );
+
+  return [
+    ...rows,
+    buildSemanticSpacerRow("semantic-unmatched-spacer-1"),
+    buildUnmatchedRawDividerRow(),
+    ...unmatchedRows,
+  ];
+}
+
+function buildSemanticSpacerRow(key = "semantic-spacer") {
+  return {
+    oldRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}-old`,
+      objectKey: key,
+      highlights: [],
+    },
+    newRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}-new`,
+      objectKey: key,
+      highlights: [],
+    },
+    oldState: "placeholder",
+    newState: "placeholder",
+    semanticDivider: true,
+  };
+}
+
+function buildUnmatchedRawDividerRow() {
+  return {
+    oldRow: {
+      number: "",
+      text: "──── UNMATCHED RAW CONFIG ────",
+      normalized: "",
+      key: "semantic-unmatched-divider-old",
+      objectKey: "semantic-unmatched-divider",
+      highlights: [],
+    },
+    newRow: {
+      number: "",
+      text: "──── UNMATCHED RAW CONFIG ────",
+      normalized: "",
+      key: "semantic-unmatched-divider-new",
+      objectKey: "semantic-unmatched-divider",
+      highlights: [],
+    },
+    oldState: "equal",
+    newState: "equal",
+    semanticDivider: true,
+  };
+}
+
+function groupAdjacentRawLines(items = []) {
+  const groups = [];
+
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+
+    if (last && item.index === last.endIndex + 1) {
+      last.items.push(item);
+      last.endIndex = item.index;
+      continue;
+    }
+
+    groups.push({
+      startIndex: item.index,
+      endIndex: item.index,
+      items: [item],
+    });
+  }
+
+  return groups;
+}
+
+function buildRawBlockRow(group, side) {
+  if (!group) return null;
+
+  const text = group.items.map((item) => item.line).join("\n");
+  const number = group.items[0]?.index + 1;
+
+  return {
+    number,
+    text,
+    normalized: canonicalizeComparableLine(text),
+    key: `semantic-unmatched-${side}-${group.startIndex}-${group.endIndex}`,
+    objectKey: `semantic-unmatched-${side}`,
+    semanticField: "",
+    objectMatched: false,
+    semanticCovered: false,
+    semanticReason: `${side}-raw-block-unmatched`,
+    highlights: [],
+  };
+}
+
+function buildGroupedUnmatchedRawRows(oldItems = [], newItems = []) {
+  const oldGroups = groupAdjacentRawLines(oldItems);
+  const newGroups = groupAdjacentRawLines(newItems);
+  const maxLength = Math.max(oldGroups.length, newGroups.length);
+  const rows = [];
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const oldRow = buildRawBlockRow(oldGroups[index], "old");
+    const newRow = buildRawBlockRow(newGroups[index], "new");
+
+    rows.push({
+      oldRow,
+      newRow,
+      oldState: oldRow ? "missing" : "placeholder",
+      newState: newRow ? "added" : "placeholder",
+      semanticCovered: false,
+      semanticReason: "raw-block-unmatched",
+      objectMatched: false,
+    });
+  }
 
   return rows;
 }
@@ -5942,6 +6342,78 @@ function mergeObjectsByKey(objects = []) {
   return Array.from(merged.values());
 }
 
+function isJuniperInterfaceAddressRow(row = {}) {
+  const text = canonicalizeComparableLine(row.text || row.normalized || "");
+
+  return /^set interfaces \S+ unit \S+ family inet address \S+\/\d+$/.test(text);
+}
+
+function isNokiaMdInterfaceAddressGroupRow(row = {}) {
+  const rawText = String(row.text || row.normalized || "").trim();
+
+  const normalizedText = canonicalizeComparableLine(rawText)
+    .replace(/[{}"]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const rawLooksLogicalInterface =
+    /^interface\s+"?[^"\s{]+\.\d+"?\s*\{$/i.test(rawText);
+
+  const normalizedLooksLogicalInterface =
+    /^interface\s+\S+\.\d+$/.test(normalizedText);
+
+  console.log("[nokia-md-group-row-debug]", {
+    rawText,
+    normalizedText,
+    rawLooksLogicalInterface,
+    normalizedLooksLogicalInterface,
+  });
+
+  return (
+    rawLooksLogicalInterface ||
+    normalizedLooksLogicalInterface ||
+    normalizedText === "ipv4" ||
+    normalizedText === "primary" ||
+    /^address\s+\d{1,3}(?:\.\d{1,3}){3}$/.test(normalizedText) ||
+    /^prefix-length\s+\d+$/.test(normalizedText)
+  );
+}
+
+function buildInterfaceOneToManyAddressDiffRows(oldRows = [], newRows = []) {
+  const oldIndex = oldRows.findIndex(isJuniperInterfaceAddressRow);
+
+  if (oldIndex < 0) return null;
+
+  const newIndexes = newRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => isNokiaMdInterfaceAddressGroupRow(row))
+    .map(({ index }) => index);
+
+  if (!newIndexes.length) return null;
+
+  const oldRow = oldRows[oldIndex];
+
+  const mergedNewRow = {
+    ...newRows[newIndexes[0]],
+    text: newIndexes.map((index) => newRows[index].text).join("\n"),
+    normalized: newIndexes.map((index) => newRows[index].normalized).join("\n"),
+    key: `${oldRow.objectKey}|interface-address-group`,
+    semanticField: "address",
+    objectMatched: true,
+  };
+
+  return {
+    oldIndex,
+    newIndexes,
+    row: {
+      oldRow,
+      newRow: mergedNewRow,
+      oldState: "equal",
+      newState: "equal",
+    },
+  };
+}
+
 function buildMatchedObjectDiffRows(oldObject, newObject) {
   const oldRows = buildObjectVisualRows(oldObject);
   const newRows = buildObjectVisualRows(newObject);
@@ -5950,7 +6422,21 @@ function buildMatchedObjectDiffRows(oldObject, newObject) {
   const usedNewIndexes = new Set();
   const rows = [];
 
-  oldRows.forEach((oldRow) => {
+  const interfaceAddressGroup =
+    oldObject.type === "interface" && newObject.type === "interface"
+      ? buildInterfaceOneToManyAddressDiffRows(oldRows, newRows)
+      : null;
+
+  const usedOldIndexes = new Set();
+
+  if (interfaceAddressGroup) {
+    rows.push(interfaceAddressGroup.row);
+    usedOldIndexes.add(interfaceAddressGroup.oldIndex);
+    interfaceAddressGroup.newIndexes.forEach((index) => usedNewIndexes.add(index));
+  }
+
+  oldRows.forEach((oldRow, oldIndex) => {
+    if (usedOldIndexes.has(oldIndex)) return;
     const newIndex = findBestNewRowForOldRow(oldRow, newRows, usedNewIndexes);
     const newRow = newIndex >= 0 ? newRows[newIndex] : null;
 
@@ -6441,7 +6927,12 @@ function buildSemanticDiffRows(text, options, source) {
     if (rule?.action === "added" && source === "new") key = `__added__:${index}`;
     if (rule?.action === "missing" && source === "old") key = `__missing__:${index}`;
     if (rule?.action === "required-field") key = `${currentObjectKey}|${extractFieldName(policyMapped || mapped) || buildSemanticLineKey(policyMapped || mapped, currentType)}`;
-    return { number: index + 1, text: rawLine, key, objectKey: currentObjectKey, normalized: canonicalizeComparableLine(policyMapped || mapped) };
+    return {
+      number: "",
+      text: line,
+      objectKey: object.key,
+      semanticField: fieldName,
+      semanticObjectStart: lineIndex === 0, };
   }).filter(Boolean);
 }
 
@@ -6627,14 +7118,49 @@ function renderDiffConnectors() {
   svg.setAttribute("height", height);
 
   const oldLines = [...selectors.oldDiffPane.querySelectorAll(".diff-line[data-pair-index]")];
-  const paths = oldLines
-    .map((oldLine) => {
-      const pairIndex = oldLine.dataset.pairIndex;
-      const newLine = selectors.newDiffPane.querySelector(`.diff-line[data-pair-index="${pairIndex}"]`);
-      if (!newLine || !shouldDrawConnector(oldLine, newLine, oldPaneRect, newPaneRect)) return "";
-      return buildConnectorPath(oldLine, newLine, gridRect, oldPaneRect, newPaneRect);
-    })
-    .filter(Boolean);
+    const newLineMap = new Map();
+
+    newLines.forEach((line) => {
+      const objectKey = line.dataset.objectKey || "";
+      const semanticStart =
+        line.dataset.semanticObjectStart === "true";
+
+      if (!objectKey || !semanticStart) return;
+
+      newLineMap.set(objectKey, line);
+    });
+
+    const paths = oldLines
+      .map((oldLine) => {
+        const objectKey = oldLine.dataset.objectKey || "";
+        const semanticStart =
+          oldLine.dataset.semanticObjectStart === "true";
+
+        if (!objectKey || !semanticStart) return "";
+
+        const newLine = newLineMap.get(objectKey);
+
+        if (
+          !newLine ||
+          !shouldDrawConnector(
+            oldLine,
+            newLine,
+            oldPaneRect,
+            newPaneRect,
+          )
+        ) {
+          return "";
+        }
+
+        return buildConnectorPath(
+          oldLine,
+          newLine,
+          gridRect,
+          oldPaneRect,
+          newPaneRect,
+        );
+      })
+      .filter(Boolean);
 
   svg.innerHTML = paths.join("");
   } catch (error) {
@@ -7102,11 +7628,46 @@ function cssEscape(value) {
 function renderDiffLine(row, state, counterpart, pairIndex, side) {
   const key = row?.key || "";
   const objectType = row?.objectKey ? splitObjectKey(row.objectKey).type : "";
-  const counterpartType = counterpart?.objectKey ? splitObjectKey(counterpart.objectKey).type : objectType;
+  const counterpartType = counterpart?.objectKey
+    ? splitObjectKey(counterpart.objectKey).type
+    : objectType;
+
   const classes = ["diff-line", state];
-  if (row?.objectMatched) classes.push("object-matched", `object-color-${objectColorIndex(row.objectKey)}`);
+
+  if (row?.objectMatched) {
+    classes.push("object-matched", `object-color-${objectColorIndex(row.objectKey)}`);
+  }
+
   if (row?.ignoredVisual) classes.push("ignored-visual");
-  return `<div class="${classes.join(" ")}" data-pair-index="${pairIndex}" data-side="${side}" data-object-type="${escapeHtml(objectType)}" data-object-key="${escapeHtml(row?.objectKey || "")}" data-diff-key="${escapeHtml(key)}" data-semantic-field="${escapeHtml(row?.semanticField || "")}"><div class="diff-line-number">${row ? row.number : ""}</div><div class="diff-line-text">${row ? highlightSharedTokens(row.text || "", counterpart?.text || "", objectType, counterpartType, row.semanticField || "", counterpart?.semanticField || "", row.highlights || []) : "&nbsp;"}</div></div>`;
+
+  if (row?.placeholder || row?.hidden || !String(row?.text || "").trim()) {
+    classes.push("semantic-placeholder-line");
+  }
+
+  const textHtml =
+    row && !row.placeholder && !row.hidden && String(row.text || "").trim()
+      ? highlightSharedTokens(
+        row.text || "",
+        counterpart?.text || "",
+        objectType,
+        counterpartType,
+        row.semanticField || "",
+        counterpart?.semanticField || "",
+        row.highlights || []
+      )
+      : "&nbsp;";
+
+  return `<div class="${classes.join(" ")}"
+    data-pair-index="${pairIndex}"
+    data-side="${side}"
+    data-object-type="${escapeHtml(objectType)}"
+    data-object-key="${escapeHtml(row?.objectKey || "")}"
+    data-diff-key="${escapeHtml(key)}"
+    data-semantic-field="${escapeHtml(row?.semanticField || "")}"
+    data-semantic-object-start="${row?.semanticObjectStart ? "true" : "false"}">
+      <div class="diff-line-number">${row && !row.placeholder && !row.hidden ? row.number : ""}</div>
+      <div class="diff-line-text">${textHtml}</div>
+    </div>`;
 }
 
 function renderDiffObjectToolbars() {

@@ -89,6 +89,18 @@ function makeMatch({
   };
 }
 
+function canUseNormalizedIdentityAsStrongMatch(object = {}) {
+  const type = object.normalizedType;
+
+  // 벤더 간 장비 교체에서는 port/lag/interface 이름은 신뢰도가 낮다.
+  // L3 interface는 prefix/ipAddress가 이미 위에서 강매칭된다.
+  if (["port", "lag", "interface"].includes(type)) {
+    return false;
+  }
+
+  return true;
+}
+
 function findIdentityMatch(oldObject, candidates) {
   const normalizedIdentityMatches = [];
 
@@ -166,6 +178,7 @@ function findIdentityMatch(oldObject, candidates) {
     }
 
     if (
+      canUseNormalizedIdentityAsStrongMatch(oldObject) &&
       oldObject.normalizedIdentity &&
       newObject.normalizedIdentity &&
       oldObject.normalizedIdentity === newObject.normalizedIdentity
@@ -251,18 +264,30 @@ function scoreSemanticObjectPair(oldObject, newObject) {
 
   if (!isSameType(oldObject, newObject)) return result;
 
+  const objectType = oldObject.normalizedType;
+
   const oldPrefix = normalizeValue(getFieldValue(oldObject, "prefix"));
   const newPrefix = normalizeValue(getFieldValue(newObject, "prefix"));
 
-  if (oldPrefix && newPrefix && oldPrefix === newPrefix) {
-    addWeightedScore(result, "prefix", 50, "prefix");
+  if (
+    ["interface", "static-route"].includes(objectType) &&
+    oldPrefix &&
+    newPrefix &&
+    oldPrefix === newPrefix
+  ) {
+    addWeightedScore(result, "prefix", objectType === "interface" ? 80 : 60, "prefix");
   }
 
   const oldIpAddress = normalizeValue(getFieldValue(oldObject, "ipAddress"));
   const newIpAddress = normalizeValue(getFieldValue(newObject, "ipAddress"));
 
-  if (oldIpAddress && newIpAddress && oldIpAddress === newIpAddress) {
-    addWeightedScore(result, "ipAddress", 40, "ip-address");
+  if (
+    objectType === "interface" &&
+    oldIpAddress &&
+    newIpAddress &&
+    oldIpAddress === newIpAddress
+  ) {
+    addWeightedScore(result, "ipAddress", 60, "ip-address");
   }
 
   const oldPeerIp = normalizeValue(
@@ -272,22 +297,30 @@ function scoreSemanticObjectPair(oldObject, newObject) {
     getFieldValue(newObject, "peerIp") || getFieldValue(newObject, "neighbor")
   );
 
-  if (oldPeerIp && newPeerIp && oldPeerIp === newPeerIp) {
-    addWeightedScore(result, "peerIp", 55, "peer-ip");
+  if (
+    objectType === "bgp" &&
+    oldPeerIp &&
+    newPeerIp &&
+    oldPeerIp === newPeerIp
+  ) {
+    addWeightedScore(result, "peerIp", 80, "peer-ip");
   }
 
   const oldPeerAs = normalizeValue(
     getFieldValue(oldObject, "peerAs") ||
-      getFieldValue(oldObject, "peer-as") ||
-      getFieldValue(oldObject, "peerAs")
+    getFieldValue(oldObject, "peer-as")
   );
   const newPeerAs = normalizeValue(
     getFieldValue(newObject, "peerAs") ||
-      getFieldValue(newObject, "peer-as") ||
-      getFieldValue(newObject, "peerAs")
+    getFieldValue(newObject, "peer-as")
   );
 
-  if (oldPeerAs && newPeerAs && oldPeerAs === newPeerAs) {
+  if (
+    objectType === "bgp" &&
+    oldPeerAs &&
+    newPeerAs &&
+    oldPeerAs === newPeerAs
+  ) {
     addWeightedScore(result, "peer-as", 20, "peer-as");
   }
 
@@ -299,12 +332,12 @@ function scoreSemanticObjectPair(oldObject, newObject) {
   );
 
   if (
-    oldObject.normalizedType === "static-route" &&
+    objectType === "static-route" &&
     oldRoute &&
     newRoute &&
     oldRoute === newRoute
   ) {
-    addWeightedScore(result, "route", 55, "route");
+    addWeightedScore(result, "route", 60, "route");
   }
 
   const oldNextHop = normalizeValue(
@@ -314,7 +347,12 @@ function scoreSemanticObjectPair(oldObject, newObject) {
     getFieldValue(newObject, "next-hop") || getFieldValue(newObject, "nextHop")
   );
 
-  if (oldNextHop && newNextHop && oldNextHop === newNextHop) {
+  if (
+    objectType === "static-route" &&
+    oldNextHop &&
+    newNextHop &&
+    oldNextHop === newNextHop
+  ) {
     addWeightedScore(result, "next-hop", 25, "next-hop");
   }
 
@@ -324,41 +362,62 @@ function scoreSemanticObjectPair(oldObject, newObject) {
   );
 
   if (descScore >= 85) {
-    addWeightedScore(result, "description", 25, "description-similarity");
+    addWeightedScore(
+      result,
+      "description",
+      ["port", "lag"].includes(objectType) ? 90 : 35,
+      "description-similarity"
+    );
   } else if (descScore >= 60) {
-    addWeightedScore(result, "description", 10, "description-partial-similarity");
+    addWeightedScore(
+      result,
+      "description",
+      ["port", "lag"].includes(objectType) ? 65 : 20,
+      "description-partial-similarity"
+    );
   }
 
-  result.score = Math.min(result.score, 100);
-
   const oldDescription = normalizeValue(
-  getFieldValue(oldObject, "description") || oldObject.description
+    getFieldValue(oldObject, "description") || oldObject.description
   );
   const newDescription = normalizeValue(
     getFieldValue(newObject, "description") || newObject.description
   );
 
   if (oldDescription && newDescription && oldDescription === newDescription) {
-    addWeightedScore(result, "description", 35, "description");
+    addWeightedScore(
+      result,
+      "description",
+      ["port", "lag"].includes(objectType) ? 95 : 40,
+      "description-exact"
+    );
   }
 
   const oldIdentity = normalizeValue(getFieldValue(oldObject, "normalizedIdentity"));
   const newIdentity = normalizeValue(getFieldValue(newObject, "normalizedIdentity"));
 
-  if (oldIdentity && newIdentity && oldIdentity === newIdentity) {
+  if (
+    !["port", "lag", "interface"].includes(objectType) &&
+    oldIdentity &&
+    newIdentity &&
+    oldIdentity === newIdentity
+  ) {
     addWeightedScore(result, "normalizedIdentity", 40, "normalized-identity");
   }
 
-  if (oldObject.normalizedType === "interface") {
-  const hasAddressMatch = result.matchKeyFields.includes("prefix") ||
-    result.matchKeyFields.includes("ipAddress");
+  if (objectType === "interface") {
+    const hasAddressMatch =
+      result.matchKeyFields.includes("prefix") ||
+      result.matchKeyFields.includes("ipAddress");
 
-  const hasDescriptionMatch = result.matchKeyFields.includes("description");
+    const hasDescriptionMatch = result.matchKeyFields.includes("description");
 
-  if (hasAddressMatch && hasDescriptionMatch) {
-    addWeightedScore(result, "interface-semantic", 15, "interface-semantic-confidence");
+    if (hasAddressMatch && hasDescriptionMatch) {
+      addWeightedScore(result, "interface-semantic", 10, "interface-semantic-confidence");
+    }
   }
-}
+
+  result.score = Math.min(result.score, 100);
 
   return result;
 }
@@ -381,6 +440,18 @@ function isAmbiguousBestMatch(best, alternatives = [], tolerance = 5) {
       item.newObject?.id !== best.newObject?.id &&
       Math.abs(item.score - best.score) <= tolerance
   );
+}
+
+function getAutoMatchThreshold(object = {}) {
+  const type = object.normalizedType;
+
+  if (type === "interface") return 80;
+
+  // port/lag는 description 의존도가 높으므로 85 이상만 자동 확정
+  // 그 미만은 candidate로 보내고 Select로 확정한다.
+  if (["port", "lag"].includes(type)) return 85;
+
+  return 80;
 }
 
 function findBestWeightedMatch(oldObject, candidates) {
@@ -416,7 +487,11 @@ function findBestWeightedMatch(oldObject, candidates) {
   return makeMatch({
     oldObject: best.oldObject,
     newObject: best.newObject,
-    status: ambiguous ? "candidate" : best.score >= 80 ? "matched" : "candidate",
+    status: ambiguous
+      ? "candidate"
+      : best.score >= getAutoMatchThreshold(oldObject)
+        ? "matched"
+        : "candidate",
     reason: ambiguous
       ? "ambiguous-weighted-match"
       : getBestWeightedReason(best.matchKeyFields),

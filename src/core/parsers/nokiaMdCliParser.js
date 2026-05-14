@@ -19,29 +19,50 @@ function extractDescription(lines) {
 }
 
 function extractAddress(lines) {
+  let ipv4Address = null;
+  let prefixLength = null;
+  let raw = null;
+
   for (const line of lines) {
     const trimmed = line.trim();
 
-    const address = trimmed.match(/^address\s+(\S+)/i);
-    if (address) {
-      return {
-        ipAddress: address[1],
-        prefix: address[1],
-        raw: trimmed,
-      };
+    const addressMatch = trimmed.match(/^address\s+(\S+)/i);
+    if (addressMatch) {
+      ipv4Address = stripQuotes(addressMatch[1]);
+      raw = trimmed;
+      continue;
+    }
+
+    const prefixMatch = trimmed.match(/^prefix-length\s+(\d{1,3})$/i);
+    if (prefixMatch) {
+      prefixLength = prefixMatch[1];
+      continue;
     }
 
     const ipv4Primary = trimmed.match(/^primary\s+address\s+(\S+)/i);
     if (ipv4Primary) {
+      const value = stripQuotes(ipv4Primary[1]);
       return {
-        ipAddress: ipv4Primary[1],
-        prefix: ipv4Primary[1],
+        ipAddress: value.includes("/") ? value.split("/")[0] : value,
+        prefix: value,
         raw: trimmed,
       };
     }
   }
 
-  return null;
+  if (!ipv4Address) return null;
+
+  const prefix = ipv4Address.includes("/")
+    ? ipv4Address
+    : prefixLength
+      ? `${ipv4Address}/${prefixLength}`
+      : ipv4Address;
+
+  return {
+    ipAddress: ipv4Address.includes("/") ? ipv4Address.split("/")[0] : ipv4Address,
+    prefix,
+    raw: raw || prefix,
+  };
 }
 
 function isTopLevelMdLine(line) {
@@ -169,34 +190,43 @@ function parseMdCliInterfaces(lines) {
     /^interface\s+"?([^"\s{]+)"?\s*\{/i
   );
 
-  return blocks.map((block, index) => {
-    const description = extractDescription(block.lines);
-    const addressInfo = extractAddress(block.lines);
+  return blocks
+    .map((block, index) => {
+      const description = extractDescription(block.lines);
+      const addressInfo = extractAddress(block.lines);
 
-    const identity = addressInfo?.prefix || description || block.name;
+      // L3 address가 없는 interface wrapper는 semantic interface 객체로 만들지 않는다.
+      // 예: interface "ge-0/0/0" { ... } 는 port/physical wrapper 성격이므로 제외
+      if (!addressInfo?.prefix) {
+        return null;
+      }
 
-    const object = createNormalizedObject({
-      id: `nokia-md-interface-${index}-${block.name}`,
-      vendor: "nokia-md-cli",
-      sourceType: "interface",
-      sourceName: block.name,
-      normalizedType: "interface",
-      normalizedIdentity: identity,
-      rawLines: block.lines,
-      fields: {
-        interface: block.name,
-        description,
-        ipAddress: addressInfo?.ipAddress || null,
-        prefix: addressInfo?.prefix || null,
-      },
-    });
+      const identity = addressInfo.prefix;
 
-    object.description = description;
-    object.ipAddress = addressInfo?.ipAddress || null;
-    object.prefix = addressInfo?.prefix || null;
+      const object = createNormalizedObject({
+        id: `nokia-md-interface-${index}-${block.name}`,
+        vendor: "nokia-md-cli",
+        sourceType: "interface",
+        sourceName: block.name,
+        normalizedType: "interface",
+        normalizedIdentity: identity,
+        rawLines: block.lines,
+        fields: {
+          interface: block.name,
+          description,
+          address: addressInfo.prefix,
+          ipAddress: addressInfo.ipAddress,
+          prefix: addressInfo.prefix,
+        },
+      });
 
-    return object;
-  });
+      object.description = description;
+      object.ipAddress = addressInfo.ipAddress;
+      object.prefix = addressInfo.prefix;
+
+      return object;
+    })
+    .filter(Boolean);
 }
 
 function parseMdCliPimInterfaces(lines) {

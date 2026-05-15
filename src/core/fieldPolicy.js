@@ -47,6 +47,29 @@ function normalizeProfileValidationPolicies(profile = {}) {
   return normalized;
 }
 
+function findProfilePolicyEntry(objectType, field, profile = {}) {
+  const entries = profile.validationPolicies?.[objectType];
+  const normalizedField = String(field || "").trim();
+  if (!normalizedField) return null;
+
+  if (Array.isArray(entries)) {
+    return entries.find((entry) => String(entry?.field || "").trim() === normalizedField) || null;
+  }
+
+  if (entries && typeof entries === "object" && entries[normalizedField]) {
+    return {
+      field: normalizedField,
+      policy: entries[normalizedField],
+    };
+  }
+
+  return null;
+}
+
+export function getProfilePolicyEntry(objectType, field, profile = {}) {
+  return findProfilePolicyEntry(objectType, field, profile);
+}
+
 export function getFieldPoliciesForObjectType(objectType, profile = {}) {
   const defaults = DEFAULT_FIELD_POLICIES[objectType] || {};
   const profilePolicies = normalizeProfileValidationPolicies(profile)[objectType] || {};
@@ -74,16 +97,19 @@ export function applyFieldPolicies({
 
   for (const [field, summary] of Object.entries(fieldSummary)) {
     const policy = policies[field] || "compare";
+    const policyEntry = findProfilePolicyEntry(objectType, field, profile);
+    const exceptionAllowed = policy === "exception" && isExceptionAllowed(summary, policyEntry);
 
     const item = {
       ...summary,
       policy,
-      ignored: policy === "ignore",
+      ignored: policy === "ignore" || exceptionAllowed,
       violation: false,
       violationReason: null,
+      policyReason: exceptionAllowed ? (policyEntry?.message || "exception-policy") : null,
     };
 
-    if (policy === "ignore") {
+    if (policy === "ignore" || exceptionAllowed) {
       item.effectiveStatus = "ignored";
     } else if (policy === "presence") {
       item.effectiveStatus =
@@ -158,4 +184,28 @@ export function applyFieldPolicies({
     violations,
     violationCount: violations.length,
   };
+}
+
+function isExceptionAllowed(summary = {}, policyEntry = null) {
+  if (!policyEntry) return true;
+  const allowed = [
+    ...splitPolicyValues(policyEntry.oldValues),
+    ...splitPolicyValues(policyEntry.newValue),
+    ...splitPolicyValues(policyEntry.allowedValues),
+  ];
+  if (!allowed.length) return true;
+  const allowedSet = new Set(allowed.map((value) => String(value).trim()));
+  const values = [
+    ...(summary.oldValues || []),
+    ...(summary.newValues || []),
+  ].map((value) => String(value).trim()).filter(Boolean);
+  return values.length > 0 && values.every((value) => allowedSet.has(value));
+}
+
+function splitPolicyValues(value = "") {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  return String(value || "")
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

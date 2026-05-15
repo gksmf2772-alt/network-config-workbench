@@ -1,6 +1,7 @@
 // src/core/comparisonPlan.js
 import { compareObjectPlanLines } from "./lineDiff.js";
 import { applyFieldPolicies } from "./fieldPolicy.js";
+import { evaluatePolicyContext } from "./policyEvaluator.js";
 import { applyDefaultNoopLineSuppression } from "./semanticRules.js";
 
 function getObjectType(match) {
@@ -438,6 +439,109 @@ function applySemanticLineCoverage(
   });
 }
 
+function applyPolicySuppressionToLineMatches({
+  lineMatches = [],
+  objectType = "",
+  profile = {},
+  oldObject = null,
+  newObject = null,
+} = {}) {
+  return lineMatches.map((lineMatch) => {
+    const fieldMatches = Array.isArray(lineMatch.fieldMatches) ? lineMatch.fieldMatches : [];
+    const policyHits = [];
+
+    fieldMatches.forEach((fieldMatch) => {
+      const field = fieldMatch.field || "";
+      const oldPolicy = fieldMatch.oldLine || fieldMatch.oldValue != null
+        ? evaluatePolicyContext({
+          profile,
+          rawLine: fieldMatch.oldLine || "",
+          side: "old",
+          objectType,
+          objectKey: objectKeyForPolicy(oldObject, objectType),
+          field,
+          fieldValue: fieldMatch.oldValue,
+        })
+        : null;
+      const newPolicy = fieldMatch.newLine || fieldMatch.newValue != null
+        ? evaluatePolicyContext({
+          profile,
+          rawLine: fieldMatch.newLine || "",
+          side: "new",
+          objectType,
+          objectKey: objectKeyForPolicy(newObject, objectType),
+          field,
+          fieldValue: fieldMatch.newValue,
+        })
+        : null;
+
+      [oldPolicy, newPolicy].filter(Boolean).forEach((policy) => {
+        if (policy.suppressed) policyHits.push(policy);
+      });
+    });
+
+    [...(lineMatch.oldLines || [])].forEach((line) => {
+      const policy = evaluatePolicyContext({
+        profile,
+        rawLine: line,
+        side: "old",
+        objectType,
+        objectKey: objectKeyForPolicy(oldObject, objectType),
+      });
+      if (policy.suppressed) policyHits.push(policy);
+    });
+
+    [...(lineMatch.newLines || [])].forEach((line) => {
+      const policy = evaluatePolicyContext({
+        profile,
+        rawLine: line,
+        side: "new",
+        objectType,
+        objectKey: objectKeyForPolicy(newObject, objectType),
+      });
+      if (policy.suppressed) policyHits.push(policy);
+    });
+
+    if (!policyHits.length) return lineMatch;
+
+    return {
+      ...lineMatch,
+      status: "ignored",
+      reason: policyHits[0].reason || "policy-suppressed",
+      semanticCovered: true,
+      ignored: true,
+      suppressed: true,
+      policySource: policyHits[0].sourcePolicy,
+      policyHits,
+      fieldMatches: fieldMatches.map((fieldMatch) => ({
+        ...fieldMatch,
+        status: "ignored",
+        ignored: true,
+      })),
+    };
+  });
+}
+
+function isPolicySuppressedPlanItem({
+  status = "",
+  fieldSummary = {},
+  lineMatches = [],
+} = {}) {
+  if (!["old-only", "new-only", "candidate", "matched"].includes(status)) return false;
+  const fields = Object.values(fieldSummary || {});
+  const hasFields = fields.length > 0;
+  const allFieldsIgnored = hasFields && fields.every((field) => field.ignored || field.effectiveStatus === "ignored");
+  const hasLineMatches = lineMatches.length > 0;
+  const allLinesIgnored = hasLineMatches && lineMatches.every((lineMatch) => lineMatch.ignored || lineMatch.status === "ignored");
+  if (status === "matched" || status === "candidate") return allFieldsIgnored && allLinesIgnored;
+  return allFieldsIgnored || allLinesIgnored;
+}
+
+function objectKeyForPolicy(object = {}, objectType = "") {
+  if (!object) return "";
+  return object.key || `${objectType}:${object.normalizedIdentity || object.identity || object.sourceName || object.id || ""}`;
+}
+
 function isInterfaceStructuralLine(line = "") {
   const text = String(line || "")
     .trim()
@@ -770,10 +874,24 @@ export function createObjectComparePlan(
       objectType
     );
 
-  const coveredLineMatches = applyDefaultNoopLineSuppression(
+  const noopCoveredLineMatches = applyDefaultNoopLineSuppression(
     interfaceStructureCoveredLineMatches,
     objectType
   );
+
+  const coveredLineMatches = applyPolicySuppressionToLineMatches({
+    lineMatches: noopCoveredLineMatches,
+    objectType,
+    profile,
+    oldObject: match.oldObject || null,
+    newObject: match.newObject || null,
+  });
+
+  const policySuppressed = isPolicySuppressedPlanItem({
+    status: match.status,
+    fieldSummary,
+    lineMatches: coveredLineMatches,
+  });
 
   return {
     id: getComparePlanId(match, index),
@@ -804,6 +922,8 @@ export function createObjectComparePlan(
     tokenMatches,
     fieldSummary,
     fieldStats,
+    policySuppressed,
+    suppressionReason: policySuppressed ? "explicit-policy" : "",
 
     relationshipSummary: dedupedRelationshipSummary,
 

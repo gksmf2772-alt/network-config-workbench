@@ -17,12 +17,14 @@ export function createParserContext({
   profile,
   configText,
   side,
+  preprocess = null,
 }) {
   return {
     vendor,
     profile,
     configText,
     side,
+    preprocess,
 
     lines: typeof configText === "string"
       ? configText.split(/\r?\n/)
@@ -73,6 +75,7 @@ export function createParserResult(context) {
   return {
     vendor: context.vendor,
     side: context.side,
+    preprocess: context.preprocess || null,
 
     objects: context.objects || [],
     warnings: context.warnings || [],

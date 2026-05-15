@@ -76,11 +76,13 @@ export function buildSummaryDashboardData({
   profileName = "",
   sessionName = "",
   comparedAt = "",
+  coverageDiagnostics = semanticSummary.coverageDiagnostics || null,
 } = {}) {
+  const reviewablePlan = plan.filter((item) => !item.policySuppressed);
   const lineSummary = buildLineSummary(report);
-  const fieldAnalysis = buildFieldOverlapAnalysis(plan);
+  const fieldAnalysis = buildFieldOverlapAnalysis(reviewablePlan);
   const review = buildReviewItems(plan);
-  const graph = buildGraphData({ plan });
+  const graph = buildGraphData({ plan: reviewablePlan });
   const severity = deriveSeverity({
     report,
     semanticSummary,
@@ -91,8 +93,8 @@ export function buildSummaryDashboardData({
 
   const counts = {
     matched: countByStatus(plan, "matched"),
-    oldOnly: countByStatus(plan, "old-only"),
-    newOnly: countByStatus(plan, "new-only"),
+    oldOnly: countByStatus(reviewablePlan, "old-only"),
+    newOnly: countByStatus(reviewablePlan, "new-only"),
     ambiguous: review.ambiguous.length,
     lowConfidence: review.lowConfidence.length,
     relationshipDiffs: review.relationshipChanges.length,
@@ -101,9 +103,11 @@ export function buildSummaryDashboardData({
   };
 
   const parsedObjectCount = plan.filter((item) => item.oldObject || item.newObject).length;
-  const topChangedTypes = topTypeCounts(plan.filter((item) => hasChangedFields(item) || hasRelationshipChange(item)));
-  const topUnmatchedTypes = topTypeCounts(plan.filter((item) => item.status === "old-only" || item.status === "new-only"));
-  const lowCoverage = Number(semanticSummary.coveragePercent || 0) < 60;
+  const topChangedTypes = topTypeCounts(reviewablePlan.filter((item) => hasChangedFields(item) || hasRelationshipChange(item)));
+  const topUnmatchedTypes = topTypeCounts(reviewablePlan.filter((item) => item.status === "old-only" || item.status === "new-only"));
+  const lowCoverage = semanticSummary.coveragePercent == null
+    ? false
+    : Number(semanticSummary.coveragePercent || 0) < 60;
 
   return {
     lineSummary,
@@ -123,6 +127,7 @@ export function buildSummaryDashboardData({
       sessionName,
       comparedAt,
       parsedObjectCount,
+      coverageDiagnostics,
     },
   };
 }
@@ -224,6 +229,7 @@ export function buildReviewItems(plan = []) {
   };
 
   plan.forEach((item) => {
+    if (item.policySuppressed) return;
     const base = buildReviewBase(item);
     if (item.status === "old-only") {
       review.unmatchedOld.push({
@@ -307,7 +313,7 @@ export function buildGraphData({ plan = [] } = {}) {
   const nodes = [];
   const edges = [];
   const nodeIds = new Set();
-  const limitedPlan = plan.slice(0, 140);
+  const limitedPlan = plan.filter((item) => !item.policySuppressed).slice(0, 140);
 
   limitedPlan.forEach((item, index) => {
     const oldNode = item.oldObject ? graphNodeFromObject(item.oldObject, item, "old", index) : null;
@@ -523,7 +529,7 @@ function toScore(score) {
 }
 
 function countByStatus(plan = [], status) {
-  return plan.filter((item) => item.status === status).length;
+  return plan.filter((item) => !item.policySuppressed && item.status === status).length;
 }
 
 function countManualMappings(plan = [], manualMap = {}, semanticSummary = {}) {
@@ -539,6 +545,7 @@ function changedFieldNames(item = {}) {
   const summary = item.fieldSummary || {};
   return Object.entries(summary)
     .filter(([, value]) => {
+      if (value?.ignored || value?.effectiveStatus === "ignored") return false;
       const status = String(value?.effectiveStatus || value?.status || "").toLowerCase();
       return ["changed", "missing", "added", "conflict", "different"].includes(status);
     })

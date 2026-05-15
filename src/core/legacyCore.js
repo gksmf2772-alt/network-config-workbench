@@ -17,6 +17,12 @@ import {
 import {
   buildSummaryDashboardData,
 } from "./summaryAnalytics.js";
+import {
+  buildSemanticCoverageDiagnostics,
+} from "./coverageDiagnostics.js";
+import {
+  evaluatePolicyContext,
+} from "./policyEvaluator.js";
 
 import {
   normalizeConfig,
@@ -226,6 +232,7 @@ const state = {
   lastSemanticPlan: [],
   lastManualMap: {},
   lastDashboardData: null,
+  lastCoverageDiagnostics: null,
   lastSessionName: "",
   semanticPairKeyboardBound: false,
   lineRelationDelegationBound: false,
@@ -3978,6 +3985,14 @@ function renderSemanticPreview() {
   const { oldVendor, newVendor, oldResult, newResult, plan, manualMap } = runtime;
   state.lastSemanticPlan = plan;
   state.lastManualMap = manualMap || {};
+  state.lastCoverageDiagnostics = buildSemanticCoverageDiagnostics({
+    oldText: selectors.oldInput.value,
+    newText: selectors.newInput.value,
+    oldResult,
+    newResult,
+    plan,
+    profile: state.profileDraft || {},
+  });
   state.lastSemanticSummary = buildSemanticSummaryMetrics({
     plan,
     oldObjects: oldResult.objects,
@@ -3985,6 +4000,7 @@ function renderSemanticPreview() {
     manualMap,
     oldVendor,
     newVendor,
+    coverageDiagnostics: state.lastCoverageDiagnostics,
   });
 
   if (selectors.semanticDebugToggle?.checked) {
@@ -4134,6 +4150,7 @@ function buildSemanticSummaryMetrics({
   manualMap = {},
   oldVendor = "",
   newVendor = "",
+  coverageDiagnostics = null,
 } = {}) {
   const summary = {
     totalObjects: plan.length,
@@ -4158,6 +4175,10 @@ function buildSemanticSummaryMetrics({
   let scoreCount = 0;
 
   plan.forEach((item) => {
+    if (item.policySuppressed) {
+      summary.noopSuppressed += 1;
+      return;
+    }
     const status = String(item.status || "");
     const reason = String(item.reason || "");
     if (status === "matched") summary.matched += 1;
@@ -4187,9 +4208,19 @@ function buildSemanticSummaryMetrics({
   });
 
   summary.averageScore = scoreCount ? Math.round(scoreTotal / scoreCount) : 0;
-  summary.coveragePercent = summary.lineTotal
-    ? Math.round((summary.lineCovered / summary.lineTotal) * 100)
-    : 0;
+  if (coverageDiagnostics) {
+    summary.lineCovered = Number(coverageDiagnostics.recognizedLineCount || 0);
+    summary.lineTotal = Number(coverageDiagnostics.eligibleLineCount || 0);
+    summary.noopSuppressed = Number(coverageDiagnostics.ignoredLineCount || coverageDiagnostics.suppressedLineCount || summary.noopSuppressed || 0);
+    summary.coveragePercent = coverageDiagnostics.coveragePercent == null
+      ? null
+      : Number(coverageDiagnostics.coveragePercent);
+    summary.coverageDiagnostics = coverageDiagnostics;
+  } else {
+    summary.coveragePercent = summary.lineTotal
+      ? Math.round((summary.lineCovered / summary.lineTotal) * 100)
+      : 0;
+  }
   summary.matchPercent = summary.totalObjects
     ? Math.round((summary.matched / summary.totalObjects) * 100)
     : 0;
@@ -4209,6 +4240,7 @@ function buildCurrentDashboardData(report, semantic = state.lastSemanticSummary)
     profileName: state.profileDraft?.name || "프로파일 없음",
     sessionName: state.lastSessionName || "현재 입력",
     comparedAt: selectors.lastComparedAt?.textContent?.replace(/^마지막 비교:\s*/, "") || "",
+    coverageDiagnostics: state.lastCoverageDiagnostics,
   });
   state.lastDashboardData = dashboard;
   return dashboard;
@@ -4235,7 +4267,8 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
   const { lineSummary, counts, fieldAnalysis, review, severity, context } = dashboard;
   const risk = severity.level || "ok";
   const support = context.support || {};
-  const coverage = Number(semanticSummary.coveragePercent ?? 0);
+  const coverage = semanticSummary.coveragePercent == null ? null : Number(semanticSummary.coveragePercent);
+  const coverageLabel = coverage == null ? "계산 불가" : `${coverage}%`;
   const alerts = buildOperatorAlerts({ dashboard, semanticSummary, report });
 
   selectors.summaryCards.innerHTML = `
@@ -4267,7 +4300,7 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
         ${renderMetricCard({ label: "신규 설정에서만 있음", value: counts.newOnly, detail: "신규 추가 가능성", state: counts.newOnly ? "added" : "ok", action: "unmatched-new" })}
         ${renderMetricCard({ label: "확인 필요 후보", value: counts.ambiguous, detail: "매핑 후보 여러 개", state: counts.ambiguous ? "warning" : "ok", action: "ambiguous" })}
         ${renderMetricCard({ label: "낮은 신뢰도", value: counts.lowConfidence, detail: "수동 검토 권장", state: counts.lowConfidence ? "warning" : "ok", action: "low-confidence" })}
-        ${renderMetricCard({ label: "분석된 라인 비율", value: `${coverage}%`, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0} 라인`, state: coverage >= 70 ? "ok" : "warning", action: "coverage" })}
+        ${renderMetricCard({ label: "분석된 라인 비율", value: coverageLabel, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0} 라인`, state: coverage != null && coverage >= 70 ? "ok" : "warning", action: "coverage" })}
         ${renderMetricCard({ label: "숨김 처리 라인", value: semanticSummary.noopSuppressed ?? lineSummary.suppressed, detail: "의미상 동일/구조 라인", state: "changed", action: "suppressed" })}
         ${renderMetricCard({ label: "직접 연결", value: counts.manual, detail: "사용자 저장 매핑", state: counts.manual ? "changed" : "ok", action: "manual" })}
       </div>
@@ -4280,7 +4313,7 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
       </section>
     ` : ""}
 
-    ${dashboard.lowCoverage ? renderCoverageWarning(semanticSummary, support) : ""}
+    ${dashboard.lowCoverage ? renderCoverageWarning(semanticSummary, support, context.coverageDiagnostics) : ""}
 
     <section class="summary-workspace-grid">
       <div class="summary-workspace-main">
@@ -4353,14 +4386,18 @@ function buildOperatorAlerts({ dashboard, semanticSummary, report }) {
   ].filter(Boolean);
 }
 
-function renderCoverageWarning(semanticSummary = {}, support = {}) {
+function renderCoverageWarning(semanticSummary = {}, support = {}, diagnostics = null) {
+  const sideSummary = diagnostics
+    ? `미분석 ${diagnostics.unparsedLineCount ?? 0} · wrapper ${diagnostics.wrapperLineCount ?? 0} · 라인매핑 없음 ${diagnostics.linesWithoutSourceMapping ?? 0}`
+    : "";
   return `
     <section class="summary-coverage-warning" data-review-panel="coverage">
       <strong>분석된 라인 비율이 낮음</strong>
-      <p>의미 기반 분석이 인식한 라인이 ${escapeHtml(semanticSummary.coveragePercent ?? 0)}%입니다. 파서 미지원 구문, 구조 라인, 의미상 동일하여 숨김 처리된 라인이 섞여 있을 수 있습니다.</p>
+      <p>의미 기반 분석이 인식한 라인이 ${escapeHtml(semanticSummary.coveragePercent ?? "계산 불가")}%입니다. ${escapeHtml(diagnostics?.reason || "파서 미지원 구문, router log wrapper, 예외 처리 라인이 원인일 수 있습니다.")}</p>
       <div class="summary-context-row">
         <span>분석 ${escapeHtml(semanticSummary.lineCovered ?? 0)} / 전체 ${escapeHtml(semanticSummary.lineTotal ?? 0)}</span>
         <span>숨김 처리 ${escapeHtml(semanticSummary.noopSuppressed ?? 0)}</span>
+        ${sideSummary ? `<span>${escapeHtml(sideSummary)}</span>` : ""}
         <span>${escapeHtml(support.label || "지원 상태 확인")}</span>
       </div>
     </section>
@@ -5150,7 +5187,12 @@ function shouldIgnoreLine(normalizedLine, rawLine, options, source) {
   const lower = normalizedLine.trim().toLowerCase();
   if (options.ignoreComments && (!lower || lower.startsWith("#") || lower.startsWith("//") || lower.startsWith("!"))) return true;
   if (options.ignoreGenerated && /timestamp|last modified|generated|created by|time:|date:/.test(lower)) return true;
-  return options.profile.rules.ignore.some((rule) => rule.source === source && canonicalizeComparableLine(rawLine).includes(canonicalizeComparableLine(rule.pattern)));
+  return evaluatePolicyContext({
+    profile: options.profile || state.profileDraft || {},
+    rawLine,
+    normalizedLine,
+    side: source,
+  }).suppressed;
 }
 
 function detectObjectStart(line, options, source = "old") {
@@ -6157,6 +6199,8 @@ function compareObjects(oldObjects, newObjects, options) {
     if (key.startsWith("global:")) return;
     const oldObject = oldMap.get(key);
     const newObject = newMap.get(key);
+    if (!oldObject && isObjectSuppressedByPolicy(newObject, "new", options.profile)) return;
+    if (!newObject && isObjectSuppressedByPolicy(oldObject, "old", options.profile)) return;
     if (!oldObject) return items.push(buildReportItem("added", key, null, newObject, "신규 config에만 존재하는 객체입니다."));
     if (!newObject) return items.push(buildReportItem("missing", key, oldObject, null, "신규 config에서 누락된 객체입니다."));
     const objectRequiredItems = buildObjectRequiredItems(oldObject, newObject, options.profile);
@@ -6331,7 +6375,7 @@ function compareCanonicalObjects(oldObject, newObject, profile = state.profileDr
     const policy = findProfilePolicyForField(oldObject.type, field, profile)?.policy
       || profile?.objects?.[oldObject.type]?.policies?.[field]
       || "compare";
-    if (policy === "ignore") return;
+    if (policy === "ignore" || policy === "exception") return;
     const oldHas = oldFields[field] !== undefined;
     const newHas = newFields[field] !== undefined;
     if (["presence", "required", "conditional"].includes(policy)) {
@@ -6380,7 +6424,7 @@ function canonicalComparableFields(object, profile = state.profileDraft) {
     const policy = findProfilePolicyForField(object.type, normalizedField, profile)?.policy
       || profile?.objects?.[object.type]?.policies?.[normalizedField]
       || "compare";
-    if (!normalizedField || value === undefined || value === "" || policy === "ignore") return result;
+    if (!normalizedField || value === undefined || value === "" || policy === "ignore" || policy === "exception") return result;
     result[normalizedField] = applySemanticPolicyNormalize(normalizedField, value, object.type, object.source, profile);
     return result;
   }, {});
@@ -6791,6 +6835,31 @@ function buildSemanticObjectDiffRows(oldText, newText, options) {
   return buildSemanticPlanDiffRows(oldText, newText, options);
 }
 
+function isObjectSuppressedByPolicy(object, source, profile = state.profileDraft) {
+  if (!object) return false;
+  const lines = object.rawLines?.length ? object.rawLines : object.lines || [];
+  const fields = object.canonicalFields || object.fields || {};
+  const lineSuppressed = lines.length > 0 && lines.every((line) => evaluatePolicyContext({
+    profile,
+    rawLine: line,
+    normalizedLine: canonicalizeComparableLine(line),
+    side: source,
+    objectType: object.type || object.normalizedType || "",
+    objectKey: object.key || "",
+  }).suppressed);
+  const fieldSuppressed = Object.entries(fields).length > 0 && Object.entries(fields).every(([field, value]) => evaluatePolicyContext({
+    profile,
+    rawLine: "",
+    normalizedLine: "",
+    side: source,
+    objectType: object.type || object.normalizedType || "",
+    objectKey: object.key || "",
+    field,
+    fieldValue: value,
+  }).suppressed);
+  return lineSuppressed || fieldSuppressed;
+}
+
 function buildSemanticRuntime({
   oldText = selectors.oldInput?.value || "",
   newText = selectors.newInput?.value || "",
@@ -6850,7 +6919,12 @@ function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
   const plan = runtime.plan;
   const rows = buildSemanticObjectBlockRows(plan);
 
-  return appendUnmatchedRawLinesToSemanticRows(rows, oldText, newText, plan);
+  return appendUnmatchedRawLinesToSemanticRows(
+    rows,
+    runtime.oldResult?.preprocess?.text || oldText,
+    runtime.newResult?.preprocess?.text || newText,
+    plan
+  );
 }
 
 function semanticPlanSortKey(item = {}) {
@@ -7915,6 +7989,7 @@ function appendUnmatchedRawLinesToSemanticRows(
 
       if (!line.trim()) return;
       if (semanticCoveredLines.has(normalized)) return;
+      if (evaluatePolicyContext({ profile: state.profileDraft || {}, rawLine: line, normalizedLine: normalized, side: "old" }).suppressed) return;
       if (consumedLineIfMatched(oldConsumed, line)) return;
 
       oldUnmatchedLines.push({ line, index });
@@ -7927,37 +8002,15 @@ function appendUnmatchedRawLinesToSemanticRows(
 
       if (!line.trim()) return;
       if (semanticCoveredLines.has(normalized)) return;
+      if (evaluatePolicyContext({ profile: state.profileDraft || {}, rawLine: line, normalizedLine: normalized, side: "new" }).suppressed) return;
       if (consumedLineIfMatched(newConsumed, line)) return;
 
       newUnmatchedLines.push({ line, index });
     });
 
-  console.log("[coverage-check] semanticCoveredLines", [...semanticCoveredLines]);
-  console.log("[coverage-check] oldUnmatchedLines", oldUnmatchedLines);
-  console.log("[coverage-check] newUnmatchedLines", newUnmatchedLines);
-
   if (!oldUnmatchedLines.length && !newUnmatchedLines.length) {
     return rows;
   }
-
-  const suspiciousLines = [
-    "exit",
-    "}",
-    "admin-state enable",
-    'group "ACCESS-PEER"',
-  ];
-
-  console.table(
-    oldUnmatchedLines.filter((item) =>
-      suspiciousLines.includes(item.line.trim())
-    )
-  );
-
-  console.table(
-    newUnmatchedLines.filter((item) =>
-      suspiciousLines.includes(item.line.trim())
-    )
-  );
   
   const unmatchedRows = buildGroupedUnmatchedRawRows(
     oldUnmatchedLines,
@@ -8700,6 +8753,14 @@ function appendUnusedObjectLines(rows, object, usedIndexes, side) {
 function isVisualIgnoredLine(line, objectType, source) {
   const normalized = canonicalizeComparableLine(line);
   if (!normalized) return true;
+  if (evaluatePolicyContext({
+    profile: state.profileDraft || {},
+    rawLine: line,
+    normalizedLine: normalized,
+    side: source,
+    objectType,
+    field: inferSemanticFieldName(line),
+  }).suppressed) return true;
   const rule = findLineRule(normalized, objectType, source, state.profileDraft.lineRules);
   if (rule?.action === "ignore") return true;
   if (state.profileDraft.rules.ignore.some((item) => item.source === source && normalized.includes(canonicalizeComparableLine(item.pattern)))) return true;
@@ -10648,6 +10709,10 @@ function renderOverviewReport(report) {
       <h3>검토 테이블</h3>
       ${renderReportReviewTable(review)}
     </section>
+    <section class="overview-section report-coverage-section">
+      <h3>분석된 라인 진단</h3>
+      ${renderCoverageDiagnostics(context.coverageDiagnostics)}
+    </section>
     <section class="overview-section report-field-section">
       <h3>공통 필드 분석</h3>
       ${renderFieldOverlapSummary(fieldAnalysis)}
@@ -10682,6 +10747,40 @@ function renderOverviewReport(report) {
     </section>
   `;
   bindReportGraphInteractions();
+}
+
+function renderCoverageDiagnostics(diagnostics = null) {
+  if (!diagnostics) return `<div class="small-note">라인 진단 데이터가 없습니다.</div>`;
+  const rows = [
+    ["분석 비율", diagnostics.coveragePercent == null ? "계산 불가" : `${diagnostics.coveragePercent}%`],
+    ["파싱 객체", diagnostics.parsedObjectCount],
+    ["인식 라인", diagnostics.recognizedLineCount],
+    ["대상 라인", diagnostics.eligibleLineCount],
+    ["예외/숨김 라인", diagnostics.ignoredLineCount],
+    ["미분석 라인", diagnostics.unparsedLineCount],
+    ["router log wrapper", diagnostics.wrapperLineCount],
+    ["라인 매핑 없음", diagnostics.linesWithoutSourceMapping],
+  ];
+  const unparsed = [
+    ...(diagnostics.sides?.old?.unparsedLines || []).map((line) => ({ ...line, side: "기존" })),
+    ...(diagnostics.sides?.new?.unparsedLines || []).map((line) => ({ ...line, side: "신규" })),
+  ].slice(0, 16);
+  return `
+    <div class="coverage-diagnostics">
+      <p>${escapeHtml(diagnostics.reason || "")}</p>
+      <div class="coverage-diagnostic-grid">
+        ${rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
+      </div>
+      <details>
+        <summary>미분석 라인 샘플 ${escapeHtml(unparsed.length)}개</summary>
+        <div class="coverage-unparsed-list">
+          ${unparsed.length ? unparsed.map((line) => `
+            <code>${escapeHtml(line.side)} ${escapeHtml(line.line)}: ${escapeHtml(line.text)}</code>
+          `).join("") : `<span class="small-note">미분석 라인 없음</span>`}
+        </div>
+      </details>
+    </div>
+  `;
 }
 
 function renderReportReviewTable(review = {}) {

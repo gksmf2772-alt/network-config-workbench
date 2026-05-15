@@ -85,7 +85,6 @@ export default function ConfigInputPanel() {
                   <option value="light">라이트</option>
                   <option value="dark">다크</option>
                   <option value="contrast">고대비</option>
-                  <option value="sketch">스케치</option>
                 </AppSelect>
               </label>
               <label>

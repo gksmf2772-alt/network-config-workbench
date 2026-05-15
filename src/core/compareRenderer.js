@@ -14,10 +14,10 @@ function escapeHtml(value) {
 }
 
 function getStatusLabel(status) {
-  if (status === "matched") return "매칭";
-  if (status === "candidate") return "후보";
-  if (status === "old-only") return "기존만 있음";
-  if (status === "new-only") return "신규만 있음";
+  if (status === "matched") return "연결됨";
+  if (status === "candidate") return "확인 필요 후보";
+  if (status === "old-only") return "기존 설정에만 있음";
+  if (status === "new-only") return "신규 설정에만 있음";
   return String(status || "알 수 없음").toUpperCase();
 }
 
@@ -27,14 +27,14 @@ function getFieldDisplayStatus(fieldSummary) {
   const status = fieldSummary?.effectiveStatus || fieldSummary?.status || "unknown";
   return ({
     equal: "동일",
-    matched: "매칭",
+    matched: "연결됨",
     changed: "변경",
     present: "존재",
     missing: "누락",
     added: "추가",
     candidate: "후보",
     conflict: "충돌",
-    ambiguous: "불명확",
+    ambiguous: "확인 필요",
     unknown: "알 수 없음",
   })[status] || status;
 }
@@ -68,16 +68,17 @@ function renderFieldSummary(fieldSummary = {}) {
 }
 
 function getLineDisplayStatus(lineMatch) {
-  if (lineMatch?.semanticCovered) return "의미 동일";
+  if (lineMatch?.ignored || lineMatch?.suppressed) return "숨김 처리";
+  if (lineMatch?.semanticCovered) return "의미상 동일";
   const status = String(lineMatch?.status || "unknown").toLowerCase();
   return ({
     equal: "동일",
     changed: "변경",
-    candidate: "후보",
-    "old-only": "기존만",
-    "new-only": "신규만",
+    candidate: "확인 필요 후보",
+    "old-only": "기존 설정에만 있음",
+    "new-only": "신규 설정에만 있음",
     conflict: "충돌",
-    ambiguous: "불명확",
+    ambiguous: "확인 필요",
     unknown: "알 수 없음",
   })[status] || status.toUpperCase();
 }
@@ -121,9 +122,9 @@ function renderCandidateList(candidates = [], getIds) {
           return `
             <li class="semantic-candidate-option">
               <span>${escapeHtml(candidate.sourceName || candidate.id || "-")}</span>
-              <span>점수: ${escapeHtml(candidate.score ?? "-")}</span>
+              <span>일치도: ${escapeHtml(candidate.score ?? "-")}</span>
               <span>사유: ${escapeHtml(candidate.reason || "-")}</span>
-              <button type="button" class="semantic-candidate-select-btn" data-old-object-id="${escapeHtml(ids.oldObjectId)}" data-new-object-id="${escapeHtml(ids.newObjectId)}">선택</button>
+              <button type="button" class="semantic-candidate-select-btn" data-old-object-id="${escapeHtml(ids.oldObjectId)}" data-new-object-id="${escapeHtml(ids.newObjectId)}">직접 연결</button>
             </li>
           `;
         }).join("")}
@@ -192,11 +193,11 @@ function renderManualMatchActions(item = {}) {
 
 function getStateDisplayLabel(state) {
   return ({
-    matched: "매칭",
+    matched: "연결됨",
     partial: "부분 일치",
-    ambiguous: "불명확",
-    unmatched: "미매칭",
-    manual: "수동",
+    ambiguous: "확인 필요",
+    unmatched: "미연결",
+    manual: "직접 연결",
   })[state] || state || "-";
 }
 
@@ -257,17 +258,17 @@ export function renderComparisonPlanHtml(plan = []) {
   return `
     <div class="semantic-compare-result">
       <div class="semantic-state-legend">
-        <span class="semantic-status-badge semantic-state-matched">매칭</span>
+        <span class="semantic-status-badge semantic-state-matched">연결됨</span>
         <span class="semantic-status-badge semantic-state-partial">부분 일치</span>
-        <span class="semantic-status-badge semantic-state-ambiguous">불명확</span>
-        <span class="semantic-status-badge semantic-state-unmatched">미매칭</span>
-        <span class="semantic-status-badge semantic-state-manual">수동</span>
+        <span class="semantic-status-badge semantic-state-ambiguous">확인 필요</span>
+        <span class="semantic-status-badge semantic-state-unmatched">미연결</span>
+        <span class="semantic-status-badge semantic-state-manual">직접 연결</span>
       </div>
       <div class="semantic-preview-summary">
         <div class="semantic-summary-item"><div class="semantic-summary-label">객체</div><div class="semantic-summary-value">${summary.total}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">매칭</div><div class="semantic-summary-value">${summary.matched}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">미매칭</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">불명확</div><div class="semantic-summary-value">${summary.ambiguous}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">연결됨</div><div class="semantic-summary-value">${summary.matched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">미연결</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">확인 필요</div><div class="semantic-summary-value">${summary.ambiguous}</div></div>
         <div class="semantic-summary-item"><div class="semantic-summary-label">위반</div><div class="semantic-summary-value">${summary.violations}</div></div>
       </div>
 
@@ -288,7 +289,7 @@ export function renderComparisonPlanHtml(plan = []) {
                 <span class="semantic-object-arrow">↔</span>
                 <span class="semantic-object-side new">${escapeHtml(getObjectSideLabel(item.newObject))}</span>
               </span>
-              <span class="semantic-object-metric">점수 ${item.score ?? "-"}</span>
+              <span class="semantic-object-metric">일치도 ${item.score ?? "-"}</span>
               <span class="semantic-object-metric">위반 ${violations}</span>
               <span class="semantic-object-metric">관계 ${relationshipIssues}</span>
               <span class="semantic-object-metric">필드 ${changedFields}/${item.fieldStats?.totalFields ?? 0}</span>
@@ -302,11 +303,11 @@ export function renderComparisonPlanHtml(plan = []) {
                 <span>매칭 키: ${escapeHtml((item.matchKeyFields || []).join(", ") || "-")}</span>
                 <span>방식: ${escapeHtml(item.reason || "-")}</span>
                 <span>상태: ${escapeHtml(getStatusLabel(item.status))}</span>
-                <span>점수 사유: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
+                <span>일치도 근거: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
               </div>
               <div class="semantic-object-actions">${renderManualMatchActions(item)}</div>
-              ${item.ambiguousAlternatives?.length ? `<details class="semantic-detail-block"><summary>대체 후보 (${item.ambiguousAlternatives.length})</summary>${renderAmbiguousAlternatives(item)}</details>` : ""}
-              ${item.manualCandidates?.length ? `<details class="semantic-detail-block" open><summary>수동 매핑 후보 (${item.manualCandidates.length})</summary>${renderManualCandidates(item)}</details>` : ""}
+              ${item.ambiguousAlternatives?.length ? `<details class="semantic-detail-block"><summary>확인 필요 후보 (${item.ambiguousAlternatives.length})</summary>${renderAmbiguousAlternatives(item)}</details>` : ""}
+              ${item.manualCandidates?.length ? `<details class="semantic-detail-block" open><summary>직접 연결 후보 (${item.manualCandidates.length})</summary>${renderManualCandidates(item)}</details>` : ""}
               <details class="semantic-detail-block"><summary>필드 비교 (${item.fieldStats?.totalFields ?? 0})</summary>${renderFieldSummary(item.fieldSummary)}</details>
               ${renderRelationshipSummary(item.relationshipSummary)}
               ${renderLineMatches(item.lineMatches)}

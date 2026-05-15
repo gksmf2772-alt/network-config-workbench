@@ -16,15 +16,15 @@ export default function AppShell() {
       <AppToolbar className="tabbar ncw-tabbar">
         <AppButton id="compareTabBtn" className="tab-button active" type="button" variant="tab">
           <GitCompareArrows className="h-4 w-4" />
-          &gt; COMPARE
+          비교
         </AppButton>
         <AppButton id="profilesTabBtn" className="tab-button" type="button" variant="tab">
           <Settings2 className="h-4 w-4" />
-          $ PROFILE
+          프로파일
         </AppButton>
         <AppButton id="summaryPageTabBtn" className="tab-button" type="button" variant="tab">
           <BarChart3 className="h-4 w-4" />
-          ~ SUMMARY
+          비교 요약
         </AppButton>
       </AppToolbar>
 

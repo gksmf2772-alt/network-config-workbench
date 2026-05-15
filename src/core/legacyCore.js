@@ -12200,7 +12200,6 @@ function saveUiPreferences() {
   document.body.dataset.lineMappingAnimation = selectors.lineMappingAnimationToggle?.checked ? "on" : "off";
   localStorage.setItem("configWorkbenchUi", JSON.stringify({
     theme: selectors.themeSelect.value,
-    terminalRedesignApplied: true,
     font: selectors.fontSelect.value,
     fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
     semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
@@ -12215,9 +12214,9 @@ function saveUiPreferences() {
 
 function loadUiPreferences() {
   try {
-    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "terminal", font: "JetBrains Mono", lineMappingStyle: "straight" };
-    selectors.themeSelect.value = prefs.terminalRedesignApplied ? (prefs.theme || "terminal") : "terminal";
-    selectors.fontSelect.value = prefs.terminalRedesignApplied ? (prefs.font || "JetBrains Mono") : "JetBrains Mono";
+    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas", lineMappingStyle: "straight" };
+    selectors.themeSelect.value = prefs.theme;
+    selectors.fontSelect.value = prefs.font;
     if (selectors.fieldHighlightToggle) {
       selectors.fieldHighlightToggle.checked = prefs.fieldHighlight !== false;
     }

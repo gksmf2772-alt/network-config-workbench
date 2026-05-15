@@ -82,6 +82,7 @@ export default function ConfigInputPanel() {
               <label>
                 테마
                 <AppSelect id="themeSelect">
+                  <option value="terminal">Terminal CLI</option>
                   <option value="light">라이트</option>
                   <option value="dark">다크</option>
                   <option value="contrast">고대비</option>
@@ -92,6 +93,8 @@ export default function ConfigInputPanel() {
               <label>
                 에디터 글꼴
                 <AppSelect id="fontSelect">
+                  <option value="JetBrains Mono">JetBrains Mono</option>
+                  <option value="Fira Code">Fira Code</option>
                   <option value="Consolas">Consolas</option>
                   <option value="D2Coding">D2Coding</option>
                   <option value="Cascadia Mono">Cascadia Mono</option>

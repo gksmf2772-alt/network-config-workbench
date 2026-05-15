@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;600;700&family=Kalam:wght@700&family=Patrick+Hand&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Fira+Code:wght@400;500;600&family=Kalam:wght@700&family=Patrick+Hand&display=swap");
 
 :root {
   --color-primary: #0f172a;
@@ -148,6 +148,41 @@
   --group-border-active: rgba(167, 139, 250, 0.48);
   --group-badge-bg: rgba(139, 92, 246, 0.16);
   --group-badge-text: #f8fafc;
+}
+
+[data-theme="terminal"] {
+  --color-primary: #33ff00;
+  --color-primary-hover: #0a0a0a;
+  --color-surface: #0a0a0a;
+  --color-surface-muted: #071407;
+  --color-border: #1f521f;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --bg: #0a0a0a;
+  --panel: #0a0a0a;
+  --panel-muted: #071407;
+  --text: #33ff00;
+  --muted: #7fdc7f;
+  --line: #1f521f;
+  --primary: #33ff00;
+  --primary-strong: #a8ff8d;
+  --warning: #ffb000;
+  --danger: #ff3333;
+  --success: #33ff00;
+  --placeholder: #113011;
+  --code-bg: #050805;
+  --shadow: none;
+  --editor-font: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  --map-line: rgba(51, 255, 0, 0.32);
+  --map-line-hover: rgba(255, 176, 0, 0.85);
+  --map-line-selected: rgba(51, 255, 0, 0.95);
+  --group-bg: rgba(51, 255, 0, 0.035);
+  --group-bg-hover: rgba(51, 255, 0, 0.075);
+  --group-bg-selected: rgba(51, 255, 0, 0.12);
+  --group-border: #1f521f;
+  --group-border-active: #33ff00;
+  --group-badge-bg: #071407;
+  --group-badge-text: #33ff00;
 }
 
 * {
@@ -6705,6 +6740,498 @@ body[data-theme="synapse"] .summary-risk-critical,
 body[data-theme="synapse"] .app-badge--danger {
   border-color: rgba(251, 113, 133, 0.45) !important;
   background: rgba(251, 113, 133, 0.12) !important;
+}
+
+body[data-theme="terminal"] {
+  min-height: 100vh;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(51, 255, 0, 0.025) 0,
+      rgba(51, 255, 0, 0.025) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    var(--bg);
+  color: var(--text);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  letter-spacing: 0;
+  text-shadow: 0 0 5px rgba(51, 255, 0, 0.36);
+}
+
+body[data-theme="terminal"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.015) 50%, rgba(0, 0, 0, 0.08) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.018), rgba(0, 255, 0, 0.012), rgba(0, 0, 255, 0.018));
+  background-size: 100% 4px, 6px 100%;
+  opacity: 0.44;
+}
+
+body[data-theme="terminal"] *,
+body[data-theme="terminal"] *::before,
+body[data-theme="terminal"] *::after {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+body[data-theme="terminal"] .app-shell {
+  display: grid;
+  gap: 8px;
+  max-width: none;
+  padding: 8px;
+}
+
+body[data-theme="terminal"] .ncw-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, auto);
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line) !important;
+  background: var(--panel) !important;
+}
+
+body[data-theme="terminal"] .ncw-terminal-brand {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 14px;
+  align-items: center;
+}
+
+body[data-theme="terminal"] .terminal-ascii {
+  grid-row: span 3;
+  margin: 0;
+  color: var(--warning);
+  font: 700 11px/1 "JetBrains Mono", monospace;
+  text-shadow: 0 0 5px rgba(255, 176, 0, 0.45);
+}
+
+body[data-theme="terminal"] .ncw-terminal-kicker {
+  color: var(--success) !important;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+body[data-theme="terminal"] h1,
+body[data-theme="terminal"] h2,
+body[data-theme="terminal"] h3,
+body[data-theme="terminal"] .app-section-header h2,
+body[data-theme="terminal"] .summary-status-main strong,
+body[data-theme="terminal"] .summary-card.summary-metric strong,
+body[data-theme="terminal"] .report-section h3,
+body[data-theme="terminal"] .editor-header h2,
+body[data-theme="terminal"] .semantic-object-title {
+  color: var(--primary) !important;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace !important;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+body[data-theme="terminal"] .terminal-cursor {
+  display: inline-block;
+  width: 0.62em;
+  height: 0.92em;
+  margin-left: 5px;
+  background: var(--primary);
+  color: transparent;
+  vertical-align: -0.08em;
+  animation: terminalBlink 1s steps(1, end) infinite;
+}
+
+body[data-theme="terminal"] .editor-header h2::after {
+  content: "█";
+  display: inline-block;
+  margin-left: 5px;
+  color: var(--primary);
+  animation: terminalBlink 1s steps(1, end) infinite;
+}
+
+body[data-theme="terminal"] .ncw-header h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+body[data-theme="terminal"] .ncw-header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+body[data-theme="terminal"] .topbar-actions {
+  align-self: stretch;
+  justify-content: flex-end;
+}
+
+body[data-theme="terminal"] .ncw-tabbar,
+body[data-theme="terminal"] .result-tabs,
+body[data-theme="terminal"] .top-result-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+body[data-theme="terminal"] .tab-button,
+body[data-theme="terminal"] .result-tab {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+body[data-theme="terminal"] .tab-button.active,
+body[data-theme="terminal"] .result-tab.active,
+body[data-theme="terminal"] .tab-button:hover,
+body[data-theme="terminal"] .result-tab:hover {
+  background: var(--primary) !important;
+  color: #0a0a0a !important;
+  text-shadow: none;
+}
+
+body[data-theme="terminal"] .app-main,
+body[data-theme="terminal"] .workspace {
+  gap: 8px;
+}
+
+body[data-theme="terminal"] .workspace {
+  grid-template-columns: minmax(260px, 312px) minmax(0, 1fr);
+}
+
+body[data-theme="terminal"] .control-panel,
+body[data-theme="terminal"] .profile-editor,
+body[data-theme="terminal"] .profile-library,
+body[data-theme="terminal"] .summary-empty-state,
+body[data-theme="terminal"] .summary-overview,
+body[data-theme="terminal"] .operator-dashboard,
+body[data-theme="terminal"] .summary-section,
+body[data-theme="terminal"] .summary-alert-panel,
+body[data-theme="terminal"] .summary-coverage-warning,
+body[data-theme="terminal"] .report-section,
+body[data-theme="terminal"] .report-graph-card,
+body[data-theme="terminal"] .coverage-diagnostics,
+body[data-theme="terminal"] .ncw-action-bar,
+body[data-theme="terminal"] .ncw-editor-card,
+body[data-theme="terminal"] .ncw-policy-panel,
+body[data-theme="terminal"] .ncw-relationship-panel,
+body[data-theme="terminal"] .ncw-manual-drawer,
+body[data-theme="terminal"] .ncw-object-match-table,
+body[data-theme="terminal"] .summary-card,
+body[data-theme="terminal"] .semantic-diff-object-block,
+body[data-theme="terminal"] .diff-card,
+body[data-theme="terminal"] .report-object-group,
+body[data-theme="terminal"] .app-panel {
+  border: 1px solid var(--line) !important;
+  background: var(--panel) !important;
+}
+
+body[data-theme="terminal"] .control-panel section,
+body[data-theme="terminal"] .profile-section,
+body[data-theme="terminal"] .summary-section,
+body[data-theme="terminal"] .report-section,
+body[data-theme="terminal"] .app-panel {
+  position: relative;
+}
+
+body[data-theme="terminal"] .app-section-header,
+body[data-theme="terminal"] .editor-header,
+body[data-theme="terminal"] .summary-section-head,
+body[data-theme="terminal"] .report-workspace-header,
+body[data-theme="terminal"] .report-graph-head,
+body[data-theme="terminal"] .semantic-diff-object-head {
+  min-height: 30px;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--line) !important;
+  background: var(--primary) !important;
+  color: #0a0a0a !important;
+  text-shadow: none;
+}
+
+body[data-theme="terminal"] .app-section-header h2,
+body[data-theme="terminal"] .editor-header h2,
+body[data-theme="terminal"] .summary-section-head h3,
+body[data-theme="terminal"] .report-workspace-header h3,
+body[data-theme="terminal"] .report-graph-head h3,
+body[data-theme="terminal"] .semantic-diff-object-title strong {
+  color: #0a0a0a !important;
+  text-shadow: none;
+}
+
+body[data-theme="terminal"] .app-section-header h2::before,
+body[data-theme="terminal"] .summary-section-head h3::before,
+body[data-theme="terminal"] .report-workspace-header h3::before,
+body[data-theme="terminal"] .report-graph-head h3::before {
+  content: "+--- ";
+}
+
+body[data-theme="terminal"] .app-section-header h2::after,
+body[data-theme="terminal"] .summary-section-head h3::after,
+body[data-theme="terminal"] .report-workspace-header h3::after,
+body[data-theme="terminal"] .report-graph-head h3::after {
+  content: " ---+";
+}
+
+body[data-theme="terminal"] .compare-area {
+  gap: 8px;
+}
+
+body[data-theme="terminal"] .compare-area .ncw-action-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  min-height: 40px;
+  padding: 4px;
+  border: 1px dashed var(--line) !important;
+  background: #050805 !important;
+}
+
+body[data-theme="terminal"] .compare-area .ncw-action-bar::before {
+  content: "root@ncw:/compare$";
+  align-self: center;
+  padding: 0 8px;
+  color: var(--warning);
+  font-size: 12px;
+}
+
+body[data-theme="terminal"] button,
+body[data-theme="terminal"] select,
+body[data-theme="terminal"] input,
+body[data-theme="terminal"] textarea {
+  border: 1px solid var(--line);
+  background: #050805;
+  color: var(--primary);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  text-shadow: 0 0 5px rgba(51, 255, 0, 0.34);
+}
+
+body[data-theme="terminal"] button,
+body[data-theme="terminal"] .app-button,
+body[data-theme="terminal"] .app-icon-button {
+  min-height: 32px;
+  padding: 4px 9px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+body[data-theme="terminal"] button::before,
+body[data-theme="terminal"] .app-button::before {
+  content: "[ ";
+}
+
+body[data-theme="terminal"] button::after,
+body[data-theme="terminal"] .app-button::after {
+  content: " ]";
+}
+
+body[data-theme="terminal"] button:hover,
+body[data-theme="terminal"] button:focus-visible,
+body[data-theme="terminal"] select:focus,
+body[data-theme="terminal"] input:focus,
+body[data-theme="terminal"] textarea:focus {
+  outline: 0;
+  background: var(--primary) !important;
+  color: #0a0a0a !important;
+  text-shadow: none !important;
+}
+
+body[data-theme="terminal"] .editor-grid,
+body[data-theme="terminal"] .editor-grid.diff-connectors-active {
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  gap: 0;
+}
+
+body[data-theme="terminal"] .diff-gutter {
+  min-width: 48px;
+  border-left: 1px dashed var(--line);
+  border-right: 1px dashed var(--line);
+  background: #050805 !important;
+}
+
+body[data-theme="terminal"] .code-frame,
+body[data-theme="terminal"] .embedded-diff {
+  border: 1px solid var(--line) !important;
+  background: var(--code-bg) !important;
+}
+
+body[data-theme="terminal"] .diff-line,
+body[data-theme="terminal"] .semantic-diff-config-line {
+  min-height: 20px;
+  border-bottom: 1px dotted rgba(31, 82, 31, 0.45);
+}
+
+body[data-theme="terminal"] .diff-line-number,
+body[data-theme="terminal"] .semantic-diff-line-no {
+  background: #050805 !important;
+  color: var(--muted) !important;
+}
+
+body[data-theme="terminal"] .diff-line-text,
+body[data-theme="terminal"] .semantic-diff-config-line code {
+  color: var(--primary) !important;
+}
+
+body[data-theme="terminal"] .diff-line:hover,
+body[data-theme="terminal"] .semantic-diff-config-line:hover,
+body[data-theme="terminal"] .report-review-row:hover,
+body[data-theme="terminal"] .semantic-object-summary-row:hover,
+body[data-theme="terminal"] .semantic-object-block-wrapper.semantic-pair-hover {
+  background: rgba(51, 255, 0, 0.10) !important;
+}
+
+body[data-theme="terminal"] .diff-token-match,
+body[data-theme="terminal"] .semantic-diff-line-field {
+  border: 1px solid var(--warning) !important;
+  background: rgba(255, 176, 0, 0.12) !important;
+  color: var(--warning) !important;
+  text-shadow: 0 0 5px rgba(255, 176, 0, 0.34);
+}
+
+body[data-theme="terminal"] .summary-status-badges span,
+body[data-theme="terminal"] .summary-risk-badge,
+body[data-theme="terminal"] .summary-context-row span,
+body[data-theme="terminal"] .app-badge,
+body[data-theme="terminal"] .semantic-status-badge,
+body[data-theme="terminal"] .semantic-diff-badge,
+body[data-theme="terminal"] .semantic-diff-object-type,
+body[data-theme="terminal"] .object-scope-chip,
+body[data-theme="terminal"] .summary-issue-chip,
+body[data-theme="terminal"] .filter-chip,
+body[data-theme="terminal"] .graph-chip {
+  border: 1px solid var(--line) !important;
+  background: #050805 !important;
+  color: var(--primary) !important;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+body[data-theme="terminal"] .summary-risk-badge::before,
+body[data-theme="terminal"] .semantic-status-badge::before,
+body[data-theme="terminal"] .app-badge::before {
+  content: "[";
+}
+
+body[data-theme="terminal"] .summary-risk-badge::after,
+body[data-theme="terminal"] .semantic-status-badge::after,
+body[data-theme="terminal"] .app-badge::after {
+  content: "]";
+}
+
+body[data-theme="terminal"] .summary-metric-grid,
+body[data-theme="terminal"] .operator-metric-grid,
+body[data-theme="terminal"] .coverage-diagnostic-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
+}
+
+body[data-theme="terminal"] .summary-card.summary-metric,
+body[data-theme="terminal"] .coverage-diagnostic-grid div,
+body[data-theme="terminal"] .semantic-field,
+body[data-theme="terminal"] .semantic-candidate-option,
+body[data-theme="terminal"] .report-review-row,
+body[data-theme="terminal"] .field-overlap-type-row,
+body[data-theme="terminal"] .semantic-object-summary-row {
+  border: 1px solid var(--line) !important;
+  background: #050805 !important;
+}
+
+body[data-theme="terminal"] .summary-card.summary-metric strong,
+body[data-theme="terminal"] .coverage-diagnostic-grid strong {
+  color: var(--primary) !important;
+  font: 700 20px/1.1 "JetBrains Mono", "Fira Code", Consolas, monospace !important;
+}
+
+body[data-theme="terminal"] .summary-card.summary-metric small::before {
+  content: "[";
+  color: var(--muted);
+}
+
+body[data-theme="terminal"] .summary-card.summary-metric small::after {
+  content: "]";
+  color: var(--muted);
+}
+
+body[data-theme="terminal"] .summary-metric-warning,
+body[data-theme="terminal"] .summary-risk-warning,
+body[data-theme="terminal"] .summary-risk-attention,
+body[data-theme="terminal"] .app-badge--warning {
+  border-color: var(--warning) !important;
+  color: var(--warning) !important;
+}
+
+body[data-theme="terminal"] .summary-metric-removed,
+body[data-theme="terminal"] .summary-risk-danger,
+body[data-theme="terminal"] .summary-risk-critical,
+body[data-theme="terminal"] .app-badge--danger {
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+body[data-theme="terminal"] .summary-metric-ok,
+body[data-theme="terminal"] .app-badge--success {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+body[data-theme="terminal"] .report-review-table,
+body[data-theme="terminal"] .field-overlap-type-table {
+  border: 1px solid var(--line);
+  background: #050805;
+}
+
+body[data-theme="terminal"] .report-graph,
+body[data-theme="terminal"] .report-graph svg {
+  background: #050805 !important;
+}
+
+body[data-theme="terminal"] .report-graph text,
+body[data-theme="terminal"] .graph-node-label,
+body[data-theme="terminal"] .graph-node-score {
+  fill: var(--primary) !important;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace !important;
+  text-shadow: none;
+}
+
+body[data-theme="terminal"] .diff-object-flow,
+body[data-theme="terminal"] .diff-object-flow-spine,
+body[data-theme="terminal"] .diff-object-link,
+body[data-theme="terminal"] .line-mapping-connector {
+  filter: none !important;
+  stroke-dasharray: 6 4;
+}
+
+body[data-theme="terminal"] .diff-object-flow-glow,
+body[data-theme="terminal"] .diff-object-link-glow,
+body[data-theme="terminal"] .line-mapping-shine {
+  display: none !important;
+}
+
+body[data-theme="terminal"] ::selection {
+  background: var(--primary);
+  color: #0a0a0a;
+  text-shadow: none;
+}
+
+@keyframes terminalBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 
 @container (max-width: 980px) {

@@ -14,13 +14,16 @@ export default function HeaderBar() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.16, ease: "easeOut" }}
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 text-xs font-medium text-cyan-700">
+      <div className="min-w-0 ncw-terminal-brand">
+        <pre className="terminal-ascii" aria-hidden="true">{String.raw`+-- NCW --+
+|  CFG  |
++-------+`}</pre>
+        <div className="flex items-center gap-2 text-xs font-medium text-cyan-700 ncw-terminal-kicker">
           <Database className="h-4 w-4" />
-          벤더 간 의미 기반 검증
+          [OK] SEMANTIC CONFIG VERIFY
         </div>
-        <h1>Network Config Workbench</h1>
-        <p>파서, 객체, 정책, 관계를 기준으로 네트워크 설정 마이그레이션을 검증.</p>
+        <h1>NETWORK CONFIG WORKBENCH<span className="terminal-cursor" aria-hidden="true">_</span></h1>
+        <p>user@ncw:~$ compare --semantic --policy --coverage</p>
       </div>
       <AppToolbar className="topbar-actions ncw-header-actions">
         <AppSelect id="historySelect" title="저장된 비교 이력" />

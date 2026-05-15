@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "test": "node --test tests/*.test.js",
+    "validate:compare": "node scripts/validateCompareFixtures.js",
+    "validate:compare:stress": "node scripts/validateCompareFixtures.js --iterations 1000 --scope bgp",
     "build": "vite build",
     "preview": "vite preview"
   },

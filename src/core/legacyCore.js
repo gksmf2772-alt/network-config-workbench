@@ -15,6 +15,10 @@ import {
 } from "./semanticTheme.js";
 
 import {
+  buildSummaryDashboardData,
+} from "./summaryAnalytics.js";
+
+import {
   normalizeConfig,
   matchNormalizedObjects,
   createComparisonPlan,
@@ -219,6 +223,9 @@ const state = {
   activeSemanticPairKey: "",
   activeLineRelationKey: "",
   lastSemanticSummary: null,
+  lastSemanticPlan: [],
+  lastManualMap: {},
+  lastDashboardData: null,
   lastSessionName: "",
   semanticPairKeyboardBound: false,
   lineRelationDelegationBound: false,
@@ -3736,6 +3743,7 @@ function runCompare() {
       ? `차이 ${report.items.length}건`
       : "차이 없음";
     selectors.lastComparedAt.textContent = `마지막 비교: ${formatDate(Date.now())}`;
+    renderSummaryCards(report, state.lastSemanticSummary);
   } catch (error) {
     handleCompareError(error);
   }
@@ -3968,6 +3976,8 @@ function renderSemanticPreview() {
     includeManualCandidates: true,
   });
   const { oldVendor, newVendor, oldResult, newResult, plan, manualMap } = runtime;
+  state.lastSemanticPlan = plan;
+  state.lastManualMap = manualMap || {};
   state.lastSemanticSummary = buildSemanticSummaryMetrics({
     plan,
     oldObjects: oldResult.objects,
@@ -4006,12 +4016,15 @@ function renderSemanticPreview() {
 
   container.innerHTML = `
     <div class="semantic-preview-header">
-      <strong>Semantic Preview</strong>
+      <strong>의미 기반 비교</strong>
       <span>${escapeHtml(vendorLabel(oldVendor))} → ${escapeHtml(vendorLabel(newVendor))}</span>
     </div>
     ${html}
   `;
-  if (state.lastReport) renderSummaryCards(state.lastReport, state.lastSemanticSummary);
+  if (state.lastReport) {
+    renderSummaryCards(state.lastReport, state.lastSemanticSummary);
+    renderOverviewReport(state.lastReport);
+  }
 
   container.querySelectorAll(".semantic-candidate-select-btn").forEach((button) => {
     button.addEventListener("click", () => {
@@ -4183,127 +4196,295 @@ function buildSemanticSummaryMetrics({
   return summary;
 }
 
-function buildLineSummaryMetrics(report = {}) {
-  const rows = Array.isArray(report.diffRows) ? report.diffRows : [];
-  const metrics = {
-    total: rows.length,
-    changed: 0,
-    added: 0,
-    removed: 0,
-    unchanged: 0,
-    suppressed: 0,
-  };
-
-  rows.forEach((row) => {
-    const oldState = row.oldState || "";
-    const newState = row.newState || "";
-    if (oldState === "equal" && newState === "equal") metrics.unchanged += 1;
-    else if (oldState === "missing" || (row.oldRow && !row.newRow)) metrics.removed += 1;
-    else if (newState === "added" || (!row.oldRow && row.newRow)) metrics.added += 1;
-    else if (oldState !== "placeholder" || newState !== "placeholder") metrics.changed += 1;
-    if (row.semanticCovered || /ignored|suppressed|noop/i.test(String(row.semanticReason || ""))) {
-      metrics.suppressed += 1;
-    }
+function buildCurrentDashboardData(report, semantic = state.lastSemanticSummary) {
+  const vendorPair = getCurrentVendorPresetForSemanticPreview();
+  const support = getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor);
+  const dashboard = buildSummaryDashboardData({
+    report,
+    plan: state.lastSemanticPlan || [],
+    semanticSummary: semantic || {},
+    manualMap: state.lastManualMap || state.profileDraft?.manualMap || {},
+    vendorPair,
+    support,
+    profileName: state.profileDraft?.name || "프로파일 없음",
+    sessionName: state.lastSessionName || "현재 입력",
+    comparedAt: selectors.lastComparedAt?.textContent?.replace(/^마지막 비교:\s*/, "") || "",
   });
-
-  return metrics;
+  state.lastDashboardData = dashboard;
+  return dashboard;
 }
 
-function summaryRiskLevel(report = {}, semantic = {}) {
-  if (report.summary?.required || semantic.policyViolations) return "danger";
-  if (report.summary?.missing || report.summary?.added || semantic.oldOnly || semantic.newOnly) return "warning";
-  if (semantic.ambiguous || semantic.lowConfidence) return "attention";
-  if (report.summary?.changed || semantic.relationshipDiffs) return "changed";
-  return "ok";
-}
-
-function renderMetricCard({ label, value, detail = "", state = "" }) {
+function renderMetricCard({ label, value, detail = "", state = "", action = "", help = "" }) {
+  const tag = action ? "button" : "div";
+  const attrs = action
+    ? ` type="button" data-summary-filter="${escapeHtml(action)}" title="${escapeHtml(help || detail || label)}"`
+    : "";
   return `
-    <div class="summary-card summary-metric ${state ? `summary-metric-${escapeHtml(state)}` : ""}">
+    <${tag}${attrs} class="summary-card summary-metric ${action ? "summary-metric-action" : ""} ${state ? `summary-metric-${escapeHtml(state)}` : ""}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
       ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
-    </div>
+    </${tag}>
   `;
 }
 
 function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
   if (!selectors.summaryCards || !report) return;
   const semanticSummary = semantic || {};
-  const lineSummary = buildLineSummaryMetrics(report);
-  const vendorPair = getCurrentVendorPresetForSemanticPreview();
-  const support = getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor);
-  const risk = summaryRiskLevel(report, semanticSummary);
-  const statusLabel = {
-    ok: "안정",
-    changed: "변경 있음",
-    attention: "검토 필요",
-    warning: "위험",
-    danger: "필수 조치",
-  }[risk] || "검토";
-  const alerts = [
-    semanticSummary.ambiguous ? `불명확 매핑 ${semanticSummary.ambiguous}건` : "",
-    semanticSummary.lowConfidence ? `낮은 신뢰도 ${semanticSummary.lowConfidence}건` : "",
-    semanticSummary.relationshipDiffs ? `관계 차이 ${semanticSummary.relationshipDiffs}건` : "",
-    support.state === VENDOR_SUPPORT_STATE.PARTIAL ? "부분 지원 preset" : "",
-  ].filter(Boolean);
+  const dashboard = buildCurrentDashboardData(report, semanticSummary);
+  const { lineSummary, counts, fieldAnalysis, review, severity, context } = dashboard;
+  const risk = severity.level || "ok";
+  const support = context.support || {};
+  const coverage = Number(semanticSummary.coveragePercent ?? 0);
+  const alerts = buildOperatorAlerts({ dashboard, semanticSummary, report });
 
   selectors.summaryCards.innerHTML = `
-    <section class="summary-overview summary-risk-${escapeHtml(risk)}">
-      <div class="summary-overview-main">
-        <span class="summary-kicker">Overall Status</span>
-        <strong>${escapeHtml(statusLabel)}</strong>
-        <p>${escapeHtml(alerts.length ? alerts.join(" · ") : "차이와 semantic 위험 신호가 낮습니다.")}</p>
+    <section class="operator-dashboard summary-risk-${escapeHtml(risk)}">
+      <div class="summary-status-header">
+        <div class="summary-status-main">
+          <span class="summary-kicker">비교 요약</span>
+          <strong>${escapeHtml(severity.label)}</strong>
+          <p>${escapeHtml(severity.reason)}</p>
+        </div>
+        <div class="summary-status-badges">
+          <span class="summary-risk-badge">${escapeHtml(severity.label)}</span>
+          <span>${escapeHtml(vendorLabel(context.oldVendor))} → ${escapeHtml(vendorLabel(context.newVendor))}</span>
+          <span>${escapeHtml(support.label || "지원 상태 확인")}</span>
+        </div>
       </div>
       <div class="summary-context-row">
-        <span>${escapeHtml(vendorLabel(vendorPair.oldVendor))} → ${escapeHtml(vendorLabel(vendorPair.newVendor))}</span>
-        <span>${escapeHtml(support.label)}</span>
-        <span>${escapeHtml(state.profileDraft?.name || "프로파일 없음")}</span>
-        <span>${escapeHtml(state.lastSessionName || "현재 입력")}</span>
+        <span>프로파일: ${escapeHtml(context.profileName || "프로파일 없음")}</span>
+        <span>세션: ${escapeHtml(context.sessionName || "현재 입력")}</span>
+        <span>비교 시각: ${escapeHtml(context.comparedAt || "방금 실행")}</span>
+        <span>파싱 객체: ${escapeHtml(context.parsedObjectCount || 0)}개</span>
         ${state.compareDirty ? "<span>비교 후 변경됨</span>" : ""}
       </div>
-    </section>
-
-    <section class="summary-section">
-      <div class="summary-section-head">
-        <h3>Line Diff</h3>
-        <button type="button" data-summary-action="issues">차이 목록</button>
-      </div>
-      <div class="summary-metric-grid">
-        ${renderMetricCard({ label: "전체", value: lineSummary.total, detail: "렌더링된 diff row" })}
-        ${renderMetricCard({ label: "변경", value: lineSummary.changed, state: "changed" })}
-        ${renderMetricCard({ label: "추가", value: lineSummary.added, state: "added" })}
-        ${renderMetricCard({ label: "삭제", value: lineSummary.removed, state: "removed" })}
-        ${renderMetricCard({ label: "동일", value: lineSummary.unchanged, state: "ok" })}
-        ${renderMetricCard({ label: "suppressed", value: lineSummary.suppressed, detail: "semantic/noop covered" })}
-      </div>
-    </section>
-
-    <section class="summary-section">
-      <div class="summary-section-head">
-        <h3>Semantic Match</h3>
-        <button type="button" data-summary-action="semantic">Semantic 상세</button>
-      </div>
-      <div class="summary-metric-grid">
-        ${renderMetricCard({ label: "match 품질", value: `${semanticSummary.matchPercent ?? 0}%`, detail: `평균 score ${semanticSummary.averageScore ?? 0}` })}
-        ${renderMetricCard({ label: "matched", value: semanticSummary.matched ?? 0, state: "ok" })}
-        ${renderMetricCard({ label: "old unmatched", value: semanticSummary.oldOnly ?? 0, state: "removed" })}
-        ${renderMetricCard({ label: "new unmatched", value: semanticSummary.newOnly ?? 0, state: "added" })}
-        ${renderMetricCard({ label: "ambiguous", value: semanticSummary.ambiguous ?? 0, state: "warning" })}
-        ${renderMetricCard({ label: "manual", value: semanticSummary.manual ?? 0 })}
-        ${renderMetricCard({ label: "relationship", value: semanticSummary.relationshipDiffs ?? 0, state: "changed" })}
-        ${renderMetricCard({ label: "line coverage", value: `${semanticSummary.coveragePercent ?? 0}%`, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0}` })}
+      <div class="operator-metric-grid">
+        ${renderMetricCard({ label: "라인 변경", value: lineSummary.changed, detail: `추가 ${lineSummary.added} / 삭제 ${lineSummary.removed}`, state: "changed", action: "line-diff", help: "변경된 라인 그룹으로 이동" })}
+        ${renderMetricCard({ label: "의미 일치도", value: `${semanticSummary.matchPercent ?? 0}%`, detail: `평균 일치도 ${semanticSummary.averageScore ?? 0}`, state: (semanticSummary.matchPercent ?? 0) >= 80 ? "ok" : "warning", action: "field-overlap" })}
+        ${renderMetricCard({ label: "연결된 객체", value: counts.matched, detail: `전체 ${semanticSummary.totalObjects ?? 0}개`, state: "ok", action: "matched" })}
+        ${renderMetricCard({ label: "기존 설정에서만 있음", value: counts.oldOnly, detail: "삭제/누락 가능성", state: counts.oldOnly ? "removed" : "ok", action: "unmatched-old" })}
+        ${renderMetricCard({ label: "신규 설정에서만 있음", value: counts.newOnly, detail: "신규 추가 가능성", state: counts.newOnly ? "added" : "ok", action: "unmatched-new" })}
+        ${renderMetricCard({ label: "확인 필요 후보", value: counts.ambiguous, detail: "매핑 후보 여러 개", state: counts.ambiguous ? "warning" : "ok", action: "ambiguous" })}
+        ${renderMetricCard({ label: "낮은 신뢰도", value: counts.lowConfidence, detail: "수동 검토 권장", state: counts.lowConfidence ? "warning" : "ok", action: "low-confidence" })}
+        ${renderMetricCard({ label: "분석된 라인 비율", value: `${coverage}%`, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0} 라인`, state: coverage >= 70 ? "ok" : "warning", action: "coverage" })}
+        ${renderMetricCard({ label: "숨김 처리 라인", value: semanticSummary.noopSuppressed ?? lineSummary.suppressed, detail: "의미상 동일/구조 라인", state: "changed", action: "suppressed" })}
+        ${renderMetricCard({ label: "직접 연결", value: counts.manual, detail: "사용자 저장 매핑", state: counts.manual ? "changed" : "ok", action: "manual" })}
       </div>
     </section>
 
     ${alerts.length ? `
-      <section class="summary-alert-panel summary-risk-${escapeHtml(risk)}">
-        <strong>검토 포인트</strong>
+      <section class="summary-alert-panel summary-risk-${escapeHtml(risk)}" data-review-panel="critical">
+        <strong>검토 우선순위</strong>
         <ul>${alerts.map((alert) => `<li>${escapeHtml(alert)}</li>`).join("")}</ul>
       </section>
     ` : ""}
+
+    ${dashboard.lowCoverage ? renderCoverageWarning(semanticSummary, support) : ""}
+
+    <section class="summary-workspace-grid">
+      <div class="summary-workspace-main">
+        <section class="summary-section" data-review-panel="field-overlap">
+          <div class="summary-section-head">
+            <h3>공통 필드 분석</h3>
+            <button type="button" data-summary-action="overview">통합 리포트</button>
+          </div>
+          ${renderFieldOverlapSummary(fieldAnalysis)}
+        </section>
+
+        <section class="summary-section">
+          <div class="summary-section-head">
+            <h3>즉시 검토 항목</h3>
+            <button type="button" data-summary-action="semantic">의미 비교 보기</button>
+          </div>
+          <div class="summary-review-grid">
+            ${renderReviewPanel("unmatched-old", "기존 설정에서만 있음", review.unmatchedOld, "removed")}
+            ${renderReviewPanel("unmatched-new", "신규 설정에서만 있음", review.unmatchedNew, "added")}
+            ${renderReviewPanel("ambiguous", "매핑 후보 여러 개", review.ambiguous, "warning")}
+            ${renderReviewPanel("low-confidence", "낮은 신뢰도 객체", review.lowConfidence, "warning")}
+            ${renderReviewPanel("abnormal", "비정상/검토 필요 값", review.abnormal, "danger")}
+            ${renderReviewPanel("relationship", "연결/참조 관계 변경", review.relationshipChanges, "changed")}
+          </div>
+        </section>
+      </div>
+
+      <aside class="summary-workspace-side">
+        <section class="summary-section">
+          <div class="summary-section-head">
+            <h3>변경 미리보기</h3>
+            <button type="button" data-summary-action="objects">객체 목록</button>
+          </div>
+          ${renderTopTypePreview("변경 많은 객체 타입", dashboard.topChangedTypes)}
+          ${renderTopTypePreview("미연결 객체 타입", dashboard.topUnmatchedTypes)}
+          ${renderLowOverlapPreview(fieldAnalysis.pairs)}
+        </section>
+
+        <section class="summary-section">
+          <div class="summary-section-head">
+            <h3>빠른 이동</h3>
+          </div>
+          <div class="summary-action-grid">
+            <button type="button" data-summary-filter="unmatched-old">기존만 보기</button>
+            <button type="button" data-summary-filter="unmatched-new">신규만 보기</button>
+            <button type="button" data-summary-filter="ambiguous">후보 확인</button>
+            <button type="button" data-summary-filter="low-confidence">낮은 신뢰도</button>
+            <button type="button" data-summary-action="overview">통합 리포트</button>
+            <button type="button" data-summary-action="issues">라인 차이</button>
+          </div>
+        </section>
+      </aside>
+    </section>
   `;
   bindSummaryActions();
+}
+
+function buildOperatorAlerts({ dashboard, semanticSummary, report }) {
+  const { review, counts, context } = dashboard;
+  return [
+    counts.oldOnly ? `기존 설정에서만 있는 객체 ${counts.oldOnly}개` : "",
+    counts.newOnly ? `신규 설정에서만 있는 객체 ${counts.newOnly}개` : "",
+    counts.ambiguous ? `매핑 후보 여러 개 ${counts.ambiguous}개` : "",
+    counts.lowConfidence ? `낮은 신뢰도 객체 ${counts.lowConfidence}개` : "",
+    review.relationshipChanges.length ? `연결/참조 관계 변경 ${review.relationshipChanges.length}개` : "",
+    review.abnormal.length ? `비정상/검토 필요 값 ${review.abnormal.length}개` : "",
+    Number(semanticSummary.coveragePercent || 0) < 60 ? `분석된 라인 비율 ${semanticSummary.coveragePercent || 0}%` : "",
+    report.summary?.required ? `필수 규칙 위반 ${report.summary.required}건` : "",
+    context.support?.state === VENDOR_SUPPORT_STATE.PARTIAL ? "부분 지원 벤더 포함" : "",
+  ].filter(Boolean);
+}
+
+function renderCoverageWarning(semanticSummary = {}, support = {}) {
+  return `
+    <section class="summary-coverage-warning" data-review-panel="coverage">
+      <strong>분석된 라인 비율이 낮음</strong>
+      <p>의미 기반 분석이 인식한 라인이 ${escapeHtml(semanticSummary.coveragePercent ?? 0)}%입니다. 파서 미지원 구문, 구조 라인, 의미상 동일하여 숨김 처리된 라인이 섞여 있을 수 있습니다.</p>
+      <div class="summary-context-row">
+        <span>분석 ${escapeHtml(semanticSummary.lineCovered ?? 0)} / 전체 ${escapeHtml(semanticSummary.lineTotal ?? 0)}</span>
+        <span>숨김 처리 ${escapeHtml(semanticSummary.noopSuppressed ?? 0)}</span>
+        <span>${escapeHtml(support.label || "지원 상태 확인")}</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderFieldOverlapSummary(fieldAnalysis = {}) {
+  const aggregate = fieldAnalysis.aggregate || {};
+  const rows = fieldAnalysis.aggregateByType || [];
+  return `
+    <div class="field-overlap-hero">
+      <div>
+        <span>전체 공통 필드</span>
+        <strong>${escapeHtml(aggregate.overlapPercent ?? 0)}%</strong>
+      </div>
+      <div class="field-overlap-bar" aria-label="공통 필드 비율 ${escapeHtml(aggregate.overlapPercent ?? 0)}%">
+        <span style="width:${Math.max(0, Math.min(100, Number(aggregate.overlapPercent || 0)))}%"></span>
+      </div>
+      <small>같음 ${escapeHtml(aggregate.sameFields || 0)} · 다름 ${escapeHtml(aggregate.differentFields || 0)} · 기존 누락 ${escapeHtml(aggregate.missingOldFields || 0)} · 신규 누락 ${escapeHtml(aggregate.missingNewFields || 0)}</small>
+    </div>
+    <div class="summary-table field-overlap-table">
+      <div class="summary-table-head">객체 타입</div>
+      <div class="summary-table-head">연결</div>
+      <div class="summary-table-head">같은 필드</div>
+      <div class="summary-table-head">다른 필드</div>
+      <div class="summary-table-head">누락</div>
+      <div class="summary-table-head">평균 공통률</div>
+      ${rows.length ? rows.slice(0, 10).map((row) => `
+        <button type="button" data-field-type-filter="${escapeHtml(row.objectType)}">${escapeHtml(row.objectType)}</button>
+        <div>${escapeHtml(row.matchedObjects)}</div>
+        <div>${escapeHtml(row.commonFields)}</div>
+        <div>${escapeHtml(row.changedFields)}</div>
+        <div>${escapeHtml(row.missingOldFields + row.missingNewFields)}</div>
+        <div><span class="mini-overlap"><span style="width:${Math.max(0, Math.min(100, Number(row.averageOverlap || 0)))}%"></span></span>${escapeHtml(row.averageOverlap)}%</div>
+      `).join("") : `<div class="summary-table-empty">연결된 객체의 필드 분석 결과가 없습니다.</div>`}
+    </div>
+    ${renderFieldHotList(fieldAnalysis.byField || [])}
+  `;
+}
+
+function renderFieldHotList(fields = []) {
+  if (!fields.length) return "";
+  return `
+    <div class="summary-field-hotlist">
+      ${fields.slice(0, 10).map((field) => `
+        <span title="다른 값 ${escapeHtml(field.different)} / 기존 누락 ${escapeHtml(field.missingOld)} / 신규 누락 ${escapeHtml(field.missingNew)}">
+          ${escapeHtml(field.field)} <strong>${escapeHtml(field.different + field.missingOld + field.missingNew)}</strong>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderReviewPanel(panelKey, title, items = [], tone = "") {
+  const open = items.length > 0 ? " open" : "";
+  return `
+    <details class="summary-review-panel summary-review-${escapeHtml(tone)}" data-review-panel="${escapeHtml(panelKey)}"${open}>
+      <summary>
+        <span>${escapeHtml(title)}</span>
+        <strong>${escapeHtml(items.length)}</strong>
+      </summary>
+      <div class="summary-review-list">
+        ${items.length ? items.slice(0, 8).map((item) => renderReviewItem(panelKey, item)).join("") : `<div class="small-note">검토 항목 없음</div>`}
+      </div>
+    </details>
+  `;
+}
+
+function renderReviewItem(panelKey, item = {}) {
+  const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
+  const fields = [
+    item.commonFields ? `공통 ${item.commonFields}` : "",
+    item.differentFields ? `다름 ${item.differentFields}` : "",
+    item.missingOldFields ? `기존 누락 ${item.missingOldFields}` : "",
+    item.missingNewFields ? `신규 누락 ${item.missingNewFields}` : "",
+  ].filter(Boolean).join(" · ");
+  return `
+    <article class="summary-review-item" data-summary-review-kind="${escapeHtml(panelKey)}">
+      <div>
+        <strong>${escapeHtml(item.objectType)} ${escapeHtml(item.label || "-")}</strong>
+        <span>${escapeHtml(item.reason || "")}</span>
+        ${fields ? `<small>${escapeHtml(fields)}</small>` : ""}
+        ${item.score ? `<small>일치도 ${escapeHtml(item.score)}%</small>` : ""}
+        ${renderCandidatePreview(item.candidates)}
+      </div>
+      <button type="button" data-object-jump="${escapeHtml(jumpKey)}">이동</button>
+    </article>
+  `;
+}
+
+function renderCandidatePreview(candidates = []) {
+  if (!Array.isArray(candidates) || !candidates.length) return "";
+  return `
+    <div class="summary-candidate-list">
+      ${candidates.slice(0, 3).map((candidate) => `<span>${escapeHtml(candidate.key)} · ${escapeHtml(candidate.score)}%</span>`).join("")}
+    </div>
+  `;
+}
+
+function renderTopTypePreview(title, rows = []) {
+  return `
+    <div class="summary-side-block">
+      <strong>${escapeHtml(title)}</strong>
+      ${rows.length ? `<div class="summary-type-list">${rows.map((row) => `<button type="button" data-field-type-filter="${escapeHtml(row.type)}">${escapeHtml(row.type)} <span>${escapeHtml(row.count)}</span></button>`).join("")}</div>` : `<p class="small-note">표시할 항목 없음</p>`}
+    </div>
+  `;
+}
+
+function renderLowOverlapPreview(pairs = []) {
+  const rows = [...pairs]
+    .filter((pair) => pair.reviewNeeded)
+    .sort((left, right) => left.overlapPercent - right.overlapPercent)
+    .slice(0, 5);
+  return `
+    <div class="summary-side-block">
+      <strong>공통 필드 낮은 객체</strong>
+      ${rows.length ? rows.map((pair) => `
+        <button type="button" class="summary-low-overlap" data-object-jump="${escapeHtml(pair.oldKey || pair.newKey)}">
+          <span>${escapeHtml(pair.label)}</span>
+          <b>${escapeHtml(pair.overlapPercent)}%</b>
+        </button>
+      `).join("") : `<p class="small-note">낮은 공통률 객체 없음</p>`}
+    </div>
+  `;
 }
 
 function bindSummaryActions() {
@@ -4323,6 +4504,37 @@ function bindSummaryActions() {
       }
     });
   });
+  selectors.summaryCards?.querySelectorAll("[data-summary-filter]").forEach((button) => {
+    button.addEventListener("click", () => focusSummaryReviewPanel(button.dataset.summaryFilter));
+  });
+  selectors.summaryCards?.querySelectorAll("[data-object-jump]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      scrollToDiffObject(button.dataset.objectJump);
+    });
+  });
+  selectors.summaryCards?.querySelectorAll("[data-field-type-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
+      renderObjectNavigator();
+      setResultTab("objects");
+    });
+  });
+}
+
+function focusSummaryReviewPanel(panelKey = "") {
+  const target = selectors.summaryCards?.querySelector(`[data-review-panel="${cssEscape(panelKey)}"]`)
+    || selectors.summaryCards?.querySelector(`[data-summary-review-kind="${cssEscape(panelKey)}"]`);
+  if (target) {
+    target.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    target.classList.add("summary-panel-pulse");
+    window.setTimeout(() => target.classList.remove("summary-panel-pulse"), 900);
+    return;
+  }
+  if (panelKey === "line-diff") {
+    setResultTab("summary");
+    selectors.reportList?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }
 }
 
 function prefersReducedMotion() {
@@ -6954,7 +7166,7 @@ function renderSemanticObjectBlockHtml({
   const state = semanticObjectVisualState(item);
   const stateLabel = getSemanticDiffStatusLabel(item.status);
   const score = item.score ?? "-";
-  const reason = item.reason || "-";
+  const reason = semanticReasonLabel(item.reason || "-");
   const fieldCount = Object.keys(fields || {}).length;
   const sideLabel = side === "old" ? "기존" : "신규";
 
@@ -6968,13 +7180,13 @@ function renderSemanticObjectBlockHtml({
         <div class="semantic-diff-object-badges">
           <span class="semantic-diff-badge side">${escapeHtml(sideLabel)}</span>
           <span class="semantic-diff-badge">${escapeHtml(stateLabel)}</span>
-          <span class="semantic-diff-badge muted">점수 ${escapeHtml(score)}</span>
-          <span class="semantic-diff-badge muted">필드 ${escapeHtml(fieldCount)}</span>
+          <span class="semantic-diff-badge muted">일치도 ${escapeHtml(score)}</span>
+          <span class="semantic-diff-badge muted">설정 항목 ${escapeHtml(fieldCount)}</span>
         </div>
       </header>
       <div class="semantic-diff-object-meta">
         <span>${escapeHtml(side === "old" ? "기존" : "신규")}</span>
-        <span>방식 ${escapeHtml(reason)}</span>
+        <span>연결 방식 ${escapeHtml(reason)}</span>
       </div>
       <div class="semantic-diff-object-body">
         ${rawLines.length
@@ -7051,14 +7263,26 @@ function renderSemanticObjectConfigLine({
 
 function getSemanticDiffStatusLabel(status = "") {
   return ({
-    matched: "매칭",
+    matched: "연결됨",
     candidate: "후보",
-    "old-only": "기존만",
-    "new-only": "신규만",
-    ambiguous: "불명확",
+    "old-only": "기존만 있음",
+    "new-only": "신규만 있음",
+    ambiguous: "확인 필요",
     partial: "부분 일치",
     unknown: "알 수 없음",
   })[String(status || "unknown").toLowerCase()] || String(status || "알 수 없음").toUpperCase();
+}
+
+function semanticReasonLabel(reason = "") {
+  return ({
+    manual: "사용자가 직접 연결",
+    "manual-candidate": "직접 연결 후보",
+    exact: "정확히 일치",
+    identity: "객체 기준 일치",
+    "semantic-score": "의미 점수 기반",
+    "line-score": "라인 유사도 기반",
+    candidate: "후보",
+  })[String(reason || "").toLowerCase()] || reason;
 }
 
 function buildSemanticRelationMapByField(item = {}) {
@@ -10394,15 +10618,53 @@ function renderOverviewReport(report) {
   if (!selectors.overviewReport) return;
   const objects = [...(report.oldObjects || []), ...(report.newObjects || [])].filter((object) => object.type !== "global");
   const byType = groupBy(objects, (object) => object.type);
+  const dashboard = state.lastDashboardData || buildCurrentDashboardData(report);
+  const { fieldAnalysis, review, graph, severity, context, lineSummary } = dashboard;
   selectors.overviewReport.innerHTML = `
+    <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}">
+      <div>
+        <span class="summary-kicker">통합 리포트</span>
+        <h3>${escapeHtml(severity.label)}</h3>
+        <p>${escapeHtml(severity.reason)}</p>
+      </div>
+      <div class="summary-context-row">
+        <span>${escapeHtml(vendorLabel(context.oldVendor))} → ${escapeHtml(vendorLabel(context.newVendor))}</span>
+        <span>${escapeHtml(context.support?.label || "지원 상태 확인")}</span>
+        <span>${escapeHtml(context.profileName || "프로파일 없음")}</span>
+      </div>
+    </section>
     <section class="overview-section">
-      <h3>요약</h3>
+      <h3>운영 요약</h3>
       <div class="overview-grid overview-summary-grid">
         <div class="overview-card"><strong>${report.summary.total}</strong><span>전체 차이</span></div>
         <div class="overview-card"><strong>${report.summary.changed}</strong><span>변경 객체</span></div>
         <div class="overview-card"><strong>${report.summary.missing}</strong><span>누락</span></div>
         <div class="overview-card"><strong>${report.summary.added}</strong><span>추가</span></div>
+        <div class="overview-card"><strong>${escapeHtml(lineSummary.changed)}</strong><span>라인 변경</span></div>
+        <div class="overview-card"><strong>${escapeHtml(review.ambiguous.length)}</strong><span>확인 필요 후보</span></div>
       </div>
+    </section>
+    <section class="overview-section report-review-section">
+      <h3>검토 테이블</h3>
+      ${renderReportReviewTable(review)}
+    </section>
+    <section class="overview-section report-field-section">
+      <h3>공통 필드 분석</h3>
+      ${renderFieldOverlapSummary(fieldAnalysis)}
+    </section>
+    <section class="overview-section report-graph-section">
+      <div class="report-graph-head">
+        <div>
+          <h3>관계 그래프</h3>
+          <p>객체 연결, 직접 연결, 참조 관계를 2D로 표시합니다.</p>
+        </div>
+        <div class="report-graph-tools">
+          <input type="search" class="report-graph-search" placeholder="객체/필드 검색" aria-label="그래프 노드 검색" />
+          <button type="button" data-graph-fit>전체 보기</button>
+          <label><input type="checkbox" data-graph-labels checked /> 라벨</label>
+        </div>
+      </div>
+      ${renderRelationshipGraph(graph)}
     </section>
     <section class="overview-section">
       <h3>객체 수</h3>
@@ -10419,6 +10681,190 @@ function renderOverviewReport(report) {
       ${renderFieldDistributionSummary(objects)}
     </section>
   `;
+  bindReportGraphInteractions();
+}
+
+function renderReportReviewTable(review = {}) {
+  const rows = [
+    ...(review.unmatchedOld || []).map((item) => ({ ...item, group: "기존 설정에서만 있음" })),
+    ...(review.unmatchedNew || []).map((item) => ({ ...item, group: "신규 설정에서만 있음" })),
+    ...(review.ambiguous || []).map((item) => ({ ...item, group: "매핑 후보 여러 개" })),
+    ...(review.lowConfidence || []).map((item) => ({ ...item, group: "낮은 신뢰도" })),
+    ...(review.abnormal || []).map((item) => ({ ...item, group: "검토 필요 값" })),
+    ...(review.relationshipChanges || []).map((item) => ({ ...item, group: "연결/참조 관계" })),
+  ].slice(0, 40);
+
+  return `
+    <div class="report-review-table">
+      <div class="summary-table-head">구분</div>
+      <div class="summary-table-head">객체</div>
+      <div class="summary-table-head">사유</div>
+      <div class="summary-table-head">필드</div>
+      <div class="summary-table-head">동작</div>
+      ${rows.length ? rows.map((item) => {
+        const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
+        const fieldText = [
+          item.commonFields ? `공통 ${item.commonFields}` : "",
+          item.differentFields ? `다름 ${item.differentFields}` : "",
+          item.missingOldFields ? `기존 누락 ${item.missingOldFields}` : "",
+          item.missingNewFields ? `신규 누락 ${item.missingNewFields}` : "",
+        ].filter(Boolean).join(" · ") || "-";
+        return `
+          <div>${escapeHtml(item.group)}</div>
+          <div><strong>${escapeHtml(item.objectType)}</strong> ${escapeHtml(item.label || "-")}</div>
+          <div>${escapeHtml(item.reason || "-")}${item.score ? ` · 일치도 ${escapeHtml(item.score)}%` : ""}</div>
+          <div>${escapeHtml(fieldText)}</div>
+          <div><button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button></div>
+        `;
+      }).join("") : `<div class="summary-table-empty">검토 항목 없음</div>`}
+    </div>
+  `;
+}
+
+function renderRelationshipGraph(graph = {}) {
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+  const edges = Array.isArray(graph.edges) ? graph.edges : [];
+  if (!nodes.length) return `<div class="report-graph-empty">그래프로 표시할 의미 기반 객체가 없습니다.</div>`;
+
+  const oldNodes = nodes.filter((node) => node.side === "old");
+  const newNodes = nodes.filter((node) => node.side === "new");
+  const relationNodes = nodes.filter((node) => node.side === "relation");
+  const height = Math.max(320, (Math.max(oldNodes.length, newNodes.length, relationNodes.length) + 1) * 58);
+  const positions = new Map();
+  oldNodes.forEach((node, index) => positions.set(node.id, { x: 170, y: 54 + index * 58 }));
+  newNodes.forEach((node, index) => positions.set(node.id, { x: 660, y: 54 + index * 58 }));
+  relationNodes.forEach((node, index) => positions.set(node.id, { x: 880, y: 54 + index * 58 }));
+
+  return `
+    <div class="report-graph" data-graph-root>
+      <svg viewBox="0 0 1040 ${height}" role="img" aria-label="설정 객체 관계 그래프">
+        <defs>
+          <marker id="graph-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"></path>
+          </marker>
+        </defs>
+        <g class="report-graph-lanes">
+          <text x="170" y="24">기존 설정</text>
+          <text x="660" y="24">신규 설정</text>
+          <text x="880" y="24">참조 관계</text>
+        </g>
+        <g class="report-graph-edges">
+          ${edges.map((edge) => {
+            const source = positions.get(edge.source);
+            const target = positions.get(edge.target);
+            if (!source || !target) return "";
+            const mid = Math.max(source.x + 90, Math.min(target.x - 90, (source.x + target.x) / 2));
+            return `
+              <path class="graph-edge graph-edge-${escapeHtml(cssSafeClassName(edge.type || "edge"))} ${edge.changed ? "graph-edge-changed" : ""}"
+                data-graph-edge="${escapeHtml(edge.id)}"
+                data-graph-source="${escapeHtml(edge.source)}"
+                data-graph-target="${escapeHtml(edge.target)}"
+                d="M ${source.x + 72} ${source.y} C ${mid} ${source.y}, ${mid} ${target.y}, ${target.x - 72} ${target.y}">
+                <title>${escapeHtml(edge.label || "연결")} · ${escapeHtml(edge.confidence || 0)}%</title>
+              </path>
+            `;
+          }).join("")}
+        </g>
+        <g class="report-graph-nodes">
+          ${nodes.map((node) => {
+            const point = positions.get(node.id);
+            if (!point) return "";
+            return `
+              <g class="graph-node graph-node-${escapeHtml(cssSafeClassName(node.side || "node"))} graph-node-status-${escapeHtml(cssSafeClassName(node.status || "unknown"))}"
+                data-graph-node="${escapeHtml(node.id)}"
+                data-object-jump="${escapeHtml(node.virtual ? "" : node.key || "")}"
+                data-graph-search="${escapeHtml([node.objectType, node.label, node.key, node.status].join(" ").toLowerCase())}"
+                transform="translate(${point.x}, ${point.y})">
+                <rect x="-72" y="-22" width="144" height="44" rx="8"></rect>
+                <text class="graph-node-type" x="-62" y="-5">${escapeHtml(node.objectType || "object")}</text>
+                <text class="graph-node-label" x="-62" y="13">${escapeHtml(truncateText(node.label || node.key || "-", 22))}</text>
+                ${node.confidence ? `<text class="graph-node-score" x="60" y="-6">${escapeHtml(node.confidence)}%</text>` : ""}
+                <title>${escapeHtml(node.objectType || "object")} ${escapeHtml(node.label || "-")} · ${escapeHtml(node.status || "")}</title>
+              </g>
+            `;
+          }).join("")}
+        </g>
+      </svg>
+      ${graph.truncated ? `<p class="small-note">그래프는 성능을 위해 ${escapeHtml(nodes.length)}개 노드까지만 표시했습니다.</p>` : ""}
+    </div>
+  `;
+}
+
+function bindReportGraphInteractions() {
+  if (!selectors.overviewReport) return;
+  selectors.overviewReport.querySelectorAll("[data-object-jump]").forEach((item) => {
+    item.addEventListener("click", () => {
+      const objectKey = item.dataset.objectJump;
+      if (objectKey) scrollToDiffObject(objectKey);
+    });
+  });
+  selectors.overviewReport.querySelectorAll("[data-field-type-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
+      renderObjectNavigator();
+      setResultTab("objects");
+    });
+  });
+
+  const graphRoot = selectors.overviewReport.querySelector("[data-graph-root]");
+  if (graphRoot) {
+    graphRoot.addEventListener("mouseover", (event) => {
+      const node = event.target.closest?.("[data-graph-node]");
+      if (node) setGraphFocus(graphRoot, node.dataset.graphNode);
+    });
+    graphRoot.addEventListener("mouseout", (event) => {
+      if (!event.relatedTarget || !graphRoot.contains(event.relatedTarget)) setGraphFocus(graphRoot, "");
+    });
+    graphRoot.addEventListener("click", (event) => {
+      const node = event.target.closest?.("[data-object-jump]");
+      const objectKey = node?.dataset.objectJump;
+      if (objectKey) scrollToDiffObject(objectKey);
+    });
+  }
+
+  const search = selectors.overviewReport.querySelector(".report-graph-search");
+  search?.addEventListener("input", () => filterReportGraph(search.value));
+  selectors.overviewReport.querySelector("[data-graph-labels]")?.addEventListener("change", (event) => {
+    graphRoot?.classList.toggle("graph-hide-labels", !event.target.checked);
+  });
+  selectors.overviewReport.querySelector("[data-graph-fit]")?.addEventListener("click", () => {
+    graphRoot?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  });
+}
+
+function setGraphFocus(graphRoot, nodeId = "") {
+  graphRoot.querySelectorAll(".graph-node, .graph-edge").forEach((item) => item.classList.remove("graph-focus", "graph-dim"));
+  if (!nodeId) return;
+  const connected = new Set([nodeId]);
+  graphRoot.querySelectorAll(`[data-graph-source="${cssEscape(nodeId)}"], [data-graph-target="${cssEscape(nodeId)}"]`).forEach((edge) => {
+    edge.classList.add("graph-focus");
+    connected.add(edge.dataset.graphSource);
+    connected.add(edge.dataset.graphTarget);
+  });
+  graphRoot.querySelectorAll("[data-graph-node]").forEach((node) => {
+    if (connected.has(node.dataset.graphNode)) node.classList.add("graph-focus");
+    else node.classList.add("graph-dim");
+  });
+}
+
+function filterReportGraph(query = "") {
+  const normalized = String(query || "").trim().toLowerCase();
+  const graphRoot = selectors.overviewReport?.querySelector("[data-graph-root]");
+  if (!graphRoot) return;
+  const visible = new Set();
+  graphRoot.querySelectorAll("[data-graph-node]").forEach((node) => {
+    const matched = !normalized || String(node.dataset.graphSearch || "").includes(normalized);
+    node.classList.toggle("graph-hidden", !matched);
+    if (matched) visible.add(node.dataset.graphNode);
+  });
+  graphRoot.querySelectorAll("[data-graph-edge]").forEach((edge) => {
+    edge.classList.toggle("graph-hidden", !visible.has(edge.dataset.graphSource) || !visible.has(edge.dataset.graphTarget));
+  });
+}
+
+function truncateText(value = "", limit = 24) {
+  const text = String(value || "");
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
 
 function renderFieldDistributionSummary(objects) {
@@ -11741,7 +12187,7 @@ function formatDate(value) {
 }
 
 function escapeHtml(value) {
-  return String(value || "")
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")

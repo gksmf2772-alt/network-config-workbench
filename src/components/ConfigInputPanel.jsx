@@ -98,6 +98,8 @@ export default function ConfigInputPanel() {
               </label>
               <label>검색<input id="filterInput" placeholder="interface, static-route, 누락" /></label>
               <SwitchRow id="fieldHighlightToggle" defaultChecked>필드 강조</SwitchRow>
+              <SwitchRow id="objectMappingVisibleToggle" defaultChecked>객체 연결 표시</SwitchRow>
+              <SwitchRow id="mappingDebugToggle">Mapping Debug</SwitchRow>
               <label>
                 라인 연결 스타일
                 <AppSelect id="lineMappingStyleSelect">

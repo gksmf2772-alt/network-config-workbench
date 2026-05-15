@@ -750,19 +750,94 @@ label {
 .diff-object-band {
   stroke-width: 1;
   pointer-events: none;
-  opacity: 0.92;
+  opacity: 0.44;
   filter: drop-shadow(0 8px 14px rgba(14, 116, 144, 0.08));
   transition: opacity 120ms ease, filter 120ms ease;
 }
 
-.diff-object-band.matched {
-  fill: rgba(14, 165, 233, 0.14);
-  stroke: rgba(14, 165, 233, 0.22);
+.object-mapping-overlay {
+  pointer-events: none;
 }
 
+.semantic-line-overlay {
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.08));
+}
+
+.mapping-debug-overlay {
+  pointer-events: none;
+}
+
+.diff-object-band-glow {
+  stroke: none;
+  pointer-events: none;
+  opacity: 0.26;
+  filter: url("#objectBridgeGlow");
+}
+
+.diff-object-bridge-spine {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  opacity: 0.82;
+  filter: drop-shadow(0 0 7px rgba(20, 184, 166, 0.26));
+  transition: opacity 120ms ease, filter 120ms ease, stroke-width 120ms ease;
+}
+
+.diff-object-band.matched {
+  fill: url("#objectBridgeMatched");
+  stroke: rgba(22, 163, 74, 0.28);
+}
+
+.diff-object-band.changed,
 .diff-object-band.partial {
-  fill: rgba(245, 158, 11, 0.13);
-  stroke: rgba(245, 158, 11, 0.23);
+  fill: url("#objectBridgeChanged");
+  stroke: rgba(202, 138, 4, 0.28);
+}
+
+.diff-object-band.candidate {
+  fill: url("#objectBridgeCandidate");
+  stroke: rgba(234, 88, 12, 0.26);
+}
+
+.diff-object-band.manual {
+  fill: url("#objectBridgeManual");
+  stroke: rgba(124, 58, 237, 0.28);
+}
+
+.diff-object-band-glow.matched {
+  fill: rgba(34, 197, 94, 0.28);
+}
+
+.diff-object-band-glow.changed,
+.diff-object-band-glow.partial {
+  fill: rgba(234, 179, 8, 0.24);
+}
+
+.diff-object-band-glow.candidate {
+  fill: rgba(249, 115, 22, 0.22);
+}
+
+.diff-object-band-glow.manual {
+  fill: rgba(139, 92, 246, 0.22);
+}
+
+.diff-object-bridge-spine.matched {
+  stroke: rgba(22, 163, 74, 0.58);
+}
+
+.diff-object-bridge-spine.changed,
+.diff-object-bridge-spine.partial {
+  stroke: rgba(202, 138, 4, 0.56);
+}
+
+.diff-object-bridge-spine.candidate {
+  stroke: rgba(234, 88, 12, 0.52);
+}
+
+.diff-object-bridge-spine.manual {
+  stroke: rgba(124, 58, 237, 0.52);
 }
 
 .diff-field-connector {
@@ -771,6 +846,206 @@ label {
   stroke-linecap: round;
   stroke-width: 1.25;
   pointer-events: none;
+}
+
+.diff-object-flow,
+.diff-object-flow-glow {
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+.diff-object-flow {
+  fill: rgba(20, 184, 166, 0.09);
+  stroke: rgba(13, 148, 136, 0.28);
+  opacity: 1;
+  stroke-width: 1;
+}
+
+.diff-object-flow-glow {
+  fill: rgba(20, 184, 166, 0.09);
+  opacity: 0.72;
+  stroke: none;
+  filter: url("#objectFlowGlow");
+}
+
+.diff-object-flow-spine {
+  fill: none;
+  stroke: rgba(13, 148, 136, 0.42);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+  opacity: 0.34;
+  pointer-events: none;
+}
+
+.diff-object-flow.type-bgp {
+  fill: rgba(22, 163, 74, 0.09);
+  stroke: rgba(22, 163, 74, 0.38);
+}
+
+.diff-object-flow-glow.type-bgp {
+  fill: rgba(22, 163, 74, 0.09);
+}
+
+.diff-object-flow-spine.type-bgp {
+  stroke: rgba(22, 163, 74, 0.48);
+}
+
+.diff-object-flow.type-static-route {
+  fill: rgba(2, 132, 199, 0.09);
+  stroke: rgba(2, 132, 199, 0.36);
+}
+
+.diff-object-flow-glow.type-static-route {
+  fill: rgba(2, 132, 199, 0.09);
+}
+
+.diff-object-flow-spine.type-static-route {
+  stroke: rgba(2, 132, 199, 0.46);
+}
+
+.diff-object-flow.type-interface,
+.diff-object-flow.type-subscriber-interface,
+.diff-object-flow.type-group-interface,
+.diff-object-flow.type-sap {
+  fill: rgba(234, 88, 12, 0.085);
+  stroke: rgba(234, 88, 12, 0.34);
+}
+
+.diff-object-flow-glow.type-interface,
+.diff-object-flow-glow.type-subscriber-interface,
+.diff-object-flow-glow.type-group-interface,
+.diff-object-flow-glow.type-sap {
+  fill: rgba(234, 88, 12, 0.085);
+}
+
+.diff-object-flow-spine.type-interface,
+.diff-object-flow-spine.type-subscriber-interface,
+.diff-object-flow-spine.type-group-interface,
+.diff-object-flow-spine.type-sap {
+  stroke: rgba(234, 88, 12, 0.44);
+}
+
+.diff-object-flow.type-port,
+.diff-object-flow.type-lag {
+  fill: rgba(8, 145, 178, 0.085);
+  stroke: rgba(8, 145, 178, 0.34);
+}
+
+.diff-object-flow-glow.type-port,
+.diff-object-flow-glow.type-lag {
+  fill: rgba(8, 145, 178, 0.085);
+}
+
+.diff-object-flow-spine.type-port,
+.diff-object-flow-spine.type-lag {
+  stroke: rgba(8, 145, 178, 0.44);
+}
+
+.diff-object-flow.semantic-pair-hover,
+.diff-object-flow.semantic-pair-selected {
+  opacity: 0.62;
+  filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.10));
+}
+
+.diff-object-flow-glow.semantic-pair-hover,
+.diff-object-flow-glow.semantic-pair-selected {
+  opacity: 0.28;
+}
+
+.diff-object-flow-spine.semantic-pair-hover,
+.diff-object-flow-spine.semantic-pair-selected {
+  opacity: 0.68;
+  stroke-width: 2;
+}
+
+.diff-object-link,
+.diff-object-link-glow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.diff-object-link {
+  stroke-width: 3.25;
+  opacity: 0.82;
+  filter: drop-shadow(0 1px 3px rgba(15, 23, 42, 0.14));
+  transition: opacity 120ms ease, stroke-width 120ms ease, filter 120ms ease;
+}
+
+.diff-object-link-glow {
+  stroke-width: 10;
+  opacity: 0.18;
+  filter: url("#objectLineGlow");
+}
+
+.diff-object-anchor {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.diff-object-link.type-bgp,
+.diff-object-link-glow.type-bgp {
+  stroke: #16a34a;
+}
+
+.diff-object-anchor.type-bgp {
+  fill: #16a34a;
+}
+
+.diff-object-link.type-static-route,
+.diff-object-link-glow.type-static-route {
+  stroke: #0284c7;
+}
+
+.diff-object-anchor.type-static-route {
+  fill: #0284c7;
+}
+
+.diff-object-link.type-interface,
+.diff-object-link-glow.type-interface,
+.diff-object-link.type-subscriber-interface,
+.diff-object-link-glow.type-subscriber-interface,
+.diff-object-link.type-group-interface,
+.diff-object-link-glow.type-group-interface,
+.diff-object-link.type-sap,
+.diff-object-link-glow.type-sap {
+  stroke: #ea580c;
+}
+
+.diff-object-anchor.type-interface,
+.diff-object-anchor.type-subscriber-interface,
+.diff-object-anchor.type-group-interface,
+.diff-object-anchor.type-sap {
+  fill: #ea580c;
+}
+
+.diff-object-link.type-port,
+.diff-object-link-glow.type-port,
+.diff-object-link.type-lag,
+.diff-object-link-glow.type-lag {
+  stroke: #0891b2;
+}
+
+.diff-object-anchor.type-port,
+.diff-object-anchor.type-lag {
+  fill: #0891b2;
+}
+
+.diff-object-link.semantic-pair-hover,
+.diff-object-link.semantic-pair-selected {
+  opacity: 1;
+  stroke-width: 3.25;
+  filter: drop-shadow(0 0 7px currentColor);
+}
+
+.diff-object-link-glow.semantic-pair-hover,
+.diff-object-link-glow.semantic-pair-selected {
+  opacity: 0.24;
 }
 
 .line-mapping-connector {
@@ -784,41 +1059,63 @@ label {
 }
 
 .line-mapping-connector.equal {
-  stroke: rgba(22, 163, 74, 0.54);
+  stroke: rgba(22, 101, 52, 0.62);
 }
 
 .line-mapping-connector.changed {
-  stroke: rgba(202, 138, 4, 0.62);
+  stroke: rgba(161, 98, 7, 0.66);
 }
 
 .line-mapping-connector.candidate {
-  stroke: rgba(234, 88, 12, 0.58);
+  stroke: rgba(194, 65, 12, 0.60);
 }
 
 .line-mapping-connector.conflict {
-  stroke: rgba(220, 38, 38, 0.68);
+  stroke: rgba(185, 28, 28, 0.68);
 }
 
 .line-mapping-connector.style-straight {
-  stroke-width: 1.3;
+  stroke-width: 1.55;
 }
 
 .line-mapping-connector.style-chain {
-  stroke-width: 1.35;
-  stroke-dasharray: 8 5;
+  stroke-width: 1.55;
+  stroke-dasharray: 5 4;
 }
 
 .line-mapping-connector.style-slime {
-  stroke-width: 5.5;
-  stroke-opacity: 0.24;
-  filter: drop-shadow(0 0 5px rgba(20, 184, 166, 0.18));
+  stroke-width: 2.4;
+  stroke-opacity: 0.22;
+  filter: drop-shadow(0 0 4px rgba(20, 184, 166, 0.12));
 }
 
 .line-mapping-connector.line-relation-hover,
 .line-mapping-connector.line-relation-selected {
-  opacity: 0.94;
-  stroke-width: 2.25;
+  opacity: 0.9;
+  stroke-width: 2.2;
   filter: drop-shadow(0 0 8px rgba(14, 116, 144, 0.18));
+}
+
+.mapping-debug-anchor circle {
+  fill: #0ea5e9;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+.mapping-debug-anchor.mapping-debug-line circle {
+  fill: #f59e0b;
+}
+
+.mapping-debug-anchor text,
+.mapping-debug-label {
+  fill: #0f172a;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  font-family: Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  text-anchor: middle;
 }
 
 .line-mapping-connector.style-slime.line-relation-hover,
@@ -1766,6 +2063,18 @@ textarea {
 
 .diff-object-band-label.partial rect {
   stroke: rgba(14, 165, 233, 0.34);
+}
+
+.diff-object-band-label.changed rect {
+  stroke: rgba(202, 138, 4, 0.38);
+}
+
+.diff-object-band-label.candidate rect {
+  stroke: rgba(234, 88, 12, 0.36);
+}
+
+.diff-object-band-label.manual rect {
+  stroke: rgba(124, 58, 237, 0.36);
 }
 
 .diff-object-band-label text {
@@ -3982,8 +4291,25 @@ textarea[id$="ConfigInput"],
 }
 
 .semantic-object-block-wrapper.object-matched {
-  background: linear-gradient(90deg, rgba(14, 165, 233, 0.026), rgba(20, 184, 166, 0.045)) !important;
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.045), rgba(20, 184, 166, 0.055)) !important;
   border-radius: 10px !important;
+}
+
+.semantic-object-block-wrapper.object-status-candidate {
+  background: linear-gradient(90deg, rgba(249, 115, 22, 0.045), rgba(251, 146, 60, 0.055)) !important;
+  border-radius: 10px !important;
+}
+
+.semantic-object-block-wrapper.object-status-candidate .semantic-diff-object-block {
+  border-left-color: #f97316 !important;
+  background: linear-gradient(90deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.74)) !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.22), 0 8px 18px rgba(15, 23, 42, 0.045) !important;
+}
+
+.semantic-object-block-wrapper.object-reason-manual .semantic-diff-object-block {
+  border-left-color: #8b5cf6 !important;
+  background: linear-gradient(90deg, rgba(245, 243, 255, 0.96), rgba(237, 233, 254, 0.76)) !important;
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.22), 0 8px 18px rgba(15, 23, 42, 0.045) !important;
 }
 
 .semantic-object-block-wrapper.semantic-pair-hover,
@@ -4007,10 +4333,12 @@ textarea[id$="ConfigInput"],
 
 .semantic-diff-object-block {
   border: 0 !important;
-  border-left: 4px solid #14b8a6 !important;
-  border-radius: 8px !important;
-  background: rgba(240, 253, 250, 0.72) !important;
-  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.22), 0 8px 18px rgba(15, 23, 42, 0.045) !important;
+  border-left: 4px solid #16a34a !important;
+  border-radius: 10px !important;
+  background: linear-gradient(90deg, rgba(240, 253, 244, 0.96), rgba(236, 253, 245, 0.82)) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(34, 197, 94, 0.20),
+    0 8px 18px rgba(15, 23, 42, 0.045) !important;
 }
 
 .semantic-object-block-wrapper + .semantic-object-block-wrapper {
@@ -4021,7 +4349,7 @@ textarea[id$="ConfigInput"],
   min-height: 30px !important;
   padding: 6px 10px !important;
   border-bottom: 0 !important;
-  background: rgba(204, 251, 241, 0.58) !important;
+  background: rgba(220, 252, 231, 0.72) !important;
 }
 
 .semantic-diff-object-title {
@@ -4036,8 +4364,8 @@ textarea[id$="ConfigInput"],
   height: 20px !important;
   padding: 0 7px !important;
   border-radius: 6px !important;
-  background: rgba(20, 184, 166, 0.16) !important;
-  color: #0f766e !important;
+  background: rgba(34, 197, 94, 0.16) !important;
+  color: #166534 !important;
   font-size: 10px !important;
 }
 
@@ -4098,13 +4426,13 @@ textarea[id$="ConfigInput"],
 }
 
 .semantic-diff-object-ambiguous {
-  border-left-color: #f59e0b !important;
-  background: rgba(255, 251, 235, 0.84) !important;
+  border-left-color: #f97316 !important;
+  background: linear-gradient(90deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.74)) !important;
 }
 
 .semantic-diff-object-partial {
-  border-left-color: #0ea5e9 !important;
-  background: rgba(240, 249, 255, 0.82) !important;
+  border-left-color: #eab308 !important;
+  background: linear-gradient(90deg, rgba(254, 252, 232, 0.96), rgba(254, 249, 195, 0.70)) !important;
 }
 
 .semantic-diff-object-manual {
@@ -4113,17 +4441,30 @@ textarea[id$="ConfigInput"],
 }
 
 .diff-object-band.matched {
-  fill: rgba(20, 184, 166, 0.22);
-  stroke: rgba(20, 184, 166, 0.34);
+  fill: url("#objectBridgeMatched");
+  stroke: rgba(22, 163, 74, 0.38);
 }
 
+.diff-object-band.changed,
 .diff-object-band.partial {
-  fill: rgba(14, 165, 233, 0.18);
-  stroke: rgba(14, 165, 233, 0.30);
+  fill: url("#objectBridgeChanged");
+  stroke: rgba(202, 138, 4, 0.34);
+}
+
+.diff-object-band.candidate {
+  fill: url("#objectBridgeCandidate");
+  stroke: rgba(234, 88, 12, 0.32);
+}
+
+.diff-object-band.manual {
+  fill: url("#objectBridgeManual");
+  stroke: rgba(124, 58, 237, 0.32);
 }
 
 .diff-object-band.semantic-pair-hover,
-.diff-object-band.semantic-pair-selected {
+.diff-object-band.semantic-pair-selected,
+.diff-object-bridge-spine.semantic-pair-hover,
+.diff-object-bridge-spine.semantic-pair-selected {
   opacity: 1;
   filter: drop-shadow(0 10px 18px rgba(20, 184, 166, 0.18));
 }
@@ -4217,22 +4558,22 @@ textarea[id$="ConfigInput"],
 /* Engineer-focused compare readability */
 
 .diff-line.semantic-gap.semantic-placeholder-line {
-  min-height: 32px !important;
-  height: 32px !important;
+  min-height: 56px !important;
+  height: 56px !important;
   border: 0 !important;
   background: transparent !important;
 }
 
 .semantic-object-block-wrapper {
-  margin-bottom: 24px !important;
+  margin-bottom: 44px !important;
 }
 
 .diff-line.semantic-object-start:not(:first-child) {
-  margin-top: 12px !important;
+  margin-top: 42px !important;
 }
 
 .diff-line.semantic-object-end {
-  margin-bottom: 12px !important;
+  margin-bottom: 24px !important;
 }
 
 .diff-line.semantic-object-start::before {
@@ -4240,9 +4581,10 @@ textarea[id$="ConfigInput"],
   position: absolute;
   left: 58px;
   right: 0;
-  top: -7px;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(20, 184, 166, 0.22), transparent 70%);
+  top: -22px;
+  height: 18px;
+  border-top: 1px solid rgba(100, 116, 139, 0.18);
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0), rgba(248, 251, 255, 0.88));
 }
 
 .semantic-height-aligned {
@@ -4250,7 +4592,7 @@ textarea[id$="ConfigInput"],
 }
 
 .semantic-object-block-wrapper[data-side="old"] .semantic-diff-object-block {
-  border-right: 2px solid rgba(20, 184, 166, 0.3) !important;
+  border-right: 2px solid rgba(22, 163, 74, 0.24) !important;
 }
 
 .semantic-object-block-wrapper[data-side="new"] .semantic-diff-object-block {
@@ -4290,6 +4632,9 @@ textarea[id$="ConfigInput"],
   filter: saturate(0.75);
 }
 
+.editor-grid.semantic-pair-focus-active .diff-object-flow:not(.semantic-pair-selected),
+.editor-grid.semantic-pair-focus-active .diff-object-flow-glow:not(.semantic-pair-selected),
+.editor-grid.semantic-pair-focus-active .diff-object-flow-spine:not(.semantic-pair-selected),
 .editor-grid.semantic-pair-focus-active .diff-object-band:not(.semantic-pair-selected),
 .editor-grid.semantic-pair-focus-active .diff-object-band-label:not(.semantic-pair-selected) {
   opacity: 0.1;
@@ -4320,6 +4665,67 @@ body[data-field-highlight="off"] .semantic-diff-line-field {
 
 body[data-field-highlight="off"] .semantic-diff-config-line {
   grid-template-columns: 34px minmax(0, 1fr) !important;
+}
+
+.semantic-object-block-wrapper.object-type-bgp.object-matched,
+.diff-line.object-type-bgp.object-matched {
+  background: rgba(22, 163, 74, 0.09) !important;
+}
+
+.semantic-object-block-wrapper.object-type-bgp .semantic-diff-object-block {
+  border-left-color: #16a34a !important;
+  background: linear-gradient(90deg, rgba(240, 253, 244, 0.96), rgba(220, 252, 231, 0.70)) !important;
+}
+
+.semantic-object-block-wrapper.object-type-static-route.object-matched,
+.diff-line.object-type-static-route.object-matched {
+  background: rgba(2, 132, 199, 0.09) !important;
+}
+
+.semantic-object-block-wrapper.object-type-static-route .semantic-diff-object-block {
+  border-left-color: #0284c7 !important;
+  background: linear-gradient(90deg, rgba(240, 249, 255, 0.96), rgba(224, 242, 254, 0.74)) !important;
+}
+
+.semantic-object-block-wrapper.object-type-interface.object-matched,
+.semantic-object-block-wrapper.object-type-subscriber-interface.object-matched,
+.semantic-object-block-wrapper.object-type-group-interface.object-matched,
+.semantic-object-block-wrapper.object-type-sap.object-matched,
+.diff-line.object-type-interface.object-matched,
+.diff-line.object-type-subscriber-interface.object-matched,
+.diff-line.object-type-group-interface.object-matched,
+.diff-line.object-type-sap.object-matched {
+  background: rgba(234, 88, 12, 0.085) !important;
+}
+
+.semantic-object-block-wrapper.object-type-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-subscriber-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-group-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-sap .semantic-diff-object-block {
+  border-left-color: #ea580c !important;
+  background: linear-gradient(90deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.72)) !important;
+}
+
+.semantic-object-block-wrapper.object-type-port.object-matched,
+.semantic-object-block-wrapper.object-type-lag.object-matched,
+.diff-line.object-type-port.object-matched,
+.diff-line.object-type-lag.object-matched {
+  background: rgba(8, 145, 178, 0.085) !important;
+}
+
+.diff-line.object-type-bgp.semantic-object-start {
+  box-shadow: inset 4px 0 0 #16a34a;
+}
+
+.diff-line.object-type-static-route.semantic-object-start {
+  box-shadow: inset 4px 0 0 #0284c7;
+}
+
+.diff-line.object-type-interface.semantic-object-start,
+.diff-line.object-type-subscriber-interface.semantic-object-start,
+.diff-line.object-type-group-interface.semantic-object-start,
+.diff-line.object-type-sap.semantic-object-start {
+  box-shadow: inset 4px 0 0 #ea580c;
 }
 
 @media (max-width: 980px) {

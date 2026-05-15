@@ -59,6 +59,8 @@ const selectors = {
   ignoreGeneratedToggle: document.querySelector("#ignoreGeneratedToggle"),
   semanticDebugToggle: document.querySelector("#semanticDebugToggle"),
   fieldHighlightToggle: document.querySelector("#fieldHighlightToggle"),
+  objectMappingVisibleToggle: document.querySelector("#objectMappingVisibleToggle"),
+  mappingDebugToggle: document.querySelector("#mappingDebugToggle"),
   lineMappingStyleSelect: document.querySelector("#lineMappingStyleSelect"),
   lineMappingVisibleToggle: document.querySelector("#lineMappingVisibleToggle"),
   lineMappingAnimationToggle: document.querySelector("#lineMappingAnimationToggle"),
@@ -208,6 +210,10 @@ const state = {
   activeLineRelationKey: "",
   semanticPairKeyboardBound: false,
   lineRelationDelegationBound: false,
+  diffResizeObserver: null,
+  mappingDebugSignature: "",
+  lineMappingDebugSignature: "",
+  mappingDebugAnchorCount: 0,
   profileDraft: createDefaultProfile(),
 };
 
@@ -545,7 +551,9 @@ function bindEvents() {
   selectors.oldDiffPane.addEventListener("dblclick", showEditMode);
   selectors.newDiffPane.addEventListener("dblclick", showEditMode);
   window.addEventListener("resize", scheduleSemanticObjectStartAlignment);
+  window.addEventListener("resize", scheduleDiffConnectorRender);
   window.addEventListener("resize", scheduleProfileExampleConnectorRender);
+  setupDiffConnectorResizeObserver();
 
   [
     [selectors.profileOldExampleInput, "old"],
@@ -615,6 +623,14 @@ function bindEvents() {
   selectors.fontSelect.addEventListener("input", saveUiPreferences);
   selectors.fieldHighlightToggle?.addEventListener("input", saveUiPreferences);
   selectors.semanticDebugToggle?.addEventListener("input", saveUiPreferences);
+  selectors.mappingDebugToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleDiffConnectorRender();
+  });
+  selectors.objectMappingVisibleToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleDiffConnectorRender();
+  });
   selectors.lineMappingStyleSelect?.addEventListener("input", () => {
     saveUiPreferences();
     scheduleDiffConnectorRender();
@@ -627,6 +643,18 @@ function bindEvents() {
     saveUiPreferences();
     scheduleDiffConnectorRender();
   });
+}
+
+function setupDiffConnectorResizeObserver() {
+  if (state.diffResizeObserver || !window.ResizeObserver) return;
+  const grid = selectors.diffConnectorSvg?.closest(".editor-grid");
+  const targets = [grid, selectors.oldDiffPane, selectors.newDiffPane].filter(Boolean);
+  if (!targets.length) return;
+
+  state.diffResizeObserver = new ResizeObserver(() => {
+    scheduleDiffConnectorRender();
+  });
+  targets.forEach((target) => state.diffResizeObserver.observe(target));
 }
 
 function setActiveTab(tab, options = {}) {
@@ -2768,21 +2796,26 @@ function inferFieldFromLinkedLines(oldLine, newLine) {
 function inferSemanticFieldName(line) {
   const normalized = canonicalizeComparableLine(line);
   if (/(?:^|\s)(?:static-route-entry|route)\s+[\d./]+/.test(normalized)) return "route";
-  if (/\bnext-hop\b/.test(normalized)) return "next-hop";
+  if (/\b(?:next-hop|gateway)\b/.test(normalized)) return "next-hop";
+  if (/^(?:ip\s+address|address|ipv4|ipv6)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
   if (/\btag\b/.test(normalized)) return "tag";
   if (/\bno\s+shutdown\b|\badmin-state\b/.test(normalized)) return "state";
   if (/\bdescription\b/.test(normalized)) return "description";
   if (/\bauthentication-key\b/.test(normalized)) return "authentication-key";
-  if (/\bgroup\b/.test(normalized)) return "group";
+  if (/\b(?:group|peer-group)\b/.test(normalized)) return "group";
   if (/\b(?:peer-as|remote-as)\b/.test(normalized)) return "peer-as";
   if (/\bneighbor\b/.test(normalized)) return "neighbor";
+  if (/^interface\b/.test(normalized)) return "interface";
   return extractFieldName(normalized);
 }
 
 function inferValueForField(line, field) {
   const normalized = canonicalizeComparableLine(line);
   if (field === "route") return stripTrailingSyntax(normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?([^"\s{}]+)"?/)?.[1] || "");
-  if (field === "next-hop") return stripTrailingSyntax(normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "next-hop") return stripTrailingSyntax(normalized.match(/\b(?:next-hop|gateway)\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "address") return stripTrailingSyntax(normalized.match(/\b\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?\b/)?.[0] || "");
+  if (field === "interface") return stripTrailingSyntax(normalized.match(/^interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "group") return stripTrailingSyntax(normalized.match(/\b(?:group|peer-group)\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (field === "tag") return stripTrailingSyntax(normalized.match(/\btag\s+([^"\s{}]+)/)?.[1] || "");
   if (field === "state") {
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
@@ -5533,11 +5566,11 @@ function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
 
       rows.push({
         oldRow: oldLine
-          ? buildPairedObjectLineRow(oldObject, oldLine, objectIndex, lineIndex, "old")
-          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, "old"),
+          ? buildPairedObjectLineRow(oldObject, oldLine, objectIndex, lineIndex, maxLines, "old")
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "old"),
         newRow: newLine
-          ? buildPairedObjectLineRow(newObject, newLine, objectIndex, lineIndex, "new")
-          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, "new"),
+          ? buildPairedObjectLineRow(newObject, newLine, objectIndex, lineIndex, maxLines, "new")
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "new"),
         oldState: oldLine ? "equal" : "placeholder",
         newState: newLine ? "equal" : "placeholder",
         semanticCovered: true,
@@ -5560,16 +5593,30 @@ function getObjectDisplayLines(object) {
   return [];
 }
 
-function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, side) {
+function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines, side) {
   const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
   const objectKey = object?.key || `${objectType}:${object?.name || object?.normalizedIdentity || objectIndex}`;
   const lineText = String(line || "");
+  const identity =
+    object?.normalizedIdentity ||
+    object?.identity ||
+    object?.name ||
+    object?.sourceName ||
+    object?.id ||
+    objectIndex;
 
   return {
     number: lineIndex + 1,
     text: lineText,
     key: `${objectKey}:${side}:${lineIndex}`,
     objectKey,
+    objectIdentity: identity,
+    objectStatus: "matched",
+    objectScore: 100,
+    semanticPairKey: objectKey,
+    semanticObjectIndex: objectIndex,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: lineIndex === maxLines - 1,
     normalized: canonicalizeComparableLine(lineText),
     semanticField: inferSemanticFieldName(lineText),
     highlights: buildLineSemanticHighlights(
@@ -5584,15 +5631,29 @@ function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, side) {
   };
 }
 
-function buildPairedPlaceholderRow(object, objectIndex, lineIndex, side) {
+function buildPairedPlaceholderRow(object, objectIndex, lineIndex, maxLines, side) {
   const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
   const objectKey = object?.key || `${objectType}:placeholder:${objectIndex}`;
+  const identity =
+    object?.normalizedIdentity ||
+    object?.identity ||
+    object?.name ||
+    object?.sourceName ||
+    object?.id ||
+    objectIndex;
 
   return {
     number: "",
     text: "",
     key: `${objectKey}:${side}:placeholder:${lineIndex}`,
     objectKey,
+    objectIdentity: identity,
+    objectStatus: "matched",
+    objectScore: 100,
+    semanticPairKey: objectKey,
+    semanticObjectIndex: objectIndex,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: lineIndex === maxLines - 1,
     normalized: "",
     semanticField: "",
     highlights: [],
@@ -6031,10 +6092,12 @@ const commonFieldAliases = {
   "authentication-key": "authentication-key",
   "auth-key": "authentication-key",
   "group": "group",
+  "peer-group": "group",
   "peer-as": "peer-as",
   "remote-as": "peer-as",
   "next-hop": "next-hop",
   "nexthop": "next-hop",
+  "gateway": "next-hop",
   "tag": "tag",
   "preference": "preference",
   "metric": "metric",
@@ -8322,6 +8385,7 @@ function setSemanticPairHover(pairKey, active) {
   document.querySelectorAll(`[data-semantic-pair-key="${cssEscape(pairKey)}"]`).forEach((element) => {
     element.classList.toggle("semantic-pair-hover", active);
   });
+  setSemanticPairLineRelationsHover(pairKey, active);
 }
 
 function setSemanticPairSelected(pairKey) {
@@ -8330,6 +8394,7 @@ function setSemanticPairSelected(pairKey) {
   state.activeSemanticPairKey = pairKey;
   selectors.diffConnectorSvg?.closest(".editor-grid")?.classList.add("semantic-pair-focus-active");
   applySemanticPairClass(pairKey, "semantic-pair-selected", true);
+  setSemanticPairLineRelationsHover(pairKey, true);
   centerSemanticPairInPanes(pairKey);
   scheduleDiffConnectorRender();
 }
@@ -8341,6 +8406,23 @@ function clearSemanticPairSelection(clearState = true) {
   selectors.diffConnectorSvg?.closest(".editor-grid")?.classList.remove("semantic-pair-focus-active");
   if (clearState) state.activeSemanticPairKey = "";
   clearLineRelationSelection(clearState);
+}
+
+function setSemanticPairLineRelationsHover(pairKey, active) {
+  if (!pairKey) return;
+  const relationKeys = new Set();
+  document.querySelectorAll(`[data-semantic-pair-key="${cssEscape(pairKey)}"] [data-line-relation-key], [data-semantic-pair-key="${cssEscape(pairKey)}"][data-line-relation-key]`).forEach((element) => {
+    const key = element.dataset.lineRelationKey || "";
+    if (key) relationKeys.add(key);
+  });
+  selectors.diffConnectorSvg?.querySelectorAll("[data-line-relation-key]").forEach((element) => {
+    const key = element.dataset.lineRelationKey || "";
+    if (key.includes(pairKey)) relationKeys.add(key);
+  });
+  relationKeys.forEach((key) => {
+    applyLineRelationClass(key, "line-relation-hover", active);
+    applySvgLineRelationClass(key, "line-relation-hover", active);
+  });
 }
 
 function applySemanticPairClass(pairKey, className, active) {
@@ -8423,44 +8505,91 @@ function scheduleDiffConnectorRender() {
 
 function renderDiffConnectors() {
   try {
-  const svg = selectors.diffConnectorSvg;
-  const grid = svg?.closest(".editor-grid");
-  if (!svg || !grid?.classList.contains("diff-connectors-active")) return;
+    const svg = selectors.diffConnectorSvg;
+    const grid = svg?.closest(".editor-grid");
+    if (!svg || !grid?.classList.contains("diff-connectors-active")) return;
 
-  const gridRect = grid.getBoundingClientRect();
-  const oldPaneRect = selectors.oldDiffPane.getBoundingClientRect();
-  const newPaneRect = selectors.newDiffPane.getBoundingClientRect();
-  const width = Math.max(0, gridRect.width);
-  const height = Math.max(0, gridRect.height);
+    const gridRect = grid.getBoundingClientRect();
+    const oldPaneRect = selectors.oldDiffPane.getBoundingClientRect();
+    const newPaneRect = selectors.newDiffPane.getBoundingClientRect();
+    const width = Math.max(0, gridRect.width);
+    const height = Math.max(0, gridRect.height);
 
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
 
-  const oldGroups = collectVisibleDiffObjectGroups(selectors.oldDiffPane, oldPaneRect);
-  const newGroups = collectVisibleDiffObjectGroups(selectors.newDiffPane, newPaneRect);
-  const objectPaths = [];
+    const oldGroups = collectVisibleDiffObjectGroups(selectors.oldDiffPane, oldPaneRect);
+    const newGroups = collectVisibleDiffObjectGroups(selectors.newDiffPane, newPaneRect);
+    const objectPaths = [];
+    const debugPaths = [];
 
-  oldGroups.forEach((oldGroup, key) => {
-    const newGroup = newGroups.get(key);
-    if (!newGroup) return;
-    objectPaths.push(buildObjectConnectorBand(oldGroup, newGroup, gridRect));
-  });
+    if (isObjectMappingVisible()) {
+      oldGroups.forEach((oldGroup, key) => {
+        const newGroup = newGroups.get(key);
+        if (!newGroup) {
+          mappingDebugWarn("object DOM pair missing", { key, side: "new" });
+          return;
+        }
+        const connector = buildObjectConnectorBand(oldGroup, newGroup, grid, isMappingDebugVisible());
+        objectPaths.push(connector.markup);
+        if (connector.debugMarkup) debugPaths.push(connector.debugMarkup);
+      });
+    }
 
-  state.lineMappingDebugAnchorCount = 0;
-  const fieldPaths = buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect);
+    state.lineMappingDebugAnchorCount = 0;
+    const fieldPaths = buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect);
+    reportMappingDebugSnapshot({
+      oldGroups,
+      newGroups,
+      objectPathCount: objectPaths.filter(Boolean).length,
+      fieldPathCount: fieldPaths.filter(Boolean).length,
+    });
 
-  svg.innerHTML = [...objectPaths, ...fieldPaths].filter(Boolean).join("");
-  if (state.activeSemanticPairKey) {
-    applySemanticPairClass(state.activeSemanticPairKey, "semantic-pair-selected", true);
-  }
-  if (state.activeLineRelationKey) {
-    applyLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
-    applySvgLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
-  }
+    svg.innerHTML = renderDiffConnectorLayers({
+      objectPaths,
+      fieldPaths,
+      debugPaths,
+    });
+    if (state.activeSemanticPairKey) {
+      applySemanticPairClass(state.activeSemanticPairKey, "semantic-pair-selected", true);
+    }
+    if (state.activeLineRelationKey) {
+      applyLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
+      applySvgLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
+    }
   } catch (error) {
     console.error("renderDiffConnectors failed", error);
   }
+}
+
+function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], debugPaths = [] } = {}) {
+  return `
+    ${renderDiffConnectorDefs()}
+    <g class="object-mapping-overlay" data-overlay-layer="object">
+      ${objectPaths.filter(Boolean).join("")}
+    </g>
+    <g class="semantic-line-overlay" data-overlay-layer="line">
+      ${fieldPaths.filter(Boolean).join("")}
+    </g>
+    <g class="mapping-debug-overlay" data-overlay-layer="debug">
+      ${debugPaths.filter(Boolean).join("")}
+    </g>
+  `;
+}
+
+function renderDiffConnectorDefs() {
+  return `
+    <defs>
+      <filter id="objectFlowGlow" x="-20%" y="-40%" width="140%" height="180%">
+        <feGaussianBlur stdDeviation="7" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+  `;
 }
 
 function collectVisibleDiffObjectGroups(pane, paneRect) {
@@ -8483,6 +8612,7 @@ function collectVisibleDiffObjectGroups(pane, paneRect) {
         pairIndex: line.dataset.pairIndex || "",
         identity: line.dataset.objectIdentity || "",
         status: line.dataset.objectStatus || "",
+        reason: line.dataset.objectReason || "",
         score: line.dataset.objectScore || "",
         state: line.classList.contains("changed") ? "changed" : "equal",
       });
@@ -8496,10 +8626,10 @@ function collectVisibleDiffObjectGroups(pane, paneRect) {
   return groups;
 }
 
-function groupVisibleRect(group) {
-  const rects = group.lines.map((line) => line.getBoundingClientRect());
+function groupVisibleRect(group, container) {
+  const rects = group.lines.map((line) => getRelativeRect(line, container));
   const first = rects[0];
-  return rects.reduce((acc, rect) => ({
+  const merged = rects.reduce((acc, rect) => ({
     left: Math.min(acc.left, rect.left),
     right: Math.max(acc.right, rect.right),
     top: Math.min(acc.top, rect.top),
@@ -8510,39 +8640,99 @@ function groupVisibleRect(group) {
     top: first.top,
     bottom: first.bottom,
   });
+  return {
+    ...merged,
+    x: merged.left,
+    y: merged.top,
+    width: merged.right - merged.left,
+    height: merged.bottom - merged.top,
+    cx: merged.left + (merged.right - merged.left) / 2,
+    cy: merged.top + (merged.bottom - merged.top) / 2,
+  };
 }
 
-function buildObjectConnectorBand(oldGroup, newGroup, gridRect) {
-  if (!oldGroup?.lines?.length || !newGroup?.lines?.length) return "";
+function getRelativeRect(element, container) {
+  const rect = element.getBoundingClientRect();
+  const base = container.getBoundingClientRect();
 
-  const oldRect = groupVisibleRect(oldGroup);
-  const newRect = groupVisibleRect(newGroup);
-  const x1 = oldRect.right - gridRect.left;
-  const x2 = newRect.left - gridRect.left;
-  const y1Top = oldRect.top - gridRect.top;
-  const y1Bottom = oldRect.bottom - gridRect.top;
-  const y2Top = newRect.top - gridRect.top;
-  const y2Bottom = newRect.bottom - gridRect.top;
+  return {
+    x: rect.left - base.left,
+    y: rect.top - base.top,
+    width: rect.width,
+    height: rect.height,
+    cx: rect.left - base.left + rect.width / 2,
+    cy: rect.top - base.top + rect.height / 2,
+    left: rect.left - base.left,
+    right: rect.right - base.left,
+    top: rect.top - base.top,
+    bottom: rect.bottom - base.top,
+  };
+}
+
+function getRelativePoint(point, container) {
+  const base = container.getBoundingClientRect();
+  return {
+    x: point.x - base.left,
+    y: point.y - base.top,
+  };
+}
+
+function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
+  if (!oldGroup?.lines?.length || !newGroup?.lines?.length) return { markup: "", debugMarkup: "" };
+
+  const oldRect = groupVisibleRect(oldGroup, grid);
+  const newRect = groupVisibleRect(newGroup, grid);
+  const x1 = Math.max(oldRect.left, oldRect.right - 18);
+  const x2 = Math.min(newRect.right, newRect.left + 18);
+  const y1Top = oldRect.top;
+  const y1Bottom = oldRect.bottom;
+  const y2Top = newRect.top;
+  const y2Bottom = newRect.bottom;
+  const y1Center = oldRect.top + (oldRect.height / 2);
+  const y2Center = newRect.top + (newRect.height / 2);
   const mid = x1 + (x2 - x1) / 2;
-  const state = oldGroup.state === "equal" && newGroup.state === "equal" ? "matched" : "partial";
-  const labelY = (Math.min(y1Top, y2Top) + Math.max(y1Bottom, y2Bottom)) / 2;
-  const label = connectorLabelText(oldGroup, newGroup);
-  const labelWidth = Math.max(72, Math.min(158, label.length * 7 + 18));
-  const path = [
+  const state = objectConnectorState(oldGroup, newGroup);
+  const typeClass = objectConnectorTypeClass(oldGroup, newGroup);
+  const controlOffset = Math.max(46, Math.min(160, Math.abs(x2 - x1) * 0.42));
+  const ribbonPath = [
     `M ${x1} ${y1Top}`,
-    `C ${mid} ${y1Top}, ${mid} ${y2Top}, ${x2} ${y2Top}`,
+    `C ${x1 + controlOffset} ${y1Top}, ${x2 - controlOffset} ${y2Top}, ${x2} ${y2Top}`,
     `L ${x2} ${y2Bottom}`,
-    `C ${mid} ${y2Bottom}, ${mid} ${y1Bottom}, ${x1} ${y1Bottom}`,
+    `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
     "Z",
   ].join(" ");
+  const debugMarkup = debug
+    ? [
+      buildMappingDebugAnchor(x1, y1Center, "object", oldGroup.key, "old"),
+      buildMappingDebugAnchor(x2, y2Center, "object", newGroup.key, "new"),
+      buildMappingDebugLabel(mid, Math.min(y1Top, y2Top) - 8, oldGroup.key),
+    ].join("")
+    : "";
 
-  return `
-    <path class="diff-object-band ${state}" d="${path}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
-    <g class="diff-object-band-label ${state}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}">
-      <rect x="${mid - (labelWidth / 2)}" y="${labelY - 10}" width="${labelWidth}" height="20" rx="10" />
-      <text x="${mid}" y="${labelY + 4}">${escapeHtml(label)}</text>
-    </g>
-  `;
+  return {
+    markup: `
+    <path class="diff-object-flow-glow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+    <path class="diff-object-flow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+  `,
+    debugMarkup,
+  };
+}
+
+function objectConnectorTypeClass(oldGroup = {}, newGroup = {}) {
+  return `type-${cssSafeClassName(oldGroup.type || newGroup.type || "object")}`;
+}
+
+function objectConnectorState(oldGroup = {}, newGroup = {}) {
+  const status = String(oldGroup.status || newGroup.status || "").toLowerCase();
+  const reason = String(oldGroup.reason || newGroup.reason || "").toLowerCase();
+  const score = Number(oldGroup.score || newGroup.score || 0);
+
+  if (reason === "manual") return "manual";
+  if (status === "candidate") return "candidate";
+  if (status === "old-only" || status === "new-only" || status === "unmatched") return "unmatched";
+  if (oldGroup.state !== "equal" || newGroup.state !== "equal") return "changed";
+  if (Number.isFinite(score) && score > 0 && score < 100) return "changed";
+  return "matched";
 }
 
 function connectorLabelText(oldGroup = {}, newGroup = {}) {
@@ -8553,13 +8743,73 @@ function connectorLabelText(oldGroup = {}, newGroup = {}) {
   return label.length > 24 ? `${label.slice(0, 23)}...` : label;
 }
 
-function buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
+function buildMappingDebugAnchor(x, y, kind, key, side = "") {
+  const label = `${side}:${kind}`;
+  return `
+    <g class="mapping-debug-anchor mapping-debug-${escapeHtml(kind)}" data-debug-key="${escapeHtml(key)}">
+      <circle cx="${x}" cy="${y}" r="${kind === "line" ? 3 : 4}" />
+      <text x="${x + 6}" y="${y - 6}">${escapeHtml(label)}</text>
+    </g>
+  `;
+}
+
+function buildMappingDebugLabel(x, y, key) {
+  const label = String(key || "").slice(0, 42);
+  return `<text class="mapping-debug-label" x="${x}" y="${y}">${escapeHtml(label)}</text>`;
+}
+
+function isMappingDebugVisible() {
+  return Boolean(selectors.mappingDebugToggle?.checked);
+}
+
+function mappingDebugWarn(message, payload = null) {
+  if (!isMappingDebugVisible()) return;
+  if (payload) console.warn(`[mapping-debug] ${message}`, payload);
+  else console.warn(`[mapping-debug] ${message}`);
+}
+
+function reportMappingDebugSnapshot({ oldGroups, newGroups, objectPathCount, fieldPathCount }) {
+  if (!isMappingDebugVisible()) return;
+  const signature = [
+    oldGroups?.size || 0,
+    newGroups?.size || 0,
+    objectPathCount || 0,
+    fieldPathCount || 0,
+    selectors.oldDiffPane?.scrollTop || 0,
+    selectors.newDiffPane?.scrollTop || 0,
+  ].join(":");
+  if (state.mappingDebugSignature === signature) return;
+  state.mappingDebugSignature = signature;
+  console.debug("[mapping-debug] connector snapshot", {
+    oldObjects: oldGroups?.size || 0,
+    newObjects: newGroups?.size || 0,
+    objectPaths: objectPathCount,
+    linePaths: fieldPathCount,
+    oldScrollTop: selectors.oldDiffPane?.scrollTop || 0,
+    newScrollTop: selectors.newDiffPane?.scrollTop || 0,
+  });
+}
+
+function compactDebugText(text = "") {
+  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+function reportLineMappingDebugRows(label, rows = []) {
+  if (!isMappingDebugVisible() || !rows.length) return;
+  const signature = `${label}:${rows.length}:${rows.slice(0, 8).map((row) => `${row.pairKey}:${row.field}:${row.state}`).join("|")}`;
+  if (state.lineMappingDebugSignature === signature) return;
+  state.lineMappingDebugSignature = signature;
+  console.debug(`[mapping-debug] line relations: ${label} (${rows.length})`);
+  console.table(rows.slice(0, 60));
+}
+
+function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
   if (!isLineMappingVisible()) {
     lineMappingDebug("relations: hidden");
     return [];
   }
 
-  const paths = buildVisibleSemanticConfigLineConnectorPaths(gridRect, oldPaneRect, newPaneRect);
+  const paths = buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect);
   const newLineMap = new Map();
 
   [...selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((line) => {
@@ -8587,7 +8837,7 @@ function buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
     paths.push(buildLineMappingConnectorPath({
       oldElement: oldLine,
       newElement: newLine,
-      gridRect,
+      grid,
       oldPaneRect,
       newPaneRect,
       relationKey: key,
@@ -8602,12 +8852,23 @@ function buildVisibleLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
     oldDomRelations: selectors.oldDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
     newDomRelations: selectors.newDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
   });
+  if (!paths.length) {
+    mappingDebugWarn("line mapping paths not generated", {
+      oldDomRelations: selectors.oldDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
+      newDomRelations: selectors.newDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
+      oldBlocks: selectors.oldDiffPane.querySelectorAll(".semantic-object-block-wrapper[data-semantic-pair-key]").length,
+      newBlocks: selectors.newDiffPane.querySelectorAll(".semantic-object-block-wrapper[data-semantic-pair-key]").length,
+      oldFlatLines: selectors.oldDiffPane.querySelectorAll(".diff-line[data-semantic-pair-key][data-semantic-field]").length,
+      newFlatLines: selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-pair-key][data-semantic-field]").length,
+    });
+  }
 
   return paths;
 }
 
-function buildVisibleSemanticConfigLineConnectorPaths(gridRect, oldPaneRect, newPaneRect) {
+function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
   const paths = [];
+  const debugRows = [];
   const oldElements = collectSemanticRelationElements(selectors.oldDiffPane);
   const newElements = collectSemanticRelationElements(selectors.newDiffPane);
   const coveredFieldPairs = new Set();
@@ -8630,10 +8891,17 @@ function buildVisibleSemanticConfigLineConnectorPaths(gridRect, oldPaneRect, new
     }
 
     coveredFieldPairs.add(lineRelationFieldPairKey(oldLine));
+    debugRows.push({
+      pairKey: oldLine.closest?.(".semantic-object-block-wrapper")?.dataset?.semanticPairKey || oldLine.dataset.semanticPairKey || "",
+      field: normalizeRelationField(oldLine.dataset.semanticField || newLine.dataset.semanticField || ""),
+      state: lineRelationStateFromElements(oldLine, newLine),
+      oldLine: compactDebugText(oldLine.textContent || ""),
+      newLine: compactDebugText(newLine.textContent || ""),
+    });
     paths.push(buildLineMappingConnectorPath({
       oldElement: oldLine,
       newElement: newLine,
-      gridRect,
+      grid,
       oldPaneRect,
       newPaneRect,
       relationKey: key,
@@ -8644,13 +8912,24 @@ function buildVisibleSemanticConfigLineConnectorPaths(gridRect, oldPaneRect, new
   });
 
   paths.push(...buildFallbackSemanticFieldConnectorPaths({
-    gridRect,
+    grid,
     oldPaneRect,
     newPaneRect,
     coveredFieldPairs,
   }));
+  paths.push(...buildFallbackFlatSemanticFieldConnectorPaths({
+    grid,
+    oldPaneRect,
+    newPaneRect,
+    coveredFieldPairs,
+  }));
+  reportLineMappingDebugRows("explicit semantic lines", debugRows);
 
   return paths;
+}
+
+function isObjectMappingVisible() {
+  return selectors.objectMappingVisibleToggle?.checked !== false;
 }
 
 function isLineMappingVisible() {
@@ -8674,12 +8953,13 @@ function lineRelationFieldPairKey(element) {
 }
 
 function buildFallbackSemanticFieldConnectorPaths({
-  gridRect,
+  grid,
   oldPaneRect,
   newPaneRect,
   coveredFieldPairs,
 }) {
   const paths = [];
+  const debugRows = [];
   const oldBlocks = collectVisibleSemanticObjectBlocks(selectors.oldDiffPane, oldPaneRect);
   const newBlocks = collectVisibleSemanticObjectBlocks(selectors.newDiffPane, newPaneRect);
 
@@ -8723,10 +9003,17 @@ function buildFallbackSemanticFieldConnectorPaths({
         const relationState = semanticFieldRelationStateFromLines(oldLine, newLine, field);
         applyFallbackLineRelation(oldLine, relationKey, relationState, field);
         applyFallbackLineRelation(newLine, relationKey, relationState, field);
+        debugRows.push({
+          pairKey,
+          field,
+          state: relationState,
+          oldLine: compactDebugText(oldLine.textContent || ""),
+          newLine: compactDebugText(newLine.textContent || ""),
+        });
         paths.push(buildLineMappingConnectorPath({
           oldElement: oldLine,
           newElement: newLine,
-          gridRect,
+          grid,
           oldPaneRect,
           newPaneRect,
           relationKey,
@@ -8745,8 +9032,94 @@ function buildFallbackSemanticFieldConnectorPaths({
       newObjects: newBlocks.size,
     });
   }
+  reportLineMappingDebugRows("fallback semantic fields", debugRows);
 
   return paths;
+}
+
+function buildFallbackFlatSemanticFieldConnectorPaths({
+  grid,
+  oldPaneRect,
+  newPaneRect,
+  coveredFieldPairs,
+}) {
+  const paths = [];
+  const debugRows = [];
+  const oldPairs = collectVisibleFlatSemanticLines(selectors.oldDiffPane, oldPaneRect);
+  const newPairs = collectVisibleFlatSemanticLines(selectors.newDiffPane, newPaneRect);
+
+  oldPairs.forEach((oldFields, pairKey) => {
+    const newFields = newPairs.get(pairKey);
+    if (!newFields) return;
+
+    const fields = orderedRelationFields(
+      "",
+      oldFields,
+      newFields
+    );
+
+    fields.forEach((field) => {
+      const fieldPairKey = `${pairKey}:${field}`;
+      if (coveredFieldPairs.has(fieldPairKey)) return;
+
+      const oldLines = oldFields.get(field) || [];
+      const newLines = newFields.get(field) || [];
+      const pairCount = Math.min(oldLines.length, newLines.length);
+
+      for (let index = 0; index < pairCount; index += 1) {
+        const oldLine = oldLines[index];
+        const newLine = newLines[index];
+        if (!oldLine || !newLine) continue;
+
+        const relationKey = `flat-field:${pairKey}:${field}:${index}`;
+        const relationState = semanticFieldRelationStateFromLines(oldLine, newLine, field);
+        applyFallbackLineRelation(oldLine, relationKey, relationState, field);
+        applyFallbackLineRelation(newLine, relationKey, relationState, field);
+        debugRows.push({
+          pairKey,
+          field,
+          state: relationState,
+          oldLine: compactDebugText(oldLine.textContent || ""),
+          newLine: compactDebugText(newLine.textContent || ""),
+        });
+        paths.push(buildLineMappingConnectorPath({
+          oldElement: oldLine,
+          newElement: newLine,
+          grid,
+          oldPaneRect,
+          newPaneRect,
+          relationKey,
+          relationState,
+          oldAnchorFn: diffLineTextAnchor,
+          newAnchorFn: diffLineTextAnchor,
+        }));
+      }
+    });
+  });
+
+  reportLineMappingDebugRows("fallback flat fields", debugRows);
+  return paths;
+}
+
+function collectVisibleFlatSemanticLines(pane, paneRect) {
+  const result = new Map();
+  if (!pane) return result;
+
+  pane.querySelectorAll(".diff-line[data-semantic-pair-key][data-semantic-field]").forEach((line) => {
+    const pairKey = line.dataset.semanticPairKey || "";
+    const field = normalizeRelationField(line.dataset.semanticField || "");
+    if (!pairKey || !field || line.classList.contains("semantic-placeholder-line")) return;
+    if (line.classList.contains("placeholder")) return;
+    if (isSemanticStructuralLine(line.textContent || "")) return;
+    const rect = line.getBoundingClientRect();
+    if (rect.bottom < paneRect.top || rect.top > paneRect.bottom) return;
+    if (!result.has(pairKey)) result.set(pairKey, new Map());
+    const fields = result.get(pairKey);
+    if (!fields.has(field)) fields.set(field, []);
+    fields.get(field).push(line);
+  });
+
+  return result;
 }
 
 function collectVisibleSemanticObjectBlocks(pane, paneRect) {
@@ -8790,7 +9163,7 @@ function orderedRelationFields(objectType, oldLinesByField, newLinesByField) {
 function normalizeRelationField(field = "") {
   const normalized = String(field || "").trim();
   if (normalized === "admin-state") return "state";
-  return normalized;
+  return commonFieldAliases[normalized] || normalized;
 }
 
 function applyFallbackLineRelation(line, relationKey, relationState, field) {
@@ -8844,14 +9217,14 @@ function lineRelationStateFromElements(oldElement, newElement) {
 }
 
 function currentLineMappingStyle() {
-  const style = selectors.lineMappingStyleSelect?.value || "chain";
-  return ["straight", "chain", "slime"].includes(style) ? style : "chain";
+  const style = selectors.lineMappingStyleSelect?.value || "straight";
+  return ["straight", "chain", "slime"].includes(style) ? style : "straight";
 }
 
 function buildLineMappingConnectorPath({
   oldElement,
   newElement,
-  gridRect,
+  grid,
   oldPaneRect,
   newPaneRect,
   relationKey,
@@ -8861,14 +9234,22 @@ function buildLineMappingConnectorPath({
 }) {
   const oldAnchor = oldAnchorFn(oldElement, oldPaneRect, "right");
   const newAnchor = newAnchorFn(newElement, newPaneRect, "left");
-  const x1 = oldAnchor.x - gridRect.left;
-  const x2 = newAnchor.x - gridRect.left;
-  const y1 = oldAnchor.y - gridRect.top;
-  const y2 = newAnchor.y - gridRect.top;
+  const oldPoint = getRelativePoint(oldAnchor, grid);
+  const newPoint = getRelativePoint(newAnchor, grid);
+  const x1 = oldPoint.x;
+  const x2 = newPoint.x;
+  const y1 = oldPoint.y;
+  const y2 = newPoint.y;
   const style = currentLineMappingStyle();
   const active = relationKey && relationKey === state.activeLineRelationKey ? "line-relation-selected" : "";
   const animated = selectors.lineMappingAnimationToggle?.checked ? "is-animated" : "";
   const path = buildLineMappingPathD({ x1, y1, x2, y2, style });
+  const debugMarkup = isMappingDebugVisible()
+    ? [
+      buildMappingDebugAnchor(x1, y1, "line", relationKey, "old"),
+      buildMappingDebugAnchor(x2, y2, "line", relationKey, "new"),
+    ].join("")
+    : "";
 
   if (selectors.semanticDebugToggle?.checked && state.lineMappingDebugAnchorCount < 5) {
     state.lineMappingDebugAnchorCount += 1;
@@ -8883,7 +9264,7 @@ function buildLineMappingConnectorPath({
 
   return `<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${active} ${animated}"
     data-line-relation-key="${escapeHtml(relationKey)}"
-    d="${path}" />`;
+    d="${path}" />${debugMarkup}`;
 }
 
 function buildLineMappingPathD({ x1, y1, x2, y2, style }) {
@@ -8905,8 +9286,8 @@ function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
   const field = line?.dataset?.semanticField || "";
   const fieldSelector = field ? `[data-semantic-field="${cssEscape(field)}"]` : "";
   const tokenElement = fieldSelector
-    ? line.querySelector(`.diff-token-match${fieldSelector}, .semantic-diff-line-field${fieldSelector}`)
-    : null;
+    ? line.querySelector(`.diff-token-match${fieldSelector}`)
+    : line?.querySelector?.(".diff-token-match");
   const textElement = tokenElement || line.querySelector("code") || line;
   const textRect = textElement.getBoundingClientRect();
   const lineRect = line.getBoundingClientRect();
@@ -8923,7 +9304,12 @@ function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
-  const textElement = line.querySelector(".diff-line-text") || line;
+  const field = line?.dataset?.semanticField || "";
+  const fieldSelector = field ? `[data-semantic-field="${cssEscape(field)}"]` : "";
+  const tokenElement = fieldSelector
+    ? line.querySelector(`.diff-token-match${fieldSelector}`)
+    : line?.querySelector?.(".diff-token-match");
+  const textElement = tokenElement || line.querySelector(".diff-line-text") || line;
   const textRect = textElement.getBoundingClientRect();
   const lineRect = line.getBoundingClientRect();
   const visibleLeft = Math.max(textRect.left, paneRect.left);
@@ -9365,7 +9751,10 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
     const wrapperClasses = [
       "semantic-object-block-wrapper",
       state,
+      objectType ? `object-type-${cssSafeClassName(objectType)}` : "",
       row?.objectMatched ? "object-matched" : "",
+      row?.objectStatus ? `object-status-${cssSafeClassName(row.objectStatus)}` : "",
+      row?.objectReason ? `object-reason-${cssSafeClassName(row.objectReason)}` : "",
       row?.semanticObjectStart ? "semantic-object-start" : "",
       row?.semanticObjectEnd ? "semantic-object-end" : "",
       row?.placeholder || row?.hidden ? "semantic-placeholder-line" : "",
@@ -9390,6 +9779,7 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
   }
 
   const classes = ["diff-line", state];
+  if (objectType) classes.push(`object-type-${cssSafeClassName(objectType)}`);
 
   if (row?.objectMatched) {
     classes.push(
@@ -9434,6 +9824,10 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
     data-side="${side}"
     data-object-type="${escapeHtml(objectType)}"
     data-object-key="${escapeHtml(row?.objectKey || "")}"
+    data-object-identity="${escapeHtml(row?.objectIdentity || "")}"
+    data-object-status="${escapeHtml(row?.objectStatus || "")}"
+    data-object-score="${escapeHtml(row?.objectScore || "")}"
+    data-object-reason="${escapeHtml(row?.objectReason || "")}"
     data-semantic-object-index="${escapeHtml(row?.semanticObjectIndex ?? "")}"
     data-semantic-pair-key="${escapeHtml(row?.semanticPairKey || "")}"
     data-diff-key="${escapeHtml(key)}"
@@ -10346,7 +10740,9 @@ function saveUiPreferences() {
   document.body.dataset.theme = selectors.themeSelect.value;
   document.documentElement.style.setProperty("--editor-font", `${selectors.fontSelect.value}, monospace`);
   document.body.dataset.fieldHighlight = selectors.fieldHighlightToggle?.checked === false ? "off" : "on";
-  document.body.dataset.lineMappingStyle = selectors.lineMappingStyleSelect?.value || "chain";
+  document.body.dataset.objectMappingVisible = selectors.objectMappingVisibleToggle?.checked === false ? "off" : "on";
+  document.body.dataset.mappingDebug = selectors.mappingDebugToggle?.checked ? "on" : "off";
+  document.body.dataset.lineMappingStyle = selectors.lineMappingStyleSelect?.value || "straight";
   document.body.dataset.lineMappingVisible = selectors.lineMappingVisibleToggle?.checked === false ? "off" : "on";
   document.body.dataset.lineMappingAnimation = selectors.lineMappingAnimationToggle?.checked ? "on" : "off";
   localStorage.setItem("configWorkbenchUi", JSON.stringify({
@@ -10354,7 +10750,9 @@ function saveUiPreferences() {
     font: selectors.fontSelect.value,
     fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
     semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
-    lineMappingStyle: selectors.lineMappingStyleSelect?.value || "chain",
+    objectMappingVisible: selectors.objectMappingVisibleToggle?.checked !== false,
+    mappingDebug: Boolean(selectors.mappingDebugToggle?.checked),
+    lineMappingStyle: selectors.lineMappingStyleSelect?.value || "straight",
     lineMappingVisible: selectors.lineMappingVisibleToggle?.checked !== false,
     lineMappingAnimation: Boolean(selectors.lineMappingAnimationToggle?.checked),
   }));
@@ -10362,7 +10760,7 @@ function saveUiPreferences() {
 
 function loadUiPreferences() {
   try {
-    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas", lineMappingStyle: "chain" };
+    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas", lineMappingStyle: "straight" };
     selectors.themeSelect.value = prefs.theme;
     selectors.fontSelect.value = prefs.font;
     if (selectors.fieldHighlightToggle) {
@@ -10370,6 +10768,12 @@ function loadUiPreferences() {
     }
     if (selectors.semanticDebugToggle) {
       selectors.semanticDebugToggle.checked = Boolean(prefs.semanticDebug);
+    }
+    if (selectors.objectMappingVisibleToggle) {
+      selectors.objectMappingVisibleToggle.checked = prefs.objectMappingVisible !== false;
+    }
+    if (selectors.mappingDebugToggle) {
+      selectors.mappingDebugToggle.checked = Boolean(prefs.mappingDebug);
     }
     if (selectors.lineMappingStyleSelect) {
       selectors.lineMappingStyleSelect.value = ["straight", "chain", "slime"].includes(prefs.lineMappingStyle)

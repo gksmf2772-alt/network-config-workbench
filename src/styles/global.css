@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Kalam:wght@700&family=Patrick+Hand&display=swap");
+
 :root {
   --color-primary: #0f172a;
   --color-primary-hover: #1e293b;
@@ -91,6 +93,33 @@
   --group-border-active: #0036cc;
   --group-badge-bg: #ffffff;
   --group-badge-text: #000000;
+}
+
+[data-theme="sketch"] {
+  --bg: #fdfbf7;
+  --panel: #ffffff;
+  --panel-muted: #f7f0e3;
+  --text: #2d2d2d;
+  --muted: #5c574f;
+  --line: #2d2d2d;
+  --primary: #2d5da1;
+  --primary-strong: #173f78;
+  --warning: #a86800;
+  --danger: #d93838;
+  --success: #217a4d;
+  --placeholder: #e5e0d8;
+  --code-bg: #fffdf8;
+  --shadow: 4px 4px 0 0 #2d2d2d;
+  --map-line: rgba(45, 45, 45, 0.42);
+  --map-line-hover: #2d5da1;
+  --map-line-selected: #ff4d4d;
+  --group-bg: rgba(229, 224, 216, 0.56);
+  --group-bg-hover: rgba(45, 93, 161, 0.12);
+  --group-bg-selected: rgba(255, 77, 77, 0.14);
+  --group-border: rgba(45, 45, 45, 0.72);
+  --group-border-active: #2d2d2d;
+  --group-badge-bg: #fff9c4;
+  --group-badge-text: #2d2d2d;
 }
 
 * {
@@ -6281,6 +6310,167 @@ body {
 [data-theme="dark"] .compare-area .ncw-action-bar,
 [data-theme="dark"] .semantic-diff-object-block {
   background: var(--panel) !important;
+}
+
+body[data-theme="sketch"] {
+  background-color: var(--bg);
+  background-image: radial-gradient(#e5e0d8 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--text);
+  font-family: "Patrick Hand", "Segoe UI", Arial, sans-serif;
+}
+
+body[data-theme="sketch"] h1,
+body[data-theme="sketch"] h2,
+body[data-theme="sketch"] h3,
+body[data-theme="sketch"] .summary-status-main strong,
+body[data-theme="sketch"] .summary-card.summary-metric strong,
+body[data-theme="sketch"] .semantic-object-title,
+body[data-theme="sketch"] .report-section h3 {
+  color: var(--text) !important;
+  font-family: "Kalam", "Patrick Hand", cursive;
+  font-weight: 700;
+}
+
+body[data-theme="sketch"] textarea,
+body[data-theme="sketch"] code,
+body[data-theme="sketch"] pre,
+body[data-theme="sketch"] .embedded-diff,
+body[data-theme="sketch"] .diff-line-text,
+body[data-theme="sketch"] .semantic-diff-config-line code {
+  font-family: var(--editor-font) !important;
+}
+
+body[data-theme="sketch"] .control-panel,
+body[data-theme="sketch"] .editor-card,
+body[data-theme="sketch"] .result-layout article,
+body[data-theme="sketch"] .diff-card,
+body[data-theme="sketch"] .profile-editor,
+body[data-theme="sketch"] .profile-library,
+body[data-theme="sketch"] .summary-empty-state,
+body[data-theme="sketch"] .summary-overview,
+body[data-theme="sketch"] .operator-dashboard,
+body[data-theme="sketch"] .summary-section,
+body[data-theme="sketch"] .summary-alert-panel,
+body[data-theme="sketch"] .summary-coverage-warning,
+body[data-theme="sketch"] .report-section,
+body[data-theme="sketch"] .report-graph-card,
+body[data-theme="sketch"] .coverage-diagnostics,
+body[data-theme="sketch"] .ncw-header,
+body[data-theme="sketch"] .ncw-action-bar,
+body[data-theme="sketch"] .ncw-editor-card,
+body[data-theme="sketch"] .ncw-policy-panel,
+body[data-theme="sketch"] .ncw-relationship-panel,
+body[data-theme="sketch"] .ncw-manual-drawer,
+body[data-theme="sketch"] .ncw-object-match-table,
+body[data-theme="sketch"] .summary-card,
+body[data-theme="sketch"] .semantic-diff-object-block {
+  border: 2px solid var(--line) !important;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px !important;
+  background: var(--panel) !important;
+  box-shadow: 4px 4px 0 0 rgba(45, 45, 45, 0.92) !important;
+}
+
+body[data-theme="sketch"] .summary-card.summary-metric,
+body[data-theme="sketch"] .semantic-field,
+body[data-theme="sketch"] .semantic-candidate-option,
+body[data-theme="sketch"] .report-review-row,
+body[data-theme="sketch"] .coverage-diagnostic-grid div,
+body[data-theme="sketch"] .field-overlap-type-row,
+body[data-theme="sketch"] .semantic-object-summary-row {
+  border: 2px solid var(--line) !important;
+  border-radius: 18px 10px 20px 12px / 12px 20px 10px 18px !important;
+  box-shadow: 3px 3px 0 0 rgba(45, 45, 45, 0.32) !important;
+}
+
+body[data-theme="sketch"] button,
+body[data-theme="sketch"] select,
+body[data-theme="sketch"] input {
+  border: 2px solid var(--line);
+  border-radius: 18px 10px 20px 12px / 12px 20px 10px 18px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: "Patrick Hand", "Segoe UI", Arial, sans-serif;
+  box-shadow: 3px 3px 0 0 rgba(45, 45, 45, 0.88);
+}
+
+body[data-theme="sketch"] button:hover,
+body[data-theme="sketch"] button:focus-visible {
+  background: #ff4d4d !important;
+  color: #ffffff !important;
+  box-shadow: 1px 1px 0 0 rgba(45, 45, 45, 0.88) !important;
+}
+
+body[data-theme="sketch"] .drop-zone,
+body[data-theme="sketch"] .code-frame,
+body[data-theme="sketch"] .embedded-diff,
+body[data-theme="sketch"] .diff-gutter {
+  border-color: var(--line) !important;
+  border-style: dashed !important;
+  background: var(--code-bg) !important;
+}
+
+body[data-theme="sketch"] .summary-status-badges span,
+body[data-theme="sketch"] .summary-risk-badge,
+body[data-theme="sketch"] .summary-context-row span,
+body[data-theme="sketch"] .app-badge,
+body[data-theme="sketch"] .semantic-status-badge,
+body[data-theme="sketch"] .semantic-diff-badge,
+body[data-theme="sketch"] .semantic-diff-object-type,
+body[data-theme="sketch"] .object-scope-chip,
+body[data-theme="sketch"] .summary-issue-chip,
+body[data-theme="sketch"] .filter-chip,
+body[data-theme="sketch"] .graph-chip {
+  border: 2px solid var(--line) !important;
+  border-radius: 14px 8px 16px 10px / 10px 16px 8px 14px !important;
+  background: #fff9c4 !important;
+  color: var(--text) !important;
+}
+
+body[data-theme="sketch"] .summary-metric-warning,
+body[data-theme="sketch"] .summary-risk-warning,
+body[data-theme="sketch"] .summary-risk-attention {
+  background: #fff9c4 !important;
+}
+
+body[data-theme="sketch"] .summary-metric-removed,
+body[data-theme="sketch"] .summary-risk-danger,
+body[data-theme="sketch"] .summary-risk-critical {
+  background: #fff0ee !important;
+}
+
+body[data-theme="sketch"] .diff-token-match,
+body[data-theme="sketch"] .semantic-diff-line-field {
+  border: 1px dashed var(--line) !important;
+  border-radius: 8px 5px 9px 6px / 6px 9px 5px 8px !important;
+  background: rgba(45, 93, 161, 0.12) !important;
+}
+
+body[data-theme="sketch"] .diff-object-flow,
+body[data-theme="sketch"] .diff-object-flow-spine,
+body[data-theme="sketch"] .diff-object-link,
+body[data-theme="sketch"] .line-mapping-connector {
+  stroke-linecap: round;
+  stroke-dasharray: 7 5;
+}
+
+body[data-theme="sketch"] .diff-line:hover,
+body[data-theme="sketch"] .semantic-diff-config-line:hover,
+body[data-theme="sketch"] .report-review-row:hover,
+body[data-theme="sketch"] .semantic-object-summary-row:hover {
+  background: rgba(255, 249, 196, 0.5) !important;
+}
+
+body[data-theme="sketch"] .ncw-editor-card:nth-child(1),
+body[data-theme="sketch"] .summary-section:nth-child(odd),
+body[data-theme="sketch"] .report-section:nth-child(odd) {
+  transform: rotate(-0.18deg);
+}
+
+body[data-theme="sketch"] .ncw-editor-card:nth-child(3),
+body[data-theme="sketch"] .summary-section:nth-child(even),
+body[data-theme="sketch"] .report-section:nth-child(even) {
+  transform: rotate(0.16deg);
 }
 
 @container (max-width: 980px) {

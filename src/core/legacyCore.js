@@ -5,6 +5,9 @@
   getVendorPresetByLegacyVendor,
   buildVendorPresetSnapshot,
   ensureVendorPresetFields,
+  getVendorLabel,
+  getVendorPairSupportState,
+  VENDOR_SUPPORT_STATE,
 } from "./vendorPresets.js";
 
 import {
@@ -119,6 +122,7 @@ const selectors = {
   vendorSelect: document.querySelector("#vendorSelect"),
   oldVendorSelect: document.querySelector("#oldVendorSelect"),
   newVendorSelect: document.querySelector("#newVendorSelect"),
+  vendorSupportNotice: document.querySelector("#vendorSupportNotice"),
   newProfileBtn: document.querySelector("#newProfileBtn"),
   saveProfileBtn: document.querySelector("#saveProfileBtn"),
   saveProfileAsBtn: document.querySelector("#saveProfileAsBtn"),
@@ -214,9 +218,14 @@ const state = {
   activeDiffObjectKey: "",
   activeSemanticPairKey: "",
   activeLineRelationKey: "",
+  lastSemanticSummary: null,
+  lastSessionName: "",
   semanticPairKeyboardBound: false,
   lineRelationDelegationBound: false,
+  connectorSvgDelegationBound: false,
   diffResizeObserver: null,
+  diffMutationObserver: null,
+  connectorSettleTimer: null,
   mappingDebugSignature: "",
   lineMappingDebugSignature: "",
   mappingDebugAnchorCount: 0,
@@ -315,6 +324,7 @@ function buildProfileVendorState(oldVendor, newVendor) {
   const fallback = getDefaultVendorPreset();
   const safeOldVendor = oldVendor || fallback.oldVendor;
   const safeNewVendor = newVendor || fallback.newVendor;
+  const supportState = getVendorPairSupportState(safeOldVendor, safeNewVendor);
   const matchedPreset = VENDOR_PRESETS.find((preset) =>
     preset.oldVendor === safeOldVendor && preset.newVendor === safeNewVendor
   );
@@ -327,6 +337,7 @@ function buildProfileVendorState(oldVendor, newVendor) {
       oldVendor: safeOldVendor,
       newVendor: safeNewVendor,
       legacyVendor,
+      status: supportState.state,
     };
 
   return {
@@ -339,7 +350,7 @@ function buildProfileVendorState(oldVendor, newVendor) {
 }
 
 function vendorLabel(vendorId) {
-  return vendorLabels[vendorId] || vendorId || "";
+  return getVendorLabel(vendorId) || vendorLabels[vendorId] || vendorId || "";
 }
 
 function legacyVendorFromParserId(vendorId = "") {
@@ -368,6 +379,26 @@ function getProfileVendorPairFromControls() {
 function syncLegacyVendorControl(vendorState = state.profileDraft) {
   if (!selectors.vendorSelect || !vendorState) return;
   selectors.vendorSelect.value = vendorState.vendor || legacyVendorFromParserId(vendorState.oldVendor || "");
+}
+
+function renderVendorSupportNotice(vendorState = state.profileDraft) {
+  if (!selectors.vendorSupportNotice || !vendorState) return;
+  const support = getVendorPairSupportState(vendorState.oldVendor, vendorState.newVendor);
+  selectors.vendorSupportNotice.dataset.state = support.state;
+  selectors.vendorSupportNotice.innerHTML = `
+    <strong>${escapeHtml(vendorLabel(vendorState.oldVendor))} → ${escapeHtml(vendorLabel(vendorState.newVendor))}</strong>
+    <span>${escapeHtml(support.label)} · ${escapeHtml(support.state === VENDOR_SUPPORT_STATE.PLANNED
+      ? "placeholder 파서는 비교 실행 대상이 아닙니다."
+      : support.state === VENDOR_SUPPORT_STATE.PARTIAL
+        ? "파서는 동작하지만 preset 검증 범위는 확대 중입니다."
+        : "파서와 기본 preset을 사용할 수 있습니다."
+    )}</span>
+  `;
+}
+
+function isCurrentVendorPairRunnable() {
+  const vendorPair = getProfileVendorPairFromControls();
+  return getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor).runnable;
 }
 
 function createEmptyRulesByType() {
@@ -555,7 +586,12 @@ async function init() {
   await refreshProfileSelect();
   await renderSavedProfiles();
   commitProfileSnapshot();
+  renderSummaryEmptyState();
   showEditMode();
+  const fontReady = document.fonts?.ready;
+  if (fontReady?.then) {
+    fontReady.then(() => scheduleSettledDiffConnectorRender()).catch(() => {});
+  }
 }
 
 function bindEvents() {
@@ -622,9 +658,11 @@ function bindEvents() {
   selectors.newDiffPane.addEventListener("dblclick", showEditMode);
   window.addEventListener("resize", scheduleSemanticObjectWidthSync);
   window.addEventListener("resize", scheduleSemanticObjectStartAlignment);
-  window.addEventListener("resize", scheduleDiffConnectorRender);
+  window.addEventListener("resize", scheduleSettledDiffConnectorRender);
   window.addEventListener("resize", scheduleProfileExampleConnectorRender);
   setupDiffConnectorResizeObserver();
+  setupDiffConnectorMutationObserver();
+  ensureConnectorSvgDelegation();
 
   [
     [selectors.profileOldExampleInput, "old"],
@@ -673,6 +711,7 @@ function bindEvents() {
     const vendorPair = getProfileVendorPairFromControls();
     Object.assign(state.profileDraft, buildProfileVendorState(vendorPair.oldVendor, vendorPair.newVendor));
     syncLegacyVendorControl(state.profileDraft);
+    renderVendorSupportNotice(state.profileDraft);
 
     markProfileDirty("Profile", "수정", "벤더");
     markCompareStale();
@@ -690,6 +729,7 @@ function bindEvents() {
     state.profileDraft.oldVendor = preset.oldVendor;
     state.profileDraft.newVendor = preset.newVendor;
     state.profileDraft.vendorPreset = buildVendorPresetSnapshot(preset);
+    renderVendorSupportNotice(state.profileDraft);
 
     markProfileDirty("Profile", "수정", "벤더");
     markCompareStale();
@@ -707,15 +747,15 @@ function bindEvents() {
   selectors.semanticDebugToggle?.addEventListener("input", saveUiPreferences);
   selectors.mappingDebugToggle?.addEventListener("input", () => {
     saveUiPreferences();
-    scheduleDiffConnectorRender();
+    scheduleSettledDiffConnectorRender();
   });
   selectors.objectMappingVisibleToggle?.addEventListener("input", () => {
     saveUiPreferences();
-    scheduleDiffConnectorRender();
+    scheduleSettledDiffConnectorRender();
   });
   selectors.lineMappingStyleSelect?.addEventListener("input", () => {
     saveUiPreferences();
-    scheduleDiffConnectorRender();
+    scheduleSettledDiffConnectorRender();
   });
   selectors.lineMappingBendRange?.addEventListener("input", () => {
     saveUiPreferences();
@@ -723,11 +763,11 @@ function bindEvents() {
   });
   selectors.lineMappingVisibleToggle?.addEventListener("input", () => {
     saveUiPreferences();
-    scheduleDiffConnectorRender();
+    scheduleSettledDiffConnectorRender();
   });
   selectors.lineMappingAnimationToggle?.addEventListener("input", () => {
     saveUiPreferences();
-    scheduleDiffConnectorRender();
+    scheduleSettledDiffConnectorRender();
   });
 }
 
@@ -738,9 +778,27 @@ function setupDiffConnectorResizeObserver() {
   if (!targets.length) return;
 
   state.diffResizeObserver = new ResizeObserver(() => {
-    scheduleDiffConnectorRender();
+    scheduleSettledDiffConnectorRender();
   });
   targets.forEach((target) => state.diffResizeObserver.observe(target));
+}
+
+function setupDiffConnectorMutationObserver() {
+  if (state.diffMutationObserver || !window.MutationObserver) return;
+  const targets = [selectors.oldDiffPane, selectors.newDiffPane].filter(Boolean);
+  if (!targets.length) return;
+
+  state.diffMutationObserver = new MutationObserver(() => {
+    scheduleSettledDiffConnectorRender();
+  });
+  targets.forEach((target) => {
+    state.diffMutationObserver.observe(target, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["open"],
+    });
+  });
 }
 
 function setActiveTab(tab, options = {}) {
@@ -757,6 +815,7 @@ function setActiveTab(tab, options = {}) {
   selectors.profilesTab.classList.toggle("active", profiles);
   selectors.summaryTab?.classList.toggle("active", summary);
   if (summary) renderObjectNavigator();
+  if (compare) scheduleSettledDiffConnectorRender();
   return true;
 }
 
@@ -783,6 +842,7 @@ function renderProfileEditor() {
   if (selectors.oldVendorSelect) selectors.oldVendorSelect.value = state.profileDraft.oldVendor || getDefaultVendorPreset().oldVendor;
   if (selectors.newVendorSelect) selectors.newVendorSelect.value = state.profileDraft.newVendor || getDefaultVendorPreset().newVendor;
   syncLegacyVendorControl(state.profileDraft);
+  renderVendorSupportNotice(state.profileDraft);
   selectors.profileObjectTypeSelect.innerHTML = objectTypes
     .map((type) => `<option value="${type}" ${state.selectedProfileObjectType === type ? "selected" : ""}>${type}</option>`)
     .join("");
@@ -3423,7 +3483,7 @@ function toggleCompareControls() {
   selectors.toggleControlsBtn.title = hidden ? "비교 옵션 보이기" : "비교 옵션 숨기기";
   selectors.toggleControlsBtn.setAttribute("aria-label", selectors.toggleControlsBtn.title);
   selectors.toggleControlsBtn.classList.toggle("is-collapsed", hidden);
-  scheduleDiffConnectorRender();
+  scheduleSettledDiffConnectorRender();
 }
 
 function setResultTab(tabName) {
@@ -3567,7 +3627,7 @@ function showDiffMode() {
   selectors.oldInput.closest(".code-frame").classList.add("diff-mode");
   selectors.newInput.closest(".code-frame").classList.add("diff-mode");
   selectors.diffConnectorSvg.closest(".editor-grid").classList.add("diff-connectors-active");
-  scheduleDiffConnectorRender();
+  scheduleSettledDiffConnectorRender();
 }
 
 function buildLineNumbers(value) {
@@ -3626,6 +3686,20 @@ function getOptions() {
 
 function runCompare() {
   try {
+    if (!isCurrentVendorPairRunnable()) {
+      const vendorPair = getProfileVendorPairFromControls();
+      const support = getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor);
+      selectors.compareStatus.textContent = "비교 불가";
+      selectors.lastComparedAt.textContent = `${support.description} · ${formatDate(Date.now())}`;
+      renderSummaryEmptyState({
+        title: "지원 예정 벤더 포함",
+        message: "placeholder 파서가 포함되어 비교를 실행하지 않았습니다.",
+        tone: "warning",
+      });
+      setActiveTab("summary", { skipConfirm: true });
+      return;
+    }
+
     selectors.compareStatus.textContent = "비교 중";
 
     const options = getOptions();
@@ -3670,7 +3744,7 @@ function runCompare() {
 function handleFieldHighlightToggle() {
   saveUiPreferences();
   if (!state.lastReport?.diffRows) {
-    scheduleDiffConnectorRender();
+    scheduleSettledDiffConnectorRender();
     return;
   }
 
@@ -3679,7 +3753,7 @@ function handleFieldHighlightToggle() {
   renderDiff(state.lastReport.diffRows || []);
   if (selectors.oldDiffPane) selectors.oldDiffPane.scrollTop = oldScrollTop;
   if (selectors.newDiffPane) selectors.newDiffPane.scrollTop = newScrollTop;
-  scheduleDiffConnectorRender();
+  scheduleSettledDiffConnectorRender();
 }
 
 function countRawRowLines(row = {}) {
@@ -3887,37 +3961,21 @@ function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = [
 function renderSemanticPreview() {
   const container = ensureSemanticPreviewContainer();
 
-  const { oldVendor, newVendor } = getCurrentVendorPresetForSemanticPreview();
-
-  const oldResult = normalizeConfig({
-    vendor: oldVendor,
-    configText: selectors.oldInput.value,
-    side: "old",
+  const runtime = buildSemanticRuntime({
+    oldText: selectors.oldInput.value,
+    newText: selectors.newInput.value,
+    options: getOptions(),
+    includeManualCandidates: true,
   });
-
-  const newResult = normalizeConfig({
-    vendor: newVendor,
-    configText: selectors.newInput.value,
-    side: "new",
-  });
-
-  const manualMap =
-    state.profileDraft?.manualMap &&
-    Object.keys(state.profileDraft.manualMap).length
-      ? state.profileDraft.manualMap
-      : loadManualMapFromLocalStorage();
-
-  const matches = matchNormalizedObjects({
+  const { oldVendor, newVendor, oldResult, newResult, plan, manualMap } = runtime;
+  state.lastSemanticSummary = buildSemanticSummaryMetrics({
+    plan,
     oldObjects: oldResult.objects,
     newObjects: newResult.objects,
     manualMap,
+    oldVendor,
+    newVendor,
   });
-
-  const plan = sortSemanticComparisonPlan(attachManualCandidatesToPlan(
-    createComparisonPlan(matches, state.profileDraft || {}),
-    oldResult.objects,
-    newResult.objects
-  ));
 
   if (selectors.semanticDebugToggle?.checked) {
     console.groupCollapsed("[semantic-object-debug]");
@@ -3949,10 +4007,11 @@ function renderSemanticPreview() {
   container.innerHTML = `
     <div class="semantic-preview-header">
       <strong>Semantic Preview</strong>
-      <span>${escapeHtml(oldVendor)} → ${escapeHtml(newVendor)}</span>
+      <span>${escapeHtml(vendorLabel(oldVendor))} → ${escapeHtml(vendorLabel(newVendor))}</span>
     </div>
     ${html}
   `;
+  if (state.lastReport) renderSummaryCards(state.lastReport, state.lastSemanticSummary);
 
   container.querySelectorAll(".semantic-candidate-select-btn").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3966,7 +4025,9 @@ function renderSemanticPreview() {
         ...nextManualMap,
       };
 
+      selectors.compareStatus.textContent = "수동 매핑 저장됨";
       renderSemanticPreview();
+      scheduleSettledDiffConnectorRender();
     });
   });
 
@@ -3987,13 +4048,16 @@ function renderSemanticPreview() {
       state.profileDraft.manualMap = nextManualMap;
       saveManualMapToLocalStorage(nextManualMap);
 
-      console.log("[manual-map-remove]", {
-        oldObjectId,
-        before: mergedManualMap,
-        after: nextManualMap,
-      });
-
+      selectors.compareStatus.textContent = "수동 매핑 삭제됨";
+      if (selectors.mappingDebugToggle?.checked) {
+        console.log("[manual-map-remove]", {
+          oldObjectId,
+          before: mergedManualMap,
+          after: nextManualMap,
+        });
+      }
       renderSemanticPreview();
+      scheduleSettledDiffConnectorRender();
     });
   });
 
@@ -4012,7 +4076,11 @@ function handleCompareError(error) {
   console.error("Network Config Workbench compare error", error);
   selectors.compareStatus.textContent = "비교 오류";
   selectors.lastComparedAt.textContent = `오류 발생: ${formatDate(Date.now())}`;
-  selectors.summaryCards.innerHTML = "";
+  renderSummaryEmptyState({
+    title: "비교 오류",
+    message: error?.message || String(error),
+    tone: "danger",
+  });
   selectors.reportList.innerHTML = `<li data-type="syntax">비교 중 오류: ${escapeHtml(error?.message || String(error))}</li>`;
   selectors.objectList.innerHTML = "";
   state.lastReport = null;
@@ -4021,6 +4089,244 @@ function handleCompareError(error) {
   } catch (renderError) {
     console.error("Failed to render compare error state", renderError);
   }
+}
+
+function renderSummaryEmptyState({
+  title = "비교 결과 없음",
+  message = "Config 비교를 실행하면 요약, 위험도, semantic match 품질이 표시됩니다.",
+  tone = "info",
+} = {}) {
+  if (!selectors.summaryCards) return;
+  const vendorState = state.profileDraft || getDefaultVendorPreset();
+  const support = getVendorPairSupportState(vendorState.oldVendor, vendorState.newVendor);
+  selectors.summaryCards.innerHTML = `
+    <section class="summary-empty-state summary-tone-${escapeHtml(tone)}">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(message)}</p>
+      </div>
+      <div class="summary-context-row">
+        <span>${escapeHtml(vendorLabel(vendorState.oldVendor))} → ${escapeHtml(vendorLabel(vendorState.newVendor))}</span>
+        <span>${escapeHtml(support.label)}</span>
+        <span>${escapeHtml(state.profileDraft?.name || "프로파일 없음")}</span>
+      </div>
+    </section>
+  `;
+}
+
+function buildSemanticSummaryMetrics({
+  plan = [],
+  oldObjects = [],
+  newObjects = [],
+  manualMap = {},
+  oldVendor = "",
+  newVendor = "",
+} = {}) {
+  const summary = {
+    totalObjects: plan.length,
+    matched: 0,
+    oldOnly: 0,
+    newOnly: 0,
+    ambiguous: 0,
+    manual: Object.keys(manualMap || {}).length,
+    relationshipDiffs: 0,
+    policyViolations: 0,
+    lineCovered: 0,
+    lineTotal: 0,
+    noopSuppressed: 0,
+    averageScore: 0,
+    lowConfidence: 0,
+    oldObjectCount: oldObjects.length,
+    newObjectCount: newObjects.length,
+    oldVendor,
+    newVendor,
+  };
+  let scoreTotal = 0;
+  let scoreCount = 0;
+
+  plan.forEach((item) => {
+    const status = String(item.status || "");
+    const reason = String(item.reason || "");
+    if (status === "matched") summary.matched += 1;
+    if (status === "old-only") summary.oldOnly += 1;
+    if (status === "new-only") summary.newOnly += 1;
+    if (status === "candidate" || item.ambiguousAlternatives?.length) summary.ambiguous += 1;
+    if (reason === "manual") summary.manual += 1;
+    if (Number.isFinite(Number(item.score))) {
+      const score = Number(item.score);
+      scoreTotal += score;
+      scoreCount += 1;
+      if (score > 0 && score < 80) summary.lowConfidence += 1;
+    }
+    summary.policyViolations += Number(item.policyViolationCount || 0);
+    (item.relationshipSummary || []).forEach((relationship) => {
+      if (!["matched", "unknown"].includes(String(relationship.status || ""))) {
+        summary.relationshipDiffs += 1;
+      }
+    });
+    (item.lineMatches || []).forEach((lineMatch) => {
+      summary.lineTotal += 1;
+      if (lineMatch.semanticCovered) summary.lineCovered += 1;
+      if (/ignored|suppressed|noop/i.test(String(lineMatch.reason || ""))) {
+        summary.noopSuppressed += 1;
+      }
+    });
+  });
+
+  summary.averageScore = scoreCount ? Math.round(scoreTotal / scoreCount) : 0;
+  summary.coveragePercent = summary.lineTotal
+    ? Math.round((summary.lineCovered / summary.lineTotal) * 100)
+    : 0;
+  summary.matchPercent = summary.totalObjects
+    ? Math.round((summary.matched / summary.totalObjects) * 100)
+    : 0;
+  return summary;
+}
+
+function buildLineSummaryMetrics(report = {}) {
+  const rows = Array.isArray(report.diffRows) ? report.diffRows : [];
+  const metrics = {
+    total: rows.length,
+    changed: 0,
+    added: 0,
+    removed: 0,
+    unchanged: 0,
+    suppressed: 0,
+  };
+
+  rows.forEach((row) => {
+    const oldState = row.oldState || "";
+    const newState = row.newState || "";
+    if (oldState === "equal" && newState === "equal") metrics.unchanged += 1;
+    else if (oldState === "missing" || (row.oldRow && !row.newRow)) metrics.removed += 1;
+    else if (newState === "added" || (!row.oldRow && row.newRow)) metrics.added += 1;
+    else if (oldState !== "placeholder" || newState !== "placeholder") metrics.changed += 1;
+    if (row.semanticCovered || /ignored|suppressed|noop/i.test(String(row.semanticReason || ""))) {
+      metrics.suppressed += 1;
+    }
+  });
+
+  return metrics;
+}
+
+function summaryRiskLevel(report = {}, semantic = {}) {
+  if (report.summary?.required || semantic.policyViolations) return "danger";
+  if (report.summary?.missing || report.summary?.added || semantic.oldOnly || semantic.newOnly) return "warning";
+  if (semantic.ambiguous || semantic.lowConfidence) return "attention";
+  if (report.summary?.changed || semantic.relationshipDiffs) return "changed";
+  return "ok";
+}
+
+function renderMetricCard({ label, value, detail = "", state = "" }) {
+  return `
+    <div class="summary-card summary-metric ${state ? `summary-metric-${escapeHtml(state)}` : ""}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+    </div>
+  `;
+}
+
+function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
+  if (!selectors.summaryCards || !report) return;
+  const semanticSummary = semantic || {};
+  const lineSummary = buildLineSummaryMetrics(report);
+  const vendorPair = getCurrentVendorPresetForSemanticPreview();
+  const support = getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor);
+  const risk = summaryRiskLevel(report, semanticSummary);
+  const statusLabel = {
+    ok: "안정",
+    changed: "변경 있음",
+    attention: "검토 필요",
+    warning: "위험",
+    danger: "필수 조치",
+  }[risk] || "검토";
+  const alerts = [
+    semanticSummary.ambiguous ? `불명확 매핑 ${semanticSummary.ambiguous}건` : "",
+    semanticSummary.lowConfidence ? `낮은 신뢰도 ${semanticSummary.lowConfidence}건` : "",
+    semanticSummary.relationshipDiffs ? `관계 차이 ${semanticSummary.relationshipDiffs}건` : "",
+    support.state === VENDOR_SUPPORT_STATE.PARTIAL ? "부분 지원 preset" : "",
+  ].filter(Boolean);
+
+  selectors.summaryCards.innerHTML = `
+    <section class="summary-overview summary-risk-${escapeHtml(risk)}">
+      <div class="summary-overview-main">
+        <span class="summary-kicker">Overall Status</span>
+        <strong>${escapeHtml(statusLabel)}</strong>
+        <p>${escapeHtml(alerts.length ? alerts.join(" · ") : "차이와 semantic 위험 신호가 낮습니다.")}</p>
+      </div>
+      <div class="summary-context-row">
+        <span>${escapeHtml(vendorLabel(vendorPair.oldVendor))} → ${escapeHtml(vendorLabel(vendorPair.newVendor))}</span>
+        <span>${escapeHtml(support.label)}</span>
+        <span>${escapeHtml(state.profileDraft?.name || "프로파일 없음")}</span>
+        <span>${escapeHtml(state.lastSessionName || "현재 입력")}</span>
+        ${state.compareDirty ? "<span>비교 후 변경됨</span>" : ""}
+      </div>
+    </section>
+
+    <section class="summary-section">
+      <div class="summary-section-head">
+        <h3>Line Diff</h3>
+        <button type="button" data-summary-action="issues">차이 목록</button>
+      </div>
+      <div class="summary-metric-grid">
+        ${renderMetricCard({ label: "전체", value: lineSummary.total, detail: "렌더링된 diff row" })}
+        ${renderMetricCard({ label: "변경", value: lineSummary.changed, state: "changed" })}
+        ${renderMetricCard({ label: "추가", value: lineSummary.added, state: "added" })}
+        ${renderMetricCard({ label: "삭제", value: lineSummary.removed, state: "removed" })}
+        ${renderMetricCard({ label: "동일", value: lineSummary.unchanged, state: "ok" })}
+        ${renderMetricCard({ label: "suppressed", value: lineSummary.suppressed, detail: "semantic/noop covered" })}
+      </div>
+    </section>
+
+    <section class="summary-section">
+      <div class="summary-section-head">
+        <h3>Semantic Match</h3>
+        <button type="button" data-summary-action="semantic">Semantic 상세</button>
+      </div>
+      <div class="summary-metric-grid">
+        ${renderMetricCard({ label: "match 품질", value: `${semanticSummary.matchPercent ?? 0}%`, detail: `평균 score ${semanticSummary.averageScore ?? 0}` })}
+        ${renderMetricCard({ label: "matched", value: semanticSummary.matched ?? 0, state: "ok" })}
+        ${renderMetricCard({ label: "old unmatched", value: semanticSummary.oldOnly ?? 0, state: "removed" })}
+        ${renderMetricCard({ label: "new unmatched", value: semanticSummary.newOnly ?? 0, state: "added" })}
+        ${renderMetricCard({ label: "ambiguous", value: semanticSummary.ambiguous ?? 0, state: "warning" })}
+        ${renderMetricCard({ label: "manual", value: semanticSummary.manual ?? 0 })}
+        ${renderMetricCard({ label: "relationship", value: semanticSummary.relationshipDiffs ?? 0, state: "changed" })}
+        ${renderMetricCard({ label: "line coverage", value: `${semanticSummary.coveragePercent ?? 0}%`, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0}` })}
+      </div>
+    </section>
+
+    ${alerts.length ? `
+      <section class="summary-alert-panel summary-risk-${escapeHtml(risk)}">
+        <strong>검토 포인트</strong>
+        <ul>${alerts.map((alert) => `<li>${escapeHtml(alert)}</li>`).join("")}</ul>
+      </section>
+    ` : ""}
+  `;
+  bindSummaryActions();
+}
+
+function bindSummaryActions() {
+  selectors.summaryCards?.querySelectorAll("[data-summary-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.summaryAction;
+      if (action === "issues") {
+        setResultTab("summary");
+        selectors.reportList?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      } else if (action === "semantic") {
+        setResultTab("summary");
+        document.querySelector("#semanticPreviewPanel")?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      } else if (action === "objects") {
+        setResultTab("objects");
+      } else if (action === "overview") {
+        setResultTab("overview");
+      }
+    });
+  });
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
 }
 
 function hasLeadingIndent(rawLine = "") {
@@ -6273,7 +6579,12 @@ function buildSemanticObjectDiffRows(oldText, newText, options) {
   return buildSemanticPlanDiffRows(oldText, newText, options);
 }
 
-function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
+function buildSemanticRuntime({
+  oldText = selectors.oldInput?.value || "",
+  newText = selectors.newInput?.value || "",
+  options = getOptions(),
+  includeManualCandidates = false,
+} = {}) {
   const { oldVendor, newVendor } = getCurrentVendorPresetForSemanticPreview();
 
   const oldResult = normalizeConfig({
@@ -6304,9 +6615,27 @@ function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
 
   const rawPlan = createComparisonPlan(matches, state.profileDraft || {});
   const scopedPlan = filterSemanticPlanByScope(rawPlan, options.selectedObjects);
-  const plan = options.sortObjects === false
+  const sortedPlan = options.sortObjects === false
     ? scopedPlan
     : sortSemanticComparisonPlan(scopedPlan);
+  const plan = includeManualCandidates
+    ? sortSemanticComparisonPlan(attachManualCandidatesToPlan(sortedPlan, oldResult.objects, newResult.objects))
+    : sortedPlan;
+
+  return {
+    oldVendor,
+    newVendor,
+    oldResult,
+    newResult,
+    matches,
+    plan,
+    manualMap,
+  };
+}
+
+function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
+  const runtime = buildSemanticRuntime({ oldText, newText, options });
+  const plan = runtime.plan;
   const rows = buildSemanticObjectBlockRows(plan);
 
   return appendUnmatchedRawLinesToSemanticRows(rows, oldText, newText, plan);
@@ -8716,6 +9045,15 @@ function scheduleDiffConnectorRender() {
   });
 }
 
+function scheduleSettledDiffConnectorRender() {
+  scheduleDiffConnectorRender();
+  if (state.connectorSettleTimer) window.clearTimeout(state.connectorSettleTimer);
+  state.connectorSettleTimer = window.setTimeout(() => {
+    state.connectorSettleTimer = null;
+    scheduleDiffConnectorRender();
+  }, 80);
+}
+
 function renderDiffConnectors() {
   try {
     const svg = selectors.diffConnectorSvg;
@@ -8789,6 +9127,49 @@ function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], debugPat
       ${debugPaths.filter(Boolean).join("")}
     </g>
   `;
+}
+
+function ensureConnectorSvgDelegation() {
+  const svg = selectors.diffConnectorSvg;
+  if (!svg || state.connectorSvgDelegationBound) return;
+  state.connectorSvgDelegationBound = true;
+
+  svg.addEventListener("mouseover", (event) => {
+    const pairTarget = event.target?.closest?.("[data-semantic-pair-key]");
+    const relationTarget = event.target?.closest?.("[data-line-relation-key]");
+    if (pairTarget?.dataset?.semanticPairKey) {
+      setSemanticPairHover(pairTarget.dataset.semanticPairKey, true);
+    }
+    if (relationTarget?.dataset?.lineRelationKey) {
+      setLineRelationHover(relationTarget.dataset.lineRelationKey, true);
+    }
+  });
+
+  svg.addEventListener("mouseout", (event) => {
+    const pairTarget = event.target?.closest?.("[data-semantic-pair-key]");
+    const relationTarget = event.target?.closest?.("[data-line-relation-key]");
+    const nextPair = event.relatedTarget?.closest?.("[data-semantic-pair-key]");
+    const nextRelation = event.relatedTarget?.closest?.("[data-line-relation-key]");
+
+    if (pairTarget?.dataset?.semanticPairKey && pairTarget.dataset.semanticPairKey !== nextPair?.dataset?.semanticPairKey) {
+      setSemanticPairHover(pairTarget.dataset.semanticPairKey, false);
+    }
+    if (relationTarget?.dataset?.lineRelationKey && relationTarget.dataset.lineRelationKey !== nextRelation?.dataset?.lineRelationKey) {
+      setLineRelationHover(relationTarget.dataset.lineRelationKey, false);
+    }
+  });
+
+  svg.addEventListener("click", (event) => {
+    const relationTarget = event.target?.closest?.("[data-line-relation-key]");
+    const pairTarget = event.target?.closest?.("[data-semantic-pair-key]");
+    if (relationTarget?.dataset?.lineRelationKey) {
+      setLineRelationSelected(relationTarget.dataset.lineRelationKey);
+      return;
+    }
+    if (pairTarget?.dataset?.semanticPairKey) {
+      setSemanticPairSelected(pairTarget.dataset.semanticPairKey);
+    }
+  });
 }
 
 function renderDiffConnectorDefs() {
@@ -8939,6 +9320,8 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
     `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
     "Z",
   ].join(" ");
+  const spinePath = `M ${x1} ${y1Center} C ${x1 + controlOffset} ${y1Center}, ${x2 - controlOffset} ${y2Center}, ${x2} ${y2Center}`;
+  const label = connectorLabelText(oldGroup, newGroup);
   const debugMarkup = debug
     ? [
       buildMappingDebugAnchor(x1, y1Center, "object", oldGroup.key, "old"),
@@ -8949,8 +9332,12 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
 
   return {
     markup: `
-    <path class="diff-object-flow-glow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
-    <path class="diff-object-flow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+    <g class="diff-object-connector ${state} ${typeClass}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" data-connector-state="${escapeHtml(state)}">
+      <title>${escapeHtml(label)} · ${escapeHtml(state)}</title>
+      <path class="diff-object-flow-glow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+      <path class="diff-object-flow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+      <path class="diff-object-flow-spine ${state} ${typeClass}" d="${spinePath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+    </g>
   `,
     debugMarkup,
   };
@@ -9801,16 +10188,7 @@ function findLastNonWhitespaceTextNode(element) {
 }
 
 function renderReportV2(report) {
-  selectors.summaryCards.innerHTML = [
-    ["차이", report.summary.total],
-    ["비교 객체", report.summary.compared],
-    ["변경", report.summary.changed],
-    ["누락", report.summary.missing],
-    ["추가", report.summary.added],
-    ["필수", report.summary.required],
-  ]
-    .map(([label, value]) => `<div class="summary-card"><strong>${value}</strong><span>${label}</span></div>`)
-    .join("");
+  renderSummaryCards(report);
 
   selectors.reportList.innerHTML = renderGroupedReportItems(report.visibleItems);
 
@@ -10685,6 +11063,8 @@ async function saveSession() {
     updatedAt: Date.now(),
   };
   await saveRecord("sessions", session, "configWorkbenchSessions");
+  state.lastSessionName = name;
+  selectors.compareStatus.textContent = "세션 저장 완료";
   await refreshHistorySelect();
 }
 
@@ -10692,6 +11072,7 @@ async function loadSelectedSession() {
   const sessions = await readRecords("sessions", "configWorkbenchSessions");
   const session = sessions.find((item) => item.id === selectors.historySelect.value);
   if (!session) return;
+  state.lastSessionName = session.name || "";
   selectors.oldInput.value = session.oldConfig;
   selectors.newInput.value = session.newConfig;
 

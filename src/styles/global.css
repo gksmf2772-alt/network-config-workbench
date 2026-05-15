@@ -7223,6 +7223,248 @@ body[data-theme="terminal"] ::selection {
   text-shadow: none;
 }
 
+/* Diff readability rebuild: object bridge, line relation, field token layers. */
+:root {
+  --diff-bg: #fbfdff;
+  --diff-panel: #ffffff;
+  --diff-text: #102033;
+  --diff-muted: #64748b;
+  --diff-grid-line: rgba(148, 163, 184, 0.18);
+  --diff-token-bg: rgba(14, 116, 144, 0.10);
+  --diff-token-border: rgba(14, 116, 144, 0.34);
+  --diff-token-text: #164e63;
+  --diff-object-fill: rgba(15, 118, 110, 0.035);
+  --diff-object-spine: rgba(15, 118, 110, 0.44);
+  --diff-line-equal: rgba(22, 101, 52, 0.48);
+  --diff-line-changed: rgba(161, 98, 7, 0.58);
+  --diff-line-candidate: rgba(194, 65, 12, 0.55);
+  --diff-line-conflict: rgba(185, 28, 28, 0.64);
+  --diff-line-endpoint: #0f766e;
+}
+
+[data-theme="terminal"] {
+  --diff-bg: #050805;
+  --diff-panel: #0a0a0a;
+  --diff-text: #baf7ba;
+  --diff-muted: #4f8d4f;
+  --diff-grid-line: rgba(31, 82, 31, 0.55);
+  --diff-token-bg: rgba(255, 176, 0, 0.08);
+  --diff-token-border: rgba(255, 176, 0, 0.62);
+  --diff-token-text: #ffd98a;
+  --diff-object-fill: rgba(51, 255, 0, 0.022);
+  --diff-object-spine: rgba(51, 255, 0, 0.40);
+  --diff-line-equal: rgba(51, 255, 0, 0.36);
+  --diff-line-changed: rgba(255, 176, 0, 0.54);
+  --diff-line-candidate: rgba(255, 176, 0, 0.64);
+  --diff-line-conflict: rgba(255, 51, 51, 0.66);
+  --diff-line-endpoint: #ffb000;
+}
+
+.code-frame,
+.embedded-diff,
+.semantic-diff-object-body {
+  background: var(--diff-bg) !important;
+}
+
+.embedded-diff {
+  color: var(--diff-text);
+}
+
+.diff-line,
+.semantic-diff-config-line {
+  border-bottom: 1px solid var(--diff-grid-line) !important;
+}
+
+.diff-line-text,
+.semantic-diff-config-line code {
+  color: var(--diff-text) !important;
+  font-weight: 400 !important;
+}
+
+.diff-line-number,
+.semantic-diff-line-no {
+  color: var(--diff-muted) !important;
+  background: var(--diff-bg) !important;
+}
+
+.diff-connector-overlay {
+  z-index: 8;
+  pointer-events: none;
+}
+
+.editor-grid.diff-connectors-active .ncw-editor-card {
+  position: relative;
+  z-index: 3;
+}
+
+.object-mapping-overlay {
+  opacity: 0.82;
+}
+
+.semantic-line-overlay {
+  opacity: 0.92;
+}
+
+.diff-object-flow,
+.diff-object-flow.type-bgp,
+.diff-object-flow.type-static-route,
+.diff-object-flow.type-interface,
+.diff-object-flow.type-subscriber-interface,
+.diff-object-flow.type-group-interface,
+.diff-object-flow.type-sap,
+.diff-object-flow.type-port,
+.diff-object-flow.type-lag {
+  fill: var(--diff-object-fill) !important;
+  opacity: 1 !important;
+  stroke: none !important;
+  filter: none !important;
+}
+
+.diff-object-flow-glow,
+.diff-object-link-glow {
+  display: none !important;
+}
+
+.diff-object-flow-spine,
+.diff-object-flow-spine.type-bgp,
+.diff-object-flow-spine.type-static-route,
+.diff-object-flow-spine.type-interface,
+.diff-object-flow-spine.type-subscriber-interface,
+.diff-object-flow-spine.type-group-interface,
+.diff-object-flow-spine.type-sap,
+.diff-object-flow-spine.type-port,
+.diff-object-flow-spine.type-lag {
+  stroke: var(--diff-object-spine) !important;
+  stroke-width: 1.25 !important;
+  opacity: 0.58 !important;
+  filter: none !important;
+}
+
+.diff-object-flow.semantic-pair-hover,
+.diff-object-flow.semantic-pair-selected {
+  fill: rgba(255, 176, 0, 0.055) !important;
+}
+
+.diff-object-flow-spine.semantic-pair-hover,
+.diff-object-flow-spine.semantic-pair-selected {
+  stroke: var(--warning) !important;
+  stroke-width: 2.25 !important;
+  opacity: 0.9 !important;
+}
+
+.line-mapping-connector {
+  opacity: 0.62;
+  stroke-width: 1.45 !important;
+  filter: none !important;
+}
+
+.line-mapping-connector.equal {
+  stroke: var(--diff-line-equal) !important;
+}
+
+.line-mapping-connector.changed {
+  stroke: var(--diff-line-changed) !important;
+}
+
+.line-mapping-connector.candidate {
+  stroke: var(--diff-line-candidate) !important;
+}
+
+.line-mapping-connector.conflict {
+  stroke: var(--diff-line-conflict) !important;
+}
+
+.line-mapping-connector.field-description,
+.line-mapping-connector.field-tag,
+.line-mapping-connector.field-authentication-key,
+.line-mapping-connector.field-peer-as,
+.line-mapping-connector.field-group,
+.line-mapping-connector.field-peer-group {
+  stroke-dasharray: 3 4;
+}
+
+.line-mapping-connector.line-relation-hover,
+.line-mapping-connector.line-relation-selected {
+  opacity: 1;
+  stroke-width: 2.6 !important;
+  filter: none !important;
+}
+
+.line-mapping-endpoint {
+  fill: var(--diff-line-endpoint);
+  stroke: var(--diff-bg);
+  stroke-width: 1.4;
+  opacity: 0.78;
+  pointer-events: all;
+  transition: opacity 120ms ease, r 120ms ease, fill 120ms ease;
+}
+
+.line-mapping-endpoint.changed,
+.line-mapping-endpoint.candidate {
+  fill: var(--warning);
+}
+
+.line-mapping-endpoint.conflict {
+  fill: var(--danger);
+}
+
+.line-mapping-endpoint.line-relation-hover,
+.line-mapping-endpoint.line-relation-selected {
+  opacity: 1;
+  fill: var(--primary);
+}
+
+.line-mapping-shine {
+  display: none !important;
+}
+
+.diff-token-match,
+.semantic-diff-line-field {
+  background: var(--diff-token-bg) !important;
+  border: 1px solid var(--diff-token-border) !important;
+  color: var(--diff-token-text) !important;
+  box-shadow: none !important;
+  font-weight: 700 !important;
+}
+
+.diff-token-match[data-token-match="local"] {
+  background: transparent !important;
+  border-style: dashed !important;
+  color: var(--diff-muted) !important;
+  font-weight: 500 !important;
+}
+
+.diff-token-match[data-token-kind="address"],
+.diff-token-match[data-token-kind="number"] {
+  background: color-mix(in srgb, var(--diff-token-bg) 78%, transparent) !important;
+}
+
+.diff-line.line-relation-hover .diff-token-match,
+.diff-line.line-relation-selected .diff-token-match,
+.semantic-diff-config-line.line-relation-hover .diff-token-match,
+.semantic-diff-config-line.line-relation-selected .diff-token-match {
+  border-color: var(--warning) !important;
+  background: rgba(255, 176, 0, 0.16) !important;
+  color: var(--warning) !important;
+}
+
+body[data-theme="terminal"] .diff-line-text,
+body[data-theme="terminal"] .semantic-diff-config-line code {
+  color: var(--diff-text) !important;
+  text-shadow: none;
+}
+
+body[data-theme="terminal"] .diff-line:hover,
+body[data-theme="terminal"] .semantic-diff-config-line:hover,
+body[data-theme="terminal"] .diff-line.semantic-pair-hover,
+body[data-theme="terminal"] .semantic-object-block-wrapper.semantic-pair-hover {
+  background: rgba(255, 176, 0, 0.055) !important;
+}
+
+body[data-theme="terminal"] .semantic-diff-object-block {
+  border-left: 1px solid var(--line) !important;
+}
+
 @keyframes terminalBlink {
   0%,
   49% {

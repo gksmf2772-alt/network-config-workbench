@@ -7330,7 +7330,7 @@ function renderSemanticObjectConfigLine({
       style="padding-left:${10 + depth * 16}px">
       <span class="semantic-diff-line-no">${index + 1}</span>
       <code>${renderSemanticLineTokens(line, objectType, fields, relationByField)}</code>
-      ${field && !structural ? `<span class="semantic-diff-line-field">${escapeHtml(field)}</span>` : ""}
+      ${field && !structural ? `<span class="semantic-diff-line-field field-${cssSafeClassName(normalizeRelationField(field))}">${escapeHtml(field)}</span>` : ""}
     </div>
   `;
 }
@@ -7398,7 +7398,7 @@ function renderHighlightedLine(line = "", highlights = [], relationByField = new
     .map((item) => ({
       token: String(item.token || item.value || "").trim(),
       kind: item.kind || item.type || "",
-      field: item.field || item.semanticField || "",
+      field: normalizeRelationField(item.field || item.semanticField || ""),
       className: item.className || "",
     }))
     .filter((item) => item.token)
@@ -9460,6 +9460,15 @@ function ensureConnectorSvgDelegation() {
 function renderDiffConnectorDefs() {
   return `
     <defs>
+      <linearGradient id="lineMappingGloss" x1="-120%" y1="0%" x2="-20%" y2="0%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
+        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.58" />
+        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+        <animate attributeName="x1" values="-120%;100%" dur="3.2s" repeatCount="indefinite" />
+        <animate attributeName="x2" values="-20%;200%" dur="3.2s" repeatCount="indefinite" />
+      </linearGradient>
       <filter id="objectFlowGlow" x="-20%" y="-40%" width="140%" height="180%">
         <feGaussianBlur stdDeviation="7" result="blur" />
         <feMerge>
@@ -9605,7 +9614,6 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
     `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
     "Z",
   ].join(" ");
-  const spinePath = `M ${x1} ${y1Center} C ${x1 + controlOffset} ${y1Center}, ${x2 - controlOffset} ${y2Center}, ${x2} ${y2Center}`;
   const label = connectorLabelText(oldGroup, newGroup);
   const debugMarkup = debug
     ? [
@@ -9621,7 +9629,6 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
       <title>${escapeHtml(label)} · ${escapeHtml(state)}</title>
       <path class="diff-object-flow-glow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
       <path class="diff-object-flow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
-      <path class="diff-object-flow-spine ${state} ${typeClass}" d="${spinePath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
     </g>
   `,
     debugMarkup,
@@ -10186,8 +10193,11 @@ function buildLineMappingConnectorPath({
   const fieldClass = lineRelationFieldClass(oldElement, newElement, relationKey);
   const laneBounds = getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 });
   const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds });
-  const shineMarkup = style === "slime" && animated
-    ? buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path })
+  const railMarkup = style === "slime"
+    ? buildLineMappingRailPath({ relationKey, relationState, fieldClass, active, path })
+    : "";
+  const shineMarkup = style === "slime" && animated && !prefersReducedMotion()
+    ? buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path, x1, y1, x2, y2 })
     : "";
   const debugMarkup = isMappingDebugVisible()
     ? [
@@ -10208,13 +10218,36 @@ function buildLineMappingConnectorPath({
     });
   }
 
-  return `<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${active} ${animated}"
+  return `${railMarkup}<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${active} ${animated}"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />${shineMarkup}${debugMarkup}`;
 }
 
-function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path }) {
-  return `<path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active} is-animated"
+function buildLineMappingRailPath({ relationKey, relationState, fieldClass, active, path }) {
+  return `<path class="line-mapping-rail ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active}"
+    data-line-relation-key="${escapeHtml(relationKey)}"
+    d="${path}" />`;
+}
+
+function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path, x1, y1, x2, y2 }) {
+  const glossId = `lineMappingGloss-${cssSafeClassName(relationKey || `${x1}-${y1}-${x2}-${y2}`)}`;
+  const sweep = Math.max(72, Math.min(180, Math.abs(x2 - x1) * 0.22));
+  const startX = Math.min(x1, x2) - sweep;
+  const endX = Math.max(x1, x2) + sweep;
+  const midY = (y1 + y2) / 2;
+  return `<defs>
+      <linearGradient id="${escapeHtml(glossId)}" gradientUnits="userSpaceOnUse" x1="${startX}" y1="${midY}" x2="${startX + sweep}" y2="${midY}">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
+        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.62" />
+        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+        <animate attributeName="x1" values="${startX};${endX}" dur="3.2s" repeatCount="indefinite" />
+        <animate attributeName="x2" values="${startX + sweep};${endX + sweep}" dur="3.2s" repeatCount="indefinite" />
+      </linearGradient>
+    </defs>
+    <path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active} is-animated"
+    style="stroke: url(#${escapeHtml(glossId)})"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />`;
 }
@@ -10254,10 +10287,13 @@ function getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 }) {
   const hasPaneEdges = Number.isFinite(oldPaneRight) && Number.isFinite(newPaneLeft) && newPaneLeft > oldPaneRight + 8;
 
   if (hasPaneEdges) {
+    const gutterWidth = newPaneLeft - oldPaneRight;
+    const centerX = oldPaneRight + (gutterWidth / 2);
+    const crossWidth = Math.max(56, Math.min(150, gutterWidth * 0.46));
     return {
-      leftX: oldPaneRight,
-      rightX: newPaneLeft,
-      centerX: oldPaneRight + ((newPaneLeft - oldPaneRight) / 2),
+      leftX: Math.max(x1 + 8, centerX - (crossWidth / 2)),
+      rightX: Math.min(x2 - 8, centerX + (crossWidth / 2)),
+      centerX,
     };
   }
 
@@ -10276,7 +10312,7 @@ function buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass = "", laneBou
     return buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass, bend, laneBounds });
   }
 
-  return buildFieldLaneCurvePath({ x1, y1, x2, y2, fieldClass, bend, laneBounds });
+  return buildSlimeTubePath({ x1, y1, x2, y2, bend, laneBounds });
 }
 
 function buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
@@ -10303,6 +10339,26 @@ function buildFieldLaneCurvePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65,
   ].join(" ");
 }
 
+function buildSlimeTubePath({ x1, y1, x2, y2, bend = 0.65, laneBounds = null }) {
+  const distance = Math.abs(x2 - x1);
+  const verticalDistance = Math.abs(y2 - y1);
+  if (distance < 24 || verticalDistance < 3) {
+    const tension = Math.max(36, Math.min(180, distance * (0.28 + bend * 0.22)));
+    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
+  }
+
+  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, "", bend, laneBounds);
+  const laneWidth = Math.max(40, lane.rightX - lane.leftX);
+  const tension = Math.max(28, Math.min(82, laneWidth * 0.36));
+
+  return [
+    `M ${x1} ${y1}`,
+    `L ${lane.leftX} ${y1}`,
+    `C ${lane.leftX + tension} ${y1}, ${lane.rightX - tension} ${y2}, ${lane.rightX} ${y2}`,
+    `L ${x2} ${y2}`,
+  ].join(" ");
+}
+
 function lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null) {
   const distance = Math.abs(x2 - x1);
   const leftX = Number.isFinite(laneBounds?.leftX) ? laneBounds.leftX : null;
@@ -10310,11 +10366,10 @@ function lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass = "", bend = 0.65
   const directX = Number.isFinite(laneBounds?.centerX) ? laneBounds.centerX : (x1 + x2) / 2;
   const directY = (y1 + y2) / 2;
   const laneHalfWidth = Math.max(18, Math.min(46, distance * 0.075));
-  const laneOffset = lineRelationFieldLaneYOffset(fieldClass) * bend;
   const verticalDistance = Math.abs(y2 - y1);
   const laneY = verticalDistance < 4
     ? directY
-    : clampLineLaneY(directY + laneOffset, y1, y2);
+    : directY;
   return {
     x: directX,
     leftX: Number.isFinite(leftX) ? leftX : directX - laneHalfWidth,
@@ -10366,10 +10421,11 @@ function buildSmoothLineMappingPath({ x1, y1, x2, y2 }) {
 }
 
 function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
-  const textElement = line.querySelector("code") || line;
+  const lineElement = line.closest?.(".semantic-diff-config-line, .diff-line") || line;
+  const textElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
   const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
-  const lineRect = line.getBoundingClientRect();
-  const visibleTokenRect = getVisibleSemanticTokenRect(line, paneRect, preferredEdge);
+  const lineRect = lineElement.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
   const visibleLeft = Math.max(textRect.left, paneRect.left);
   const visibleRight = Math.min(textRect.right, paneRect.right);
   const hasVisibleWidth = visibleRight > visibleLeft;
@@ -10383,10 +10439,11 @@ function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
-  const textElement = line.querySelector(".diff-line-text") || line;
+  const lineElement = line.closest?.(".diff-line, .semantic-diff-config-line") || line;
+  const textElement = lineElement.querySelector(".diff-line-text") || lineElement.querySelector("code") || lineElement;
   const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
-  const lineRect = line.getBoundingClientRect();
-  const visibleTokenRect = getVisibleSemanticTokenRect(line, paneRect, preferredEdge);
+  const lineRect = lineElement.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
   const visibleLeft = Math.max(textRect.left, paneRect.left);
   const visibleRight = Math.min(textRect.right, paneRect.right);
   const hasVisibleWidth = visibleRight > visibleLeft;
@@ -11329,8 +11386,10 @@ function highlightSharedTokens(text, counterpartText, objectType = "", counterpa
 
   let html = escapeHtml(temp);
   placeholders.forEach(({ marker, item }) => {
-    const colorIndex = tokenColorIndex(item.colorSeed || item.token);
-    html = html.replaceAll(marker, `<span class="diff-token-match token-color-${colorIndex}" data-token-kind="${item.kind}" data-token-match="${item.match}" data-semantic-field="${escapeHtml(item.field || "")}" data-token="${escapeHtml(item.token)}">${escapeHtml(item.token)}</span>`);
+    const field = normalizeRelationField(item.field || "");
+    const colorIndex = tokenColorIndex(field || item.colorSeed || item.token);
+    const fieldClass = field ? ` field-${cssSafeClassName(field)}` : "";
+    html = html.replaceAll(marker, `<span class="diff-token-match token-color-${colorIndex}${fieldClass}" data-token-kind="${item.kind}" data-token-match="${item.match}" data-semantic-field="${escapeHtml(field)}" data-token="${escapeHtml(item.token)}">${escapeHtml(item.token)}</span>`);
   });
   return html;
 }
@@ -11413,24 +11472,20 @@ function extractSemanticVisualTokens(text, objectType) {
   const neighbor = normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/);
   if (neighbor) {
     add("neighbor", stripTrailingSyntax(neighbor[1]), "address");
-    return tokens;
   }
 
   if (/\bno\s+shutdown\b/.test(normalized)) {
     add("state", "no shutdown", "keyword");
-    return tokens;
   }
 
   if (/\badmin-state\s+enable\b/.test(normalized)) {
     add("state", "admin-state", "keyword");
     add("state", "enable", "keyword");
-    return tokens;
   }
 
   if (/\badmin-state\s+disable\b/.test(normalized)) {
     add("state", "admin-state", "keyword");
     add("state", "disable", "keyword");
-    return tokens;
   }
 
   if (objectType === "static-route") {
@@ -11459,6 +11514,20 @@ function extractSemanticVisualTokens(text, objectType) {
     return tokens;
   }
 
+  const description = extractDescriptionValue(source);
+  if (description) add("description", description, "quoted");
+
+  const authKey = normalized.match(/\bauthentication-key\s+"?([^"\s{}]+)"?/);
+  if (authKey) add("authentication-key", stripTrailingSyntax(authKey[1]), "quoted");
+
+  const group = normalized.match(/\b(?:group|peer-group)\s+"?([^"\s{}]+)"?/);
+  if (group) add("group", stripTrailingSyntax(group[1]), "keyword");
+
+  const peerAs = normalized.match(/\b(?:peer-as|remote-as)\s+"?([^"\s{}]+)"?/);
+  if (peerAs) add("peer-as", stripTrailingSyntax(peerAs[1]), "number");
+
+  if (tokens.length) return tokens;
+
   const field = extractFieldName(normalized);
   const value = field ? extractFieldValue(normalized, field) : "";
   add(field, value);
@@ -11486,9 +11555,29 @@ function isLowValueHighlightToken(token) {
 }
 
 function tokenColorIndex(token) {
-  const normalized = canonicalizeComparableLine(token).replace(/^"|"$/g, "");
-  const fieldIndex = semanticFieldOrder.indexOf(normalized);
-  if (fieldIndex >= 0) return (fieldIndex % 8) + 1;
+  const normalized = normalizeRelationField(canonicalizeComparableLine(token).replace(/^"|"$/g, ""));
+  const fieldColor = {
+    route: 6,
+    neighbor: 6,
+    "next-hop": 7,
+    gateway: 7,
+    address: 1,
+    "ip-address": 1,
+    description: 4,
+    tag: 3,
+    metric: 3,
+    state: 2,
+    "admin-state": 2,
+    group: 8,
+    "peer-group": 8,
+    "authentication-key": 5,
+    "peer-as": 5,
+    interface: 3,
+    sap: 3,
+    port: 3,
+    lag: 3,
+  }[normalized];
+  if (fieldColor) return fieldColor;
   let hash = 0;
   for (let index = 0; index < normalized.length; index += 1) {
     hash = (hash * 31 + normalized.charCodeAt(index)) % 9973;

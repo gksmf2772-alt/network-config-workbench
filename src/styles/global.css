@@ -788,13 +788,7 @@ label {
 }
 
 .diff-object-bridge-spine {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
-  opacity: 0.82;
-  filter: drop-shadow(0 0 7px rgba(20, 184, 166, 0.26));
-  transition: opacity 120ms ease, filter 120ms ease, stroke-width 120ms ease;
+  display: none;
 }
 
 .diff-object-band.matched {
@@ -881,13 +875,8 @@ label {
 }
 
 .diff-object-flow-spine {
-  fill: none;
-  stroke: rgba(13, 148, 136, 0.42);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.4;
-  opacity: 0.34;
-  pointer-events: stroke;
+  display: none;
+  pointer-events: none;
 }
 
 .diff-object-flow.type-bgp {
@@ -1069,6 +1058,33 @@ label {
   transition: opacity 140ms ease, stroke-width 140ms ease, filter 140ms ease;
 }
 
+.line-mapping-rail {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 11;
+  stroke: rgba(15, 23, 42, 0.08);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0.76;
+}
+
+.line-mapping-rail.equal {
+  stroke: rgba(22, 101, 52, 0.12);
+}
+
+.line-mapping-rail.changed {
+  stroke: rgba(161, 98, 7, 0.14);
+}
+
+.line-mapping-rail.candidate {
+  stroke: rgba(194, 65, 12, 0.13);
+}
+
+.line-mapping-rail.conflict {
+  stroke: rgba(185, 28, 28, 0.16);
+}
+
 .line-mapping-connector.equal {
   stroke: rgba(22, 101, 52, 0.62);
 }
@@ -1131,60 +1147,60 @@ label {
 }
 
 .line-mapping-connector.style-straight {
-  stroke-width: 2.1;
+  stroke-width: 3.4;
 }
 
 .line-mapping-connector.style-chain {
-  stroke-width: 2.1;
+  stroke-width: 3.4;
   stroke-dasharray: 5 4;
 }
 
 .line-mapping-connector.style-slime {
-  stroke-width: 3;
-  stroke-opacity: 0.38;
-  filter: drop-shadow(0 0 5px rgba(20, 184, 166, 0.14));
+  stroke-width: 8;
+  stroke-opacity: 0.30;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.20))
+    drop-shadow(0 1px 2px rgba(15, 23, 42, 0.08));
 }
 
 .line-mapping-shine {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.92);
+  stroke: url("#lineMappingGloss");
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.4;
-  stroke-dasharray: 18 190;
-  stroke-dashoffset: 120;
+  stroke-width: 7.2;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
-  opacity: 0.78;
+  opacity: 0.92;
+  mix-blend-mode: screen;
   filter:
-    drop-shadow(0 0 4px rgba(255, 255, 255, 0.42))
-    drop-shadow(0 0 7px rgba(20, 184, 166, 0.20));
-  animation: slime-line-shine 2.6s linear infinite;
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(20, 184, 166, 0.10));
 }
 
 .line-mapping-shine.field-authentication-key,
 .line-mapping-shine.field-peer-as {
   filter:
-    drop-shadow(0 0 4px rgba(255, 255, 255, 0.45))
-    drop-shadow(0 0 7px rgba(220, 38, 38, 0.16));
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(220, 38, 38, 0.10));
 }
 
 .line-mapping-shine.field-description {
   filter:
-    drop-shadow(0 0 4px rgba(255, 255, 255, 0.45))
-    drop-shadow(0 0 7px rgba(124, 58, 237, 0.18));
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(124, 58, 237, 0.10));
 }
 
 .line-mapping-shine.field-tag {
   filter:
-    drop-shadow(0 0 4px rgba(255, 255, 255, 0.45))
-    drop-shadow(0 0 7px rgba(202, 138, 4, 0.18));
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(202, 138, 4, 0.10));
 }
 
 .line-mapping-connector.line-relation-hover,
 .line-mapping-connector.line-relation-selected {
   opacity: 1;
-  stroke-width: 3;
+  stroke-width: 5.2;
   filter: drop-shadow(0 0 8px rgba(14, 116, 144, 0.18));
 }
 
@@ -1212,13 +1228,19 @@ label {
 
 .line-mapping-connector.style-slime.line-relation-hover,
 .line-mapping-connector.style-slime.line-relation-selected {
-  stroke-width: 7;
-  stroke-opacity: 0.36;
+  stroke-width: 10;
+  stroke-opacity: 0.38;
+}
+
+.line-mapping-rail.line-relation-hover,
+.line-mapping-rail.line-relation-selected {
+  stroke-width: 13;
+  opacity: 0.92;
 }
 
 .line-mapping-shine.line-relation-hover,
 .line-mapping-shine.line-relation-selected {
-  stroke-width: 3.2;
+  stroke-width: 8.4;
   opacity: 0.96;
 }
 
@@ -1237,13 +1259,6 @@ label {
 
 @keyframes line-chain-flow {
   to { stroke-dashoffset: -26; }
-}
-
-@keyframes slime-line-shine {
-  from { stroke-dashoffset: 180; opacity: 0.18; }
-  18% { opacity: 0.88; }
-  82% { opacity: 0.88; }
-  to { stroke-dashoffset: -220; opacity: 0.18; }
 }
 
 .semantic-diff-config-line.is-line-related {
@@ -2290,6 +2305,99 @@ textarea {
 .token-color-8 {
   --token-bg: rgba(190, 24, 93, 0.15);
   --token-border: rgba(190, 24, 93, 0.33);
+}
+
+.diff-token-match.field-route,
+.diff-token-match.field-neighbor,
+.semantic-diff-line-field.field-route,
+.semantic-diff-line-field.field-neighbor {
+  --token-bg: rgba(37, 99, 235, 0.16);
+  --token-border: rgba(37, 99, 235, 0.42);
+  --token-text: #1d4ed8;
+}
+
+.diff-token-match.field-next-hop,
+.diff-token-match.field-gateway,
+.semantic-diff-line-field.field-next-hop,
+.semantic-diff-line-field.field-gateway {
+  --token-bg: rgba(13, 148, 136, 0.17);
+  --token-border: rgba(13, 148, 136, 0.42);
+  --token-text: #0f766e;
+}
+
+.diff-token-match.field-description,
+.semantic-diff-line-field.field-description {
+  --token-bg: rgba(124, 58, 237, 0.17);
+  --token-border: rgba(124, 58, 237, 0.40);
+  --token-text: #6d28d9;
+}
+
+.diff-token-match.field-tag,
+.diff-token-match.field-metric,
+.semantic-diff-line-field.field-tag,
+.semantic-diff-line-field.field-metric {
+  --token-bg: rgba(202, 138, 4, 0.18);
+  --token-border: rgba(202, 138, 4, 0.44);
+  --token-text: #92400e;
+}
+
+.diff-token-match.field-state,
+.diff-token-match.field-admin-state,
+.semantic-diff-line-field.field-state,
+.semantic-diff-line-field.field-admin-state {
+  --token-bg: rgba(22, 163, 74, 0.16);
+  --token-border: rgba(22, 163, 74, 0.40);
+  --token-text: #166534;
+}
+
+.diff-token-match.field-group,
+.diff-token-match.field-peer-group,
+.semantic-diff-line-field.field-group,
+.semantic-diff-line-field.field-peer-group {
+  --token-bg: rgba(219, 39, 119, 0.15);
+  --token-border: rgba(219, 39, 119, 0.38);
+  --token-text: #be185d;
+}
+
+.diff-token-match.field-authentication-key,
+.diff-token-match.field-peer-as,
+.semantic-diff-line-field.field-authentication-key,
+.semantic-diff-line-field.field-peer-as {
+  --token-bg: rgba(220, 38, 38, 0.15);
+  --token-border: rgba(220, 38, 38, 0.38);
+  --token-text: #b91c1c;
+}
+
+.diff-token-match.field-interface,
+.diff-token-match.field-sap,
+.diff-token-match.field-port,
+.diff-token-match.field-lag,
+.semantic-diff-line-field.field-interface,
+.semantic-diff-line-field.field-sap,
+.semantic-diff-line-field.field-port,
+.semantic-diff-line-field.field-lag {
+  --token-bg: rgba(234, 88, 12, 0.16);
+  --token-border: rgba(234, 88, 12, 0.40);
+  --token-text: #c2410c;
+}
+
+.diff-token-match.field-address,
+.diff-token-match.field-ip-address,
+.semantic-diff-line-field.field-address,
+.semantic-diff-line-field.field-ip-address {
+  --token-bg: rgba(8, 145, 178, 0.16);
+  --token-border: rgba(8, 145, 178, 0.40);
+  --token-text: #0e7490;
+}
+
+.diff-token-match[data-semantic-field]:not([data-semantic-field=""]) {
+  color: var(--token-text, inherit);
+  border-color: var(--token-border);
+}
+
+.diff-token-match[data-token-match="local"][data-semantic-field]:not([data-semantic-field=""]) {
+  background: var(--token-bg);
+  border-style: dashed;
 }
 
 .diff-line.equal {
@@ -5101,9 +5209,10 @@ textarea[id$="ConfigInput"],
 
 .semantic-diff-line-field {
   padding: 1px 6px;
-  border-radius: 999px;
-  background: #eef2f7;
-  color: #64748b;
+  border: 1px solid var(--token-border, #dbe3ef);
+  border-radius: 5px;
+  background: var(--token-bg, #eef2f7);
+  color: var(--token-text, #64748b);
   font-family: "Segoe UI", Arial, sans-serif;
   font-size: 10px;
   font-weight: 700;
@@ -5758,6 +5867,22 @@ body[data-field-highlight="off"] .semantic-diff-config-line {
   box-shadow: inset 4px 0 0 #0284c7;
 }
 
+.semantic-object-block-wrapper .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-candidate .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-reason-manual .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-bgp .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-static-route .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-subscriber-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-group-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-sap .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+.semantic-object-block-wrapper .semantic-diff-object-unmatched,
+.semantic-object-block-wrapper[data-side="new"] .semantic-diff-object-block {
+  border-left: 1px solid #dbe3ef !important;
+}
+
 /* Keep horizontally scrolled semantic lines inside their object card. */
 .embedded-diff .semantic-object-block-wrapper {
   display: block !important;
@@ -5799,6 +5924,16 @@ body[data-field-highlight="off"] .semantic-diff-config-line {
 .diff-line.object-type-group-interface.semantic-object-start,
 .diff-line.object-type-sap.semantic-object-start {
   box-shadow: inset 4px 0 0 #ea580c;
+}
+
+.diff-line.semantic-object-start,
+.diff-line.object-type-bgp.semantic-object-start,
+.diff-line.object-type-static-route.semantic-object-start,
+.diff-line.object-type-interface.semantic-object-start,
+.diff-line.object-type-subscriber-interface.semantic-object-start,
+.diff-line.object-type-group-interface.semantic-object-start,
+.diff-line.object-type-sap.semantic-object-start {
+  box-shadow: none !important;
 }
 
 @media (max-width: 980px) {

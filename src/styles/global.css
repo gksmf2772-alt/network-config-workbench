@@ -1360,6 +1360,7 @@ label {
   display: block;
   min-width: 0;
   overflow: hidden;
+  background: var(--code-bg);
 }
 
 .code-frame.diff-mode .line-numbers,
@@ -2233,6 +2234,29 @@ textarea {
   font-family: var(--editor-font);
   font-size: 13px;
   scrollbar-gutter: stable both-edges;
+  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-width: thin;
+}
+
+.embedded-diff::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.embedded-diff::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.embedded-diff::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #cbd5e1;
+  background-clip: content-box;
+}
+
+.embedded-diff::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  background-clip: content-box;
 }
 
 .code-frame.diff-mode .embedded-diff {

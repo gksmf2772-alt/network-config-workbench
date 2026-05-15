@@ -967,11 +967,20 @@ const SUB_SLA_MGMT_ONE_LINE_FIELDS = [
   { path: ["sub-sla-mgmt", "admin-state"], field: "state", normalize: normalizeState },
   { path: ["sub-sla-mgmt", "admin-state"], field: "admin-state", normalize: normalizeState },
   { path: ["sub-sla-mgmt", "sub-ident-policy"], field: "sub-sla-mgmt.sub-ident-policy" },
+  { path: ["sub-ident-policy"], field: "sub-sla-mgmt.sub-ident-policy" },
   { path: ["sub-sla-mgmt", "subscriber-limit"], field: "sub-sla-mgmt.subscriber-limit" },
+  { path: ["subscriber-limit"], field: "sub-sla-mgmt.subscriber-limit" },
   { path: ["sub-sla-mgmt", "defaults", "sub-profile"], field: "sub-sla-mgmt.defaults.sub-profile" },
+  { path: ["defaults", "sub-profile"], field: "sub-sla-mgmt.defaults.sub-profile" },
   { path: ["sub-sla-mgmt", "defaults", "sla-profile"], field: "sub-sla-mgmt.defaults.sla-profile" },
+  { path: ["defaults", "sla-profile"], field: "sub-sla-mgmt.defaults.sla-profile" },
+  { path: ["sla-profile"], field: "sub-sla-mgmt.defaults.sla-profile" },
   { path: ["sub-sla-mgmt", "defaults", "subscriber-id"], field: "sub-sla-mgmt.defaults.subscriber-id" },
+  { path: ["defaults", "subscriber-id"], field: "sub-sla-mgmt.defaults.subscriber-id" },
+  { path: ["subscriber-id"], field: "sub-sla-mgmt.defaults.subscriber-id" },
   { path: ["sub-sla-mgmt", "defaults", "int-dest-id", "string"], field: "sub-sla-mgmt.defaults.int-dest-id" },
+  { path: ["defaults", "int-dest-id", "string"], field: "sub-sla-mgmt.defaults.int-dest-id" },
+  { path: ["int-dest-id", "string"], field: "sub-sla-mgmt.defaults.int-dest-id" },
 ];
 
 const STATIC_HOST_ONE_LINE_FIELDS = [

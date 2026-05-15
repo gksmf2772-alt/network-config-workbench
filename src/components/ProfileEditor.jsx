@@ -6,6 +6,7 @@ import { AppPanel } from "./ui/AppPanel.jsx";
 import { AppSectionHeader } from "./ui/AppSectionHeader.jsx";
 import { AppSelect } from "./ui/AppSelect.jsx";
 import { AppToolbar } from "./ui/AppToolbar.jsx";
+import { VENDOR_OPTIONS } from "../core/vendorPresets.js";
 
 function CollapsibleSection({ id, title, summary, defaultOpen = false, children }) {
   const storageKey = `profile-section-open:${id}`;
@@ -48,6 +49,14 @@ function SectionIntro({ step, title, children }) {
   );
 }
 
+function VendorOptions() {
+  return VENDOR_OPTIONS.map((vendor) => (
+    <option key={vendor.id} value={vendor.id} disabled={!vendor.selectable}>
+      {vendor.label} ({vendor.supportLabel})
+    </option>
+  ));
+}
+
 export default function ProfileEditor() {
   return (
     <AppPanel as="article" className="profile-editor">
@@ -68,24 +77,17 @@ export default function ProfileEditor() {
         <label>
           기존 Config 벤더 / OS
           <AppSelect id="oldVendorSelect">
-            <option value="nokia-classic">Nokia Classic</option>
-            <option value="nokia-md-cli">Nokia MD-CLI</option>
-            <option value="cisco-ios-xe">Cisco IOS-XE</option>
-            <option value="juniper-set">Juniper Set</option>
-            <option value="arista-eos">Arista EOS</option>
+            <VendorOptions />
           </AppSelect>
         </label>
         <label>
           신규 Config 벤더 / OS
           <AppSelect id="newVendorSelect">
-            <option value="nokia-md-cli">Nokia MD-CLI</option>
-            <option value="nokia-classic">Nokia Classic</option>
-            <option value="cisco-ios-xe">Cisco IOS-XE</option>
-            <option value="juniper-set">Juniper Set</option>
-            <option value="arista-eos">Arista EOS</option>
+            <VendorOptions />
           </AppSelect>
         </label>
       </div>
+      <div id="vendorSupportNotice" className="vendor-support-notice" role="status" />
 
       <CollapsibleSection id="object-type-mapping" title="1. 객체 유형 매핑" summary="기존/신규 객체 유형 연결" defaultOpen>
         <SectionIntro step="1" title="객체 유형 매핑">식별/필드 추출 전에 기존과 신규 객체 유형을 연결.</SectionIntro>

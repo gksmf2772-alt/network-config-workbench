@@ -8,6 +8,65 @@ export const VENDOR_IDS = {
   ARISTA_EOS: "arista-eos",
 };
 
+export const VENDOR_LABELS = {
+  [VENDOR_IDS.NOKIA_CLASSIC]: "Nokia Classic",
+  [VENDOR_IDS.NOKIA_MD_CLI]: "Nokia MD-CLI",
+  [VENDOR_IDS.CISCO_IOS_XE]: "Cisco IOS-XE",
+  [VENDOR_IDS.JUNIPER_SET]: "Juniper Set",
+  [VENDOR_IDS.ARISTA_EOS]: "Arista EOS",
+};
+
+export const VENDOR_SUPPORT_STATE = {
+  SUPPORTED: "supported",
+  PARTIAL: "partial",
+  PLANNED: "planned",
+};
+
+export const VENDOR_SUPPORT = {
+  [VENDOR_IDS.NOKIA_CLASSIC]: {
+    state: VENDOR_SUPPORT_STATE.SUPPORTED,
+    label: "지원",
+    description: "Nokia Classic 파서 지원",
+    selectable: true,
+  },
+  [VENDOR_IDS.NOKIA_MD_CLI]: {
+    state: VENDOR_SUPPORT_STATE.SUPPORTED,
+    label: "지원",
+    description: "Nokia MD-CLI 파서 지원",
+    selectable: true,
+  },
+  [VENDOR_IDS.CISCO_IOS_XE]: {
+    state: VENDOR_SUPPORT_STATE.PARTIAL,
+    label: "부분 지원",
+    description: "Cisco IOS-XE 파서 지원, preset 검증 범위는 확대 중",
+    selectable: true,
+  },
+  [VENDOR_IDS.JUNIPER_SET]: {
+    state: VENDOR_SUPPORT_STATE.PARTIAL,
+    label: "부분 지원",
+    description: "Juniper Set 파서 지원, preset 검증 범위는 확대 중",
+    selectable: true,
+  },
+  [VENDOR_IDS.ARISTA_EOS]: {
+    state: VENDOR_SUPPORT_STATE.PLANNED,
+    label: "예정",
+    description: "Arista EOS 파서는 아직 placeholder",
+    selectable: false,
+  },
+};
+
+export const VENDOR_OPTIONS = Object.values(VENDOR_IDS).map((id) => {
+  const support = VENDOR_SUPPORT[id];
+  return {
+    id,
+    label: VENDOR_LABELS[id],
+    supportState: support.state,
+    supportLabel: support.label,
+    description: support.description,
+    selectable: support.selectable,
+  };
+});
+
 export const LEGACY_VENDOR_IDS = {
   NOKIA: "nokia",
   CISCO: "cisco",
@@ -30,7 +89,7 @@ export const VENDOR_PRESETS = [
     newVendor: VENDOR_IDS.NOKIA_MD_CLI,
     legacyVendor: LEGACY_VENDOR_IDS.NOKIA,
     description: "Nokia Classic CLI config를 Nokia MD-CLI config와 비교합니다.",
-    status: "initial",
+    status: VENDOR_SUPPORT_STATE.SUPPORTED,
   },
   {
     id: VENDOR_PRESET_IDS.CISCO_IOS_XE_TO_MD_CLI,
@@ -39,7 +98,7 @@ export const VENDOR_PRESETS = [
     newVendor: VENDOR_IDS.NOKIA_MD_CLI,
     legacyVendor: LEGACY_VENDOR_IDS.CISCO,
     description: "Cisco IOS/XE config를 Nokia MD-CLI config와 비교합니다.",
-    status: "planned",
+    status: VENDOR_SUPPORT_STATE.PARTIAL,
   },
   {
     id: VENDOR_PRESET_IDS.JUNIPER_SET_TO_MD_CLI,
@@ -48,7 +107,7 @@ export const VENDOR_PRESETS = [
     newVendor: VENDOR_IDS.NOKIA_MD_CLI,
     legacyVendor: LEGACY_VENDOR_IDS.JUNIPER,
     description: "Juniper set 형식 config를 Nokia MD-CLI config와 비교합니다.",
-    status: "planned",
+    status: VENDOR_SUPPORT_STATE.PARTIAL,
   },
   {
     id: VENDOR_PRESET_IDS.ARISTA_EOS_TO_MD_CLI,
@@ -57,7 +116,7 @@ export const VENDOR_PRESETS = [
     newVendor: VENDOR_IDS.NOKIA_MD_CLI,
     legacyVendor: LEGACY_VENDOR_IDS.ARISTA,
     description: "Arista EOS config를 Nokia MD-CLI config와 비교합니다.",
-    status: "planned",
+    status: VENDOR_SUPPORT_STATE.PLANNED,
   },
 ];
 
@@ -110,6 +169,7 @@ export function buildVendorPresetSnapshot(preset) {
     oldVendor: safePreset.oldVendor,
     newVendor: safePreset.newVendor,
     legacyVendor: safePreset.legacyVendor,
+    status: safePreset.status || getVendorPairSupportState(safePreset.oldVendor, safePreset.newVendor).state,
   };
 }
 
@@ -153,4 +213,44 @@ export function getLegacyVendorFromPresetId(presetId) {
 export function getPresetIdFromLegacyVendor(legacyVendor) {
   const preset = getVendorPresetByLegacyVendor(legacyVendor);
   return preset.id;
+}
+
+export function getVendorLabel(vendorId) {
+  return VENDOR_LABELS[vendorId] || vendorId || "";
+}
+
+export function getVendorSupport(vendorId) {
+  return VENDOR_SUPPORT[vendorId] || {
+    state: VENDOR_SUPPORT_STATE.PLANNED,
+    label: "미확인",
+    description: "지원 상태 미확인",
+    selectable: false,
+  };
+}
+
+export function getVendorPairSupportState(oldVendor, newVendor) {
+  const oldSupport = getVendorSupport(oldVendor);
+  const newSupport = getVendorSupport(newVendor);
+  const states = [oldSupport.state, newSupport.state];
+  const hasPlanned = states.includes(VENDOR_SUPPORT_STATE.PLANNED);
+  const hasPartial = states.includes(VENDOR_SUPPORT_STATE.PARTIAL);
+  const state = hasPlanned
+    ? VENDOR_SUPPORT_STATE.PLANNED
+    : hasPartial
+      ? VENDOR_SUPPORT_STATE.PARTIAL
+      : VENDOR_SUPPORT_STATE.SUPPORTED;
+  const label = {
+    [VENDOR_SUPPORT_STATE.SUPPORTED]: "지원",
+    [VENDOR_SUPPORT_STATE.PARTIAL]: "부분 지원",
+    [VENDOR_SUPPORT_STATE.PLANNED]: "예정",
+  }[state] || "미확인";
+
+  return {
+    state,
+    label,
+    runnable: state !== VENDOR_SUPPORT_STATE.PLANNED,
+    oldSupport,
+    newSupport,
+    description: `${getVendorLabel(oldVendor)} → ${getVendorLabel(newVendor)}: ${label}`,
+  };
 }

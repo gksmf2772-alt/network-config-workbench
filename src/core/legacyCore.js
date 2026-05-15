@@ -10189,7 +10189,6 @@ function buildLineMappingConnectorPath({
   const shineMarkup = style === "slime" && animated
     ? buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path })
     : "";
-  const endpointMarkup = buildLineMappingEndpointMarkup({ x1, y1, x2, y2, relationKey, relationState, fieldClass, active });
   const debugMarkup = isMappingDebugVisible()
     ? [
       buildMappingDebugAnchor(x1, y1, "line", relationKey, "old"),
@@ -10211,22 +10210,13 @@ function buildLineMappingConnectorPath({
 
   return `<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${active} ${animated}"
     data-line-relation-key="${escapeHtml(relationKey)}"
-    d="${path}" />${endpointMarkup}${shineMarkup}${debugMarkup}`;
+    d="${path}" />${shineMarkup}${debugMarkup}`;
 }
 
 function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path }) {
   return `<path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active} is-animated"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />`;
-}
-
-function buildLineMappingEndpointMarkup({ x1, y1, x2, y2, relationKey, relationState, fieldClass, active }) {
-  const classes = `line-mapping-endpoint ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active}`;
-  const key = escapeHtml(relationKey);
-  return `
-    <circle class="${classes}" data-line-relation-key="${key}" cx="${x1}" cy="${y1}" r="2.7" />
-    <circle class="${classes}" data-line-relation-key="${key}" cx="${x2}" cy="${y2}" r="2.7" />
-  `;
 }
 
 function lineRelationFieldClass(oldElement, newElement, relationKey = "") {
@@ -10376,17 +10366,35 @@ function buildSmoothLineMappingPath({ x1, y1, x2, y2 }) {
 }
 
 function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
+  const textElement = line.querySelector("code") || line;
+  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
   const lineRect = line.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(line, paneRect, preferredEdge);
+  const visibleLeft = Math.max(textRect.left, paneRect.left);
+  const visibleRight = Math.min(textRect.right, paneRect.right);
+  const hasVisibleWidth = visibleRight > visibleLeft;
+  const x = preferredEdge === "left"
+    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
+    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
-    x: preferredEdge === "left" ? paneRect.left + 6 : paneRect.right - 6,
+    x,
     y: lineRect.top + (lineRect.height / 2),
   };
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
+  const textElement = line.querySelector(".diff-line-text") || line;
+  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
   const lineRect = line.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(line, paneRect, preferredEdge);
+  const visibleLeft = Math.max(textRect.left, paneRect.left);
+  const visibleRight = Math.min(textRect.right, paneRect.right);
+  const hasVisibleWidth = visibleRight > visibleLeft;
+  const x = preferredEdge === "left"
+    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
+    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
-    x: preferredEdge === "left" ? paneRect.left + 6 : paneRect.right - 6,
+    x,
     y: lineRect.top + (lineRect.height / 2),
   };
 }

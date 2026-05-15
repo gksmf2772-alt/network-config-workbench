@@ -79,6 +79,29 @@ function findPath(tokens = [], path = [], start = 0) {
   return -1;
 }
 
+function pathExists(tokens = [], path = [], start = 0) {
+  return findPath(tokens, path, start) >= 0;
+}
+
+function valueAfterPath(tokens = [], path = [], start = 0) {
+  const index = findPath(tokens, path, start);
+  if (index < 0) return "";
+  return tokens[index + path.length] || "";
+}
+
+function fieldAfterToken(tokens = [], token = "", start = 0) {
+  const index = findToken(tokens, token, start);
+  return index >= 0 ? tokens[index + 1] || "" : "";
+}
+
+function extractBracketedPolicyList(line = "") {
+  const match = String(line || "").match(/\bimport\s+policy\s+\[(.+?)\]/i);
+  if (!match) return "";
+  const quoted = [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]);
+  if (quoted.length) return quoted.join(",");
+  return match[1].split(/\s+/).map(stripQuotes).filter(Boolean).join(",");
+}
+
 function setField(fields, field, value) {
   const cleanValue = stripQuotes(value);
   if (!field || !cleanValue || fields[field] !== undefined) return;
@@ -867,25 +890,98 @@ function parseMdCliServiceObjects(lines) {
 
 const PORT_ONE_LINE_FIELDS = [
   { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
   { path: ["description"], field: "description" },
+  { path: ["ethernet", "mode"], field: "mode" },
   { path: ["ethernet", "mtu"], field: "mtu" },
   { path: ["mtu"], field: "mtu" },
+  { path: ["ethernet", "crc-monitor", "signal-degrade", "threshold"], field: "crc-monitor.signal-degrade.threshold" },
+  { path: ["ethernet", "egress", "port-scheduler-policy", "policy-name"], field: "egress.port-scheduler-policy" },
+  { path: ["ethernet", "access", "egress", "queue-group"], field: "egress.queue-group" },
+  { path: ["instance-id"], field: "egress.queue-group.instance-id" },
+  { path: ["int-dest-id"], field: "egress.queue-group.int-dest-id" },
 ];
 
 const LAG_ONE_LINE_FIELDS = [
   { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
   { path: ["description"], field: "description" },
+  { path: ["mode"], field: "mode" },
   { path: ["lacp", "mode"], field: "lacpMode" },
   { path: ["lacp", "mode"], field: "lacp-mode" },
+  { path: ["lacp", "administrative-key"], field: "lacp.administrative-key" },
+  { path: ["lacp-xmit-interval"], field: "lacp-xmit-interval" },
+  { path: ["access", "adapt-qos", "mode"], field: "access.adapt-qos.mode" },
   { path: ["port"], field: "member-port" },
 ];
 
 const INTERFACE_ONE_LINE_FIELDS = [
   { path: ["description"], field: "description" },
   { path: ["ipv4", "primary", "address"], field: "address" },
+  { path: ["ipv4", "primary", "prefix-length"], field: "prefix-length" },
   { path: ["ip", "address"], field: "address" },
   { path: ["address"], field: "address" },
   { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["ipv4", "icmp", "mask-reply"], field: "icmp.mask-reply" },
+  { path: ["ipv4", "icmp", "redirects", "admin-state"], field: "icmp.redirects", normalize: normalizeState },
+  { path: ["ipv4", "icmp", "ttl-expired", "admin-state"], field: "icmp.ttl-expired", normalize: normalizeState },
+  { path: ["ipv4", "icmp", "unreachables", "admin-state"], field: "icmp.unreachables", normalize: normalizeState },
+];
+
+const SUBSCRIBER_ONE_LINE_FIELDS = [
+  { path: ["description"], field: "description" },
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["ipv4", "allow-unmatching-subnets"], field: "dhcp.allow-unmatching-subnets" },
+  { path: ["ipv4", "address"], field: "address" },
+  { path: ["prefix-length"], field: "prefix-length" },
+];
+
+const GROUP_ONE_LINE_FIELDS = [
+  { path: ["radius-auth-policy"], field: "radius-auth-policy" },
+  { path: ["ipv4", "neighbor-discovery", "populate"], field: "neighbor-discovery.populate" },
+];
+
+const DHCP_ONE_LINE_FIELDS = [
+  { path: ["ipv4", "dhcp", "admin-state"], field: "state", normalize: normalizeState },
+  { path: ["ipv4", "dhcp", "admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["ipv4", "dhcp", "filter"], field: "dhcp.filter" },
+  { path: ["ipv4", "dhcp", "server"], field: "dhcp.server" },
+  { path: ["ipv4", "dhcp", "trusted"], field: "dhcp.trusted" },
+  { path: ["ipv4", "dhcp", "lease-populate", "max-leases"], field: "dhcp.lease-populate.max-leases" },
+];
+
+const SAP_ONE_LINE_FIELDS = [
+  { path: ["ingress", "filter", "ip"], field: "ingress.filter.ip" },
+  { path: ["egress", "filter", "ip"], field: "egress.filter.ip" },
+  { path: ["ingress", "qos", "sap-ingress", "policy-name"], field: "ingress.qos.sap-ingress.policy-name" },
+  { path: ["egress", "qos", "sap-egress", "policy-name"], field: "egress.qos.sap-egress.policy-name" },
+];
+
+const CPU_PROTECTION_ONE_LINE_FIELDS = [
+  { path: ["cpu-protection", "policy-id"], field: "cpu-protection.policy-id" },
+];
+
+const SUB_SLA_MGMT_ONE_LINE_FIELDS = [
+  { path: ["sub-sla-mgmt", "admin-state"], field: "state", normalize: normalizeState },
+  { path: ["sub-sla-mgmt", "admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["sub-sla-mgmt", "sub-ident-policy"], field: "sub-sla-mgmt.sub-ident-policy" },
+  { path: ["sub-sla-mgmt", "subscriber-limit"], field: "sub-sla-mgmt.subscriber-limit" },
+  { path: ["sub-sla-mgmt", "defaults", "sub-profile"], field: "sub-sla-mgmt.defaults.sub-profile" },
+  { path: ["sub-sla-mgmt", "defaults", "sla-profile"], field: "sub-sla-mgmt.defaults.sla-profile" },
+  { path: ["sub-sla-mgmt", "defaults", "subscriber-id"], field: "sub-sla-mgmt.defaults.subscriber-id" },
+  { path: ["sub-sla-mgmt", "defaults", "int-dest-id", "string"], field: "sub-sla-mgmt.defaults.int-dest-id" },
+];
+
+const STATIC_HOST_ONE_LINE_FIELDS = [
+  { path: ["mac"], field: "mac" },
+  { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["sub-profile"], field: "sub-profile" },
+  { path: ["sla-profile"], field: "sla-profile" },
+  { path: ["int-dest-id"], field: "int-dest-id" },
+  { path: ["subscriber-id"], field: "subscriber-id" },
 ];
 
 const BGP_ONE_LINE_FIELDS = [
@@ -895,6 +991,8 @@ const BGP_ONE_LINE_FIELDS = [
   { path: ["peer-as"], field: "peer-as" },
   { path: ["remote-as"], field: "peer-as" },
   { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["import", "policy"], field: "import.policy" },
 ];
 
 const STATIC_ROUTE_ONE_LINE_FIELDS = [
@@ -903,6 +1001,7 @@ const STATIC_ROUTE_ONE_LINE_FIELDS = [
   { path: ["tag"], field: "tag" },
   { path: ["description"], field: "description" },
   { path: ["admin-state"], field: "state", normalize: normalizeState },
+  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
 ];
 
 const PIM_ONE_LINE_FIELDS = [
@@ -914,6 +1013,9 @@ function parseMdCliOneLinePort(tokens, rawLine, index) {
   if (!tokenEquals(tokens, 0, "port") || !tokens[1]) return null;
   const portId = stripQuotes(tokens[1]);
   const fields = mapLeafFields({ port: portId }, tokens, 2, PORT_ONE_LINE_FIELDS);
+  if (pathExists(tokens, ["ethernet", "down-on-internal-error"], 2)) {
+    fields["down-on-internal-error"] = "true";
+  }
   return createMdCliOneLineObject({
     type: "port",
     identity: portId,
@@ -930,11 +1032,254 @@ function parseMdCliOneLineLag(tokens, rawLine, index) {
   const lagName = stripQuotes(tokens[1]);
   const fields = mapLeafFields({ lag: lagName }, tokens, 2, LAG_ONE_LINE_FIELDS);
   if (fields.lacpMode && !fields["lacp-mode"]) fields["lacp-mode"] = fields.lacpMode;
+  if (fields["member-port"]) fields.members = [fields["member-port"]];
   return createMdCliOneLineObject({
     type: "lag",
     identity: lagName,
     sourceType: "lag",
     sourceName: lagName,
+    fields,
+    rawLine,
+    index,
+  });
+}
+
+function withPrefix(fields = {}) {
+  const next = { ...fields };
+  const address = stripQuotes(next.address || "");
+  const prefixLength = stripQuotes(next["prefix-length"] || "");
+  if (address && prefixLength && !address.includes("/")) {
+    next.address = `${address}/${prefixLength}`;
+    next.prefix = next.address;
+  } else if (address) {
+    next.prefix = address;
+  }
+  return next;
+}
+
+function createMdCliServiceOneLineObject({ type, identityParts, sourceType, sourceName, fields, rawLine, index }) {
+  return createMdCliOneLineObject({
+    type,
+    identity: buildHierarchyKey(identityParts),
+    sourceType: sourceType || type,
+    sourceName: sourceName || identityParts.filter(Boolean).at(-1) || type,
+    fields,
+    rawLine,
+    index,
+  });
+}
+
+function parseMdCliOneLineInterfaceService({ tokens, rawLine, index, serviceType, serviceId, interfaceIndex }) {
+  const interfaceName = canonicalInterfaceName(tokens[interfaceIndex + 1]);
+  const baseFields = {
+    service: serviceType,
+    "service-id": serviceId,
+    interface: interfaceName,
+  };
+  const sapIndex = findToken(tokens, "sap", interfaceIndex + 2);
+
+  if (sapIndex >= 0 && tokens[sapIndex + 1]) {
+    const sapName = canonicalServiceName(tokens[sapIndex + 1]);
+    const fields = mapLeafFields(
+      { ...baseFields, sap: sapName },
+      tokens,
+      sapIndex + 2,
+      SAP_ONE_LINE_FIELDS
+    );
+    return createMdCliServiceOneLineObject({
+      type: "sap",
+      identityParts: [serviceId, interfaceName, sapName],
+      sourceType: "sap",
+      sourceName: sapName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  const fields = withPrefix(mapLeafFields(baseFields, tokens, interfaceIndex + 2, INTERFACE_ONE_LINE_FIELDS));
+  return createMdCliServiceOneLineObject({
+    type: "interface",
+    identityParts: [serviceId, interfaceName],
+    sourceType: "interface",
+    sourceName: interfaceName,
+    fields,
+    rawLine,
+    index,
+  });
+}
+
+function parseMdCliOneLineSubscriberService({ tokens, rawLine, index, serviceType, serviceId, subscriberIndex }) {
+  const subscriberName = canonicalServiceName(tokens[subscriberIndex + 1]);
+  const baseFields = {
+    service: serviceType,
+    "service-id": serviceId,
+    "subscriber-interface": subscriberName,
+  };
+  const groupIndex = findToken(tokens, "group-interface", subscriberIndex + 2);
+
+  if (groupIndex < 0 || !tokens[groupIndex + 1]) {
+    const fields = withPrefix(mapLeafFields(baseFields, tokens, subscriberIndex + 2, SUBSCRIBER_ONE_LINE_FIELDS));
+    return createMdCliServiceOneLineObject({
+      type: "subscriber-interface",
+      identityParts: [serviceId, subscriberName],
+      sourceType: "subscriber-interface",
+      sourceName: subscriberName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  const groupName = canonicalServiceName(tokens[groupIndex + 1]);
+  const groupFields = {
+    ...baseFields,
+    "group-interface": groupName,
+  };
+  const sapIndex = findToken(tokens, "sap", groupIndex + 2);
+  const dhcpIndex = findPath(tokens, ["ipv4", "dhcp"], groupIndex + 2);
+
+  if (sapIndex >= 0 && tokens[sapIndex + 1]) {
+    return parseMdCliOneLineSubscriberSap({
+      tokens,
+      rawLine,
+      index,
+      serviceId,
+      subscriberName,
+      groupName,
+      sapIndex,
+      baseFields: groupFields,
+    });
+  }
+
+  if (dhcpIndex >= 0) {
+    const fields = mapLeafFields(groupFields, tokens, groupIndex + 2, DHCP_ONE_LINE_FIELDS);
+    if (pathExists(tokens, ["ipv4", "dhcp", "lease-populate", "l2-header"], groupIndex + 2)) {
+      fields["dhcp.lease-populate.l2-header"] = "true";
+    }
+    return createMdCliServiceOneLineObject({
+      type: "dhcp",
+      identityParts: [serviceId, subscriberName, groupName],
+      sourceType: "dhcp",
+      sourceName: groupName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  const fields = mapLeafFields(groupFields, tokens, groupIndex + 2, GROUP_ONE_LINE_FIELDS);
+  return createMdCliServiceOneLineObject({
+    type: "group-interface",
+    identityParts: [serviceId, subscriberName, groupName],
+    sourceType: "group-interface",
+    sourceName: groupName,
+    fields,
+    rawLine,
+    index,
+  });
+}
+
+function parseMdCliOneLineSubscriberSap({ tokens, rawLine, index, serviceId, subscriberName, groupName, sapIndex, baseFields }) {
+  const sapName = canonicalServiceName(tokens[sapIndex + 1]);
+  const sapFields = {
+    ...baseFields,
+    sap: sapName,
+  };
+  const staticHostIndex = findToken(tokens, "static-host", sapIndex + 2);
+  const defaultHostIndex = findToken(tokens, "default-host", sapIndex + 2);
+  const subSlaIndex = findToken(tokens, "sub-sla-mgmt", sapIndex + 2);
+  const cpuProtectionIndex = findToken(tokens, "cpu-protection", sapIndex + 2);
+
+  if (staticHostIndex >= 0) {
+    const hostIp = tokenEquals(tokens, staticHostIndex + 1, "ipv4")
+      ? stripQuotes(tokens[staticHostIndex + 2])
+      : stripQuotes(tokens[staticHostIndex + 1]);
+    const fields = mapLeafFields(
+      { ...sapFields, "static-host": hostIp },
+      tokens,
+      staticHostIndex + 1,
+      STATIC_HOST_ONE_LINE_FIELDS
+    );
+    return createMdCliServiceOneLineObject({
+      type: "static-host",
+      identityParts: [serviceId, subscriberName, groupName, sapName, hostIp],
+      sourceType: "static-host",
+      sourceName: hostIp,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  if (defaultHostIndex >= 0) {
+    const hostIp = tokenEquals(tokens, defaultHostIndex + 1, "ipv4")
+      ? stripQuotes(tokens[defaultHostIndex + 2])
+      : stripQuotes(tokens[defaultHostIndex + 1]);
+    const prefixLength = valueAfterPath(tokens, ["prefix-length"], defaultHostIndex + 1);
+    const host = hostIp && prefixLength ? `${hostIp}/${prefixLength}` : hostIp;
+    const fields = {
+      ...sapFields,
+      "default-host": host,
+      "prefix-length": prefixLength,
+    };
+    setField(fields, "next-hop", valueAfterPath(tokens, ["next-hop"], defaultHostIndex + 1));
+    return createMdCliServiceOneLineObject({
+      type: "default-host",
+      identityParts: [serviceId, subscriberName, groupName, sapName, host],
+      sourceType: "default-host",
+      sourceName: host,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  if (subSlaIndex >= 0) {
+    const fields = mapLeafFields(
+      { ...sapFields, "sub-sla-mgmt": "present" },
+      tokens,
+      subSlaIndex,
+      SUB_SLA_MGMT_ONE_LINE_FIELDS
+    );
+    return createMdCliServiceOneLineObject({
+      type: "sub-sla-mgmt",
+      identityParts: [serviceId, subscriberName, groupName, sapName],
+      sourceType: "sub-sla-mgmt",
+      sourceName: sapName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  if (cpuProtectionIndex >= 0) {
+    const fields = mapLeafFields(
+      { ...sapFields, "cpu-protection": "present" },
+      tokens,
+      cpuProtectionIndex,
+      CPU_PROTECTION_ONE_LINE_FIELDS
+    );
+    if (pathExists(tokens, ["cpu-protection", "ip-src-monitoring"], cpuProtectionIndex)) {
+      fields["cpu-protection.ip-src-monitoring"] = "true";
+    }
+    return createMdCliServiceOneLineObject({
+      type: "cpu-protection",
+      identityParts: [serviceId, subscriberName, groupName, sapName],
+      sourceType: "cpu-protection",
+      sourceName: sapName,
+      fields,
+      rawLine,
+      index,
+    });
+  }
+
+  const fields = mapLeafFields(sapFields, tokens, sapIndex + 2, SAP_ONE_LINE_FIELDS);
+  return createMdCliServiceOneLineObject({
+    type: "sap",
+    identityParts: [serviceId, subscriberName, groupName, sapName],
+    sourceType: "sap",
+    sourceName: sapName,
     fields,
     rawLine,
     index,
@@ -949,51 +1294,25 @@ function parseMdCliOneLineService(tokens, rawLine, index) {
   const interfaceIndex = findToken(tokens, "interface", 3);
   const subscriberIndex = findToken(tokens, "subscriber-interface", 3);
 
-  if (interfaceIndex >= 0 && tokens[interfaceIndex + 1]) {
-    const interfaceName = canonicalInterfaceName(tokens[interfaceIndex + 1]);
-    const fields = mapLeafFields(
-      {
-        service: serviceType,
-        "service-id": serviceId,
-        interface: interfaceName,
-      },
+  if (subscriberIndex >= 0 && tokens[subscriberIndex + 1]) {
+    return parseMdCliOneLineSubscriberService({
       tokens,
-      interfaceIndex + 2,
-      INTERFACE_ONE_LINE_FIELDS
-    );
-    const identity = buildHierarchyKey([serviceId, interfaceName]);
-    return createMdCliOneLineObject({
-      type: "interface",
-      identity,
-      sourceType: "interface",
-      sourceName: interfaceName,
-      fields,
       rawLine,
       index,
+      serviceType,
+      serviceId,
+      subscriberIndex,
     });
   }
 
-  if (subscriberIndex >= 0 && tokens[subscriberIndex + 1]) {
-    const subscriberName = canonicalServiceName(tokens[subscriberIndex + 1]);
-    const fields = mapLeafFields(
-      {
-        service: serviceType,
-        "service-id": serviceId,
-        "subscriber-interface": subscriberName,
-      },
+  if (interfaceIndex >= 0 && tokens[interfaceIndex + 1]) {
+    return parseMdCliOneLineInterfaceService({
       tokens,
-      subscriberIndex + 2,
-      INTERFACE_ONE_LINE_FIELDS
-    );
-    const identity = buildHierarchyKey([serviceId, subscriberName]);
-    return createMdCliOneLineObject({
-      type: "subscriber-interface",
-      identity,
-      sourceType: "subscriber-interface",
-      sourceName: subscriberName,
-      fields,
       rawLine,
       index,
+      serviceType,
+      serviceId,
+      interfaceIndex,
     });
   }
 
@@ -1015,6 +1334,8 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
       bgpIndex + 3,
       BGP_ONE_LINE_FIELDS
     );
+    const importPolicy = extractBracketedPolicyList(rawLine);
+    if (importPolicy) fields["import.policy"] = importPolicy;
     return createMdCliOneLineObject({
       type: "bgp",
       identity: peerIp,

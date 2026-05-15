@@ -63,14 +63,29 @@ export default function ProfileEditor() {
       </div>
 
       <label>프로파일 이름<input id="profileNameInput" defaultValue="Nokia 기본 검증" /></label>
-      <label>
-        벤더 / OS
-        <AppSelect id="vendorSelect">
-          <option value="nokia">Nokia Classic / MD-CLI</option>
-          <option value="cisco">Cisco</option>
-          <option value="juniper">Juniper</option>
-        </AppSelect>
-      </label>
+      <input id="vendorSelect" type="hidden" defaultValue="nokia" />
+      <div className="profile-vendor-grid">
+        <label>
+          기존 Config 벤더 / OS
+          <AppSelect id="oldVendorSelect">
+            <option value="nokia-classic">Nokia Classic</option>
+            <option value="nokia-md-cli">Nokia MD-CLI</option>
+            <option value="cisco-ios-xe">Cisco IOS-XE</option>
+            <option value="juniper-set">Juniper Set</option>
+            <option value="arista-eos">Arista EOS</option>
+          </AppSelect>
+        </label>
+        <label>
+          신규 Config 벤더 / OS
+          <AppSelect id="newVendorSelect">
+            <option value="nokia-md-cli">Nokia MD-CLI</option>
+            <option value="nokia-classic">Nokia Classic</option>
+            <option value="cisco-ios-xe">Cisco IOS-XE</option>
+            <option value="juniper-set">Juniper Set</option>
+            <option value="arista-eos">Arista EOS</option>
+          </AppSelect>
+        </label>
+      </div>
 
       <CollapsibleSection id="object-type-mapping" title="1. 객체 유형 매핑" summary="기존/신규 객체 유형 연결" defaultOpen>
         <SectionIntro step="1" title="객체 유형 매핑">식별/필드 추출 전에 기존과 신규 객체 유형을 연결.</SectionIntro>

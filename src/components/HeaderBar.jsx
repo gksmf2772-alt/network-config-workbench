@@ -1,7 +1,8 @@
 import React from "react";
-import { Clock, Database, Save } from "lucide-react";
+import { Clock, Database, Save, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { AppButton } from "./ui/AppButton.jsx";
+import { AppIconButton } from "./ui/AppIconButton.jsx";
 import { AppSelect } from "./ui/AppSelect.jsx";
 import { AppToolbar } from "./ui/AppToolbar.jsx";
 
@@ -31,6 +32,9 @@ export default function HeaderBar() {
           <Save className="h-4 w-4" />
           저장
         </AppButton>
+        <AppIconButton id="deleteSessionBtn" type="button" title="선택한 세션 삭제">
+          <Trash2 className="h-4 w-4" />
+        </AppIconButton>
       </AppToolbar>
     </motion.header>
   );

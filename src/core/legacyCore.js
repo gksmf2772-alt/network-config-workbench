@@ -1,5 +1,6 @@
 ﻿import {
   DEFAULT_VENDOR_PRESET_ID,
+  VENDOR_PRESETS,
   getDefaultVendorPreset,
   getVendorPresetByLegacyVendor,
   buildVendorPresetSnapshot,
@@ -50,6 +51,7 @@ const selectors = {
   historySelect: document.querySelector("#historySelect"),
   loadHistoryBtn: document.querySelector("#loadHistoryBtn"),
   saveSessionBtn: document.querySelector("#saveSessionBtn"),
+  deleteSessionBtn: document.querySelector("#deleteSessionBtn"),
   profileSelect: document.querySelector("#profileSelect"),
   loadProfileBtn: document.querySelector("#loadProfileBtn"),
   normalizeSpacingToggle: document.querySelector("#normalizeSpacingToggle"),
@@ -62,6 +64,7 @@ const selectors = {
   objectMappingVisibleToggle: document.querySelector("#objectMappingVisibleToggle"),
   mappingDebugToggle: document.querySelector("#mappingDebugToggle"),
   lineMappingStyleSelect: document.querySelector("#lineMappingStyleSelect"),
+  lineMappingBendRange: document.querySelector("#lineMappingBendRange"),
   lineMappingVisibleToggle: document.querySelector("#lineMappingVisibleToggle"),
   lineMappingAnimationToggle: document.querySelector("#lineMappingAnimationToggle"),
   objectToggles: document.querySelector("#objectToggles"),
@@ -114,6 +117,8 @@ const selectors = {
   diffConnectorSvg: document.querySelector("#diffConnectorSvg"),
   profileNameInput: document.querySelector("#profileNameInput"),
   vendorSelect: document.querySelector("#vendorSelect"),
+  oldVendorSelect: document.querySelector("#oldVendorSelect"),
+  newVendorSelect: document.querySelector("#newVendorSelect"),
   newProfileBtn: document.querySelector("#newProfileBtn"),
   saveProfileBtn: document.querySelector("#saveProfileBtn"),
   saveProfileAsBtn: document.querySelector("#saveProfileAsBtn"),
@@ -191,6 +196,7 @@ const state = {
   syncingDiffScroll: false,
   connectorFrame: null,
   semanticObjectAlignFrame: null,
+  semanticObjectWidthFrame: null,
   draggingProfileLine: null,
   selectedProfileLineLink: null,
   pendingProfileLineRef: null,
@@ -279,26 +285,89 @@ function createDefaultProfile() {
   };
 }
 
-function createEmptyProfile(vendor = state.profileDraft?.vendor || "nokia") {
+const vendorLabels = {
+  "nokia-classic": "Nokia Classic",
+  "nokia-md-cli": "Nokia MD-CLI",
+  "cisco-ios-xe": "Cisco IOS-XE",
+  "juniper-set": "Juniper Set",
+  "arista-eos": "Arista EOS",
+};
+
+function createEmptyProfile(vendor = state.profileDraft?.vendor || "nokia", vendorPair = null) {
   const preset = getVendorPresetByLegacyVendor(vendor);
-  console.log("[profile-preset-debug]", {
-  vendor,
-  preset,
-  });
+  const vendorState = buildProfileVendorState(
+    vendorPair?.oldVendor || preset.oldVendor,
+    vendorPair?.newVendor || preset.newVendor,
+  );
 
   return {
     ...createDefaultProfile(),
     id: null,
     name: "새 프로파일",
-    vendor: preset.legacyVendor,
-    vendorPresetId: preset.id,
-    oldVendor: preset.oldVendor,
-    newVendor: preset.newVendor,
-    vendorPreset: buildVendorPresetSnapshot(preset),
+    ...vendorState,
     semanticMappings: Object.fromEntries(objectTypes.map((type) => [type, []])),
     semanticNodeGroups: createEmptyRulesByType(),
     semanticLineGroups: createEmptyRulesByType(),
   };
+}
+
+function buildProfileVendorState(oldVendor, newVendor) {
+  const fallback = getDefaultVendorPreset();
+  const safeOldVendor = oldVendor || fallback.oldVendor;
+  const safeNewVendor = newVendor || fallback.newVendor;
+  const matchedPreset = VENDOR_PRESETS.find((preset) =>
+    preset.oldVendor === safeOldVendor && preset.newVendor === safeNewVendor
+  );
+  const legacyVendor = matchedPreset?.legacyVendor || legacyVendorFromParserId(safeOldVendor);
+  const vendorPreset = matchedPreset
+    ? buildVendorPresetSnapshot(matchedPreset)
+    : {
+      id: `custom:${safeOldVendor}->${safeNewVendor}`,
+      label: `${vendorLabel(safeOldVendor)} → ${vendorLabel(safeNewVendor)}`,
+      oldVendor: safeOldVendor,
+      newVendor: safeNewVendor,
+      legacyVendor,
+    };
+
+  return {
+    vendor: legacyVendor,
+    vendorPresetId: vendorPreset.id,
+    oldVendor: safeOldVendor,
+    newVendor: safeNewVendor,
+    vendorPreset,
+  };
+}
+
+function vendorLabel(vendorId) {
+  return vendorLabels[vendorId] || vendorId || "";
+}
+
+function legacyVendorFromParserId(vendorId = "") {
+  if (vendorId.startsWith("cisco")) return "cisco";
+  if (vendorId.startsWith("juniper")) return "juniper";
+  if (vendorId.startsWith("arista")) return "arista";
+  return "nokia";
+}
+
+function getProfileVendorPairFromControls() {
+  const ensuredProfile = ensureVendorPresetFields(state.profileDraft || createDefaultProfile());
+  return {
+    oldVendor:
+      selectors.oldVendorSelect?.value ||
+      ensuredProfile.oldVendor ||
+      ensuredProfile.vendorPreset?.oldVendor ||
+      getDefaultVendorPreset().oldVendor,
+    newVendor:
+      selectors.newVendorSelect?.value ||
+      ensuredProfile.newVendor ||
+      ensuredProfile.vendorPreset?.newVendor ||
+      getDefaultVendorPreset().newVendor,
+  };
+}
+
+function syncLegacyVendorControl(vendorState = state.profileDraft) {
+  if (!selectors.vendorSelect || !vendorState) return;
+  selectors.vendorSelect.value = vendorState.vendor || legacyVendorFromParserId(vendorState.oldVendor || "");
 }
 
 function createEmptyRulesByType() {
@@ -495,6 +564,7 @@ function bindEvents() {
   selectors.summaryPageTabBtn?.addEventListener("click", () => setActiveTab("summary"));
   selectors.loadHistoryBtn.addEventListener("click", loadSelectedSession);
   selectors.saveSessionBtn.addEventListener("click", saveSession);
+  selectors.deleteSessionBtn?.addEventListener("click", deleteSelectedSession);
   selectors.loadProfileBtn.addEventListener("click", loadSelectedProfile);
   selectors.deleteProfileBtn.addEventListener("click", deleteSelectedProfile);
   selectors.newProfileBtn?.addEventListener("click", createNewEmptyProfile);
@@ -550,6 +620,7 @@ function bindEvents() {
   window.addEventListener("pointerup", finishSemanticPreviewTokenDrag);
   selectors.oldDiffPane.addEventListener("dblclick", showEditMode);
   selectors.newDiffPane.addEventListener("dblclick", showEditMode);
+  window.addEventListener("resize", scheduleSemanticObjectWidthSync);
   window.addEventListener("resize", scheduleSemanticObjectStartAlignment);
   window.addEventListener("resize", scheduleDiffConnectorRender);
   window.addEventListener("resize", scheduleProfileExampleConnectorRender);
@@ -597,7 +668,18 @@ function bindEvents() {
     state.profileDraft.name = selectors.profileNameInput.value.trim() || "이름 없는 프로파일";
     markProfileDirty("Profile", "수정", "프로파일 이름");
   });
-  selectors.vendorSelect.addEventListener("input", () => {
+  const handleProfileVendorPairChange = () => {
+    pushProfileUndoSnapshot("profile-vendor");
+    const vendorPair = getProfileVendorPairFromControls();
+    Object.assign(state.profileDraft, buildProfileVendorState(vendorPair.oldVendor, vendorPair.newVendor));
+    syncLegacyVendorControl(state.profileDraft);
+
+    markProfileDirty("Profile", "수정", "벤더");
+    markCompareStale();
+  };
+  selectors.oldVendorSelect?.addEventListener("input", handleProfileVendorPairChange);
+  selectors.newVendorSelect?.addEventListener("input", handleProfileVendorPairChange);
+  selectors.vendorSelect?.addEventListener("input", () => {
     pushProfileUndoSnapshot("profile-vendor");
 
     const legacyVendor = selectors.vendorSelect.value;
@@ -621,7 +703,7 @@ function bindEvents() {
   });
   selectors.themeSelect.addEventListener("input", saveUiPreferences);
   selectors.fontSelect.addEventListener("input", saveUiPreferences);
-  selectors.fieldHighlightToggle?.addEventListener("input", saveUiPreferences);
+  selectors.fieldHighlightToggle?.addEventListener("input", handleFieldHighlightToggle);
   selectors.semanticDebugToggle?.addEventListener("input", saveUiPreferences);
   selectors.mappingDebugToggle?.addEventListener("input", () => {
     saveUiPreferences();
@@ -632,6 +714,10 @@ function bindEvents() {
     scheduleDiffConnectorRender();
   });
   selectors.lineMappingStyleSelect?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleDiffConnectorRender();
+  });
+  selectors.lineMappingBendRange?.addEventListener("input", () => {
     saveUiPreferences();
     scheduleDiffConnectorRender();
   });
@@ -694,7 +780,9 @@ function renderProfileEditor() {
 
   ensureProfileExamples(state.profileDraft);
   selectors.profileNameInput.value = state.profileDraft.name;
-  selectors.vendorSelect.value = state.profileDraft.vendor;
+  if (selectors.oldVendorSelect) selectors.oldVendorSelect.value = state.profileDraft.oldVendor || getDefaultVendorPreset().oldVendor;
+  if (selectors.newVendorSelect) selectors.newVendorSelect.value = state.profileDraft.newVendor || getDefaultVendorPreset().newVendor;
+  syncLegacyVendorControl(state.profileDraft);
   selectors.profileObjectTypeSelect.innerHTML = objectTypes
     .map((type) => `<option value="${type}" ${state.selectedProfileObjectType === type ? "selected" : ""}>${type}</option>`)
     .join("");
@@ -2795,6 +2883,8 @@ function inferFieldFromLinkedLines(oldLine, newLine) {
 
 function inferSemanticFieldName(line) {
   const normalized = canonicalizeComparableLine(line);
+  const oneLineStaticRouteField = inferOneLineStaticRouteField(normalized);
+  if (oneLineStaticRouteField) return oneLineStaticRouteField;
   if (/(?:^|\s)(?:static-route-entry|route)\s+[\d./]+/.test(normalized)) return "route";
   if (/\b(?:next-hop|gateway)\b/.test(normalized)) return "next-hop";
   if (/^(?:ip\s+address|address|ipv4|ipv6)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
@@ -2807,6 +2897,16 @@ function inferSemanticFieldName(line) {
   if (/\bneighbor\b/.test(normalized)) return "neighbor";
   if (/^interface\b/.test(normalized)) return "interface";
   return extractFieldName(normalized);
+}
+
+function inferOneLineStaticRouteField(normalized = "") {
+  if (!/^\/?configure\s*\{.*\bstatic-routes\s+route\b/.test(normalized)) return "";
+  if (/\bdescription\b/.test(normalized)) return "description";
+  if (/\btag\b/.test(normalized)) return "tag";
+  if (/\bmetric\b/.test(normalized)) return "metric";
+  if (/\badmin-state\b/.test(normalized)) return "state";
+  if (/\bnext-hop\b/.test(normalized)) return "next-hop";
+  return "route";
 }
 
 function inferValueForField(line, field) {
@@ -3567,6 +3667,21 @@ function runCompare() {
   }
 }
 
+function handleFieldHighlightToggle() {
+  saveUiPreferences();
+  if (!state.lastReport?.diffRows) {
+    scheduleDiffConnectorRender();
+    return;
+  }
+
+  const oldScrollTop = selectors.oldDiffPane?.scrollTop || 0;
+  const newScrollTop = selectors.newDiffPane?.scrollTop || 0;
+  renderDiff(state.lastReport.diffRows || []);
+  if (selectors.oldDiffPane) selectors.oldDiffPane.scrollTop = oldScrollTop;
+  if (selectors.newDiffPane) selectors.newDiffPane.scrollTop = newScrollTop;
+  scheduleDiffConnectorRender();
+}
+
 function countRawRowLines(row = {}) {
   return [row.oldRow?.text, row.newRow?.text]
     .filter(Boolean)
@@ -3591,6 +3706,13 @@ function logStaticRouteCoverageSummary(oldObjects = [], newObjects = [], report 
 }
 
 function getCurrentVendorPresetForSemanticPreview() {
+  if (state.profileDraft?.oldVendor && state.profileDraft?.newVendor) {
+    return {
+      oldVendor: state.profileDraft.oldVendor,
+      newVendor: state.profileDraft.newVendor,
+    };
+  }
+
   // 1순위:
   // 사용자가 프로파일에서 명시적으로 선택한 vendor preset
   // heuristic보다 항상 우선한다.
@@ -5474,7 +5596,16 @@ function splitPolicyValues(value) {
 }
 
 function extractFieldValue(line, field) {
-  return stripTrailingSyntax(canonicalizeComparableLine(line).slice(field.length).trim());
+  const normalized = canonicalizeComparableLine(line);
+  const normalizedField = normalizeFieldName(field);
+  if (normalizedField === "state") {
+    if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
+    if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (normalizedField === "neighbor") {
+    return stripTrailingSyntax(normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  }
+  return stripTrailingSyntax(normalized.slice(String(field || "").length).trim());
 }
 
 function sortObjects(objects) {
@@ -8275,6 +8406,7 @@ function renderDiff(rows) {
     selectors.newDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.newRow || null, row?.newState || "placeholder", row?.oldRow || null, index, "new")).join("");
     bindSemanticDiffInteractions();
     renderDiffObjectToolbars();
+    syncSemanticObjectBlockWidths();
     if (state.activeDiffObjectKey) highlightObjectLines(state.activeDiffObjectKey);
     scheduleSemanticObjectStartAlignment();
   } catch (error) {
@@ -8441,6 +8573,87 @@ function centerSemanticPairInPanes(pairKey) {
   scrollPaneToLine(selectors.oldDiffPane, oldTarget);
   scrollPaneToLine(selectors.newDiffPane, newTarget);
   state.syncingDiffScroll = false;
+}
+
+function scheduleSemanticObjectWidthSync() {
+  if (state.semanticObjectWidthFrame) return;
+  state.semanticObjectWidthFrame = requestAnimationFrame(() => {
+    state.semanticObjectWidthFrame = null;
+    syncSemanticObjectBlockWidths();
+    scheduleDiffConnectorRender();
+  });
+}
+
+function syncSemanticObjectBlockWidths() {
+  syncSemanticObjectBlockWidthsForPane(selectors.oldDiffPane);
+  syncSemanticObjectBlockWidthsForPane(selectors.newDiffPane);
+}
+
+function syncSemanticObjectBlockWidthsForPane(pane) {
+  if (!pane) return;
+
+  const paneWidth = Math.max(0, pane.clientWidth - 2);
+  pane.querySelectorAll(".semantic-object-block-wrapper").forEach((wrapper) => {
+    const block = wrapper.querySelector(".semantic-diff-object-block");
+    const head = wrapper.querySelector(".semantic-diff-object-head");
+    const body = wrapper.querySelector(".semantic-diff-object-body");
+    const lines = [...wrapper.querySelectorAll(".semantic-diff-config-line")];
+    const measured = [wrapper, block, head, body, ...lines].filter(Boolean);
+
+    measured.forEach(clearSemanticWidthStyle);
+
+    const wrapperStyle = window.getComputedStyle(wrapper);
+    const wrapperPadding =
+      readCssPixelValue(wrapperStyle.paddingLeft) +
+      readCssPixelValue(wrapperStyle.paddingRight);
+    const minBlockWidth = Math.max(0, paneWidth - wrapperPadding);
+    const lineWidths = lines.map(measureSemanticConfigLineWidth);
+    const contentWidth = Math.ceil(Math.max(
+      minBlockWidth,
+      block?.scrollWidth || 0,
+      head?.scrollWidth || 0,
+      body?.scrollWidth || 0,
+      ...lineWidths,
+    ) + 8);
+    const wrapperWidth = Math.ceil(contentWidth + wrapperPadding);
+
+    setImportantWidth(wrapper, wrapperWidth);
+    [block, head, body, ...lines].filter(Boolean).forEach((element) => {
+      setImportantWidth(element, contentWidth);
+    });
+  });
+}
+
+function clearSemanticWidthStyle(element) {
+  if (!element) return;
+  element.style.removeProperty("width");
+  element.style.removeProperty("min-width");
+}
+
+function setImportantWidth(element, width) {
+  if (!element || !Number.isFinite(width) || width <= 0) return;
+  const value = `${Math.ceil(width)}px`;
+  element.style.setProperty("width", value, "important");
+  element.style.setProperty("min-width", value, "important");
+}
+
+function readCssPixelValue(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function measureSemanticConfigLineWidth(line) {
+  if (!line) return 0;
+  const lineRect = line.getBoundingClientRect();
+  const candidates = [line.scrollWidth || 0];
+
+  line.querySelectorAll("code, .semantic-diff-line-field").forEach((element) => {
+    const rect = element.getBoundingClientRect();
+    const offset = Math.max(0, rect.left - lineRect.left);
+    candidates.push(offset + Math.max(element.scrollWidth || 0, rect.width || 0));
+  });
+
+  return Math.ceil(Math.max(...candidates) + 24);
 }
 
 function scheduleSemanticObjectStartAlignment() {
@@ -8614,6 +8827,7 @@ function collectVisibleDiffObjectGroups(pane, paneRect) {
         status: line.dataset.objectStatus || "",
         reason: line.dataset.objectReason || "",
         score: line.dataset.objectScore || "",
+        paneRect,
         state: line.classList.contains("changed") ? "changed" : "equal",
       });
     }
@@ -8627,7 +8841,30 @@ function collectVisibleDiffObjectGroups(pane, paneRect) {
 }
 
 function groupVisibleRect(group, container) {
-  const rects = group.lines.map((line) => getRelativeRect(line, container));
+  const base = container.getBoundingClientRect();
+  const paneBounds = group.paneRect
+    ? {
+      left: group.paneRect.left - base.left,
+      right: group.paneRect.right - base.left,
+      top: group.paneRect.top - base.top,
+      bottom: group.paneRect.bottom - base.top,
+    }
+    : null;
+  const rects = group.lines
+    .map((line) => getRelativeRect(line, container))
+    .map((rect) => paneBounds
+      ? ({
+        ...rect,
+        left: Math.max(rect.left, paneBounds.left),
+        right: Math.min(rect.right, paneBounds.right),
+        top: Math.max(rect.top, paneBounds.top),
+        bottom: Math.min(rect.bottom, paneBounds.bottom),
+      })
+      : rect)
+    .filter((rect) => rect.right > rect.left && rect.bottom > rect.top);
+  if (!rects.length) {
+    return getRelativeRect(group.lines[0], container);
+  }
   const first = rects[0];
   const merged = rects.reduce((acc, rect) => ({
     left: Math.min(acc.left, rect.left),
@@ -8682,8 +8919,8 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
 
   const oldRect = groupVisibleRect(oldGroup, grid);
   const newRect = groupVisibleRect(newGroup, grid);
-  const x1 = Math.max(oldRect.left, oldRect.right - 18);
-  const x2 = Math.min(newRect.right, newRect.left + 18);
+  const x1 = oldRect.right;
+  const x2 = newRect.left;
   const y1Top = oldRect.top;
   const y1Bottom = oldRect.bottom;
   const y2Top = newRect.top;
@@ -8693,7 +8930,8 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
   const mid = x1 + (x2 - x1) / 2;
   const state = objectConnectorState(oldGroup, newGroup);
   const typeClass = objectConnectorTypeClass(oldGroup, newGroup);
-  const controlOffset = Math.max(46, Math.min(160, Math.abs(x2 - x1) * 0.42));
+  const connectorWidth = Math.abs(x2 - x1);
+  const controlOffset = Math.max(20, Math.min(140, connectorWidth * 0.5));
   const ribbonPath = [
     `M ${x1} ${y1Top}`,
     `C ${x1 + controlOffset} ${y1Top}, ${x2 - controlOffset} ${y2Top}, ${x2} ${y2Top}`,
@@ -9140,12 +9378,36 @@ function collectVisibleSemanticObjectBlocks(pane, paneRect) {
 function collectSemanticConfigLinesByField(block) {
   const result = new Map();
   block.querySelectorAll(".semantic-diff-config-line[data-semantic-field]").forEach((line) => {
-    const field = normalizeRelationField(line.dataset.semanticField || "");
-    if (!field || line.classList.contains("is-structural")) return;
-    if (!result.has(field)) result.set(field, []);
-    result.get(field).push(line);
+    if (line.classList.contains("is-structural")) return;
+    const fields = new Set([
+      normalizeRelationField(line.dataset.semanticField || ""),
+      ...inferRelationFieldsFromRenderedLine(line),
+    ].filter(Boolean));
+
+    fields.forEach((field) => {
+      if (!result.has(field)) result.set(field, []);
+      result.get(field).push(line);
+    });
   });
   return result;
+}
+
+function inferRelationFieldsFromRenderedLine(line) {
+  const text = canonicalizeComparableLine(line?.querySelector?.("code")?.textContent || line?.textContent || "");
+  const fields = [];
+
+  if (/^\/?configure\s*\{.*\bstatic-routes\s+route\b/.test(text)) {
+    if (/\bstatic-routes\s+route\b/.test(text)) fields.push("route");
+    if (/\bnext-hop\b/.test(text)) fields.push("next-hop");
+    if (/\bdescription\b/.test(text)) fields.push("description");
+    if (/\btag\b/.test(text)) fields.push("tag");
+    if (/\bmetric\b/.test(text)) fields.push("metric");
+    if (/\badmin-state\b/.test(text)) fields.push("state");
+    return fields;
+  }
+
+  const field = normalizeRelationField(inferSemanticFieldName(text));
+  return field ? [field] : [];
 }
 
 function orderedRelationFields(objectType, oldLinesByField, newLinesByField) {
@@ -9221,6 +9483,12 @@ function currentLineMappingStyle() {
   return ["straight", "chain", "slime"].includes(style) ? style : "straight";
 }
 
+function currentLineMappingBend() {
+  const raw = Number(selectors.lineMappingBendRange?.value ?? 65);
+  if (!Number.isFinite(raw)) return 0.65;
+  return Math.max(0, Math.min(1, raw / 100));
+}
+
 function buildLineMappingConnectorPath({
   oldElement,
   newElement,
@@ -9243,7 +9511,12 @@ function buildLineMappingConnectorPath({
   const style = currentLineMappingStyle();
   const active = relationKey && relationKey === state.activeLineRelationKey ? "line-relation-selected" : "";
   const animated = selectors.lineMappingAnimationToggle?.checked ? "is-animated" : "";
-  const path = buildLineMappingPathD({ x1, y1, x2, y2, style });
+  const fieldClass = lineRelationFieldClass(oldElement, newElement, relationKey);
+  const laneBounds = getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 });
+  const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds });
+  const shineMarkup = style === "slime" && animated
+    ? buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path })
+    : "";
   const debugMarkup = isMappingDebugVisible()
     ? [
       buildMappingDebugAnchor(x1, y1, "line", relationKey, "old"),
@@ -9257,46 +9530,180 @@ function buildLineMappingConnectorPath({
       relationKey,
       relationState,
       style,
+      fieldClass,
       left: { x: Math.round(x1), y: Math.round(y1) },
       right: { x: Math.round(x2), y: Math.round(y2) },
     });
   }
 
-  return `<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${active} ${animated}"
+  return `<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${active} ${animated}"
     data-line-relation-key="${escapeHtml(relationKey)}"
-    d="${path}" />${debugMarkup}`;
+    d="${path}" />${shineMarkup}${debugMarkup}`;
 }
 
-function buildLineMappingPathD({ x1, y1, x2, y2, style }) {
-  if (style === "straight") {
-    return `M ${x1} ${y1} L ${x2} ${y2}`;
+function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path }) {
+  return `<path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active} is-animated"
+    data-line-relation-key="${escapeHtml(relationKey)}"
+    d="${path}" />`;
+}
+
+function lineRelationFieldClass(oldElement, newElement, relationKey = "") {
+  const field = lineRelationFieldName(oldElement, newElement, relationKey);
+  return field ? `field-${cssSafeClassName(field)}` : "field-unknown";
+}
+
+function lineRelationFieldName(oldElement, newElement, relationKey = "") {
+  const direct = normalizeRelationField(
+    oldElement?.dataset?.semanticField ||
+    newElement?.dataset?.semanticField ||
+    ""
+  );
+  if (direct) return direct;
+
+  const knownFields = new Set([
+    ...semanticFieldOrder,
+    ...Object.keys(commonFieldAliases),
+    "address",
+    "state",
+    "port",
+    "lag",
+    "sap",
+  ]);
+  return String(relationKey || "")
+    .split(":")
+    .map((part) => normalizeRelationField(part))
+    .find((part) => knownFields.has(part)) || "";
+}
+
+function getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 }) {
+  const base = grid.getBoundingClientRect();
+  const oldPaneRight = Number(oldPaneRect?.right) - base.left;
+  const newPaneLeft = Number(newPaneRect?.left) - base.left;
+  const hasPaneEdges = Number.isFinite(oldPaneRight) && Number.isFinite(newPaneLeft) && newPaneLeft > oldPaneRight + 8;
+
+  if (hasPaneEdges) {
+    return {
+      leftX: oldPaneRight,
+      rightX: newPaneLeft,
+      centerX: oldPaneRight + ((newPaneLeft - oldPaneRight) / 2),
+    };
   }
 
-  if (style === "chain") {
-    const gap = Math.max(24, Math.min(92, Math.abs(x2 - x1) * 0.24));
-    const mid = x1 + (x2 - x1) / 2;
-    return `M ${x1} ${y1} L ${mid - gap} ${y1} L ${mid + gap} ${y2} L ${x2} ${y2}`;
+  const centerX = x1 + ((x2 - x1) / 2);
+  const halfWidth = Math.max(18, Math.min(46, Math.abs(x2 - x1) * 0.075));
+  return {
+    leftX: centerX - halfWidth,
+    rightX: centerX + halfWidth,
+    centerX,
+  };
+}
+
+function buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass = "", laneBounds = null }) {
+  const bend = currentLineMappingBend();
+  if (style === "straight" || style === "chain") {
+    return buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass, bend, laneBounds });
   }
 
-  const tension = Math.max(54, Math.min(180, Math.abs(x2 - x1) * 0.42));
-  return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
+  return buildFieldLaneCurvePath({ x1, y1, x2, y2, fieldClass, bend, laneBounds });
+}
+
+function buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
+  if (bend <= 0.02) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
+  return `M ${x1} ${y1} L ${lane.leftX} ${y1} L ${lane.x} ${lane.y} L ${lane.rightX} ${y2} L ${x2} ${y2}`;
+}
+
+function buildFieldLaneCurvePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
+  const distance = Math.abs(x2 - x1);
+  if (bend <= 0.02) {
+    const tension = Math.max(64, Math.min(220, distance * 0.46));
+    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
+  }
+
+  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
+  const middleTension = Math.max(12, Math.min(42, distance * 0.045));
+  return [
+    `M ${x1} ${y1}`,
+    `L ${lane.leftX} ${y1}`,
+    `C ${lane.leftX + middleTension} ${y1}, ${lane.x - middleTension} ${lane.y}, ${lane.x} ${lane.y}`,
+    `C ${lane.x + middleTension} ${lane.y}, ${lane.rightX - middleTension} ${y2}, ${lane.rightX} ${y2}`,
+    `L ${x2} ${y2}`,
+  ].join(" ");
+}
+
+function lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null) {
+  const distance = Math.abs(x2 - x1);
+  const leftX = Number.isFinite(laneBounds?.leftX) ? laneBounds.leftX : null;
+  const rightX = Number.isFinite(laneBounds?.rightX) ? laneBounds.rightX : null;
+  const directX = Number.isFinite(laneBounds?.centerX) ? laneBounds.centerX : (x1 + x2) / 2;
+  const directY = (y1 + y2) / 2;
+  const laneHalfWidth = Math.max(18, Math.min(46, distance * 0.075));
+  const laneOffset = lineRelationFieldLaneYOffset(fieldClass) * bend;
+  const verticalDistance = Math.abs(y2 - y1);
+  const laneY = verticalDistance < 4
+    ? directY
+    : clampLineLaneY(directY + laneOffset, y1, y2);
+  return {
+    x: directX,
+    leftX: Number.isFinite(leftX) ? leftX : directX - laneHalfWidth,
+    rightX: Number.isFinite(rightX) ? rightX : directX + laneHalfWidth,
+    y: laneY,
+  };
+}
+
+function clampLineLaneY(value, y1, y2) {
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+  const span = maxY - minY;
+  if (span < 4) return (y1 + y2) / 2;
+
+  const inset = Math.min(6, span * 0.18);
+  return Math.max(minY + inset, Math.min(maxY - inset, value));
+}
+
+function lineRelationFieldLaneYOffset(fieldClass = "") {
+  const offsetByField = {
+    "field-route": -22,
+    "field-neighbor": -22,
+    "field-address": -15,
+    "field-ip-address": -15,
+    "field-next-hop": -11,
+    "field-gateway": -11,
+    "field-state": 9,
+    "field-admin-state": 9,
+    "field-description": 18,
+    "field-tag": 28,
+    "field-interface": 14,
+    "field-sap": 14,
+    "field-port": 14,
+    "field-lag": 14,
+    "field-group": 38,
+    "field-peer-group": 38,
+    "field-authentication-key": 48,
+    "field-peer-as": 48,
+  };
+  return offsetByField[fieldClass] ?? 0;
+}
+
+function buildSmoothLineMappingPath({ x1, y1, x2, y2 }) {
+  const distance = Math.abs(x2 - x1);
+  const tension = Math.max(64, Math.min(220, distance * 0.46));
+  const dy = y2 - y1;
+  const curveY = Math.abs(dy) < 6 ? 0 : dy * 0.18;
+  return `M ${x1} ${y1} C ${x1 + tension} ${y1 + curveY}, ${x2 - tension} ${y2 - curveY}, ${x2} ${y2}`;
 }
 
 function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
-  const field = line?.dataset?.semanticField || "";
-  const fieldSelector = field ? `[data-semantic-field="${cssEscape(field)}"]` : "";
-  const tokenElement = fieldSelector
-    ? line.querySelector(`.diff-token-match${fieldSelector}`)
-    : line?.querySelector?.(".diff-token-match");
-  const textElement = tokenElement || line.querySelector("code") || line;
-  const textRect = textElement.getBoundingClientRect();
+  const textElement = line.querySelector("code") || line;
+  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
   const lineRect = line.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(line, paneRect, preferredEdge);
   const visibleLeft = Math.max(textRect.left, paneRect.left);
   const visibleRight = Math.min(textRect.right, paneRect.right);
   const hasVisibleWidth = visibleRight > visibleLeft;
   const x = preferredEdge === "left"
-    ? (hasVisibleWidth ? visibleLeft : Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
-    : (hasVisibleWidth ? visibleRight : Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
+    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
+    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
     x,
     y: lineRect.top + (lineRect.height / 2),
@@ -9304,24 +9711,93 @@ function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
-  const field = line?.dataset?.semanticField || "";
-  const fieldSelector = field ? `[data-semantic-field="${cssEscape(field)}"]` : "";
-  const tokenElement = fieldSelector
-    ? line.querySelector(`.diff-token-match${fieldSelector}`)
-    : line?.querySelector?.(".diff-token-match");
-  const textElement = tokenElement || line.querySelector(".diff-line-text") || line;
-  const textRect = textElement.getBoundingClientRect();
+  const textElement = line.querySelector(".diff-line-text") || line;
+  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
   const lineRect = line.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(line, paneRect, preferredEdge);
   const visibleLeft = Math.max(textRect.left, paneRect.left);
   const visibleRight = Math.min(textRect.right, paneRect.right);
   const hasVisibleWidth = visibleRight > visibleLeft;
   const x = preferredEdge === "left"
-    ? (hasVisibleWidth ? visibleLeft : Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
-    : (hasVisibleWidth ? visibleRight : Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
+    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
+    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
     x,
     y: lineRect.top + (lineRect.height / 2),
   };
+}
+
+function getVisibleSemanticTokenRect(line, paneRect, preferredEdge = "right") {
+  const tokens = [...line.querySelectorAll(".diff-token-match[data-semantic-field]:not([data-semantic-field=''])")];
+  const visible = tokens
+    .map((token) => ({ token, rect: token.getBoundingClientRect() }))
+    .filter((item) => item.rect.right > paneRect.left && item.rect.left < paneRect.right);
+  if (!visible.length) return null;
+
+  const candidates = preferredEdge === "right"
+    ? visible.filter((item) => item.token.dataset.tokenKind === "keyword")
+    : visible;
+  const pool = candidates.length ? candidates : visible;
+  const item = preferredEdge === "left"
+    ? pool.reduce((best, candidate) => (candidate.rect.left < best.rect.left ? candidate : best), pool[0])
+    : pool.reduce((best, candidate) => (candidate.rect.right > best.rect.right ? candidate : best), pool[0]);
+  const rect = item.rect;
+
+  return {
+    left: Math.max(rect.left, paneRect.left),
+    right: Math.min(rect.right, paneRect.right),
+  };
+}
+
+function getActualSettingTextRect(element, preferredEdge = "right") {
+  if (!element || !document.createRange || !document.createTreeWalker) return null;
+  const textNodeInfo = preferredEdge === "left"
+    ? findFirstNonWhitespaceTextNode(element)
+    : findLastNonWhitespaceTextNode(element);
+  if (!textNodeInfo) return null;
+
+  const range = document.createRange();
+  range.setStart(textNodeInfo.node, textNodeInfo.offset);
+  range.setEnd(textNodeInfo.node, textNodeInfo.offset + 1);
+  const rect = range.getBoundingClientRect();
+  range.detach?.();
+  return rect && rect.width >= 0 ? rect : null;
+}
+
+function findFirstNonWhitespaceTextNode(element) {
+  const walker = document.createTreeWalker(element, window.NodeFilter?.SHOW_TEXT || 4);
+  let node = walker.nextNode();
+
+  while (node) {
+    const match = String(node.nodeValue || "").match(/\S/);
+    if (match) {
+      return { node, offset: match.index };
+    }
+    node = walker.nextNode();
+  }
+
+  return null;
+}
+
+function findLastNonWhitespaceTextNode(element) {
+  const nodes = [];
+  const walker = document.createTreeWalker(element, window.NodeFilter?.SHOW_TEXT || 4);
+  let node = walker.nextNode();
+
+  while (node) {
+    nodes.push(node);
+    node = walker.nextNode();
+  }
+
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const value = String(nodes[index].nodeValue || "");
+    const match = value.match(/\S(?=\s*$)/);
+    if (match) {
+      return { node: nodes[index], offset: match.index };
+    }
+  }
+
+  return null;
 }
 
 function renderReportV2(report) {
@@ -9999,14 +10475,40 @@ function dedupeVisualTokens(tokens) {
 }
 
 function extractSemanticVisualTokens(text, objectType) {
+  const source = String(text || "");
   const normalized = canonicalizeComparableLine(text);
   const tokens = [];
   const add = (field, value, kind = tokenHighlightKind(value)) => {
     if (!field || !value) return;
     tokens.push({ token: field, field, colorSeed: field, kind: "keyword" });
     tokens.push({ token: value, field, colorSeed: field, kind });
-    if (normalized.includes(`"${value}"`)) tokens.push({ token: `"${value}"`, field, colorSeed: field, kind });
+    if (source.toLowerCase().includes(`"${String(value).toLowerCase()}"`)) {
+      tokens.push({ token: `"${value}"`, field, colorSeed: field, kind });
+    }
   };
+
+  const neighbor = normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/);
+  if (neighbor) {
+    add("neighbor", stripTrailingSyntax(neighbor[1]), "address");
+    return tokens;
+  }
+
+  if (/\bno\s+shutdown\b/.test(normalized)) {
+    add("state", "no shutdown", "keyword");
+    return tokens;
+  }
+
+  if (/\badmin-state\s+enable\b/.test(normalized)) {
+    add("state", "admin-state", "keyword");
+    add("state", "enable", "keyword");
+    return tokens;
+  }
+
+  if (/\badmin-state\s+disable\b/.test(normalized)) {
+    add("state", "admin-state", "keyword");
+    add("state", "disable", "keyword");
+    return tokens;
+  }
 
   if (objectType === "static-route") {
     const route = normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?([^"\s{}]+)"?/);
@@ -10015,6 +10517,10 @@ function extractSemanticVisualTokens(text, objectType) {
     if (nextHop) add("next-hop", stripTrailingSyntax(nextHop[1]), "address");
     const tag = normalized.match(/\btag\s+([^"\s{}]+)/);
     if (tag) add("tag", stripTrailingSyntax(tag[1]), "number");
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "quoted");
+    }
     if (/\bno\s+shutdown\b/.test(normalized)) {
       add("state", "no shutdown", "keyword");
       add("state", "shutdown", "keyword");
@@ -10126,10 +10632,11 @@ function alignNewConfigToOldOrder() {
 
 function createNewEmptyProfile() {
   if (!confirmUnsavedProfileAction("신규 프로파일 생성")) return;
-  const vendor = selectors.vendorSelect.value || state.profileDraft?.vendor || "nokia";
+  const vendorPair = getProfileVendorPairFromControls();
+  const vendor = state.profileDraft?.vendor || legacyVendorFromParserId(vendorPair.oldVendor);
   state.activeProfileId = null;
   state.selectedProfileLibraryId = null;
-  state.profileDraft = createEmptyProfile(vendor);
+  state.profileDraft = createEmptyProfile(vendor, vendorPair);
   state.selectedProfileObjectType = "static-route";
   ensureProfileExamples(state.profileDraft);
   renderProfileEditor();
@@ -10218,6 +10725,17 @@ async function loadSelectedSession() {
   markCompareStale();
 }
 
+async function deleteSelectedSession() {
+  const id = selectors.historySelect.value;
+  if (!id) return;
+  const sessions = await readRecords("sessions", "configWorkbenchSessions");
+  const session = sessions.find((item) => item.id === id);
+  if (!session) return;
+  if (!window.confirm?.(`'${session.name}' 세션을 삭제할까요?`)) return;
+  await deleteRecord("sessions", id, "configWorkbenchSessions");
+  await refreshHistorySelect();
+}
+
 async function refreshHistorySelect() {
   const sessions = await readRecords("sessions", "configWorkbenchSessions");
   selectors.historySelect.innerHTML = sessions.length
@@ -10235,13 +10753,14 @@ async function refreshProfileSelect() {
 
 async function saveProfile() {
   state.profileDraft = ensureVendorPresetFields(state.profileDraft);
+  const vendorPair = getProfileVendorPairFromControls();
+  Object.assign(state.profileDraft, buildProfileVendorState(vendorPair.oldVendor, vendorPair.newVendor));
   saveCurrentProfileExamples();
   const targetId = state.profileDraft.id || state.activeProfileId || null;
   const record = {
     ...state.profileDraft,
     id: targetId || createId(),
     name: selectors.profileNameInput.value.trim() || "이름 없는 프로파일",
-    vendor: selectors.vendorSelect.value,
     updatedAt: Date.now(),
   };
   state.activeProfileId = record.id;
@@ -10257,12 +10776,13 @@ async function saveProfile() {
 
 async function saveProfileAs() {
   state.profileDraft = ensureVendorPresetFields(state.profileDraft);
+  const vendorPair = getProfileVendorPairFromControls();
+  Object.assign(state.profileDraft, buildProfileVendorState(vendorPair.oldVendor, vendorPair.newVendor));
   saveCurrentProfileExamples();
   const record = {
     ...state.profileDraft,
     id: createId(),
     name: selectors.profileNameInput.value.trim() || `${state.profileDraft.name || "이름 없는 프로파일"} 복사본`,
-    vendor: selectors.vendorSelect.value,
     updatedAt: Date.now(),
   };
   state.activeProfileId = record.id;
@@ -10371,10 +10891,17 @@ function selectSavedProfile(id) {
 }
 
 function normalizeProfile(profile) {
+  const legacyPreset = getVendorPresetByLegacyVendor(profile.vendor || "");
+  const vendorState = buildProfileVendorState(
+    profile.oldVendor || profile.vendorPreset?.oldVendor || legacyPreset.oldVendor,
+    profile.newVendor || profile.vendorPreset?.newVendor || legacyPreset.newVendor,
+  );
+
   return {
     id: profile.id || null,
     name: profile.name || "이름 없는 프로파일",
-    vendor: profile.vendor || "nokia",
+    ...vendorState,
+    vendor: (profile.oldVendor || profile.vendorPreset?.oldVendor) ? vendorState.vendor : (profile.vendor || vendorState.vendor),
     mappings: Array.isArray(profile.mappings) ? profile.mappings : objectTypes.map((type) => ({ oldType: type, newType: type })),
     objects: normalizeSemanticObjects(profile.objects),
     normalize: normalizeNormalizeRules(profile.normalize),
@@ -10753,6 +11280,7 @@ function saveUiPreferences() {
     objectMappingVisible: selectors.objectMappingVisibleToggle?.checked !== false,
     mappingDebug: Boolean(selectors.mappingDebugToggle?.checked),
     lineMappingStyle: selectors.lineMappingStyleSelect?.value || "straight",
+    lineMappingBend: selectors.lineMappingBendRange?.value || "65",
     lineMappingVisible: selectors.lineMappingVisibleToggle?.checked !== false,
     lineMappingAnimation: Boolean(selectors.lineMappingAnimationToggle?.checked),
   }));
@@ -10779,6 +11307,11 @@ function loadUiPreferences() {
       selectors.lineMappingStyleSelect.value = ["straight", "chain", "slime"].includes(prefs.lineMappingStyle)
         ? prefs.lineMappingStyle
         : "chain";
+    }
+    if (selectors.lineMappingBendRange) {
+      selectors.lineMappingBendRange.value = String(
+        Math.max(0, Math.min(100, Number(prefs.lineMappingBend ?? 65) || 65))
+      );
     }
     if (selectors.lineMappingVisibleToggle) {
       selectors.lineMappingVisibleToggle.checked = prefs.lineMappingVisible !== false;

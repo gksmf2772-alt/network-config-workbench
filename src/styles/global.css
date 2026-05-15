@@ -331,6 +331,19 @@ select {
   background: var(--panel);
 }
 
+.range-control {
+  display: grid;
+  gap: 8px;
+}
+
+.range-control input[type="range"] {
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--primary);
+}
+
 .app-shell {
   min-height: 100vh;
 }
@@ -694,29 +707,22 @@ label {
 }
 
 .editor-grid {
-  grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
   position: relative;
   align-items: stretch;
+  min-width: 0;
 }
 
 .diff-gutter {
   position: relative;
-  min-width: 72px;
+  min-width: 64px;
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(226, 232, 240, 0), rgba(226, 232, 240, 0.9) 48%, rgba(226, 232, 240, 0));
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0), rgba(226, 232, 240, 0.32), rgba(226, 232, 240, 0));
   overflow: hidden;
 }
 
 .diff-gutter__rail {
-  position: sticky;
-  top: 16px;
-  width: 2px;
-  height: calc(100vh - 220px);
-  min-height: 260px;
-  margin: 12px auto;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(14, 165, 233, 0.16), rgba(20, 184, 166, 0.26), rgba(14, 165, 233, 0.16));
+  display: none;
 }
 
 .diff-connector-overlay {
@@ -857,14 +863,14 @@ label {
 
 .diff-object-flow {
   fill: rgba(20, 184, 166, 0.09);
-  stroke: rgba(13, 148, 136, 0.28);
+  stroke: transparent;
   opacity: 1;
-  stroke-width: 1;
+  stroke-width: 0;
 }
 
 .diff-object-flow-glow {
-  fill: rgba(20, 184, 166, 0.09);
-  opacity: 0.72;
+  fill: rgba(20, 184, 166, 0.045);
+  opacity: 0.22;
   stroke: none;
   filter: url("#objectFlowGlow");
 }
@@ -881,11 +887,11 @@ label {
 
 .diff-object-flow.type-bgp {
   fill: rgba(22, 163, 74, 0.09);
-  stroke: rgba(22, 163, 74, 0.38);
+  stroke: transparent;
 }
 
 .diff-object-flow-glow.type-bgp {
-  fill: rgba(22, 163, 74, 0.09);
+  fill: rgba(22, 163, 74, 0.045);
 }
 
 .diff-object-flow-spine.type-bgp {
@@ -894,11 +900,11 @@ label {
 
 .diff-object-flow.type-static-route {
   fill: rgba(2, 132, 199, 0.09);
-  stroke: rgba(2, 132, 199, 0.36);
+  stroke: transparent;
 }
 
 .diff-object-flow-glow.type-static-route {
-  fill: rgba(2, 132, 199, 0.09);
+  fill: rgba(2, 132, 199, 0.045);
 }
 
 .diff-object-flow-spine.type-static-route {
@@ -910,7 +916,7 @@ label {
 .diff-object-flow.type-group-interface,
 .diff-object-flow.type-sap {
   fill: rgba(234, 88, 12, 0.085);
-  stroke: rgba(234, 88, 12, 0.34);
+  stroke: transparent;
 }
 
 .diff-object-flow-glow.type-interface,
@@ -930,7 +936,7 @@ label {
 .diff-object-flow.type-port,
 .diff-object-flow.type-lag {
   fill: rgba(8, 145, 178, 0.085);
-  stroke: rgba(8, 145, 178, 0.34);
+  stroke: transparent;
 }
 
 .diff-object-flow-glow.type-port,
@@ -945,7 +951,7 @@ label {
 
 .diff-object-flow.semantic-pair-hover,
 .diff-object-flow.semantic-pair-selected {
-  opacity: 0.62;
+  opacity: 1;
   filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.10));
 }
 
@@ -1054,7 +1060,7 @@ label {
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
-  opacity: 0.72;
+  opacity: 0.84;
   transition: opacity 140ms ease, stroke-width 140ms ease, filter 140ms ease;
 }
 
@@ -1074,25 +1080,106 @@ label {
   stroke: rgba(185, 28, 28, 0.68);
 }
 
+.line-mapping-connector.field-route,
+.line-mapping-connector.field-neighbor {
+  stroke: rgba(37, 99, 235, 0.84);
+}
+
+.line-mapping-connector.field-next-hop,
+.line-mapping-connector.field-gateway {
+  stroke: rgba(13, 148, 136, 0.88);
+}
+
+.line-mapping-connector.field-description {
+  stroke: rgba(124, 58, 237, 0.82);
+}
+
+.line-mapping-connector.field-tag {
+  stroke: rgba(202, 138, 4, 0.9);
+}
+
+.line-mapping-connector.field-state,
+.line-mapping-connector.field-admin-state {
+  stroke: rgba(22, 163, 74, 0.86);
+}
+
+.line-mapping-connector.field-group,
+.line-mapping-connector.field-peer-group {
+  stroke: rgba(219, 39, 119, 0.82);
+}
+
+.line-mapping-connector.field-authentication-key,
+.line-mapping-connector.field-peer-as {
+  stroke: rgba(220, 38, 38, 0.82);
+}
+
+.line-mapping-connector.field-interface,
+.line-mapping-connector.field-sap,
+.line-mapping-connector.field-port,
+.line-mapping-connector.field-lag {
+  stroke: rgba(234, 88, 12, 0.84);
+}
+
+.line-mapping-connector.field-address,
+.line-mapping-connector.field-ip-address {
+  stroke: rgba(8, 145, 178, 0.86);
+}
+
 .line-mapping-connector.style-straight {
-  stroke-width: 1.55;
+  stroke-width: 2.1;
 }
 
 .line-mapping-connector.style-chain {
-  stroke-width: 1.55;
+  stroke-width: 2.1;
   stroke-dasharray: 5 4;
 }
 
 .line-mapping-connector.style-slime {
+  stroke-width: 3;
+  stroke-opacity: 0.38;
+  filter: drop-shadow(0 0 5px rgba(20, 184, 166, 0.14));
+}
+
+.line-mapping-shine {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-linecap: round;
+  stroke-linejoin: round;
   stroke-width: 2.4;
-  stroke-opacity: 0.22;
-  filter: drop-shadow(0 0 4px rgba(20, 184, 166, 0.12));
+  stroke-dasharray: 18 190;
+  stroke-dashoffset: 120;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0.78;
+  filter:
+    drop-shadow(0 0 4px rgba(255, 255, 255, 0.42))
+    drop-shadow(0 0 7px rgba(20, 184, 166, 0.20));
+  animation: slime-line-shine 2.6s linear infinite;
+}
+
+.line-mapping-shine.field-authentication-key,
+.line-mapping-shine.field-peer-as {
+  filter:
+    drop-shadow(0 0 4px rgba(255, 255, 255, 0.45))
+    drop-shadow(0 0 7px rgba(220, 38, 38, 0.16));
+}
+
+.line-mapping-shine.field-description {
+  filter:
+    drop-shadow(0 0 4px rgba(255, 255, 255, 0.45))
+    drop-shadow(0 0 7px rgba(124, 58, 237, 0.18));
+}
+
+.line-mapping-shine.field-tag {
+  filter:
+    drop-shadow(0 0 4px rgba(255, 255, 255, 0.45))
+    drop-shadow(0 0 7px rgba(202, 138, 4, 0.18));
 }
 
 .line-mapping-connector.line-relation-hover,
 .line-mapping-connector.line-relation-selected {
-  opacity: 0.9;
-  stroke-width: 2.2;
+  opacity: 1;
+  stroke-width: 3;
   filter: drop-shadow(0 0 8px rgba(14, 116, 144, 0.18));
 }
 
@@ -1124,6 +1211,12 @@ label {
   stroke-opacity: 0.36;
 }
 
+.line-mapping-shine.line-relation-hover,
+.line-mapping-shine.line-relation-selected {
+  stroke-width: 3.2;
+  opacity: 0.96;
+}
+
 .line-mapping-connector.is-animated {
   animation: line-flow-pulse 1.9s linear infinite;
 }
@@ -1139,6 +1232,13 @@ label {
 
 @keyframes line-chain-flow {
   to { stroke-dashoffset: -26; }
+}
+
+@keyframes slime-line-shine {
+  from { stroke-dashoffset: 180; opacity: 0.18; }
+  18% { opacity: 0.88; }
+  82% { opacity: 0.88; }
+  to { stroke-dashoffset: -220; opacity: 0.18; }
 }
 
 .semantic-diff-config-line.is-line-related {
@@ -1253,6 +1353,8 @@ label {
 
 .code-frame.diff-mode {
   display: block;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .code-frame.diff-mode .line-numbers,
@@ -1846,11 +1948,16 @@ textarea {
 
 .embedded-diff {
   display: none;
+  min-width: 0;
+  max-width: 100%;
   height: 100%;
   overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   background: var(--code-bg);
   font-family: var(--editor-font);
   font-size: 13px;
+  scrollbar-gutter: stable both-edges;
 }
 
 .code-frame.diff-mode .embedded-diff {
@@ -3126,9 +3233,12 @@ textarea {
 
 body[data-field-highlight="off"] .diff-token-match {
   border: 0;
+  border-radius: 0;
   background: transparent !important;
   color: inherit !important;
   box-shadow: none !important;
+  font-weight: inherit;
+  padding: 0;
 }
 
 /* SaaS shell refresh: UI-only layer, keeps legacy IDs and engine hooks intact. */
@@ -3322,10 +3432,11 @@ body {
 }
 
 .editor-grid {
-  gap: 14px;
+  gap: 0;
 }
 
 .ncw-editor-card {
+  min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 8px;
@@ -3334,6 +3445,7 @@ body {
 }
 
 .editor-header {
+  min-width: 0;
   min-height: 60px;
   padding: 12px 14px;
   border-bottom: 1px solid #e2e8f0;
@@ -3356,6 +3468,7 @@ body {
 
 .header-actions {
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .drop-zone {
@@ -3368,6 +3481,8 @@ body {
 }
 
 .code-frame {
+  min-width: 0;
+  max-width: calc(100% - 24px);
   margin: 0 12px 12px;
   border-color: #dbe3ef;
   border-radius: 8px;
@@ -3828,10 +3943,12 @@ textarea[id$="ConfigInput"],
 .ncw-editor-card {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
   min-height: calc(100vh - 210px);
 }
 
 .editor-header {
+  min-width: 0;
   min-height: 64px;
   padding: var(--space-3) var(--space-4);
 }
@@ -3842,6 +3959,7 @@ textarea[id$="ConfigInput"],
 
 .header-actions {
   flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .drop-zone {
@@ -3853,6 +3971,8 @@ textarea[id$="ConfigInput"],
 
 .code-frame,
 .app-code-editor-frame {
+  min-width: 0;
+  max-width: calc(100% - (var(--space-4) * 2));
   margin: 0 var(--space-4) var(--space-4);
   border-radius: var(--radius-md);
 }
@@ -3867,12 +3987,31 @@ textarea[id$="ConfigInput"],
 }
 
 .profile-editor > label,
+.profile-editor > .profile-vendor-grid,
 .profile-editor > .profile-flow-note,
 .profile-editor > .profile-section,
 .profile-editor > .profile-save-panel,
 .profile-editor > .collapsible-section {
   margin-left: var(--space-4);
   margin-right: var(--space-4);
+}
+
+.profile-vendor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.profile-vendor-grid label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .profile-vendor-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .profile-editor > .profile-flow-note {
@@ -4139,7 +4278,8 @@ textarea[id$="ConfigInput"],
 
 .semantic-object-block-wrapper {
   display: block !important;
-  width: 100% !important;
+  min-width: 100% !important;
+  width: max-content !important;
   padding: 12px 14px !important;
   background: transparent !important;
   font-family: "Segoe UI", Arial, sans-serif !important;
@@ -4147,8 +4287,9 @@ textarea[id$="ConfigInput"],
 
 .semantic-diff-object-block {
   display: block !important;
-  width: 100% !important;
-  overflow: hidden !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  overflow: visible !important;
   border: 1px solid #dbe3ef !important;
   border-left: 4px solid #22c55e !important;
   border-radius: 12px !important;
@@ -4158,6 +4299,7 @@ textarea[id$="ConfigInput"],
 
 .semantic-diff-object-head {
   display: flex !important;
+  min-width: max-content !important;
   align-items: center !important;
   justify-content: space-between !important;
   gap: 12px !important;
@@ -4218,15 +4360,18 @@ textarea[id$="ConfigInput"],
 
 .semantic-diff-object-body {
   display: block !important;
+  min-width: max-content !important;
   padding: 8px 0 !important;
   background: #fbfdff !important;
 }
 
 .semantic-diff-config-line {
   display: grid !important;
-  grid-template-columns: 34px minmax(0, 1fr) !important;
+  grid-template-columns: 34px max-content !important;
   gap: 8px !important;
   align-items: center !important;
+  min-width: 100% !important;
+  width: max-content !important;
   min-height: 24px !important;
   padding: 2px 12px !important;
   border: 0 !important;
@@ -4259,26 +4404,39 @@ textarea[id$="ConfigInput"],
   display: block !important;
   color: #0f172a !important;
   white-space: pre !important;
+  min-width: max-content !important;
 }
 
 /* Commercial semantic diff surface */
 
+.compare-area .editor-grid {
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+}
+
+.compare-area .diff-gutter {
+  display: block;
+  min-width: 64px;
+}
+
 .editor-grid.diff-connectors-active {
   gap: 0;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
 }
 
 .editor-grid.diff-connectors-active .diff-gutter {
   display: block;
+  min-width: 64px;
 }
 
 .editor-grid.diff-connectors-active .ncw-editor-card:first-child {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 .editor-grid.diff-connectors-active .ncw-editor-card:nth-child(3) {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
 }
 
 .editor-grid.diff-connectors-active .embedded-diff {
@@ -4400,6 +4558,9 @@ textarea[id$="ConfigInput"],
 
 .semantic-diff-config-line {
   min-height: 22px !important;
+  grid-template-columns: 34px max-content !important;
+  min-width: 100% !important;
+  width: max-content !important;
   padding-top: 1px !important;
   padding-bottom: 1px !important;
   border: 0 !important;
@@ -4713,12 +4874,69 @@ body[data-field-highlight="off"] .semantic-diff-config-line {
   background: rgba(8, 145, 178, 0.085) !important;
 }
 
+.semantic-object-block-wrapper.object-status-old-only,
+.semantic-object-block-wrapper.object-status-new-only {
+  background: rgba(248, 113, 113, 0.10) !important;
+  border-radius: 10px !important;
+}
+
+.semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+.semantic-object-block-wrapper .semantic-diff-object-unmatched {
+  border-left-color: #ef4444 !important;
+  background: linear-gradient(90deg, rgba(255, 241, 242, 0.98), rgba(254, 226, 226, 0.78)) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(239, 68, 68, 0.24),
+    0 8px 18px rgba(127, 29, 29, 0.055) !important;
+}
+
+.semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-head,
+.semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-head {
+  background: rgba(254, 226, 226, 0.76) !important;
+}
+
 .diff-line.object-type-bgp.semantic-object-start {
   box-shadow: inset 4px 0 0 #16a34a;
 }
 
 .diff-line.object-type-static-route.semantic-object-start {
   box-shadow: inset 4px 0 0 #0284c7;
+}
+
+/* Keep horizontally scrolled semantic lines inside their object card. */
+.embedded-diff .semantic-object-block-wrapper {
+  display: block !important;
+  box-sizing: border-box !important;
+  min-width: 100% !important;
+  width: max-content !important;
+}
+
+.embedded-diff .semantic-diff-object-block {
+  display: inline-block !important;
+  box-sizing: border-box !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  overflow: visible !important;
+}
+
+.embedded-diff .semantic-diff-object-head,
+.embedded-diff .semantic-diff-object-body {
+  box-sizing: border-box !important;
+  min-width: 100% !important;
+  width: max-content !important;
+}
+
+.embedded-diff .semantic-diff-config-line {
+  box-sizing: border-box !important;
+  grid-template-columns: 34px max-content auto !important;
+  min-width: 100% !important;
+  width: max-content !important;
+}
+
+.embedded-diff .semantic-diff-config-line code {
+  display: block !important;
+  min-width: max-content !important;
+  width: max-content !important;
 }
 
 .diff-line.object-type-interface.semantic-object-start,

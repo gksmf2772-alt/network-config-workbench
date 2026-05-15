@@ -34,6 +34,12 @@ export function normalizeNokiaSemanticFields(fields = {}) {
   if (next.route) next.route = clean(next.route).toLowerCase();
   if (next.prefix) next.prefix = clean(next.prefix).toLowerCase();
   if (next.address) next.address = clean(next.address).toLowerCase();
+  if (next.address && next["prefix-length"] && !next.address.includes("/")) {
+    next.address = `${next.address}/${clean(next["prefix-length"])}`;
+    next.prefix = next.address;
+  }
+  if (next["static-host"]) next["static-host"] = clean(next["static-host"]).toLowerCase();
+  if (next["default-host"]) next["default-host"] = clean(next["default-host"]).toLowerCase();
   if (next["next-hop"]) next["next-hop"] = clean(next["next-hop"]).toLowerCase();
   if (next.nextHop && !next["next-hop"]) next["next-hop"] = clean(next.nextHop).toLowerCase();
   if (next.metric) next.metric = clean(next.metric);
@@ -52,6 +58,14 @@ export function normalizeNokiaSemanticFields(fields = {}) {
 
   if (next["ingress.filter.ip"] && !next["ingress-filter"]) {
     next["ingress-filter"] = clean(next["ingress.filter.ip"]);
+  }
+
+  if (next["egress.filter.ip"] && !next["egress-filter"]) {
+    next["egress-filter"] = clean(next["egress.filter.ip"]);
+  }
+
+  if (next["ingress.qos.sap-ingress.policy-name"] && !next["ingress-qos"]) {
+    next["ingress-qos"] = clean(next["ingress.qos.sap-ingress.policy-name"]);
   }
 
   if (next["egress.qos"] && !next["egress-qos"]) {

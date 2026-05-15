@@ -97,7 +97,7 @@ export default function ConfigInputPanel() {
                 </AppSelect>
               </label>
               <label>검색<input id="filterInput" placeholder="interface, static-route, 누락" /></label>
-              <SwitchRow id="fieldHighlightToggle" defaultChecked>필드 강조</SwitchRow>
+              <SwitchRow id="fieldHighlightToggle" defaultChecked>필드 박스 표시</SwitchRow>
               <SwitchRow id="objectMappingVisibleToggle" defaultChecked>객체 연결 표시</SwitchRow>
               <SwitchRow id="mappingDebugToggle">Mapping Debug</SwitchRow>
               <label>
@@ -107,6 +107,10 @@ export default function ConfigInputPanel() {
                   <option value="chain">체인 연결</option>
                   <option value="slime">슬라임 연결</option>
                 </AppSelect>
+              </label>
+              <label className="range-control">
+                선 꺾임
+                <input id="lineMappingBendRange" type="range" min="0" max="100" defaultValue="65" />
               </label>
               <SwitchRow id="lineMappingVisibleToggle" defaultChecked>라인 연결 표시</SwitchRow>
               <SwitchRow id="lineMappingAnimationToggle">라인 연결 애니메이션</SwitchRow>

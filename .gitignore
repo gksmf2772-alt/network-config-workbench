@@ -9,3 +9,5 @@ backup_*/
 *.dmp
 node_modules/
 dist/
+.agents/
+skills-lock.json

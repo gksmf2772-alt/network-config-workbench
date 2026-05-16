@@ -1,0 +1,2714 @@
+{
+  "generatedAt": "2026-05-16T17:03:55.400Z",
+  "caseId": "nokia-classic15-to-nokia-mdcli-22",
+  "summary": {
+    "total": 111,
+    "trueMissingFromTargetFixture": 9,
+    "outsidePartialTargetScope": 0,
+    "targetObjectHasNoSourceCounterpart": 102,
+    "parserMatcherFalseNegative": 9,
+    "missingParentRelationship": 0,
+    "manualMappingCouldResolve": 9,
+    "primaryConclusion": "Actual missing candidates are mostly target-side extra objects or source objects without same-type target coverage; each still needs fixture-scope confirmation."
+  },
+  "groups": {
+    "bySide": [
+      {
+        "key": "new",
+        "count": 102
+      },
+      {
+        "key": "old",
+        "count": 9
+      }
+    ],
+    "byObjectType": [
+      {
+        "key": "pim",
+        "count": 50
+      },
+      {
+        "key": "dhcp",
+        "count": 27
+      },
+      {
+        "key": "cpu-protection",
+        "count": 25
+      },
+      {
+        "key": "static-route",
+        "count": 9
+      }
+    ],
+    "byCompletenessStatus": [
+      {
+        "key": "target-object-has-no-source-counterpart",
+        "count": 102
+      },
+      {
+        "key": "true-missing-from-target-fixture",
+        "count": 9
+      }
+    ],
+    "byParserOrMatcherStatus": [
+      {
+        "key": "no-opposite-type-coverage",
+        "count": 102
+      },
+      {
+        "key": "parser-or-matcher-false-negative",
+        "count": 9
+      }
+    ],
+    "byManualMapping": [
+      {
+        "key": "manual-map-not-enough",
+        "count": 102
+      },
+      {
+        "key": "manual-map-possible",
+        "count": 9
+      }
+    ]
+  },
+  "records": [
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:0.0.0.0/0|61.78.49.241",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8388,
+        8389,
+        8390,
+        8391,
+        19,
+        26
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 0.0.0.0/0",
+        "            indirect 61.78.49.241     ",
+        "                tunnel-next-hop"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:112.188.30.8/32|112.188.28.78",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8396,
+        8397,
+        8398,
+        8399,
+        26,
+        19
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 112.188.30.8/32",
+        "            next-hop 112.188.28.78",
+        "                description \"Gangbuk-XLC008_loopback\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:112.188.30.28/32|112.188.21.126",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8410,
+        8411,
+        8412,
+        8399,
+        26,
+        19
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 112.188.30.28/32",
+        "            next-hop 112.188.21.126",
+        "                description \"Dobong-XLC028_loopback\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:112.188.30.43/32|112.188.28.98",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8417,
+        8418,
+        8419,
+        8399,
+        26,
+        19
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 112.188.30.43/32",
+        "            next-hop 112.188.28.98",
+        "                description \"Dobong-XLG043_loopback\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:125.144.253.0/24|125.144.5.1",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8813,
+        8814,
+        8390,
+        8391,
+        19,
+        26
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 125.144.253.0/24",
+        "            indirect 125.144.5.1",
+        "                tunnel-next-hop"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:125.159.0.0/23|125.144.5.1",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8861,
+        8814,
+        8390,
+        8391,
+        19,
+        26
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 125.159.0.0/23",
+        "            indirect 125.144.5.1      ",
+        "                tunnel-next-hop"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:125.159.7.128/25|125.144.5.1",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8869,
+        8814,
+        8390,
+        8391,
+        19,
+        26
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 125.159.7.128/25",
+        "            indirect 125.144.5.1",
+        "                tunnel-next-hop"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:125.159.44.0/24|125.144.5.1",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8877,
+        8814,
+        8390,
+        8391,
+        19,
+        26
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 125.159.44.0/24",
+        "            indirect 125.144.5.1",
+        "                tunnel-next-hop"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "static-route",
+      "objectKey": "static-route:220.116.146.117/32|112.188.17.5",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        8899,
+        8900,
+        26,
+        19,
+        8903,
+        8906,
+        8909,
+        8912,
+        8915,
+        8922,
+        8923,
+        8928,
+        8929,
+        8930,
+        8931,
+        8932,
+        8933,
+        8934,
+        8935,
+        8936,
+        8937
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "score": null,
+      "sampleLines": [
+        "        static-route-entry 220.116.146.117/32",
+        "            next-hop 112.188.16.29",
+        "                no shutdown"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "parser-or-matcher-false-negative",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": true,
+      "recommendedAction": "Review candidate objects and add explicit object/manual mapping if same real-world object."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fb03/g-to-dobong-tou-fb03",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        398,
+        399,
+        400,
+        401,
+        402,
+        403
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fb03/g-to-dobong-tou-fb03/lag-a-6109",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        406,
+        407
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 sap lag-A-6109 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 sap lag-A-6109 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fb04/g-to-dobong-tou-fb04",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        428,
+        429,
+        430,
+        431,
+        432,
+        433
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fb04/g-to-dobong-tou-fb04/lag-a-6110",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        436,
+        437
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 sap lag-A-6110 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 sap lag-A-6110 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fb05/g-to-dobong-tou-fb05",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        458,
+        459,
+        460,
+        461,
+        462,
+        463
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fb05/g-to-dobong-tou-fb05/lag-a-6111",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        466,
+        467
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 sap lag-A-6111 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 sap lag-A-6111 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn09/g-to-nowon-tou-fn09",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        488,
+        489,
+        490,
+        491,
+        492,
+        493
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn09/g-to-nowon-tou-fn09/lag-a-6112",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        496,
+        497
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 sap lag-A-6112 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 sap lag-A-6112 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn08/g-to-nowon-tou-fn08",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        518,
+        519,
+        520,
+        521,
+        522,
+        523
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn08/g-to-nowon-tou-fn08/lag-a-4101",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        526,
+        527
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 sap lag-A-4101 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 sap lag-A-4101 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-gangbuk-tou-fk55/g-to-gangbuk-tou-fk55",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        548,
+        549,
+        550,
+        551,
+        552,
+        553
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-gangbuk-tou-fk55/g-to-gangbuk-tou-fk55/lag-a-8101",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        556,
+        557
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 sap lag-A-8101 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 sap lag-A-8101 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-gangbuk-tou-fk53/g-to-gangbuk-tou-fk53",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        578,
+        579,
+        580,
+        581,
+        582,
+        583
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-gangbuk-tou-fk53/g-to-gangbuk-tou-fk53/lag-a-6105",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        586,
+        587
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 sap lag-A-6105 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 sap lag-A-6105 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-gangbuk-tou-fk54/g-to-gangbuk-tou-fk54",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        608,
+        609,
+        610,
+        611,
+        612,
+        613
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-gangbuk-tou-fk54/g-to-gangbuk-tou-fk54/lag-a-6108",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        616,
+        617
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 sap lag-A-6108 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 sap lag-A-6108 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn11/g-to-nowon-tou-fn11",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        638,
+        639,
+        640,
+        641,
+        642,
+        643
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn11/g-to-nowon-tou-fn11/lag-a-6106",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        646,
+        647
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 sap lag-A-6106 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 sap lag-A-6106 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn14/g-to-nowon-tou-fn14",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        668,
+        669,
+        670,
+        671,
+        672,
+        673
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn14/g-to-nowon-tou-fn14/lag-a-4102",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        676,
+        677
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 sap lag-A-4102 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 sap lag-A-4102 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-gangbuk-tou-fk51/g-to-gangbuk-tou-fk51",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        698,
+        699,
+        700,
+        701,
+        702,
+        703
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-gangbuk-tou-fk51/g-to-gangbuk-tou-fk51/lag-a-4103",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        706,
+        707
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 sap lag-A-4103 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 sap lag-A-4103 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn05/g-to-nowon-tou-fn05",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        728,
+        729,
+        730,
+        731,
+        732,
+        733
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn05/g-to-nowon-tou-fn05/lag-a-2105",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        736,
+        737
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 sap lag-A-2105 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 sap lag-A-2105 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn06/g-to-nowon-tou-fn06",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        758,
+        759,
+        760,
+        761,
+        762,
+        763
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn06/g-to-nowon-tou-fn06/lag-a-2106",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        766,
+        767
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 sap lag-A-2106 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 sap lag-A-2106 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn07/g-to-nowon-tou-fn07",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        788,
+        789,
+        790,
+        791,
+        792,
+        793
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn07/g-to-nowon-tou-fn07/lag-a-4104",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        796,
+        797
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 sap lag-A-4104 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 sap lag-A-4104 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fd14/g-to-dobong-tou-fd14",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        818,
+        819,
+        820,
+        821,
+        822,
+        823
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fd14/g-to-dobong-tou-fd14/lag-a-4105",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        826,
+        827
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 sap lag-A-4105 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 sap lag-A-4105 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fd15/g-to-dobong-tou-fd15",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        848,
+        849,
+        850,
+        851,
+        852,
+        853
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fd15/g-to-dobong-tou-fd15/lag-a-4106",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        856,
+        857
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 sap lag-A-4106 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 sap lag-A-4106 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fb09/g-to-dobong-tou-fb09",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        878,
+        879,
+        880,
+        881,
+        882,
+        883
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fb09/g-to-dobong-tou-fb09/lag-a-6101",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        886,
+        887
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 sap lag-A-6101 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 sap lag-A-6101 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fd20/g-to-dobong-tou-fd20",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        908,
+        909,
+        910,
+        911,
+        912,
+        913
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fd20/g-to-dobong-tou-fd20/lag-a-6102",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        916,
+        917
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 sap lag-A-6102 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 sap lag-A-6102 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fd21/g-to-dobong-tou-fd21",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        938,
+        939,
+        940,
+        941,
+        942,
+        943
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fd21/g-to-dobong-tou-fd21/lag-a-6103",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        946,
+        947
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 sap lag-A-6103 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 sap lag-A-6103 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-gangbuk-tou-fk57/g-to-gangbuk-tou-fk57",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        968,
+        969,
+        970,
+        971,
+        972,
+        973
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-gangbuk-tou-fk57/g-to-gangbuk-tou-fk57/lag-a-6107",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        976,
+        977
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 sap lag-A-6107 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 sap lag-A-6107 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-dobong-tou-fk66/g-to-dobong-tou-fk66",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        998,
+        999,
+        1000,
+        1001,
+        1002,
+        1003
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-dobong-tou-fk66/g-to-dobong-tou-fk66/lag-a-6104",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1006,
+        1007
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 sap lag-A-6104 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 sap lag-A-6104 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn16/g-to-nowon-tou-fn16",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1028,
+        1029,
+        1030,
+        1031,
+        1032,
+        1033
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn16/g-to-nowon-tou-fn16/lag-a-2102",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1036,
+        1037
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 sap lag-A-2102 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 sap lag-A-2102 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn15/g-to-nowon-tou-fn15",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1058,
+        1059,
+        1060,
+        1061,
+        1062,
+        1063
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn15/g-to-nowon-tou-fn15/lag-a-2101",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1066,
+        1067
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 sap lag-A-2101 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 sap lag-A-2101 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn17/g-to-nowon-tou-fn17",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1088,
+        1089,
+        1090,
+        1091,
+        1092,
+        1093
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn17/g-to-nowon-tou-fn17/lag-a-2103",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1096,
+        1097
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/to-nowon-tou-fn18/g-to-nowon-tou-fn18",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1118,
+        1119,
+        1120,
+        1121,
+        1122,
+        1123
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 ipv4 dhcp filter 60 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 ipv4 dhcp server [121.128.86.26] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "cpu-protection",
+      "objectKey": "cpu-protection:100/to-nowon-tou-fn18/g-to-nowon-tou-fn18/lag-a-2104",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1126,
+        1127
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 sap lag-A-2104 cpu-protection policy-id 200 }",
+        "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 sap lag-A-2104 cpu-protection ip-src-monitoring }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/cvnet_dhcp_server_1/g-cvnet_dhcp_server_1",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1142,
+        1143
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface CVNET_DHCP_SERVER_1 group-interface g-CVNET_DHCP_SERVER_1 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface CVNET_DHCP_SERVER_1 group-interface g-CVNET_DHCP_SERVER_1 ipv4 dhcp server [119.194.107.67, 119.194.107.79, 119.194.107.83, 119.194.107.92] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "dhcp",
+      "objectKey": "dhcp:100/cvnet_dhcp_server_2/g-cvnet_dhcp_server_2",
+      "sourceFile": "예제 및 테스트 설정/New_interface_1.txt",
+      "sourceLines": [
+        1145,
+        1146
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { service ies \"100\" subscriber-interface CVNET_DHCP_SERVER_2 group-interface g-CVNET_DHCP_SERVER_2 ipv4 dhcp admin-state enable }",
+        "/configure { service ies \"100\" subscriber-interface CVNET_DHCP_SERVER_2 group-interface g-CVNET_DHCP_SERVER_2 ipv4 dhcp server [119.194.107.68, 119.194.107.82, 119.194.107.84, 119.194.107.85, 119.194.107.91] }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fb03",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        1
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB03\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fb04",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        2
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB04\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fb05",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        3
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB05\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fb09",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        4
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB09\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fd14",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        5
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD14\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fd15",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        6
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD15\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fd20",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        7
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD20\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fd21",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        8
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD21\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-dobong-tou-fk66",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        9
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FK66\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-gangbuk-tou-fk51",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        10
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK51\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-gangbuk-tou-fk53",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        11
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK53\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-gangbuk-tou-fk54",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        12
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK54\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-gangbuk-tou-fk55",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        13
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK55\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-gangbuk-tou-fk57",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        14
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK57\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn05",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        15
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN05\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn06",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        16
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN06\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn07",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        17
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN07\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn08",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        18
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN08\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn09",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        19
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN09\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn11",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        20
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN11\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn14",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        21
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN14\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn15",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        22
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN15\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn16",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        23
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN16\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn17",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        24
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN17\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:g-to-nowon-tou-fn18",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        25
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN18\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fb01",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        26
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB01\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fb02",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        27
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB02\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fb06",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        28
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB06\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fb07",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        29
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB07\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fb08",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        30
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB08\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd04",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        31
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD04\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd05",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        32
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD05\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd06",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        33
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD06\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd07",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        34
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD07\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd08",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        35
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD08\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd09",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        36
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD09\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd13",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        37
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD13\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd16",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        38
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD16\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd17",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        39
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD17\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd18",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        40
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD18\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd19",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        41
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD19\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-dobong-tou-fd22",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        42
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD22\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-gangbuk-tou-fk52",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        43
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Gangbuk-TOU-FK52\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-gangbuk-tou-fk56",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        44
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Gangbuk-TOU-FK56\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-gongneug-tou-fg11",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        45
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG11\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-gongneug-tou-fg12",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        46
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG12\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-gongneug-tou-fg18",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        47
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG18\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-gongneug-tou-fg19",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        48
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG19\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-nowon-tou-fn19",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        49
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Nowon-TOU-FN19\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "pim",
+      "objectKey": "pim:to-nowon-tou-fn20",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "sourceLines": [
+        50
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "score": null,
+      "sampleLines": [
+        "/configure { router \"Base\" pim interface \"to-Nowon-TOU-FN20\" }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    }
+  ]
+}

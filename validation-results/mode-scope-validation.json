@@ -1,0 +1,94 @@
+{
+  "generatedAt": "2026-05-16T17:03:55.405Z",
+  "status": "passed",
+  "summary": {
+    "cases": 8,
+    "passed": 8,
+    "failed": 0,
+    "simpleCompareActiveFindingCount": 0,
+    "bgpNeighborOnlyCompareActiveFindingCount": 0,
+    "standardsAuditActiveFindingCount": 5,
+    "migrationReadinessActiveFindingCount": 0,
+    "suppressedIgnoredFindingCount": 3
+  },
+  "cases": [
+    {
+      "id": "simple-bgp-neighbor-compare",
+      "status": "passed",
+      "assertionsPassed": 4,
+      "assertionsTotal": 4,
+      "metrics": {
+        "simpleCompareActiveFindings": 0,
+        "bgpNeighborOnlyActiveFindings": 0
+      }
+    },
+    {
+      "id": "classic-direct-to-mdcli-group-equivalent",
+      "status": "passed",
+      "assertionsPassed": 5,
+      "assertionsTotal": 5,
+      "metrics": {
+        "status": "matched",
+        "policyViolationCount": 0
+      }
+    },
+    {
+      "id": "mdcli-group-reference-missing-definition",
+      "status": "passed",
+      "assertionsPassed": 4,
+      "assertionsTotal": 4,
+      "metrics": {
+        "inheritanceStatus": "inheritance-unresolved",
+        "policyViolationCount": 0
+      }
+    },
+    {
+      "id": "standards-audit-bgp-policy-not-required",
+      "status": "passed",
+      "assertionsPassed": 2,
+      "assertionsTotal": 2,
+      "metrics": {
+        "activeFindings": 3
+      }
+    },
+    {
+      "id": "standards-audit-bgp-policy-required",
+      "status": "passed",
+      "assertionsPassed": 2,
+      "assertionsTotal": 2,
+      "metrics": {
+        "activeFindings": 5
+      }
+    },
+    {
+      "id": "migration-readiness-visible-only-in-mode",
+      "status": "passed",
+      "assertionsPassed": 1,
+      "assertionsTotal": 1,
+      "metrics": {
+        "migrationReadinessActiveFindings": 0,
+        "targetDefaultRisk": 0
+      }
+    },
+    {
+      "id": "new-line-exception-suppresses-downstream",
+      "status": "passed",
+      "assertionsPassed": 6,
+      "assertionsTotal": 6,
+      "metrics": {
+        "suppressedFindings": 3,
+        "summaryActiveFindings": 0
+      }
+    },
+    {
+      "id": "manual-mapping-plus-exception",
+      "status": "passed",
+      "assertionsPassed": 4,
+      "assertionsTotal": 4,
+      "metrics": {
+        "matched": 1,
+        "policyViolationCount": 0
+      }
+    }
+  ]
+}

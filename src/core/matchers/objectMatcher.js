@@ -1,5 +1,7 @@
 // src/core/matchers/objectMatcher.js
 
+import { resolveBgpEffectiveObjects } from "../bgpEffectiveResolver.js";
+
 function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
@@ -89,6 +91,88 @@ function makeMatch({
   };
 }
 
+function activeComparableObjects(objects = []) {
+  return resolveBgpEffectiveObjects(objects || [], { includeMetadataObjects: false })
+    .filter((object) => !object.metadataOnly);
+}
+
+function getObjectKey(object = {}) {
+  const type = object?.normalizedType || object?.sourceType || "";
+  return [
+    object?.id,
+    object?.key,
+    object?.normalizedIdentity,
+    object?.sourceName,
+    getFieldValue(object, type),
+    getFieldValue(object, "port"),
+    getFieldValue(object, "lag"),
+    getFieldValue(object, "sap"),
+  ]
+    .filter(Boolean)
+    .map((item) => normalizeIdentityToken(item));
+}
+
+function matchesObjectRef(object = {}, ref = "") {
+  const normalizedRef = normalizeIdentityToken(ref);
+  if (!normalizedRef) return false;
+  return getObjectKey(object).includes(normalizedRef);
+}
+
+function asArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function collectObjectAliases(profile = {}) {
+  return [
+    ...asArray(profile.objectAliases),
+    ...asArray(profile.objectAliasPolicy?.aliases),
+    ...asArray(profile.aliasPolicies?.objectAliases),
+    ...asArray(profile.aliases?.objects),
+  ].filter(Boolean);
+}
+
+function findObjectAliasMatch(oldObject, candidates = [], profile = {}) {
+  const aliases = collectObjectAliases(profile);
+  if (!aliases.length) return null;
+
+  for (const alias of aliases) {
+    const objectType = alias.objectType || alias.type || alias.normalizedType || "";
+    if (objectType && objectType !== oldObject.normalizedType) continue;
+
+    const oldRef =
+      alias.oldId ||
+      alias.oldObjectId ||
+      alias.oldKey ||
+      alias.old ||
+      alias.from ||
+      alias.source;
+    if (!matchesObjectRef(oldObject, oldRef)) continue;
+
+    const newRef =
+      alias.newId ||
+      alias.newObjectId ||
+      alias.newKey ||
+      alias.new ||
+      alias.to ||
+      alias.target;
+    const newObject = candidates.find((candidate) => matchesObjectRef(candidate, newRef));
+    if (!newObject) continue;
+
+    return makeMatch({
+      oldObject,
+      newObject,
+      status: "matched",
+      reason: alias.reason || "object-alias-policy",
+      score: Number(alias.confidence || alias.score || 100),
+      matchKeyFields: ["object-alias"],
+      scoreReasons: ["object-alias-policy"],
+    });
+  }
+
+  return null;
+}
+
 function canUseNormalizedIdentityAsStrongMatch(object = {}) {
   const type = object.normalizedType;
 
@@ -175,14 +259,17 @@ function findIdentityMatch(oldObject, candidates) {
         newObject.peerIp &&
         oldObject.peerIp === newObject.peerIp
       ) {
+        const groupBased = Boolean(newObject.bgpInheritance?.groupReference);
         return makeMatch({
           oldObject,
           newObject,
           status: "matched",
-          reason: "peer-ip",
+          reason: groupBased ? "peer-ip-mdcli-group-structure" : "peer-ip",
           score: 100,
-          matchKeyFields: ["peerIp"],
-          scoreReasons: ["peer-ip"],
+          matchKeyFields: groupBased ? ["peerIp", "group"] : ["peerIp"],
+          scoreReasons: groupBased
+            ? ["same-peer-ip", "mdcli-group-based-neighbor", "structure-conversion-from-classic-direct"]
+            : ["peer-ip"],
         });
       }
     }
@@ -284,12 +371,48 @@ function getStaticRouteNextHop(object = {}) {
   return (
     normalizeIdentityToken(getFieldValue(object, "next-hop")) ||
     normalizeIdentityToken(getFieldValue(object, "nextHop")) ||
+    normalizeIdentityToken(getFieldValue(object, "gateway")) ||
     normalizeIdentityToken(object?.nextHop) ||
     identity.nextHop
   );
 }
 
-function scoreStaticRoutePair(oldObject, newObject) {
+function getStaticRoutePolicy(profile = {}) {
+  return (
+    profile.staticRouteConversionPolicy ||
+    profile.conversionPolicies?.staticRoute ||
+    profile.policies?.staticRoute ||
+    {}
+  );
+}
+
+function allowsStaticRouteNextHopRewrite({ oldObject, newObject, profile }) {
+  const policy = getStaticRoutePolicy(profile);
+  const rewrites = [
+    ...asArray(policy.allowedNextHopRewrites),
+    ...asArray(policy.nextHopRewrites),
+  ];
+  if (!rewrites.length) return false;
+
+  const oldPrefix = getStaticRoutePrefix(oldObject);
+  const newPrefix = getStaticRoutePrefix(newObject);
+  const oldNextHop = getStaticRouteNextHop(oldObject);
+  const newNextHop = getStaticRouteNextHop(newObject);
+
+  return rewrites.some((rewrite) => {
+    const prefix = normalizeIdentityToken(rewrite.prefix || rewrite.route || "");
+    const from = normalizeIdentityToken(rewrite.from || rewrite.old || rewrite.source || "");
+    const to = normalizeIdentityToken(rewrite.to || rewrite.new || rewrite.target || "");
+
+    if (prefix && prefix !== oldPrefix && prefix !== newPrefix) return false;
+    if (from && from !== oldNextHop) return false;
+    if (to && to !== newNextHop) return false;
+
+    return Boolean(prefix || from || to);
+  });
+}
+
+function scoreStaticRoutePair(oldObject, newObject, profile = {}) {
   const result = {
     score: 0,
     matchKeyFields: [],
@@ -315,6 +438,11 @@ function scoreStaticRoutePair(oldObject, newObject) {
     }
 
     if (oldNextHop && newNextHop && oldNextHop !== newNextHop) {
+      if (allowsStaticRouteNextHopRewrite({ oldObject, newObject, profile })) {
+        addWeightedScore(result, "next-hop", 40, "next-hop-policy-rewrite");
+        result.scoreReasons.push("static-route-next-hop-accepted-by-policy");
+        return result;
+      }
       result.scoreReasons.push("static-route-next-hop-mismatch");
       return result;
     }
@@ -323,6 +451,175 @@ function scoreStaticRoutePair(oldObject, newObject) {
     return result;
   }
 
+  return result;
+}
+
+function normalizeListValue(value) {
+  if (Array.isArray(value)) return value.flatMap(normalizeListValue);
+  return String(value || "")
+    .split(/[,\s]+/)
+    .map(normalizeIdentityToken)
+    .filter(Boolean);
+}
+
+function getObjectMembers(object = {}) {
+  return [
+    ...normalizeListValue(getFieldValue(object, "members")),
+    ...normalizeListValue(getFieldValue(object, "member-port")),
+    ...normalizeListValue(getFieldValue(object, "port-member")),
+  ];
+}
+
+function sameSet(left = [], right = []) {
+  if (!left.length || !right.length || left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
+}
+
+function overlapRatio(left = [], right = []) {
+  if (!left.length || !right.length) return 0;
+  const rightSet = new Set(right);
+  const overlap = left.filter((item) => rightSet.has(item)).length;
+  return overlap / Math.max(left.length, right.length);
+}
+
+function getPhysicalId(object = {}) {
+  return (
+    normalizeIdentityToken(getFieldValue(object, "physical-port")) ||
+    normalizeIdentityToken(getFieldValue(object, "physicalPort")) ||
+    normalizeIdentityToken(getFieldValue(object, "hardware-port")) ||
+    normalizeIdentityToken(getFieldValue(object, "port-id")) ||
+    normalizeIdentityToken(getFieldValue(object, "port")) ||
+    normalizeIdentityToken(getFieldValue(object, "lag")) ||
+    normalizeIdentityToken(object?.normalizedIdentity)
+  );
+}
+
+function scorePortLagPair(oldObject, newObject) {
+  const result = {
+    score: 0,
+    matchKeyFields: [],
+    scoreReasons: [],
+  };
+
+  const objectType = oldObject.normalizedType;
+  const oldPhysicalId = getPhysicalId(oldObject);
+  const newPhysicalId = getPhysicalId(newObject);
+
+  if (oldPhysicalId && newPhysicalId && oldPhysicalId === newPhysicalId) {
+    addWeightedScore(result, objectType === "lag" ? "lag" : "port", 80, `${objectType}-physical-id`);
+  }
+
+  if (objectType === "lag") {
+    const oldMembers = getObjectMembers(oldObject);
+    const newMembers = getObjectMembers(newObject);
+    const memberOverlap = overlapRatio(oldMembers, newMembers);
+    if (sameSet(oldMembers, newMembers)) {
+      addWeightedScore(result, "members", 85, "lag-member-set-exact");
+    } else if (memberOverlap > 0) {
+      addWeightedScore(
+        result,
+        "members",
+        Math.round(55 + memberOverlap * 20),
+        "lag-member-set-partial"
+      );
+      result.scoreReasons.push("lag-member-set-changed");
+    }
+  }
+
+  const oldState = normalizeValue(getFieldValue(oldObject, "state") || getFieldValue(oldObject, "admin-state"));
+  const newState = normalizeValue(getFieldValue(newObject, "state") || getFieldValue(newObject, "admin-state"));
+  if (oldState && newState && oldState === newState && result.score > 0) {
+    addWeightedScore(result, "state", 5, "admin-state");
+  }
+
+  const descScore = descriptionSimilarity(
+    oldObject.description || getFieldValue(oldObject, "description"),
+    newObject.description || getFieldValue(newObject, "description")
+  );
+  if (descScore >= 85) {
+    addWeightedScore(result, "description", 15, "description-similarity");
+  } else if (descScore >= 60) {
+    addWeightedScore(result, "description", 8, "description-partial-similarity");
+  }
+
+  result.score = Math.min(result.score, 100);
+  return result;
+}
+
+const SAP_PARENT_FIELDS = [
+  "service-id",
+  "service",
+  "interface",
+  "subscriber-interface",
+  "group-interface",
+];
+
+const SAP_POLICY_FIELDS = [
+  "ingress-filter",
+  "egress-filter",
+  "ingress-qos",
+  "egress-qos",
+  "ingress.filter.ip",
+  "egress.filter.ip",
+  "ingress.qos.sap-ingress.policy-name",
+  "egress.qos.sap-egress.policy-name",
+];
+
+function scoreSapPair(oldObject, newObject) {
+  const result = {
+    score: 0,
+    matchKeyFields: [],
+    scoreReasons: [],
+  };
+
+  const oldSap = normalizeIdentityToken(getFieldValue(oldObject, "sap") || oldObject.normalizedIdentity);
+  const newSap = normalizeIdentityToken(getFieldValue(newObject, "sap") || newObject.normalizedIdentity);
+  if (oldSap && newSap && oldSap === newSap) {
+    addWeightedScore(result, "sap", 55, "same-sap-id");
+  }
+
+  let parentMatches = 0;
+  let parentConflicts = 0;
+  let serviceMatched = false;
+  for (const field of SAP_PARENT_FIELDS) {
+    const oldValue = normalizeValue(getFieldValue(oldObject, field));
+    const newValue = normalizeValue(getFieldValue(newObject, field));
+    if (!oldValue || !newValue) {
+      if (oldValue || newValue) result.scoreReasons.push(`missing-parent:${field}`);
+      continue;
+    }
+    if (oldValue === newValue) {
+      parentMatches += 1;
+      if (field === "service-id" || field === "service") serviceMatched = true;
+      addWeightedScore(result, field, field === "service-id" || field === "service" ? 25 : 15, `same-parent:${field}`);
+    } else {
+      parentConflicts += 1;
+      result.scoreReasons.push(`conflicting-parent:${field}`);
+    }
+  }
+
+  if (oldSap && newSap && oldSap === newSap && serviceMatched) {
+    addWeightedScore(result, "sap-service", 25, "same-sap-service");
+  }
+
+  for (const field of SAP_POLICY_FIELDS) {
+    const oldValue = normalizeValue(getFieldValue(oldObject, field));
+    const newValue = normalizeValue(getFieldValue(newObject, field));
+    if (oldValue && newValue && oldValue === newValue) {
+      addWeightedScore(result, field, 8, `same-policy:${field}`);
+    }
+  }
+
+  if (oldSap && newSap && oldSap === newSap && !parentMatches) {
+    result.scoreReasons.push(parentConflicts ? "conflicting-parent-relationship" : "missing-parent-relationship");
+  }
+
+  if (parentConflicts && result.score > 55) {
+    result.score = 55;
+  }
+
+  result.score = Math.min(result.score, 100);
   return result;
 }
 
@@ -349,7 +646,7 @@ const CANONICAL_SERVICE_FIELDS = [
   "sub-sla-mgmt",
 ];
 
-function scoreSemanticObjectPair(oldObject, newObject) {
+function scoreSemanticObjectPair(oldObject, newObject, profile = {}) {
   const result = {
     score: 0,
     matchKeyFields: [],
@@ -361,7 +658,15 @@ function scoreSemanticObjectPair(oldObject, newObject) {
   const objectType = oldObject.normalizedType;
 
   if (objectType === "static-route") {
-    return scoreStaticRoutePair(oldObject, newObject);
+    return scoreStaticRoutePair(oldObject, newObject, profile);
+  }
+
+  if (["port", "lag"].includes(objectType)) {
+    return scorePortLagPair(oldObject, newObject);
+  }
+
+  if (objectType === "sap") {
+    return scoreSapPair(oldObject, newObject);
   }
 
   const oldPrefix = normalizeValue(getFieldValue(oldObject, "prefix"));
@@ -439,10 +744,14 @@ function scoreSemanticObjectPair(oldObject, newObject) {
   }
 
   const oldNextHop = normalizeValue(
-    getFieldValue(oldObject, "next-hop") || getFieldValue(oldObject, "nextHop")
+    getFieldValue(oldObject, "next-hop") ||
+    getFieldValue(oldObject, "nextHop") ||
+    getFieldValue(oldObject, "gateway")
   );
   const newNextHop = normalizeValue(
-    getFieldValue(newObject, "next-hop") || getFieldValue(newObject, "nextHop")
+    getFieldValue(newObject, "next-hop") ||
+    getFieldValue(newObject, "nextHop") ||
+    getFieldValue(newObject, "gateway")
   );
 
   if (
@@ -534,6 +843,11 @@ function getBestWeightedReason(matchKeyFields = []) {
   if (matchKeyFields.includes("prefix") && matchKeyFields.includes("next-hop")) {
     return "prefix-next-hop";
   }
+  if (matchKeyFields.includes("members")) return "lag-member-set";
+  if (matchKeyFields.includes("sap") && matchKeyFields.includes("service-id")) {
+    return "same-sap-service";
+  }
+  if (matchKeyFields.includes("sap")) return "same-sap-id";
   if (matchKeyFields.includes("prefix")) return "prefix";
   if (matchKeyFields.includes("route")) return "route";
   if (matchKeyFields.includes("peerIp")) return "peer-ip";
@@ -569,11 +883,11 @@ function getAutoMatchThreshold(object = {}) {
   return 80;
 }
 
-function findBestWeightedMatch(oldObject, candidates) {
+function findBestWeightedMatch(oldObject, candidates, profile = {}) {
   const scoredCandidates = [];
 
   for (const newObject of candidates) {
-    const result = scoreSemanticObjectPair(oldObject, newObject);
+    const result = scoreSemanticObjectPair(oldObject, newObject, profile);
 
     if (!result.score) continue;
 
@@ -670,7 +984,10 @@ export function matchNormalizedObjects({
   oldObjects = [],
   newObjects = [],
   manualMap = {},
+  profile = {},
 } = {}) {
+  oldObjects = activeComparableObjects(oldObjects);
+  newObjects = activeComparableObjects(newObjects);
   const matches = [];
   const usedOldIds = new Set();
   const usedNewIds = new Set();
@@ -699,7 +1016,25 @@ export function matchNormalizedObjects({
     usedNewIds.add(newObject.id);
   }
 
-  // 2. Identity matching
+  // 2. Object alias policy matching
+  for (const oldObject of oldObjects) {
+    if (usedOldIds.has(oldObject.id)) continue;
+
+    const candidates = newObjects.filter(
+      (newObject) =>
+        !usedNewIds.has(newObject.id) &&
+        newObject.normalizedType === oldObject.normalizedType
+    );
+
+    const match = findObjectAliasMatch(oldObject, candidates, profile);
+    if (!match) continue;
+
+    matches.push(match);
+    usedOldIds.add(oldObject.id);
+    usedNewIds.add(match.newObject.id);
+  }
+
+  // 3. Identity matching
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -717,7 +1052,7 @@ export function matchNormalizedObjects({
     usedNewIds.add(match.newObject.id);
   }
 
-  // 3. Weighted semantic matching
+  // 4. Weighted semantic matching
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -727,7 +1062,7 @@ export function matchNormalizedObjects({
         newObject.normalizedType === oldObject.normalizedType
     );
 
-    const match = findBestWeightedMatch(oldObject, candidates);
+    const match = findBestWeightedMatch(oldObject, candidates, profile);
     if (!match) continue;
 
     matches.push(match);
@@ -738,7 +1073,7 @@ export function matchNormalizedObjects({
     }
   }
 
-  // 4. Description similarity matching
+  // 5. Description similarity matching
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -760,7 +1095,7 @@ export function matchNormalizedObjects({
     }
   }
 
-  // 5. Old only
+  // 6. Old only
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -789,7 +1124,7 @@ export function matchNormalizedObjects({
     }
   }
 
-  // 6. New only
+  // 7. New only
   for (const newObject of newObjects) {
     if (usedNewIds.has(newObject.id)) continue;
     if (ambiguousAlternativeNewIds.has(newObject.id)) continue;

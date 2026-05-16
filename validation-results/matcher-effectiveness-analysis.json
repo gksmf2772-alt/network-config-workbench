@@ -1,0 +1,929 @@
+{
+  "generatedAt": "2026-05-16T17:03:55.401Z",
+  "caseId": "nokia-classic15-to-nokia-mdcli-22",
+  "baseline": {
+    "generatedAt": "2026-05-16T08:40:50.564Z",
+    "matched": 61,
+    "unmatchedSource": 575,
+    "unmatchedTarget": 447,
+    "ambiguous": 5,
+    "lowConfidence": 60,
+    "fieldOverlapPercent": 29,
+    "semanticLineCoveragePercent": 94,
+    "parserUnmappedLines": 736,
+    "activeAuditFindings": 628,
+    "suppressedAuditFindings": 171,
+    "blocksAutoGeneration": 71,
+    "conversionPolicyRequired": 163
+  },
+  "current": {
+    "matched": 61,
+    "unmatchedSource": 575,
+    "unmatchedTarget": 447,
+    "ambiguous": 5,
+    "lowConfidence": 60,
+    "fieldOverlapPercent": 29
+  },
+  "deltaFromBaseline": {
+    "matched": 0,
+    "unmatchedSource": 0,
+    "unmatchedTarget": 0,
+    "ambiguous": 0,
+    "lowConfidence": 0,
+    "fieldOverlapPercent": 0
+  },
+  "summary": {
+    "portLagCandidateCount": 0,
+    "sapCandidateCount": 0,
+    "staticRouteCandidateManualReviewCount": 59,
+    "falseExactMatchPreventionCount": 59,
+    "manualMappingCandidatesGenerated": 60,
+    "relationshipEvidenceCandidates": 0,
+    "weakMappings": 60,
+    "primaryConclusion": "Matcher changes are measurable through safer candidates and false-exact-match prevention; partial target scope still dominates absolute unmatched counts."
+  },
+  "groups": {
+    "candidateByType": [
+      {
+        "key": "static-route",
+        "count": 59
+      },
+      {
+        "key": "interface",
+        "count": 1
+      }
+    ],
+    "candidateByReason": [
+      {
+        "key": "prefix",
+        "count": 54
+      },
+      {
+        "key": "ambiguous-weighted-match",
+        "count": 5
+      },
+      {
+        "key": "description-similarity",
+        "count": 1
+      }
+    ],
+    "candidateByScoreReason": [
+      {
+        "key": "prefix",
+        "count": 59
+      },
+      {
+        "key": "static-route-next-hop-mismatch",
+        "count": 59
+      },
+      {
+        "key": "ambiguous-candidates",
+        "count": 5
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.19/32|112.188.22.198",
+      "newKey": "static-route:112.188.30.19/32|112.188.21.198",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.64/32|112.188.22.90",
+      "newKey": "static-route:112.188.30.64/32|112.188.21.90",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.65/32|112.188.28.94",
+      "newKey": "static-route:112.188.30.65/32|112.188.27.94",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.66/32|112.188.28.98",
+      "newKey": "static-route:112.188.30.66/32|112.188.27.98",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.67/32|112.188.28.102",
+      "newKey": "static-route:112.188.30.67/32|112.188.27.102",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.68/32|112.188.28.106",
+      "newKey": "static-route:112.188.30.68/32|112.188.27.106",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.69/32|112.188.28.134",
+      "newKey": "static-route:112.188.30.69/32|112.188.27.134",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.71/32|112.188.28.138",
+      "newKey": "static-route:112.188.30.71/32|112.188.27.138",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.111/32|112.188.24.58",
+      "newKey": "static-route:112.188.30.111/32|112.188.23.58",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.112/32|112.188.24.50",
+      "newKey": "static-route:112.188.30.112/32|112.188.23.50",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.113/32|112.188.24.54",
+      "newKey": "static-route:112.188.30.113/32|112.188.23.54",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.115/32|112.188.23.34",
+      "newKey": "static-route:112.188.30.115/32|112.188.24.34",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.116/32|112.188.24.62",
+      "newKey": "static-route:112.188.30.116/32|112.188.23.62",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.117/32|112.188.24.66",
+      "newKey": "static-route:112.188.30.117/32|112.188.23.66",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.118/32|112.188.24.70",
+      "newKey": "static-route:112.188.30.118/32|112.188.23.70",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.119/32|112.188.24.6",
+      "newKey": "static-route:112.188.30.119/32|112.188.23.6",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.121/32|112.188.24.170",
+      "newKey": "static-route:112.188.30.121/32|112.188.23.170",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.122/32|112.188.24.122",
+      "newKey": "static-route:112.188.30.122/32|112.188.23.122",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.123/32|112.188.24.78",
+      "newKey": "static-route:112.188.30.123/32|112.188.23.78",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.124/32|112.188.24.10",
+      "newKey": "static-route:112.188.30.124/32|112.188.23.10",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.125/32|112.188.22.50",
+      "newKey": "static-route:112.188.30.125/32|112.188.21.50",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.126/32|112.188.24.26",
+      "newKey": "static-route:112.188.30.126/32|112.188.23.26",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.127/32|112.188.24.42",
+      "newKey": "static-route:112.188.30.127/32|112.188.23.42",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.128/32|112.188.24.86",
+      "newKey": "static-route:112.188.30.128/32|112.188.23.86",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.129/32|112.188.24.94",
+      "newKey": "static-route:112.188.30.129/32|112.188.23.94",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.131/32|112.188.24.130",
+      "newKey": "static-route:112.188.30.131/32|112.188.23.130",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.135/32|112.188.22.54",
+      "newKey": "static-route:112.188.30.135/32|112.188.21.54",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.136/32|112.188.22.58",
+      "newKey": "static-route:112.188.30.136/32|112.188.21.58",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.137/32|112.188.22.62",
+      "newKey": "static-route:112.188.30.137/32|112.188.21.62",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.138/32|112.188.22.66",
+      "newKey": "static-route:112.188.30.138/32|112.188.21.66",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.139/32|112.188.22.74",
+      "newKey": "static-route:112.188.30.139/32|112.188.21.74",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.140/32|112.188.22.78",
+      "newKey": "static-route:112.188.30.140/32|112.188.21.78",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.141/32|112.188.23.90",
+      "newKey": "static-route:112.188.30.141/32|112.188.24.90",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.143/32|112.188.22.154",
+      "newKey": "static-route:112.188.30.143/32|112.188.21.154",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.150/32|112.188.24.98",
+      "newKey": "static-route:112.188.30.150/32|112.188.23.98",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.151/32|112.188.24.14",
+      "newKey": "static-route:112.188.30.151/32|112.188.23.14",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.152/32|112.188.22.194",
+      "newKey": "static-route:112.188.30.152/32|112.188.21.194",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.170/32|112.188.22.82",
+      "newKey": "static-route:112.188.30.170/32|112.188.21.82",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.171/32|112.188.22.86",
+      "newKey": "static-route:112.188.30.171/32|112.188.21.86",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.172/32|112.188.24.30",
+      "newKey": "static-route:112.188.30.172/32|112.188.23.30",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.183/32|112.188.22.142",
+      "newKey": "static-route:112.188.30.183/32|112.188.21.142",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.184/32|112.188.22.130",
+      "newKey": "static-route:112.188.30.184/32|112.188.21.130",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.185/32|112.188.22.134",
+      "newKey": "static-route:112.188.30.185/32|112.188.21.134",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.186/32|112.188.22.138",
+      "newKey": "static-route:112.188.30.186/32|112.188.21.138",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.187/32|112.188.22.158",
+      "newKey": "static-route:112.188.30.187/32|112.188.21.158",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.188/32|112.188.22.146",
+      "newKey": "static-route:112.188.30.188/32|112.188.21.146",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.189/32|112.188.22.150",
+      "newKey": "static-route:112.188.30.189/32|112.188.21.150",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.190/32|112.188.22.162",
+      "newKey": "static-route:112.188.30.190/32|112.188.21.162",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.191/32|112.188.22.166",
+      "newKey": "static-route:112.188.30.191/32|112.188.21.166",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.192/32|112.188.22.170",
+      "newKey": "static-route:112.188.30.192/32|112.188.21.170",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.219/32|112.188.22.66",
+      "newKey": "static-route:112.188.30.219/32|112.188.21.54",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:112.188.30.220/32|112.188.22.66",
+      "newKey": "static-route:112.188.30.220/32|112.188.21.54",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:125.144.1.97/32|14.59.4.77",
+      "newKey": "static-route:125.144.1.97/32|14.59.4.65",
+      "score": 60,
+      "reason": "ambiguous-weighted-match",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch",
+        "ambiguous-candidates"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:125.144.1.98/32|14.59.5.77",
+      "newKey": "static-route:125.144.1.98/32|14.59.5.65",
+      "score": 60,
+      "reason": "ambiguous-weighted-match",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch",
+        "ambiguous-candidates"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:125.144.5.1/32|14.59.5.77",
+      "newKey": "static-route:125.144.5.1/32|14.59.4.65",
+      "score": 60,
+      "reason": "ambiguous-weighted-match",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch",
+        "ambiguous-candidates"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:125.145.147.20/32|14.59.5.22",
+      "newKey": "static-route:125.145.147.20/32|14.59.4.18",
+      "score": 60,
+      "reason": "ambiguous-weighted-match",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch",
+        "ambiguous-candidates"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:125.145.147.21/32|14.59.4.22",
+      "newKey": "static-route:125.145.147.21/32|14.59.4.18",
+      "score": 60,
+      "reason": "ambiguous-weighted-match",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch",
+        "ambiguous-candidates"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:175.192.35.200/30|112.188.22.54",
+      "newKey": "static-route:175.192.35.200/30|112.188.21.54",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "static-route",
+      "oldKey": "static-route:175.192.61.4/30|112.188.22.66",
+      "newKey": "static-route:175.192.61.4/30|112.188.21.54",
+      "score": 60,
+      "reason": "prefix",
+      "matchKeyFields": [
+        "prefix"
+      ],
+      "scoreReasons": [
+        "prefix",
+        "static-route-next-hop-mismatch"
+      ]
+    },
+    {
+      "objectType": "interface",
+      "oldKey": "interface:To-MNT#2-10",
+      "newKey": "interface:100/to-nowon-tou-fn20",
+      "score": 71,
+      "reason": "description-similarity",
+      "matchKeyFields": [
+        "description"
+      ],
+      "scoreReasons": []
+    }
+  ]
+}

@@ -94,8 +94,9 @@ function fieldAfterToken(tokens = [], token = "", start = 0) {
   return index >= 0 ? tokens[index + 1] || "" : "";
 }
 
-function extractBracketedPolicyList(line = "") {
-  const match = String(line || "").match(/\bimport\s+policy\s+\[(.+?)\]/i);
+function extractBracketedPolicyList(line = "", keyword = "import") {
+  const pattern = new RegExp(`\\b${keyword}\\s+policy\\s+\\[(.+?)\\]`, "i");
+  const match = String(line || "").match(pattern);
   if (!match) return "";
   const quoted = [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]);
   if (quoted.length) return quoted.join(",");
@@ -593,6 +594,61 @@ function parseMdCliBgpNeighbors(lines) {
   });
 }
 
+function parseMdCliBgpGroups(lines) {
+  const blocks = collectBraceBlocks(lines, /^group\s+"?([^"\s{]+)"?\s*\{/i);
+
+  return blocks.map((block, index) => {
+    const groupName = block.name;
+    const description = extractDescription(block.lines);
+    const fields = { group: groupName };
+
+    for (const line of block.lines) {
+      const trimmed = line.trim();
+      let match = trimmed.match(/^peer-as\s+(\S+)/i) || trimmed.match(/^remote-as\s+(\S+)/i);
+      if (match) fields["peer-as"] = stripQuotes(match[1]);
+      match = trimmed.match(/^authentication-key\s+(.+)$/i);
+      if (match) fields["authentication-key"] = stripQuotes(match[1]);
+      match = trimmed.match(/^local-address\s+(\S+)/i);
+      if (match) fields["local-address"] = stripQuotes(match[1]);
+      match = trimmed.match(/^import\s+policy\s+\[(.+?)\]/i);
+      if (match) fields["import.policy"] = extractBracketedPolicyList(trimmed, "import");
+      match = trimmed.match(/^export\s+policy\s+\[(.+?)\]/i);
+      if (match) fields["export.policy"] = extractBracketedPolicyList(trimmed, "export");
+      match = trimmed.match(/^import\s+"?([^"\s]+)"?/i);
+      if (match && !fields["import.policy"]) fields["import.policy"] = stripQuotes(match[1]);
+      match = trimmed.match(/^export\s+"?([^"\s]+)"?/i);
+      if (match && !fields["export.policy"]) fields["export.policy"] = stripQuotes(match[1]);
+      if (/^admin-state\s+enable$/i.test(trimmed) || /^no\s+shutdown$/i.test(trimmed)) {
+        fields.state = "enabled";
+        fields["admin-state"] = "enabled";
+      }
+      if (/^admin-state\s+disable$/i.test(trimmed) || /^shutdown$/i.test(trimmed)) {
+        fields.state = "disabled";
+        fields["admin-state"] = "disabled";
+      }
+    }
+
+    if (description) fields.description = description;
+    const normalizedFields = normalizeNokiaSemanticFields(fields);
+    const object = createNormalizedObject({
+      id: `nokia-md-bgp-group-${index}-${groupName}`,
+      vendor: "nokia-md-cli",
+      sourceType: "bgp-group",
+      sourceName: groupName,
+      normalizedType: "bgp-group",
+      normalizedIdentity: groupName,
+      rawLines: block.lines,
+      fields: normalizedFields,
+    });
+
+    object.description = normalizedFields.description || null;
+    object.metadataOnly = true;
+    object.relationshipRole = "bgp-group-definition";
+
+    return object;
+  });
+}
+
 function createMdServiceObject({ type, name, fields, rawLines, index }) {
   const normalizedFields = normalizeNokiaSemanticFields(fields);
   const identity =
@@ -1002,6 +1058,7 @@ const BGP_ONE_LINE_FIELDS = [
   { path: ["admin-state"], field: "state", normalize: normalizeState },
   { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
   { path: ["import", "policy"], field: "import.policy" },
+  { path: ["export", "policy"], field: "export.policy" },
 ];
 
 const STATIC_ROUTE_ONE_LINE_FIELDS = [
@@ -1343,8 +1400,10 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
       bgpIndex + 3,
       BGP_ONE_LINE_FIELDS
     );
-    const importPolicy = extractBracketedPolicyList(rawLine);
+    const importPolicy = extractBracketedPolicyList(rawLine, "import");
     if (importPolicy) fields["import.policy"] = importPolicy;
+    const exportPolicy = extractBracketedPolicyList(rawLine, "export");
+    if (exportPolicy) fields["export.policy"] = exportPolicy;
     return createMdCliOneLineObject({
       type: "bgp",
       identity: peerIp,
@@ -1354,6 +1413,32 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
       rawLine,
       index,
     });
+  }
+
+  if (bgpIndex >= 0 && tokenEquals(tokens, bgpIndex + 1, "group") && tokens[bgpIndex + 2]) {
+    const groupName = stripQuotes(tokens[bgpIndex + 2]);
+    const fields = mapLeafFields(
+      { group: groupName },
+      tokens,
+      bgpIndex + 3,
+      BGP_ONE_LINE_FIELDS
+    );
+    const importPolicy = extractBracketedPolicyList(rawLine, "import");
+    if (importPolicy) fields["import.policy"] = importPolicy;
+    const exportPolicy = extractBracketedPolicyList(rawLine, "export");
+    if (exportPolicy) fields["export.policy"] = exportPolicy;
+    const object = createMdCliOneLineObject({
+      type: "bgp-group",
+      identity: groupName,
+      sourceType: "bgp-group",
+      sourceName: groupName,
+      fields,
+      rawLine,
+      index,
+    });
+    object.metadataOnly = true;
+    object.relationshipRole = "bgp-group-definition";
+    return object;
   }
 
   if (
@@ -1472,6 +1557,7 @@ export function parseNokiaMdCliConfig(configText) {
     ...parseMdCliLags(lines),
     ...parseMdCliInterfaces(lines),
     ...parseMdCliStaticRoutes(lines),
+    ...parseMdCliBgpGroups(lines),
     ...parseMdCliBgpNeighbors(lines),
     ...parseMdCliPimInterfaces(lines),
     ...parseMdCliServiceObjects(lines),

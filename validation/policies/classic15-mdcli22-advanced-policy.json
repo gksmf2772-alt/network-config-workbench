@@ -1,0 +1,75 @@
+{
+  "name": "classic15-mdcli22-advanced-policy",
+  "kind": "advanced-compare-policy",
+  "description": "Validation-only advanced compare policy for Nokia Classic CLI 15 to Nokia MD-CLI 22 fixture checks.",
+  "validationPolicies": {
+    "bgp": [
+      {
+        "field": "authentication-key",
+        "policy": "ignore",
+        "message": "Secret/hash rendering differs between Classic and MD-CLI fixtures."
+      },
+      {
+        "field": "description",
+        "policy": "ignore",
+        "message": "Neighbor descriptions are intentionally shortened in the MD-CLI target fixture."
+      }
+    ],
+    "static-route": [
+      {
+        "field": "metric",
+        "policy": "ignore",
+        "message": "Metric 100 is a known target fixture default."
+      },
+      {
+        "field": "description",
+        "policy": "ignore",
+        "message": "Route descriptions are not fully represented in the partial MD-CLI fixture."
+      }
+    ],
+    "interface": [
+      {
+        "field": "icmp.redirects",
+        "policy": "ignore",
+        "message": "MD-CLI fixture expands implicit ICMP defaults."
+      }
+    ],
+    "port": [
+      {
+        "field": "mtu",
+        "policy": "ignore",
+        "message": "Target fixture default MTU is not a semantic migration key."
+      },
+      {
+        "field": "egress.port-scheduler-policy",
+        "policy": "ignore",
+        "message": "Target scheduler policy requires QoS migration review, not line-level abnormal scoring."
+      }
+    ],
+    "lag": [
+      {
+        "field": "lacp.administrative-key",
+        "policy": "ignore",
+        "message": "MD-CLI generated LACP key differs from Classic LAG ID."
+      }
+    ]
+  },
+  "fixturePolicy": {
+    "status": "partial-assembled-target",
+    "doesNotSuppressUnmatchedObjects": true,
+    "allowedPartialTargetObjectTypes": [
+      "port",
+      "lag",
+      "interface",
+      "sap",
+      "subscriber-interface",
+      "group-interface",
+      "qos-policy",
+      "filter",
+      "route-policy",
+      "prefix-list",
+      "community"
+    ],
+    "notes": "The target fixture is feature-split. This policy reduces known field-level noise only; it does not mark missing source objects as converted."
+  }
+}

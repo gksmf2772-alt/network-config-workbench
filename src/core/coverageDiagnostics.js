@@ -34,7 +34,7 @@ export function buildSemanticCoverageDiagnostics({
   const suppressedLineCount = old.suppressedLineCount + next.suppressedLineCount;
   const wrapperLineCount = old.wrapperLineCount + next.wrapperLineCount;
   const linesWithoutSourceMapping = old.linesWithoutSourceMapping + next.linesWithoutSourceMapping;
-  const unparsedLineCount = Math.max(0, eligibleLineCount - recognizedLineCount - ignoredLineCount);
+  const unparsedLineCount = old.unparsedLineCount + next.unparsedLineCount;
 
   const coveragePercent = eligibleLineCount
     ? Math.round((recognizedLineCount / eligibleLineCount) * 100)

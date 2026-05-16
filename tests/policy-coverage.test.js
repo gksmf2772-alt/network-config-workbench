@@ -76,6 +76,82 @@ test("line exception suppresses new-only object from review counts", () => {
   assert.equal(dashboard.review.abnormal.length, 0);
 });
 
+test("manual added line rule suppresses new-only object from integrated review", () => {
+  const rawLine = '/configure { router "Base" bgp neighbor "210.183.28.161" group "ACCESS-PEER" }';
+  const profile = {
+    lineRules: {
+      bgp: [
+        { source: "new", text: rawLine, action: "added", message: "accepted target-only line" },
+      ],
+    },
+    rules: { ignore: [] },
+  };
+  const newObject = {
+    id: "new-bgp-added-rule",
+    normalizedType: "bgp",
+    normalizedIdentity: "210.183.28.161",
+    fields: {
+      neighbor: "210.183.28.161",
+      group: "ACCESS-PEER",
+    },
+    rawLines: [rawLine],
+  };
+  const plan = createComparisonPlan(
+    matchNormalizedObjects({
+      oldObjects: [],
+      newObjects: [newObject],
+      manualMap: {},
+      profile,
+    }),
+    profile,
+  );
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan,
+    semanticSummary: {},
+  });
+
+  assert.equal(plan[0].policySuppressed, true);
+  assert.equal(plan[0].lineMatches.every((lineMatch) => lineMatch.status === "ignored"), true);
+  assert.equal(dashboard.counts.newOnly, 0);
+  assert.equal(dashboard.review.unmatchedNew.length, 0);
+
+  const oldLine = "neighbor 203.0.113.10";
+  const oldProfile = {
+    lineRules: {
+      bgp: [
+        { source: "old", text: oldLine, action: "missing", message: "accepted source-only line" },
+      ],
+    },
+    rules: { ignore: [] },
+  };
+  const oldObject = {
+    id: "old-bgp-missing-rule",
+    normalizedType: "bgp",
+    normalizedIdentity: "203.0.113.10",
+    fields: { neighbor: "203.0.113.10" },
+    rawLines: [oldLine],
+  };
+  const oldPlan = createComparisonPlan(
+    matchNormalizedObjects({
+      oldObjects: [oldObject],
+      newObjects: [],
+      manualMap: {},
+      profile: oldProfile,
+    }),
+    oldProfile,
+  );
+  const oldDashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: oldPlan,
+    semanticSummary: {},
+  });
+
+  assert.equal(oldPlan[0].policySuppressed, true);
+  assert.equal(oldDashboard.counts.oldOnly, 0);
+  assert.equal(oldDashboard.review.unmatchedOld.length, 0);
+});
+
 test("advanced ignore policy suppresses ignored field from abnormal list", () => {
   const profile = {
     validationPolicies: {
@@ -231,6 +307,209 @@ test("policy evaluator reports audit metadata", () => {
   assert.equal(result.suppressed, true);
   assert.equal(result.sourcePolicy, "user-exception");
   assert.equal(result.appliesTo, "new");
+});
+
+test("object scoped exception matches only the selected object key", () => {
+  const profile = {
+    rules: {
+      ignore: [{
+        source: "new",
+        objectType: "static-route",
+        objectKey: "static-route:10.10.10.0/24|192.0.2.1",
+        pattern: "static-route:10.10.10.0/24|192.0.2.1",
+      }],
+    },
+  };
+
+  const matched = evaluatePolicyContext({
+    profile,
+    rawLine: "tag 100",
+    side: "new",
+    objectType: "static-route",
+    objectKey: "static-route:10.10.10.0/24|192.0.2.1",
+  });
+  const other = evaluatePolicyContext({
+    profile,
+    rawLine: "tag 100",
+    side: "new",
+    objectType: "static-route",
+    objectKey: "static-route:10.10.10.0/24|192.0.2.2",
+  });
+
+  assert.equal(matched.suppressed, true);
+  assert.equal(other.suppressed, false);
+});
+
+test("profile scoped exception can target one finding type", () => {
+  const profile = {
+    rules: {
+      ignore: [{
+        source: "both",
+        objectType: "static-route",
+        findingType: "new-only",
+        pattern: "new-only",
+      }],
+    },
+  };
+
+  const newOnly = evaluatePolicyContext({
+    profile,
+    rawLine: "route 10.10.10.0/24",
+    side: "new",
+    objectType: "static-route",
+    findingType: "new-only",
+  });
+  const oldOnly = evaluatePolicyContext({
+    profile,
+    rawLine: "route 10.10.10.0/24",
+    side: "old",
+    objectType: "static-route",
+    findingType: "old-only",
+  });
+
+  assert.equal(newOnly.suppressed, true);
+  assert.equal(oldOnly.suppressed, false);
+});
+
+test("profile exceptions suppress only selected object when object scoped", () => {
+  const profile = {
+    exceptions: [{
+      id: "exception-object-static",
+      scope: "object",
+      enabled: true,
+      target: {
+        side: "new",
+        objectType: "static-route",
+        objectKey: "static-route:10.10.10.0/24|192.0.2.1",
+        fieldPath: "tag",
+        findingType: "new-only",
+      },
+      match: {
+        mode: "exact-object",
+        objectType: "static-route",
+        objectKey: "static-route:10.10.10.0/24|192.0.2.1",
+        fieldPath: "tag",
+        findingType: "new-only",
+      },
+    }],
+  };
+
+  const selected = evaluatePolicyContext({
+    profile,
+    rawLine: "tag 100",
+    side: "new",
+    objectType: "static-route",
+    objectKey: "static-route:10.10.10.0/24|192.0.2.1",
+    field: "tag",
+    findingType: "new-only",
+  });
+  const otherObject = evaluatePolicyContext({
+    profile,
+    rawLine: "tag 100",
+    side: "new",
+    objectType: "static-route",
+    objectKey: "static-route:10.10.10.0/24|192.0.2.2",
+    field: "tag",
+    findingType: "new-only",
+  });
+
+  assert.equal(selected.suppressed, true);
+  assert.equal(selected.sourcePolicy, "profile-exception");
+  assert.equal(otherObject.suppressed, false);
+});
+
+test("profile exceptions suppress same profile field rule after reload", () => {
+  const exception = {
+    id: "exception-profile-bgp-description",
+    scope: "profile",
+    enabled: true,
+    target: {
+      side: "both",
+      objectType: "bgp",
+      fieldPath: "description",
+      findingType: "matched",
+    },
+    match: {
+      mode: "profile-field-rule",
+      objectType: "bgp",
+      fieldPath: "description",
+      findingType: "matched",
+    },
+  };
+  const reloadedProfile = JSON.parse(JSON.stringify({ exceptions: [exception] }));
+
+  const matched = evaluatePolicyContext({
+    profile: reloadedProfile,
+    rawLine: 'description "peer"',
+    side: "new",
+    objectType: "bgp",
+    objectKey: "bgp:192.0.2.1",
+    field: "description",
+    findingType: "matched",
+  });
+  const differentField = evaluatePolicyContext({
+    profile: reloadedProfile,
+    rawLine: "peer-as 65000",
+    side: "new",
+    objectType: "bgp",
+    objectKey: "bgp:192.0.2.1",
+    field: "peer-as",
+    findingType: "matched",
+  });
+
+  assert.equal(matched.suppressed, true);
+  assert.equal(differentField.suppressed, false);
+});
+
+test("disabled profile exception restores active policy result", () => {
+  const profile = {
+    exceptions: [{
+      id: "disabled-exception",
+      scope: "profile",
+      enabled: false,
+      target: { objectType: "bgp", fieldPath: "group", findingType: "new-only" },
+      match: { mode: "profile-field-rule", objectType: "bgp", fieldPath: "group", findingType: "new-only" },
+    }],
+  };
+
+  const result = evaluatePolicyContext({
+    profile,
+    rawLine: 'group "ACCESS-PEER"',
+    side: "new",
+    objectType: "bgp",
+    objectKey: "bgp:192.0.2.1",
+    field: "group",
+    findingType: "new-only",
+  });
+
+  assert.equal(result.suppressed, false);
+});
+
+test("coverage unsupported count does not double subtract ignored target lines", () => {
+  const coverage = buildSemanticCoverageDiagnostics({
+    oldText: "system name fixture",
+    newText: "metric 100",
+    oldResult: {
+      objects: [],
+      preprocess: null,
+    },
+    newResult: {
+      objects: [],
+      preprocess: null,
+    },
+    plan: [],
+    profile: {
+      rules: {
+        ignore: [
+          { source: "new", pattern: "metric 100", matchMode: "contains" },
+        ],
+      },
+    },
+  });
+
+  assert.equal(coverage.sides.old.unparsedLineCount, 1);
+  assert.equal(coverage.sides.new.ignoredLineCount, 1);
+  assert.equal(coverage.unparsedLineCount, 1);
 });
 
 function findExampleDir() {

@@ -1,0 +1,207 @@
+{
+  "command": "validate:stress",
+  "status": "passed",
+  "iterationsRequested": 1000,
+  "iterationsCompleted": 1000,
+  "casesRun": [
+    "nokia-classic15-to-nokia-mdcli-22"
+  ],
+  "productionCasesRun": [
+    "nokia-classic15-to-nokia-mdcli-22"
+  ],
+  "syntheticCasesRun": [],
+  "blockedCases": [
+    "juniper-to-nokia-mdcli-22"
+  ],
+  "pass": true,
+  "durationMs": 371815,
+  "failingCaseId": "",
+  "failingIteration": null,
+  "failingSeed": "",
+  "failures": [],
+  "sampleResults": [
+    {
+      "id": "nokia-classic15-to-nokia-mdcli-22",
+      "status": "passed",
+      "synthetic": false,
+      "productionValidation": true,
+      "mode": "stress",
+      "sourcePath": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "targetPaths": [
+        "예제 및 테스트 설정/New_bgp_1.txt"
+      ],
+      "sourceVendor": "nokia-classic",
+      "targetVendor": "nokia-md-cli",
+      "parser": {
+        "oldObjects": 696,
+        "newObjects": 56,
+        "oldEligibleLines": 9466,
+        "newEligibleLines": 168,
+        "recognizedLines": 8898,
+        "unsupportedLines": 736,
+        "routerLogWrapperLines": 123,
+        "sourceLineMappingStatus": "ok"
+      },
+      "semantic": {
+        "planItems": 696,
+        "matched": 56,
+        "unmatchedOld": 640,
+        "unmatchedNew": 0,
+        "ambiguous": 0,
+        "lowConfidence": 0,
+        "fieldOverlapPercent": 43,
+        "coveragePercent": 92,
+        "suppressedLines": 56
+      },
+      "policy": {
+        "ignoredPolicyFields": 114,
+        "suppressedAuditFindings": 60,
+        "activeAuditFindings": 400
+      },
+      "audit": {
+        "summary": {
+          "total": 460,
+          "active": 400,
+          "suppressed": 60,
+          "bySeverity": {
+            "warning": 288,
+            "info": 10,
+            "manual-review": 102,
+            "suppressed": 60
+          },
+          "byCategory": {
+            "qos": 121,
+            "filter-acl": 40,
+            "routing-bgp": 224,
+            "subscriber-service": 71,
+            "management-security": 4
+          },
+          "byMigrationImpact": {
+            "target-default-risk": 259,
+            "review-before-migration": 131,
+            "conversion-policy-required": 70
+          }
+        },
+        "categories": {
+          "qos": 121,
+          "filter-acl": 40,
+          "routing-bgp": 224,
+          "subscriber-service": 71,
+          "management-security": 4
+        },
+        "migrationImpact": {
+          "target-default-risk": 259,
+          "review-before-migration": 131,
+          "conversion-policy-required": 70
+        },
+        "findingCount": 460
+      },
+      "report": {
+        "summaryCounts": {
+          "matched": 56,
+          "oldOnly": 640,
+          "newOnly": 0,
+          "ambiguous": 0,
+          "lowConfidence": 0,
+          "relationshipDiffs": 68,
+          "abnormal": 602,
+          "manual": 0,
+          "auditActive": 400,
+          "auditSuppressed": 60,
+          "auditCritical": 0,
+          "auditWarning": 288,
+          "auditManual": 102,
+          "auditUnsupported": 0,
+          "unmatchedPartialTargetScope": 571,
+          "unmatchedMatcherIssue": 0,
+          "unmatchedParserGap": 69,
+          "unmatchedRealMissingTarget": 0
+        },
+        "reviewCounts": {
+          "unmatchedOld": 640,
+          "unmatchedNew": 0,
+          "ambiguous": 0,
+          "lowConfidence": 0,
+          "abnormal": 602,
+          "relationshipChanges": 68
+        },
+        "severity": {
+          "level": "critical",
+          "label": "검토 우선순위 높음",
+          "reason": "핵심 객체 누락 또는 낮은 분석 비율"
+        }
+      },
+      "graph": {
+        "nodes": 340,
+        "edges": 136,
+        "invalidEdges": []
+      },
+      "migrationReadiness": {
+        "generationImplemented": false,
+        "generationValidationStatus": "not-applicable",
+        "status": "manual-review",
+        "impact": {
+          "target-default-risk": 259,
+          "review-before-migration": 131,
+          "conversion-policy-required": 70
+        },
+        "unsupportedObjects": 0,
+        "manualReviewObjects": 201,
+        "targetDefaultRisk": 259,
+        "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
+      },
+      "compare": {
+        "htmlLength": 6945163,
+        "hasUndefined": false,
+        "hasNaN": false
+      },
+      "diagnostics": {
+        "coverageReason": "의미 기반 분석 라인 매핑 정상",
+        "oldUnparsedSample": [
+          {
+            "line": 4,
+            "text": "        name \"Gangbuk-SEA028\"",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 5,
+            "text": "        load-balancing",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 6,
+            "text": "            l4-load-balancing",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 7,
+            "text": "            mc-enh-load-balancing",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 9,
+            "text": "        management cli",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 10,
+            "text": "            configuration",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 11,
+            "text": "                no immediate",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 14,
+            "text": "        netconf",
+            "reason": "parser-unmapped"
+          }
+        ],
+        "newUnparsedSample": []
+      },
+      "signature": "5f468c78f5adbd492e1b3efece299468cac9b8373567f715b58c9de8a04b3d06"
+    }
+  ]
+}

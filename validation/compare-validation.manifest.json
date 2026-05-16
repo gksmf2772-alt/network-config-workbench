@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "description": "Manifest-driven validation for config comparison, standards audit, report, graph, and migration-readiness workflows.",
+  "cases": [
+    {
+      "id": "juniper-to-nokia-mdcli-22",
+      "enabled": false,
+      "status": "blocked",
+      "blockedReason": "missing-source-config",
+      "sourceVendor": "juniper-set",
+      "sourceSyntax": "set",
+      "sourceVersion": "auto-detect",
+      "targetVendor": "nokia-md-cli",
+      "targetSyntax": "md-cli",
+      "targetVersion": "22",
+      "sourceConfigPath": null,
+      "targetConfigPath": null,
+      "profilePath": null,
+      "exceptionPolicyPath": null,
+      "standardsAuditProfile": "default-network-standard",
+      "requiredInputs": [
+        "real Juniper source config",
+        "target Nokia MD-CLI 22 config or expected generated/converted config",
+        "vendor/profile settings if applicable",
+        "exception/advanced compare policy if applicable"
+      ],
+      "modes": [
+        "compare",
+        "semantic-compare",
+        "standards-audit",
+        "migration-readiness",
+        "report-generation",
+        "graph-data-generation"
+      ],
+      "notesKo": "현재 레포지토리 내 Juniper 원본 설정이 없어 실제 Juniper → Nokia MD-CLI 22 검증은 보류합니다."
+    },
+    {
+      "id": "synthetic-juniper-set-smoke",
+      "enabled": true,
+      "synthetic": true,
+      "productionValidation": false,
+      "sourceVendor": "juniper-set",
+      "sourceSyntax": "set",
+      "sourceVersion": "synthetic",
+      "targetVendor": "nokia-md-cli",
+      "targetSyntax": "md-cli",
+      "targetVersion": "22",
+      "sourceConfigPath": "validation/fixtures/synthetic/juniper-set-smoke.conf",
+      "targetConfigPath": "validation/fixtures/synthetic/nokia-mdcli22-smoke.conf",
+      "profilePath": "validation/profiles/synthetic-juniper-smoke-profile.json",
+      "standardsAuditProfile": "default-network-standard",
+      "modes": [
+        "parser-smoke",
+        "compare",
+        "semantic-compare",
+        "standards-audit",
+        "migration-readiness",
+        "report-generation",
+        "graph-data-generation"
+      ],
+      "notesKo": "Synthetic smoke fixture입니다. 실제 Juniper 운영 설정 기반 검증으로 계산하지 않습니다."
+    },
+    {
+      "id": "nokia-classic15-to-nokia-mdcli-22",
+      "enabled": true,
+      "primary": true,
+      "sourceVendor": "nokia-classic",
+      "sourceSyntax": "classic-cli",
+      "sourceVersion": "15",
+      "targetVendor": "nokia-md-cli",
+      "targetSyntax": "md-cli",
+      "targetVersion": "22",
+      "sourceConfigPath": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "targetConfigPaths": [
+        "예제 및 테스트 설정/New_bgp_1.txt",
+        "예제 및 테스트 설정/New_static_1.txt",
+        "예제 및 테스트 설정/New_interface_1.txt",
+        "예제 및 테스트 설정/New_lag_1.txt",
+        "예제 및 테스트 설정/New_port_1.txt",
+        "예제 및 테스트 설정/New_PIM_1.txt"
+      ],
+      "stressTargetConfigPaths": [
+        "예제 및 테스트 설정/New_bgp_1.txt"
+      ],
+      "profilePath": "validation/profiles/nokia-classic15-mdcli22-profile.json",
+      "exceptionPolicyPath": "validation/policies/classic15-mdcli22-line-exceptions.json",
+      "advancedComparePolicyPath": "validation/policies/classic15-mdcli22-advanced-policy.json",
+      "lineExceptionPolicyPath": "validation/policies/classic15-mdcli22-line-exceptions.json",
+      "fieldAliasesPath": "validation/policies/classic15-mdcli22-field-aliases.json",
+      "fixtureCompleteness": "partial-assembled-target",
+      "standardsAuditProfile": "classic-to-mdcli-migration-standard",
+      "modes": [
+        "compare",
+        "semantic-compare",
+        "standards-audit",
+        "migration-readiness",
+        "report-generation",
+        "graph-data-generation"
+      ]
+    }
+  ]
+}

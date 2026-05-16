@@ -1,3 +1,9 @@
+import { buildAuditGraphData, summarizeAuditFindings } from "./standardsAudit.js";
+import {
+  buildAnalysisContext,
+  filterAuditFindingsForModeScope,
+} from "./analysisModes.js";
+
 const IMPORTANT_FIELDS = new Set([
   "route",
   "next-hop",
@@ -6,6 +12,8 @@ const IMPORTANT_FIELDS = new Set([
   "prefix-length",
   "neighbor",
   "peer-as",
+  "import.policy",
+  "export.policy",
   "state",
   "admin-state",
   "metric",
@@ -77,19 +85,39 @@ export function buildSummaryDashboardData({
   sessionName = "",
   comparedAt = "",
   coverageDiagnostics = semanticSummary.coverageDiagnostics || null,
+  audit = {},
+  fixtureScope = null,
+  analysisMode = "debug/developer",
+  compareScope = "all",
+  selectedObjects = [],
 } = {}) {
   const reviewablePlan = plan.filter((item) => !item.policySuppressed);
   const lineSummary = buildLineSummary(report);
   const fieldAnalysis = buildFieldOverlapAnalysis(reviewablePlan);
   const review = buildReviewItems(plan);
-  const graph = buildGraphData({ plan: reviewablePlan });
+  const analysisContext = buildAnalysisContext({
+    mode: analysisMode,
+    scope: compareScope,
+    selectedObjects,
+  });
+  const rawAuditFindings = Array.isArray(audit.findings) ? audit.findings : [];
+  const auditFindings = filterAuditFindingsForModeScope(rawAuditFindings, {
+    mode: analysisContext.analysisMode,
+    scope: analysisContext.compareScope,
+    selectedObjects,
+  });
+  const auditSummary = summarizeAuditFindings(auditFindings);
+  const graph = buildGraphData({ plan: reviewablePlan, auditFindings });
   const severity = deriveSeverity({
     report,
     semanticSummary,
     lineSummary,
     review,
     support,
+    auditSummary,
   });
+
+  const fixtureScopeAnalysis = buildFixtureScopeAnalysis(plan, fixtureScope);
 
   const counts = {
     matched: countByStatus(plan, "matched"),
@@ -100,6 +128,16 @@ export function buildSummaryDashboardData({
     relationshipDiffs: review.relationshipChanges.length,
     abnormal: review.abnormal.length,
     manual: countManualMappings(plan, manualMap, semanticSummary),
+    auditActive: auditSummary.active || 0,
+    auditSuppressed: auditSummary.suppressed || 0,
+    auditCritical: auditSummary.bySeverity?.critical || 0,
+    auditWarning: auditSummary.bySeverity?.warning || 0,
+    auditManual: auditSummary.bySeverity?.["manual-review"] || 0,
+    auditUnsupported: auditSummary.bySeverity?.unsupported || 0,
+    unmatchedPartialTargetScope: fixtureScopeAnalysis.unmatchedDuePartialTargetScope,
+    unmatchedMatcherIssue: fixtureScopeAnalysis.unmatchedDueLikelyMatcherIssue,
+    unmatchedParserGap: fixtureScopeAnalysis.unmatchedDueParserGap,
+    unmatchedRealMissingTarget: fixtureScopeAnalysis.unmatchedDueRealMissingTarget,
   };
 
   const parsedObjectCount = plan.filter((item) => item.oldObject || item.newObject).length;
@@ -114,6 +152,11 @@ export function buildSummaryDashboardData({
     fieldAnalysis,
     review,
     graph,
+    audit: {
+      ...audit,
+      findings: auditFindings,
+      summary: auditSummary,
+    },
     severity,
     counts,
     topChangedTypes,
@@ -128,7 +171,79 @@ export function buildSummaryDashboardData({
       comparedAt,
       parsedObjectCount,
       coverageDiagnostics,
+      fixtureScope: fixtureScopeAnalysis,
+      analysisMode: analysisContext.analysisMode,
+      compareScope: analysisContext.compareScope,
+      modeLabelKo: analysisContext.modeLabelKo,
+      scopeLabelKo: analysisContext.scopeLabelKo,
+      standardsAuditVisible: analysisContext.standardsAuditVisible,
+      migrationReadinessVisible: analysisContext.migrationReadinessVisible,
+      debugDiagnosticsVisible: analysisContext.debugDiagnosticsVisible,
+      modeScopeLabelsKo: analysisContext.labelsKo,
     },
+  };
+}
+
+function buildFixtureScopeAnalysis(plan = [], fixtureScope = null) {
+  const oldObjects = plan.map((item) => item.oldObject).filter(Boolean);
+  const newObjects = plan.map((item) => item.newObject).filter(Boolean);
+  const newTypeCounts = countMap(newObjects, getObjectType);
+  const oldTypeCounts = countMap(oldObjects, getObjectType);
+  const partialTarget =
+    fixtureScope?.status === "partial-assembled-target" ||
+    fixtureScope?.fixtureCompleteness === "partial-assembled-target" ||
+    fixtureScope?.partialTarget === true;
+  const oldOnly = plan.filter((item) => item.status === "old-only" && !item.policySuppressed);
+  const partialTargetUnmatched = [];
+  const matcherIssueUnmatched = [];
+  const parserGapUnmatched = [];
+  const realMissingUnmatched = [];
+
+  for (const item of oldOnly) {
+    const type = item.objectType || getObjectType(item.oldObject);
+    const sourceCount = oldTypeCounts.get(type) || 0;
+    const targetCount = newTypeCounts.get(type) || 0;
+    const isParserGap = ["qos-policy", "filter", "route-policy", "prefix-list", "community"].includes(type);
+
+    if (isParserGap) {
+      parserGapUnmatched.push(item);
+    } else if (partialTarget && (!targetCount || sourceCount > targetCount)) {
+      partialTargetUnmatched.push(item);
+    } else if (targetCount && ["port", "lag", "interface", "sap", "subscriber-interface", "group-interface", "static-route"].includes(type)) {
+      matcherIssueUnmatched.push(item);
+    } else {
+      realMissingUnmatched.push(item);
+    }
+  }
+
+  const sourceObjectsInTargetScope = oldObjects.filter((object) => (newTypeCounts.get(getObjectType(object)) || 0) > 0).length;
+  const sourceObjectsOutsideTargetScope = oldObjects.length - sourceObjectsInTargetScope;
+
+  return {
+    status: partialTarget ? "partial-assembled-target" : (fixtureScope?.status || "full-or-unknown-target"),
+    labelsKo: partialTarget
+      ? [
+          "부분 Target 구성",
+          "전체 장비 설정 간 1:1 비교 아님",
+          "Target fixture 범위 밖 미매칭",
+          "Matcher 개선 필요",
+          "Parser 미지원 가능성",
+          "실제 누락 가능성",
+        ]
+      : [
+          "전체/미확인 Target 구성",
+          "Matcher 개선 필요",
+          "Parser 미지원 가능성",
+          "실제 누락 가능성",
+        ],
+    fullSourceObjectCount: oldObjects.length,
+    targetFixtureObjectCount: newObjects.length,
+    sourceObjectsInTargetScope,
+    sourceObjectsOutsideTargetScope,
+    unmatchedDuePartialTargetScope: partialTargetUnmatched.length,
+    unmatchedDueLikelyMatcherIssue: matcherIssueUnmatched.length,
+    unmatchedDueParserGap: parserGapUnmatched.length,
+    unmatchedDueRealMissingTarget: realMissingUnmatched.length,
   };
 }
 
@@ -309,7 +424,7 @@ export function buildReviewItems(plan = []) {
   return review;
 }
 
-export function buildGraphData({ plan = [] } = {}) {
+export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
   const nodes = [];
   const edges = [];
   const nodeIds = new Set();
@@ -366,6 +481,14 @@ export function buildGraphData({ plan = [] } = {}) {
     });
   });
 
+  const auditGraph = buildAuditGraphData(auditFindings.filter((finding) => !finding.suppressed).slice(0, 80));
+  for (const node of auditGraph.nodes || []) {
+    if (nodeIds.has(node.id)) continue;
+    nodeIds.add(node.id);
+    nodes.push(node);
+  }
+  edges.push(...(auditGraph.edges || []));
+
   return {
     nodes,
     edges,
@@ -380,9 +503,11 @@ export function deriveSeverity({
   lineSummary = {},
   review = {},
   support = {},
+  auditSummary = {},
 } = {}) {
   const criticalCount =
     (review.critical?.length || 0) +
+    (auditSummary.bySeverity?.critical || 0) +
     (Number(semanticSummary.coveragePercent || 0) > 0 && Number(semanticSummary.coveragePercent || 0) < 40 ? 1 : 0);
   if (support?.state === "planned" || support?.state === "unsupported") {
     return { level: "critical", label: "검토 우선순위 높음", reason: "선택한 벤더 지원 상태가 미완성" };
@@ -390,11 +515,11 @@ export function deriveSeverity({
   if (criticalCount || Number(report.summary?.required || 0)) {
     return { level: "critical", label: "검토 우선순위 높음", reason: "핵심 객체 누락 또는 낮은 분석 비율" };
   }
-  if ((review.unmatchedOld?.length || 0) || (review.unmatchedNew?.length || 0) || (review.ambiguous?.length || 0)) {
-    return { level: "warning", label: "확인 필요", reason: "미연결 객체 또는 매핑 후보 확인 필요" };
+  if ((auditSummary.bySeverity?.warning || 0) || (review.unmatchedOld?.length || 0) || (review.unmatchedNew?.length || 0) || (review.ambiguous?.length || 0)) {
+    return { level: "warning", label: "확인 필요", reason: "표준 점검 또는 매핑 후보 확인 필요" };
   }
-  if ((review.lowConfidence?.length || 0) || (review.relationshipChanges?.length || 0) || lineSummary.changed) {
-    return { level: "attention", label: "변경 검토", reason: "낮은 일치도 또는 참조 관계 변경 있음" };
+  if ((auditSummary.bySeverity?.["manual-review"] || 0) || (review.lowConfidence?.length || 0) || (review.relationshipChanges?.length || 0) || lineSummary.changed) {
+    return { level: "attention", label: "변경 검토", reason: "표준 점검 수동 검토 또는 참조 관계 변경 있음" };
   }
   return { level: "ok", label: "안정", reason: "주요 검토 항목 낮음" };
 }
@@ -407,13 +532,15 @@ function buildFieldOverlapPair(item = {}) {
   const fieldRows = [...fields].sort().map((field) => {
     const hasOld = Object.prototype.hasOwnProperty.call(oldFields, field);
     const hasNew = Object.prototype.hasOwnProperty.call(newFields, field);
-    const oldValue = hasOld ? normalizeFieldValue(oldFields[field]) : "";
-    const newValue = hasNew ? normalizeFieldValue(newFields[field]) : "";
+    const oldValue = hasOld ? displayFieldValue(field, oldFields[field]) : "";
+    const newValue = hasNew ? displayFieldValue(field, newFields[field]) : "";
+    const oldComparableValue = hasOld ? normalizeFieldValue(oldFields[field]) : "";
+    const newComparableValue = hasNew ? normalizeFieldValue(newFields[field]) : "";
     const aliasMatched = hasAliasSource(field, item);
     let status = "same";
     if (!hasOld) status = "missing-old";
     else if (!hasNew) status = "missing-new";
-    else if (oldValue !== newValue) status = "different";
+    else if (oldComparableValue !== newComparableValue) status = "different";
     return {
       field,
       status,
@@ -456,6 +583,7 @@ function buildReviewBase(item = {}) {
   const object = item.oldObject || item.newObject || {};
   const objectType = item.objectType || object.normalizedType || object.type || "object";
   const overlap = item.oldObject && item.newObject ? buildFieldOverlapPair(item) : null;
+  const fieldRows = buildReviewTableFieldRows(item, overlap);
   return {
     planId: item.id || "",
     objectType,
@@ -469,7 +597,90 @@ function buildReviewBase(item = {}) {
     differentFields: overlap?.differentFields || 0,
     missingOldFields: overlap?.missingOldFields || 0,
     missingNewFields: overlap?.missingNewFields || 0,
+    fieldRows,
   };
+}
+
+function buildReviewTableFieldRows(item = {}, overlap = null) {
+  const summaryRows = Object.entries(item.fieldSummary || {})
+    .filter(([, value]) => !(value?.ignored || value?.effectiveStatus === "ignored"))
+    .map(([field, value]) => ({
+      field: normalizeFieldName(field),
+      status: String(value?.effectiveStatus || value?.status || "").toLowerCase(),
+      oldValue: compactFieldValues(value?.oldValues),
+      newValue: compactFieldValues(value?.newValues),
+    }))
+    .filter((row) => row.field);
+
+  if (summaryRows.length) return ensureDescriptionReviewFieldRow(summaryRows, item);
+
+  if (overlap?.fieldRows?.length) {
+    return ensureDescriptionReviewFieldRow(overlap.fieldRows.map((row) => ({
+      field: normalizeFieldName(row.field),
+      status: row.status,
+      oldValue: row.oldValue,
+      newValue: row.newValue,
+    })), item);
+  }
+
+  const object = item.oldObject || item.newObject || {};
+  const sourceFields = normalizeFields(object.fields || object.canonicalFields || {});
+  const sourceSide = item.newObject && !item.oldObject ? "new" : "old";
+
+  return ensureDescriptionReviewFieldRow(Object.entries(sourceFields).map(([field, value]) => ({
+    field: normalizeFieldName(field),
+    status: sourceSide === "new" ? "added" : "missing",
+    oldValue: sourceSide === "old" ? displayFieldValue(field, value) : "",
+    newValue: sourceSide === "new" ? displayFieldValue(field, value) : "",
+  })), item);
+}
+
+function ensureDescriptionReviewFieldRow(rows = [], item = {}) {
+  const oldValue = getObjectDescription(item.oldObject);
+  const newValue = getObjectDescription(item.newObject);
+  const existingIndex = rows.findIndex((row) => normalizeFieldName(row.field) === "description");
+
+  if (existingIndex >= 0) {
+    return rows.map((row, index) => {
+      if (index !== existingIndex) return row;
+      const nextOldValue = oldValue || row.oldValue;
+      const nextNewValue = newValue || row.newValue;
+      return {
+        ...row,
+        oldValue: nextOldValue,
+        newValue: nextNewValue,
+        status: descriptionReviewStatus(nextOldValue, nextNewValue, row.status),
+      };
+    });
+  }
+
+  if (!oldValue && !newValue) return rows;
+
+  return [
+    ...rows,
+    {
+      field: "description",
+      status: descriptionReviewStatus(oldValue, newValue),
+      oldValue,
+      newValue,
+    },
+  ];
+}
+
+function getObjectDescription(object = {}) {
+  return displayFieldValue("description", object?.fields?.description || object?.canonicalFields?.description || object?.description || "");
+}
+
+function descriptionReviewStatus(oldValue = "", newValue = "", fallback = "same") {
+  if (!oldValue && !newValue) return fallback || "same";
+  if (!oldValue) return "missing-old";
+  if (!newValue) return "missing-new";
+  return normalizeFieldValue(oldValue) === normalizeFieldValue(newValue) ? "same" : "different";
+}
+
+function compactFieldValues(values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  return [...new Set(list.map((value) => String(value ?? "").trim()).filter(Boolean))].join(", ");
 }
 
 function graphNodeFromObject(object, item, side, index) {
@@ -508,6 +719,12 @@ function normalizeFieldValue(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function displayFieldValue(field = "", value = "") {
+  if (Array.isArray(value)) return value.map((entry) => displayFieldValue(field, entry)).join(",");
+  const text = String(value ?? "").trim().replace(/\s+/g, " ");
+  return normalizeFieldName(field) === "description" ? text : text.toLowerCase();
+}
+
 function objectIdentity(object = {}) {
   return String(
     object.normalizedIdentity ||
@@ -530,6 +747,18 @@ function toScore(score) {
 
 function countByStatus(plan = [], status) {
   return plan.filter((item) => !item.policySuppressed && item.status === status).length;
+}
+
+function countMap(items = [], keyFn) {
+  return (items || []).reduce((result, item) => {
+    const key = keyFn(item);
+    result.set(key, (result.get(key) || 0) + 1);
+    return result;
+  }, new Map());
+}
+
+function getObjectType(object = {}) {
+  return object.normalizedType || object.type || object.sourceType || "object";
 }
 
 function countManualMappings(plan = [], manualMap = {}, semanticSummary = {}) {

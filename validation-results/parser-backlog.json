@@ -1,0 +1,695 @@
+{
+  "generatedAt": "2026-05-16T17:03:55.410Z",
+  "caseId": "nokia-classic15-to-nokia-mdcli-22",
+  "summary": {
+    "groupCount": 7,
+    "unsupportedLineCount": 736,
+    "activeFindingCount": 623,
+    "autoGenerationBlockingGroups": 2,
+    "topPriorityGroup": "qos-policy-body",
+    "primaryConclusion": "QoS/filter/route-policy body coverage and subscriber/service policy details are the highest-value parser backlog before automatic generation."
+  },
+  "groups": [
+    {
+      "id": "qos-policy-body",
+      "titleKo": "QoS policy body parsing",
+      "priority": 134,
+      "unsupportedLineCount": 7,
+      "activeFindingCount": 250,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 524,
+          "text": "cpm-queue"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 525,
+          "text": "queue 100 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 527,
+          "text": "queue 101 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 529,
+          "text": "queue 102 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 531,
+          "text": "queue 120 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 534,
+          "text": "queue 500 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 537,
+          "text": "queue 1000 create"
+        }
+      ],
+      "objectType": "qos-policy",
+      "expectedNormalizedFields": [
+        "policy-id/name",
+        "queue",
+        "scheduler",
+        "policer",
+        "shaper",
+        "cir",
+        "pir",
+        "mbs",
+        "cbs",
+        "remarking"
+      ],
+      "migrationImpact": "target-default-risk",
+      "auditRulesAffected": [
+        {
+          "key": "qos.sap-ingress-required",
+          "count": 149
+        },
+        {
+          "key": "qos.referenced-policy-undefined",
+          "count": 66
+        },
+        {
+          "key": "qos.sap-egress-required",
+          "count": 20
+        },
+        {
+          "key": "qos.defined-policy-unused",
+          "count": 11
+        },
+        {
+          "key": "qos.sap-ingress-egress-asymmetry",
+          "count": 4
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 66,
+      "impactOnConversionPolicyRequired": 4,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 250,
+      "easeOfImplementation": "medium",
+      "implementationRisk": "medium",
+      "recommendedNextAction": "First add policy definition/reference extraction; defer queue/scheduler body semantics.",
+      "neededForAutoGeneration": true,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "subscriber-service-policy",
+      "titleKo": "Subscriber/service policy parsing",
+      "priority": 129,
+      "unsupportedLineCount": 7,
+      "activeFindingCount": 399,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 543,
+          "text": "description \"DHCP Rate Limit\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 548,
+          "text": "description \"DHCP_PIM_Limit_400\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 814,
+          "text": "event-control \"dhcp\" 2010 suppress"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 815,
+          "text": "event-control \"dhcp\" 2027 suppress"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 1293,
+          "text": "description \"KT_DHCP+CVNET\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 1357,
+          "text": "port-list \"DHCP\" create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 1358,
+          "text": "description \"DHCP_Server_67_Client_68\""
+        }
+      ],
+      "objectType": "subscriber-service,sap,subscriber-interface,group-interface,dhcp",
+      "expectedNormalizedFields": [
+        "service-id",
+        "sap",
+        "subscriber-interface",
+        "group-interface",
+        "dhcp",
+        "static-host",
+        "default-host",
+        "sub-sla-mgmt",
+        "cpu-protection"
+      ],
+      "migrationImpact": "target-default-risk",
+      "auditRulesAffected": [
+        {
+          "key": "qos.sap-ingress-required",
+          "count": 149
+        },
+        {
+          "key": "service.sap-relationship-incomplete",
+          "count": 107
+        },
+        {
+          "key": "qos.referenced-policy-undefined",
+          "count": 66
+        },
+        {
+          "key": "subscriber.dhcp-group-missing",
+          "count": 27
+        },
+        {
+          "key": "service.group-subscriber-missing",
+          "count": 25
+        },
+        {
+          "key": "qos.sap-egress-required",
+          "count": 20
+        },
+        {
+          "key": "qos.sap-ingress-egress-asymmetry",
+          "count": 4
+        },
+        {
+          "key": "subscriber.static-host-abnormal",
+          "count": 1
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 66,
+      "impactOnConversionPolicyRequired": 163,
+      "impactOnActualMissingPossibility": 27,
+      "impactOnAuditAccuracy": 399,
+      "easeOfImplementation": "medium",
+      "implementationRisk": "medium",
+      "recommendedNextAction": "Backlog only until narrower fixtures and expected normalized fields are available.",
+      "neededForAutoGeneration": true,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "filter-acl-body",
+      "titleKo": "Filter/ACL body parsing",
+      "priority": 111,
+      "unsupportedLineCount": 479,
+      "activeFindingCount": 45,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 127,
+          "text": "script-policy \"mda1_1_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 132,
+          "text": "script-policy \"mda1_2_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 137,
+          "text": "script-policy \"mda2_1_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 142,
+          "text": "script-policy \"mda2_2_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 147,
+          "text": "script-policy \"mda3_1_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 152,
+          "text": "script-policy \"mda3_2_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 157,
+          "text": "script-policy \"mda4_1_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 162,
+          "text": "script-policy \"mda4_2_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 167,
+          "text": "script-policy \"mda5_1_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 172,
+          "text": "script-policy \"mda5_2_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 177,
+          "text": "script-policy \"mda6_1_action\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 182,
+          "text": "script-policy \"mda6_2_action\""
+        }
+      ],
+      "objectType": "filter",
+      "expectedNormalizedFields": [
+        "filter-id/name",
+        "entry-id",
+        "match source/destination",
+        "protocol/port",
+        "action",
+        "log",
+        "default-action"
+      ],
+      "migrationImpact": "conversion-policy-required",
+      "auditRulesAffected": [
+        {
+          "key": "filter.default-action-missing",
+          "count": 45
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 0,
+      "impactOnConversionPolicyRequired": 0,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 45,
+      "easeOfImplementation": "low",
+      "implementationRisk": "high",
+      "recommendedNextAction": "Extract filter definitions and default-action first; defer full entry shadow analysis.",
+      "neededForAutoGeneration": false,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "bgp-import-export-policy",
+      "titleKo": "BGP import/export policy references",
+      "priority": 90,
+      "unsupportedLineCount": 11,
+      "activeFindingCount": 174,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 280,
+          "text": "description \"## MNT BGP peer permit ##\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 285,
+          "text": "description \"## PE BGP peer permit ##\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 290,
+          "text": "description \"## SER-PEER BGP Peer permit ##\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 295,
+          "text": "description \"## Ntopia BGP Peer permit ##\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 421,
+          "text": "match \"configure router bgp shutdown\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 542,
+          "text": "policy 100 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 547,
+          "text": "policy 200 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 552,
+          "text": "policy 254 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 555,
+          "text": "policy 255 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 559,
+          "text": "policy \"_default-access-policy\" create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 561,
+          "text": "policy \"_default-network-policy\" create"
+        }
+      ],
+      "objectType": "bgp,route-policy",
+      "expectedNormalizedFields": [
+        "neighbor",
+        "group",
+        "import.policy",
+        "export.policy",
+        "max-prefix",
+        "auth",
+        "description"
+      ],
+      "migrationImpact": "target-default-risk",
+      "auditRulesAffected": [
+        {
+          "key": "bgp.max-prefix-required",
+          "count": 57
+        },
+        {
+          "key": "bgp.export-policy-required",
+          "count": 53
+        },
+        {
+          "key": "bgp.import-policy-required",
+          "count": 53
+        },
+        {
+          "key": "filter.default-action-missing",
+          "count": 8
+        },
+        {
+          "key": "bgp.group-inheritance-unresolved",
+          "count": 2
+        },
+        {
+          "key": "static-route.default-review",
+          "count": 1
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 0,
+      "impactOnConversionPolicyRequired": 0,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 174,
+      "easeOfImplementation": "high",
+      "implementationRisk": "low",
+      "recommendedNextAction": "Keep reference extraction tests; add max-prefix only if syntax sample is stable.",
+      "neededForAutoGeneration": false,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "route-policy-body",
+      "titleKo": "Route-policy body parsing",
+      "priority": 88,
+      "unsupportedLineCount": 6,
+      "activeFindingCount": 8,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 542,
+          "text": "policy 100 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 547,
+          "text": "policy 200 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 552,
+          "text": "policy 254 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 555,
+          "text": "policy 255 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 559,
+          "text": "policy \"_default-access-policy\" create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 561,
+          "text": "policy \"_default-network-policy\" create"
+        }
+      ],
+      "objectType": "route-policy",
+      "expectedNormalizedFields": [
+        "policy-name",
+        "entry/order",
+        "from prefix/community/as-path",
+        "action",
+        "next-policy",
+        "default-action"
+      ],
+      "migrationImpact": "target-default-risk",
+      "auditRulesAffected": [
+        {
+          "key": "filter.default-action-missing",
+          "count": 8
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 0,
+      "impactOnConversionPolicyRequired": 0,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 8,
+      "easeOfImplementation": "low",
+      "implementationRisk": "high",
+      "recommendedNextAction": "Backlog only until narrower fixtures and expected normalized fields are available.",
+      "neededForAutoGeneration": false,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "management-security",
+      "titleKo": "Management/security baseline parsing",
+      "priority": 84,
+      "unsupportedLineCount": 210,
+      "activeFindingCount": 2,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 15,
+          "text": "name \"Gangbuk-SEA028\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 16,
+          "text": "load-balancing"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 17,
+          "text": "l4-load-balancing"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 18,
+          "text": "mc-enh-load-balancing"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 20,
+          "text": "management cli"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 21,
+          "text": "configuration"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 22,
+          "text": "no immediate"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 25,
+          "text": "netconf"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 28,
+          "text": "rollback"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 29,
+          "text": "rollback-location \"cf3:/rollback/rollback\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 30,
+          "text": "local-max-checkpoints 50"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 36,
+          "text": "sntp"
+        }
+      ],
+      "objectType": "management-security",
+      "expectedNormalizedFields": [
+        "aaa",
+        "ssh",
+        "snmp",
+        "ntp",
+        "syslog",
+        "management ACL",
+        "cpu-protection",
+        "netconf"
+      ],
+      "migrationImpact": "target-default-risk",
+      "auditRulesAffected": [
+        {
+          "key": "security.cpu-protection-coverage",
+          "count": 1
+        },
+        {
+          "key": "security.management-acl-review",
+          "count": 1
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 0,
+      "impactOnConversionPolicyRequired": 0,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 2,
+      "easeOfImplementation": "low",
+      "implementationRisk": "high",
+      "recommendedNextAction": "Backlog only until narrower fixtures and expected normalized fields are available.",
+      "neededForAutoGeneration": false,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "prefix-community-aspath-policy",
+      "titleKo": "Prefix/community/as-path policy parsing",
+      "priority": 84,
+      "unsupportedLineCount": 6,
+      "activeFindingCount": 8,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 542,
+          "text": "policy 100 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 547,
+          "text": "policy 200 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 552,
+          "text": "policy 254 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 555,
+          "text": "policy 255 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 559,
+          "text": "policy \"_default-access-policy\" create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 561,
+          "text": "policy \"_default-network-policy\" create"
+        }
+      ],
+      "objectType": "prefix-list,community,route-policy",
+      "expectedNormalizedFields": [
+        "prefix-list entries",
+        "community members",
+        "as-path regex",
+        "policy reference graph"
+      ],
+      "migrationImpact": "target-default-risk",
+      "auditRulesAffected": [
+        {
+          "key": "filter.default-action-missing",
+          "count": 8
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 0,
+      "impactOnConversionPolicyRequired": 0,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 8,
+      "easeOfImplementation": "low",
+      "implementationRisk": "high",
+      "recommendedNextAction": "Backlog only until narrower fixtures and expected normalized fields are available.",
+      "neededForAutoGeneration": false,
+      "parserGapStatus": "parser-gap"
+    }
+  ]
+}

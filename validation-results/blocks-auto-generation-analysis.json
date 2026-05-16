@@ -1,0 +1,2953 @@
+{
+  "generatedAt": "2026-05-16T17:03:55.397Z",
+  "caseId": "nokia-classic15-to-nokia-mdcli-22",
+  "summary": {
+    "baselineTotal": 71,
+    "total": 66,
+    "resolvedFromBaseline": 5,
+    "parserExtension": 0,
+    "matcherImprovement": 0,
+    "conversionPolicy": 66,
+    "manualMapping": 0,
+    "targetFixtureCompletion": 66,
+    "actualConfigCorrection": 0,
+    "resolvedFromBaselineDetails": [
+      {
+        "ruleId": "static-route.next-hop-invalid",
+        "count": 5,
+        "resolution": "Classic indirect/tunnel-next-hop static routes now preserve next-hop for audit/migration review."
+      }
+    ],
+    "primaryConclusion": "Remaining blocks are undefined target policy references. Classic indirect static-route next-hop parser gaps are resolved in this pass."
+  },
+  "groups": {
+    "byRuleId": [
+      {
+        "key": "qos.referenced-policy-undefined",
+        "count": 66
+      }
+    ],
+    "byCategory": [
+      {
+        "key": "qos",
+        "count": 66
+      }
+    ],
+    "byObjectType": [
+      {
+        "key": "sap",
+        "count": 66
+      }
+    ],
+    "bySide": [
+      {
+        "key": "new",
+        "count": 66
+      }
+    ],
+    "byFieldPath": [
+      {
+        "key": "egress.qos.sap-egress.policy-name",
+        "count": 58
+      },
+      {
+        "key": "ingress.qos.sap-ingress.policy-name",
+        "count": 8
+      }
+    ],
+    "byParserVsActual": [
+      {
+        "key": "target-fixture-gap",
+        "count": 66
+      }
+    ],
+    "byPolicyVsUnsupported": [
+      {
+        "key": "policy-missing",
+        "count": 66
+      }
+    ],
+    "byResolutionPath": [
+      {
+        "key": "conversion policy",
+        "count": 66
+      },
+      {
+        "key": "target fixture completion",
+        "count": 66
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "new:qos.referenced-policy-undefined:62:sap:100/to-mnc#1-1/2/1/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#1-1/2/1/c17/1",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:63:sap:100/to-mnc#1-1/2/1/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#1-1/2/1/c17/1",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:64:sap:100/to-mnc#1-2/4/1/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#1-2/4/1/c17/1",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:65:sap:100/to-mnc#1-2/4/1/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#1-2/4/1/c17/1",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:66:sap:100/to-mnc#2-1/2/2/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#2-1/2/2/c17/1",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:67:sap:100/to-mnc#2-1/2/2/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#2-1/2/2/c17/1",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:68:sap:100/to-mnc#2-2/4/2/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#2-2/4/2/c17/1",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:69:sap:100/to-mnc#2-2/4/2/c17/1",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-mnc#2-2/4/2/c17/1",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        },
+        {
+          "line": 2,
+          "text": "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 egress filter ip \"TERMINAL_DETECT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:70:sap:100/to-pe#1-1/lag-p-2113",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-pe#1-1/lag-p-2113",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#1-1\" sap lag-P-2113 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#1-1\" sap lag-P-2113 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:71:sap:100/to-pe#1-2/lag-p-2115",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-pe#1-2/lag-p-2115",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#1-2\" sap lag-P-2115 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#1-2\" sap lag-P-2115 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:72:sap:100/to-pe#2-1/lag-p-2213",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-pe#2-1/lag-p-2213",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#2-1\" sap lag-P-2213 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#2-1\" sap lag-P-2213 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:73:sap:100/to-pe#2-2/lag-p-2215",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-pe#2-2/lag-p-2215",
+      "side": "new",
+      "fieldPath": "ingress.qos.sap-ingress.policy-name",
+      "actualValue": "SEA_IN",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#2-2\" sap lag-P-2215 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-PE#2-2\" sap lag-P-2215 ingress qos sap-ingress policy-name \"SEA_IN\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:74:sap:100/to-icod#1-1/lag-i-2114",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-icod#1-1/lag-i-2114",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-1\" sap lag-I-2114 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-1\" sap lag-I-2114 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-1\" sap lag-I-2114 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-1\" sap lag-I-2114 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:75:sap:100/to-icod#1-2/lag-i-2116",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-icod#1-2/lag-i-2116",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-2\" sap lag-I-2116 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-2\" sap lag-I-2116 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-2\" sap lag-I-2116 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#1-2\" sap lag-I-2116 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:76:sap:100/to-icod#2-1/lag-i-2214",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-icod#2-1/lag-i-2214",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-1\" sap lag-I-2214 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-1\" sap lag-I-2214 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-1\" sap lag-I-2214 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-1\" sap lag-I-2214 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:77:sap:100/to-icod#2-2/lag-i-2216",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-icod#2-2/lag-i-2216",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_CORE_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-2\" sap lag-I-2216 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-2\" sap lag-I-2216 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-2\" sap lag-I-2216 ingress filter ip \"iCOD_IN\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"To-iCOD#2-2\" sap lag-I-2216 egress qos sap-egress policy-name \"SEA_CORE_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:78:sap:100/to-gongneug-tou-fg19/lag-b-6205",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gongneug-tou-fg19/lag-b-6205",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG19\" sap lag-B-6205 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG19\" sap lag-B-6205 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG19\" sap lag-B-6205 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG19\" sap lag-B-6205 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:79:sap:100/to-dobong-tou-fd09/lag-b-6211",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd09/lag-b-6211",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD09\" sap lag-B-6211 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD09\" sap lag-B-6211 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD09\" sap lag-B-6211 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD09\" sap lag-B-6211 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:80:sap:100/to-dobong-tou-fb06/lag-b-6208",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb06/lag-b-6208",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB06\" sap lag-B-6208 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB06\" sap lag-B-6208 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB06\" sap lag-B-6208 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB06\" sap lag-B-6208 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:81:sap:100/to-dobong-tou-fb07/lag-b-6209",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb07/lag-b-6209",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB07\" sap lag-B-6209 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB07\" sap lag-B-6209 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB07\" sap lag-B-6209 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB07\" sap lag-B-6209 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:82:sap:100/to-dobong-tou-fb08/lag-b-6210",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb08/lag-b-6210",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB08\" sap lag-B-6210 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB08\" sap lag-B-6210 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB08\" sap lag-B-6210 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB08\" sap lag-B-6210 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:83:sap:100/to-dobong-tou-fb02/lag-b-4202",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb02/lag-b-4202",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB02\" sap lag-B-4202 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB02\" sap lag-B-4202 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB02\" sap lag-B-4202 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB02\" sap lag-B-4202 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:84:sap:100/to-dobong-tou-fd08/lag-b-6203",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd08/lag-b-6203",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD08\" sap lag-B-6203 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD08\" sap lag-B-6203 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD08\" sap lag-B-6203 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD08\" sap lag-B-6203 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:85:sap:100/to-dobong-tou-fd13/lag-b-6204",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd13/lag-b-6204",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD13\" sap lag-B-6204 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD13\" sap lag-B-6204 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD13\" sap lag-B-6204 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD13\" sap lag-B-6204 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:86:sap:100/to-dobong-tou-fd22/lag-b-6201",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd22/lag-b-6201",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD22\" sap lag-B-6201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD22\" sap lag-B-6201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD22\" sap lag-B-6201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD22\" sap lag-B-6201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:87:sap:100/to-gangbuk-tou-fk56/lag-b-6212",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gangbuk-tou-fk56/lag-b-6212",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK56\" sap lag-B-6212 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK56\" sap lag-B-6212 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK56\" sap lag-B-6212 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK56\" sap lag-B-6212 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:88:sap:100/to-gongneug-tou-fg11/lag-b-6206",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gongneug-tou-fg11/lag-b-6206",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG11\" sap lag-B-6206 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG11\" sap lag-B-6206 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG11\" sap lag-B-6206 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG11\" sap lag-B-6206 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:89:sap:100/to-gongneug-tou-fg12/lag-b-8201",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gongneug-tou-fg12/lag-b-8201",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG12\" sap lag-B-8201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG12\" sap lag-B-8201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG12\" sap lag-B-8201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG12\" sap lag-B-8201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:90:sap:100/to-dobong-tou-fb01/lag-b-2206",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb01/lag-b-2206",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB01\" sap lag-B-2206 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB01\" sap lag-B-2206 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB01\" sap lag-B-2206 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FB01\" sap lag-B-2206 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:91:sap:100/to-dobong-tou-fd04/lag-b-2204",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd04/lag-b-2204",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD04\" sap lag-B-2204 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD04\" sap lag-B-2204 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD04\" sap lag-B-2204 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD04\" sap lag-B-2204 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:92:sap:100/to-dobong-tou-fd05/lag-b-2205",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd05/lag-b-2205",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD05\" sap lag-B-2205 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD05\" sap lag-B-2205 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD05\" sap lag-B-2205 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD05\" sap lag-B-2205 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:93:sap:100/to-gangbuk-tou-fk52/lag-b-4201",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gangbuk-tou-fk52/lag-b-4201",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK52\" sap lag-B-4201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK52\" sap lag-B-4201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK52\" sap lag-B-4201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gangbuk-TOU-FK52\" sap lag-B-4201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:94:sap:100/to-dobong-tou-fd06/lag-b-2203",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd06/lag-b-2203",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD06\" sap lag-B-2203 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD06\" sap lag-B-2203 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD06\" sap lag-B-2203 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD06\" sap lag-B-2203 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:95:sap:100/to-dobong-tou-fd07/lag-b-6202",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd07/lag-b-6202",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD07\" sap lag-B-6202 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD07\" sap lag-B-6202 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD07\" sap lag-B-6202 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD07\" sap lag-B-6202 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:96:sap:100/to-gongneug-tou-fg18/lag-b-6207",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gongneug-tou-fg18/lag-b-6207",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG18\" sap lag-B-6207 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG18\" sap lag-B-6207 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG18\" sap lag-B-6207 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Gongneug-TOU-FG18\" sap lag-B-6207 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:97:sap:100/to-dobong-tou-fd19/lag-b-4206",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd19/lag-b-4206",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD19\" sap lag-B-4206 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD19\" sap lag-B-4206 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD19\" sap lag-B-4206 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD19\" sap lag-B-4206 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:98:sap:100/to-dobong-tou-fd16/lag-b-4203",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd16/lag-b-4203",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD16\" sap lag-B-4203 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD16\" sap lag-B-4203 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD16\" sap lag-B-4203 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD16\" sap lag-B-4203 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:99:sap:100/to-dobong-tou-fd17/lag-b-4204",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd17/lag-b-4204",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD17\" sap lag-B-4204 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD17\" sap lag-B-4204 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD17\" sap lag-B-4204 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD17\" sap lag-B-4204 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:100:sap:100/to-dobong-tou-fd18/lag-b-4205",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd18/lag-b-4205",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD18\" sap lag-B-4205 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD18\" sap lag-B-4205 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD18\" sap lag-B-4205 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Dobong-TOU-FD18\" sap lag-B-4205 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:101:sap:100/to-nowon-tou-fn19/lag-b-2201",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn19/lag-b-2201",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN19\" sap lag-B-2201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN19\" sap lag-B-2201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN19\" sap lag-B-2201 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN19\" sap lag-B-2201 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:102:sap:100/to-nowon-tou-fn20/lag-b-2202",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn20/lag-b-2202",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN20\" sap lag-B-2202 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN20\" sap lag-B-2202 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN20\" sap lag-B-2202 ingress filter ip \"prtsr-backup\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" interface \"to-Nowon-TOU-FN20\" sap lag-B-2202 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:103:sap:100/to-dobong-tou-fb03/g-to-dobong-tou-fb03/lag-a-6109",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb03/g-to-dobong-tou-fb03/lag-a-6109",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 sap lag-A-6109 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 sap lag-A-6109 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 sap lag-A-6109 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB03 group-interface g-to-Dobong-TOU-FB03 sap lag-A-6109 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:104:sap:100/to-dobong-tou-fb04/g-to-dobong-tou-fb04/lag-a-6110",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb04/g-to-dobong-tou-fb04/lag-a-6110",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 sap lag-A-6110 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 sap lag-A-6110 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 sap lag-A-6110 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB04 group-interface g-to-Dobong-TOU-FB04 sap lag-A-6110 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:105:sap:100/to-dobong-tou-fb05/g-to-dobong-tou-fb05/lag-a-6111",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb05/g-to-dobong-tou-fb05/lag-a-6111",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 sap lag-A-6111 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 sap lag-A-6111 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 sap lag-A-6111 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB05 group-interface g-to-Dobong-TOU-FB05 sap lag-A-6111 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:106:sap:100/to-nowon-tou-fn09/g-to-nowon-tou-fn09/lag-a-6112",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn09/g-to-nowon-tou-fn09/lag-a-6112",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 sap lag-A-6112 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 sap lag-A-6112 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 sap lag-A-6112 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN09 group-interface g-to-Nowon-TOU-FN09 sap lag-A-6112 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:107:sap:100/to-nowon-tou-fn08/g-to-nowon-tou-fn08/lag-a-4101",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn08/g-to-nowon-tou-fn08/lag-a-4101",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 sap lag-A-4101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 sap lag-A-4101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 sap lag-A-4101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN08 group-interface g-to-Nowon-TOU-FN08 sap lag-A-4101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:108:sap:100/to-gangbuk-tou-fk55/g-to-gangbuk-tou-fk55/lag-a-8101",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gangbuk-tou-fk55/g-to-gangbuk-tou-fk55/lag-a-8101",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 sap lag-A-8101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 sap lag-A-8101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 sap lag-A-8101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK55 group-interface g-to-Gangbuk-TOU-FK55 sap lag-A-8101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:109:sap:100/to-gangbuk-tou-fk53/g-to-gangbuk-tou-fk53/lag-a-6105",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gangbuk-tou-fk53/g-to-gangbuk-tou-fk53/lag-a-6105",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 sap lag-A-6105 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 sap lag-A-6105 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 sap lag-A-6105 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK53 group-interface g-to-Gangbuk-TOU-FK53 sap lag-A-6105 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:110:sap:100/to-gangbuk-tou-fk54/g-to-gangbuk-tou-fk54/lag-a-6108",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gangbuk-tou-fk54/g-to-gangbuk-tou-fk54/lag-a-6108",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 sap lag-A-6108 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 sap lag-A-6108 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 sap lag-A-6108 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK54 group-interface g-to-Gangbuk-TOU-FK54 sap lag-A-6108 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:111:sap:100/to-nowon-tou-fn11/g-to-nowon-tou-fn11/lag-a-6106",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn11/g-to-nowon-tou-fn11/lag-a-6106",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 sap lag-A-6106 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 sap lag-A-6106 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 sap lag-A-6106 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN11 group-interface g-to-Nowon-TOU-FN11 sap lag-A-6106 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:112:sap:100/to-nowon-tou-fn14/g-to-nowon-tou-fn14/lag-a-4102",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn14/g-to-nowon-tou-fn14/lag-a-4102",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 sap lag-A-4102 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 sap lag-A-4102 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 sap lag-A-4102 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN14 group-interface g-to-Nowon-TOU-FN14 sap lag-A-4102 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:113:sap:100/to-gangbuk-tou-fk51/g-to-gangbuk-tou-fk51/lag-a-4103",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gangbuk-tou-fk51/g-to-gangbuk-tou-fk51/lag-a-4103",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 sap lag-A-4103 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 sap lag-A-4103 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 sap lag-A-4103 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK51 group-interface g-to-Gangbuk-TOU-FK51 sap lag-A-4103 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:114:sap:100/to-nowon-tou-fn05/g-to-nowon-tou-fn05/lag-a-2105",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn05/g-to-nowon-tou-fn05/lag-a-2105",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 sap lag-A-2105 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 sap lag-A-2105 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 sap lag-A-2105 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN05 group-interface g-to-Nowon-TOU-FN05 sap lag-A-2105 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:115:sap:100/to-nowon-tou-fn06/g-to-nowon-tou-fn06/lag-a-2106",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn06/g-to-nowon-tou-fn06/lag-a-2106",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 sap lag-A-2106 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 sap lag-A-2106 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 sap lag-A-2106 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN06 group-interface g-to-Nowon-TOU-FN06 sap lag-A-2106 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:116:sap:100/to-nowon-tou-fn07/g-to-nowon-tou-fn07/lag-a-4104",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn07/g-to-nowon-tou-fn07/lag-a-4104",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 sap lag-A-4104 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 sap lag-A-4104 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 sap lag-A-4104 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN07 group-interface g-to-Nowon-TOU-FN07 sap lag-A-4104 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:117:sap:100/to-dobong-tou-fd14/g-to-dobong-tou-fd14/lag-a-4105",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd14/g-to-dobong-tou-fd14/lag-a-4105",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 sap lag-A-4105 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 sap lag-A-4105 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 sap lag-A-4105 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD14 group-interface g-to-Dobong-TOU-FD14 sap lag-A-4105 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:118:sap:100/to-dobong-tou-fd15/g-to-dobong-tou-fd15/lag-a-4106",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd15/g-to-dobong-tou-fd15/lag-a-4106",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 sap lag-A-4106 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 sap lag-A-4106 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 sap lag-A-4106 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD15 group-interface g-to-Dobong-TOU-FD15 sap lag-A-4106 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:119:sap:100/to-dobong-tou-fb09/g-to-dobong-tou-fb09/lag-a-6101",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fb09/g-to-dobong-tou-fb09/lag-a-6101",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 sap lag-A-6101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 sap lag-A-6101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 sap lag-A-6101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FB09 group-interface g-to-Dobong-TOU-FB09 sap lag-A-6101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:120:sap:100/to-dobong-tou-fd20/g-to-dobong-tou-fd20/lag-a-6102",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd20/g-to-dobong-tou-fd20/lag-a-6102",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 sap lag-A-6102 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 sap lag-A-6102 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 sap lag-A-6102 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD20 group-interface g-to-Dobong-TOU-FD20 sap lag-A-6102 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:121:sap:100/to-dobong-tou-fd21/g-to-dobong-tou-fd21/lag-a-6103",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fd21/g-to-dobong-tou-fd21/lag-a-6103",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 sap lag-A-6103 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 sap lag-A-6103 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 sap lag-A-6103 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FD21 group-interface g-to-Dobong-TOU-FD21 sap lag-A-6103 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:122:sap:100/to-gangbuk-tou-fk57/g-to-gangbuk-tou-fk57/lag-a-6107",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-gangbuk-tou-fk57/g-to-gangbuk-tou-fk57/lag-a-6107",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 sap lag-A-6107 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 sap lag-A-6107 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 sap lag-A-6107 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Gangbuk-TOU-FK57 group-interface g-to-Gangbuk-TOU-FK57 sap lag-A-6107 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:123:sap:100/to-dobong-tou-fk66/g-to-dobong-tou-fk66/lag-a-6104",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-dobong-tou-fk66/g-to-dobong-tou-fk66/lag-a-6104",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 sap lag-A-6104 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 sap lag-A-6104 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 sap lag-A-6104 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Dobong-TOU-FK66 group-interface g-to-Dobong-TOU-FK66 sap lag-A-6104 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:124:sap:100/to-nowon-tou-fn16/g-to-nowon-tou-fn16/lag-a-2102",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn16/g-to-nowon-tou-fn16/lag-a-2102",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 sap lag-A-2102 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 sap lag-A-2102 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 sap lag-A-2102 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN16 group-interface g-to-Nowon-TOU-FN16 sap lag-A-2102 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:125:sap:100/to-nowon-tou-fn15/g-to-nowon-tou-fn15/lag-a-2101",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn15/g-to-nowon-tou-fn15/lag-a-2101",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 sap lag-A-2101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 sap lag-A-2101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 sap lag-A-2101 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN15 group-interface g-to-Nowon-TOU-FN15 sap lag-A-2101 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:126:sap:100/to-nowon-tou-fn17/g-to-nowon-tou-fn17/lag-a-2103",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn17/g-to-nowon-tou-fn17/lag-a-2103",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    },
+    {
+      "id": "new:qos.referenced-policy-undefined:127:sap:100/to-nowon-tou-fn18/g-to-nowon-tou-fn18/lag-a-2104",
+      "ruleId": "qos.referenced-policy-undefined",
+      "category": "qos",
+      "severity": "critical",
+      "titleKo": "정의되지 않은 QoS 정책 참조",
+      "objectType": "sap",
+      "objectKey": "100/to-nowon-tou-fn18/g-to-nowon-tou-fn18/lag-a-2104",
+      "side": "new",
+      "fieldPath": "egress.qos.sap-egress.policy-name",
+      "actualValue": "SEA_ACCESS_OUT",
+      "expectedValue": "정의된 QoS policy",
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 sap lag-A-2104 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 sap lag-A-2104 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ],
+      "migrationImpact": "blocks-auto-generation",
+      "policyProfile": "classic-to-mdcli-migration-standard",
+      "suppressed": false,
+      "parserGapVsActualConfigIssue": "target-fixture-gap",
+      "policyMissingVsUnsupportedTargetSyntax": "policy-missing",
+      "resolutionPath": [
+        "target fixture completion",
+        "conversion policy"
+      ],
+      "recommendedAction": "Add referenced policy definitions or provide explicit QoS/filter policy mapping before generation.",
+      "sourceExcerpt": [
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 sap lag-A-2104 ingress filter ip \"prtsr-active\" }"
+        },
+        {
+          "line": 1,
+          "text": "/configure { service ies \"100\" subscriber-interface to-Nowon-TOU-FN18 group-interface g-to-Nowon-TOU-FN18 sap lag-A-2104 egress qos sap-egress policy-name \"SEA_ACCESS_OUT\" }"
+        }
+      ]
+    }
+  ]
+}

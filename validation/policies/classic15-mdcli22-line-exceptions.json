@@ -1,0 +1,20 @@
+{
+  "name": "classic15-mdcli22-line-exceptions",
+  "kind": "line-exception-policy",
+  "rules": {
+    "ignore": [
+      {
+        "source": "new",
+        "pattern": "metric 100",
+        "matchMode": "contains",
+        "reason": "Known MD-CLI fixture default metric."
+      },
+      {
+        "source": "new",
+        "pattern": "authentication-key",
+        "matchMode": "contains",
+        "reason": "Secret/hash rendering is intentionally ignored in validation."
+      }
+    ]
+  }
+}

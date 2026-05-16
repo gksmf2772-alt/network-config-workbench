@@ -541,6 +541,29 @@ function applyFieldLine(current, text) {
     return;
   }
 
+  match = text.match(/^indirect\s+"?([^"\s]+)"?/i);
+  if (match && current.type === "static-route") {
+    current.fields["next-hop"] = stripQuotes(match[1]);
+    current.fields["next-hop-type"] = "indirect";
+    return;
+  }
+
+  if (/^tunnel-next-hop$/i.test(text) && current.type === "static-route") {
+    current.fields["tunnel-next-hop"] = "true";
+    return;
+  }
+
+  match = text.match(/^port\s+"?([^"\s]+)"?/i);
+  if (match && current.type === "lag") {
+    const member = stripQuotes(match[1]);
+    current.fields["member-port"] = member;
+    current.fields.members = [
+      ...(Array.isArray(current.fields.members) ? current.fields.members : []),
+      member,
+    ];
+    return;
+  }
+
   match = text.match(/^tag\s+(\S+)/i);
   if (match) {
     current.fields.tag = stripQuotes(match[1]);
@@ -564,6 +587,18 @@ function applyFieldLine(current, text) {
   match = text.match(/^authentication-key\s+(.+)$/i);
   if (match) {
     current.fields["authentication-key"] = stripQuotes(match[1]);
+    return;
+  }
+
+  match = text.match(/^import\s+(.+)$/i);
+  if (match && current.type === "bgp") {
+    current.fields["import.policy"] = stripQuotes(match[1]);
+    return;
+  }
+
+  match = text.match(/^export\s+(.+)$/i);
+  if (match && current.type === "bgp") {
+    current.fields["export.policy"] = stripQuotes(match[1]);
     return;
   }
 
@@ -596,6 +631,11 @@ export function parseNokiaClassicConfig(configText = "", { side = "old" } = {}) 
       if (appendLineToCurrentObject(current, line)) {
         current = flushCurrent(current, objects);
       }
+      continue;
+    }
+
+    if (current?.type === "lag" && /^port\s+\S+/i.test(text)) {
+      appendLineToCurrentObject(current, line);
       continue;
     }
 

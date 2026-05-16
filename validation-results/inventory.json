@@ -1,0 +1,1181 @@
+{
+  "generatedAt": "2026-05-16T17:03:01.876Z",
+  "searchedPaths": [
+    "examples",
+    "example",
+    "samples",
+    "sample",
+    "fixtures",
+    "fixture",
+    "tests",
+    "test",
+    "validation",
+    "configs",
+    "config",
+    "profiles",
+    "presets",
+    "sessions",
+    "data",
+    "public",
+    "src",
+    "scripts",
+    "예제 및 테스트 설정",
+    "."
+  ],
+  "foundConfigFiles": [
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbu-SEA027H_config.txt",
+      "size": 439644,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbu-SEA029H_config.txt",
+      "size": 416858,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "size": 436087,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbuk-SEA030_config.txt",
+      "size": 419521,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_1.txt",
+      "size": 21986,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_2.txt",
+      "size": 21985,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_3.txt",
+      "size": 17322,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_4.txt",
+      "size": 17322,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_1.txt",
+      "size": 153044,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_2.txt",
+      "size": 153654,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_3.txt",
+      "size": 123575,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_4.txt",
+      "size": 130590,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_1.txt",
+      "size": 29590,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_2.txt",
+      "size": 29623,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_3.txt",
+      "size": 23018,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_4.txt",
+      "size": 22679,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_1.txt",
+      "size": 3300,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_2.txt",
+      "size": 3299,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_3.txt",
+      "size": 2928,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_4.txt",
+      "size": 2932,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_1.txt",
+      "size": 35837,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_2.txt",
+      "size": 35912,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_3.txt",
+      "size": 26466,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_4.txt",
+      "size": 26127,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_1.txt",
+      "size": 25557,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_2.txt",
+      "size": 25957,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_3.txt",
+      "size": 23848,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_4.txt",
+      "size": 23857,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/test 기존 static.txt",
+      "size": 1051,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "unknown",
+      "routerLog": false,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "config"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "validation/fixtures/synthetic/juniper-set-smoke.conf",
+      "size": 318,
+      "vendor": "juniper-set",
+      "syntax": "set",
+      "synthetic": true,
+      "confidence": "high",
+      "signals": [
+        "juniper"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "validation/fixtures/synthetic/nokia-mdcli22-smoke.conf",
+      "size": 441,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "22",
+      "synthetic": true,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    }
+  ],
+  "foundSourceFiles": [
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbu-SEA027H_config.txt",
+      "size": 439644,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbu-SEA029H_config.txt",
+      "size": 416858,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "size": 436087,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/Gangbuk-SEA030_config.txt",
+      "size": 419521,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "15",
+      "routerLog": true,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "router-log"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "예제 및 테스트 설정/test 기존 static.txt",
+      "size": 1051,
+      "vendor": "nokia-classic",
+      "syntax": "classic-cli",
+      "version": "unknown",
+      "routerLog": false,
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-classic",
+        "config"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "source",
+      "path": "validation/fixtures/synthetic/juniper-set-smoke.conf",
+      "size": 318,
+      "vendor": "juniper-set",
+      "syntax": "set",
+      "synthetic": true,
+      "confidence": "high",
+      "signals": [
+        "juniper"
+      ]
+    }
+  ],
+  "foundTargetFiles": [
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_1.txt",
+      "size": 21986,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_2.txt",
+      "size": 21985,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_3.txt",
+      "size": 17322,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_bgp_4.txt",
+      "size": 17322,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_1.txt",
+      "size": 153044,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_2.txt",
+      "size": 153654,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_3.txt",
+      "size": 123575,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_interface_4.txt",
+      "size": 130590,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_1.txt",
+      "size": 29590,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_2.txt",
+      "size": 29623,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_3.txt",
+      "size": 23018,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_lag_4.txt",
+      "size": 22679,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_1.txt",
+      "size": 3300,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_2.txt",
+      "size": 3299,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_3.txt",
+      "size": 2928,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_PIM_4.txt",
+      "size": 2932,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_1.txt",
+      "size": 35837,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_2.txt",
+      "size": 35912,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_3.txt",
+      "size": 26466,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_port_4.txt",
+      "size": 26127,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_1.txt",
+      "size": 25557,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_2.txt",
+      "size": 25957,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_3.txt",
+      "size": 23848,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "예제 및 테스트 설정/New_static_4.txt",
+      "size": 23857,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "unknown",
+      "synthetic": false,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    },
+    {
+      "kind": "config",
+      "role": "target",
+      "path": "validation/fixtures/synthetic/nokia-mdcli22-smoke.conf",
+      "size": 441,
+      "vendor": "nokia-md-cli",
+      "syntax": "md-cli",
+      "version": "22",
+      "synthetic": true,
+      "confidence": "high",
+      "signals": [
+        "nokia-md-cli"
+      ]
+    }
+  ],
+  "foundProfiles": [
+    {
+      "kind": "profile",
+      "path": "validation/profiles/nokia-classic15-mdcli22-profile.json",
+      "size": 1223,
+      "signals": [
+        "profile-json"
+      ]
+    },
+    {
+      "kind": "profile",
+      "path": "validation/profiles/synthetic-juniper-smoke-profile.json",
+      "size": 433,
+      "signals": [
+        "profile-json"
+      ]
+    }
+  ],
+  "foundPresets": [
+    {
+      "kind": "preset",
+      "path": "scripts/validateCompareFixtures.js",
+      "size": 8929,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "scripts/validationWorkflow.mjs",
+      "size": 54438,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "src/adapters/legacyProfileAdapter.js",
+      "size": 668,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "src/core/legacyCore.js",
+      "size": 578685,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "src/core/profile.js",
+      "size": 575,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "src/core/vendorPresets.js",
+      "size": 7669,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "tests/policy-coverage.test.js",
+      "size": 14231,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "tests/static-route-object-key.test.js",
+      "size": 6258,
+      "signals": [
+        "vendor-preset"
+      ]
+    }
+  ],
+  "foundExceptionPolicies": [
+    {
+      "kind": "exception-policy",
+      "path": "validation/policies/classic15-mdcli22-line-exceptions.json",
+      "size": 487,
+      "signals": [
+        "exception-policy"
+      ]
+    }
+  ],
+  "foundAdvancedComparePolicies": [
+    {
+      "kind": "advanced-compare-policy",
+      "path": "validation/policies/classic15-mdcli22-advanced-policy.json",
+      "size": 2205,
+      "signals": [
+        "advanced-policy"
+      ]
+    },
+    {
+      "kind": "advanced-compare-policy",
+      "path": "validation/policies/classic15-mdcli22-field-aliases.json",
+      "size": 1113,
+      "signals": [
+        "advanced-policy"
+      ]
+    }
+  ],
+  "foundStandardsAuditProfiles": [
+    {
+      "kind": "standards-audit-profile",
+      "path": "scripts/analyze-validation-quality.mjs",
+      "size": 98180,
+      "signals": [
+        "standards-audit"
+      ]
+    },
+    {
+      "kind": "standards-audit-profile",
+      "path": "src/core/analysisModes.js",
+      "size": 11182,
+      "signals": [
+        "standards-audit"
+      ]
+    },
+    {
+      "kind": "standards-audit-profile",
+      "path": "src/core/standardsAudit.js",
+      "size": 42204,
+      "signals": [
+        "standards-audit"
+      ]
+    },
+    {
+      "kind": "standards-audit-profile",
+      "path": "src/core/summaryAnalytics.js",
+      "size": 30499,
+      "signals": [
+        "standards-audit"
+      ]
+    },
+    {
+      "kind": "standards-audit-profile",
+      "path": "tests/bgp-effective-neighbor.test.js",
+      "size": 7363,
+      "signals": [
+        "standards-audit"
+      ]
+    },
+    {
+      "kind": "standards-audit-profile",
+      "path": "tests/mode-scope-policy.test.js",
+      "size": 7209,
+      "signals": [
+        "standards-audit"
+      ]
+    },
+    {
+      "kind": "standards-audit-profile",
+      "path": "tests/standards-audit.test.js",
+      "size": 4870,
+      "signals": [
+        "standards-audit"
+      ]
+    },
+    {
+      "kind": "standards-audit-profile",
+      "path": "validation/compare-validation.manifest.json",
+      "size": 3923,
+      "signals": [
+        "standards-audit"
+      ]
+    }
+  ],
+  "foundSavedSessions": [
+    {
+      "kind": "saved-session",
+      "path": "src/core/legacyCore.backup.js",
+      "size": 311371,
+      "signals": [
+        "session"
+      ]
+    }
+  ],
+  "foundManualMappingData": [
+    {
+      "kind": "manual-mapping",
+      "path": "src/core/comparator.js",
+      "size": 1180,
+      "signals": [
+        "manual-map"
+      ]
+    },
+    {
+      "kind": "manual-mapping",
+      "path": "src/core/manualMapping.js",
+      "size": 1867,
+      "signals": [
+        "manual-map"
+      ]
+    },
+    {
+      "kind": "manual-mapping",
+      "path": "src/core/matchers/objectMatcher.js",
+      "size": 33010,
+      "signals": [
+        "manual-map"
+      ]
+    },
+    {
+      "kind": "manual-mapping",
+      "path": "validation/fixtures/juniper-to-nokia-mdcli22/README.md",
+      "size": 667,
+      "signals": [
+        "manual-map"
+      ]
+    }
+  ],
+  "unknownOrAmbiguousFiles": [
+    {
+      "kind": "unknown",
+      "path": "예제 및 테스트 설정/test 신규 static.txt",
+      "size": 1340,
+      "signals": [
+        "ambiguous-name"
+      ]
+    },
+    {
+      "kind": "unknown",
+      "path": "src/core/profileBackup.js",
+      "size": 4414,
+      "signals": [
+        "ambiguous-name"
+      ]
+    },
+    {
+      "kind": "unknown",
+      "path": "vite.config.js",
+      "size": 203,
+      "signals": [
+        "ambiguous-name"
+      ]
+    }
+  ],
+  "missingInputs": [
+    {
+      "id": "juniper-source-config",
+      "messageKo": "Juniper 원본 설정 파일이 없어 실제 비교 검증을 수행할 수 없습니다.",
+      "searchedPatterns": [
+        "Juniper",
+        "juniper",
+        "JUNOS",
+        "junos",
+        "set interfaces",
+        "set routing-options",
+        "set protocols bgp",
+        "set policy-options"
+      ]
+    }
+  ]
+}

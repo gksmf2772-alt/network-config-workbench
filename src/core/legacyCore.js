@@ -18,11 +18,24 @@ import {
   buildSummaryDashboardData,
 } from "./summaryAnalytics.js";
 import {
+  buildAnalysisContext,
+  filterAuditForModeScope,
+  filterPlanByModeScope,
+  resolveAnalysisMode,
+  resolveCompareScope,
+} from "./analysisModes.js";
+import {
   buildSemanticCoverageDiagnostics,
 } from "./coverageDiagnostics.js";
 import {
   evaluatePolicyContext,
 } from "./policyEvaluator.js";
+import {
+  AUDIT_SEVERITY_LABELS_KO,
+  MIGRATION_IMPACT_LABELS_KO,
+  attachAuditFindingsToPlan,
+  runStandardsAuditForSides,
+} from "./standardsAudit.js";
 
 import {
   normalizeConfig,
@@ -51,6 +64,12 @@ const objectTypes = [
   "icmp-options",
   "sub-sla-mgmt",
   "cpu-protection",
+  "qos-policy",
+  "filter",
+  "acl",
+  "route-policy",
+  "prefix-list",
+  "community",
 ];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
 
@@ -89,8 +108,8 @@ const selectors = {
   lastComparedAt: document.querySelector("#lastComparedAt"),
   oldMeta: document.querySelector("#oldMeta"),
   newMeta: document.querySelector("#newMeta"),
-  oldDropZone: document.querySelector("#oldDropZone"),
-  newDropZone: document.querySelector("#newDropZone"),
+  oldDropZone: document.querySelector("#oldConfigInput")?.closest(".code-frame") || document.querySelector("#oldDropZone"),
+  newDropZone: document.querySelector("#newConfigInput")?.closest(".code-frame") || document.querySelector("#newDropZone"),
   oldInput: document.querySelector("#oldConfigInput"),
   newInput: document.querySelector("#newConfigInput"),
   oldLineNumbers: document.querySelector("#oldLineNumbers"),
@@ -233,6 +252,11 @@ const state = {
   lastManualMap: {},
   lastDashboardData: null,
   lastCoverageDiagnostics: null,
+  lastStandardsAudit: null,
+  lastStandardsAuditRaw: null,
+  lastAnalysisContext: null,
+  exceptionTargets: new Map(),
+  activeIssueContext: null,
   lastSessionName: "",
   semanticPairKeyboardBound: false,
   lineRelationDelegationBound: false,
@@ -292,6 +316,7 @@ function createDefaultProfile() {
     objects: createDefaultSemanticObjects(),
     normalize: createDefaultNormalizeRules(),
     rules: { ignore: [], required: [] },
+    exceptions: [],
     examples: createDefaultExamples(),
     identityRules: createDefaultIdentityRules(),
     lineMappings: createEmptyRulesByType(),
@@ -3419,21 +3444,50 @@ function previewActionLabel(action) {
 }
 
 function bindDropZone(zone, input, meta) {
+  if (!zone || !input) return;
+  const setConfigText = (text, label = "") => {
+    input.value = text;
+    if (label && meta) meta.textContent = label;
+    captureInitialConfigSnapshot(true);
+    updateLineNumbers();
+    markCompareStale();
+    input.focus();
+  };
+
+  zone.addEventListener("click", (event) => {
+    if (event.target === input || event.target.closest?.("button")) return;
+    input.focus();
+  });
   zone.addEventListener("dragover", (event) => {
     event.preventDefault();
     zone.classList.add("drag-over");
   });
-  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+  zone.addEventListener("dragleave", (event) => {
+    if (!event.relatedTarget || !zone.contains(event.relatedTarget)) {
+      zone.classList.remove("drag-over");
+    }
+  });
   zone.addEventListener("drop", async (event) => {
     event.preventDefault();
     zone.classList.remove("drag-over");
     const [file] = event.dataTransfer.files;
-    if (!file) return;
-    input.value = await file.text();
-    meta.textContent = `${file.name} | 마지막 수정 ${formatDate(file.lastModified)}`;
-    captureInitialConfigSnapshot(true);
-    updateLineNumbers();
-    markCompareStale();
+    if (file) {
+      setConfigText(
+        await file.text(),
+        `${file.name} | 마지막 수정 ${formatDate(file.lastModified)}`
+      );
+      return;
+    }
+
+    const text = event.dataTransfer.getData("text/plain");
+    if (text) setConfigText(text);
+  });
+  zone.addEventListener("paste", (event) => {
+    if (event.target === input) return;
+    const text = event.clipboardData?.getData("text/plain") || "";
+    if (!text) return;
+    event.preventDefault();
+    setConfigText(text);
   });
 }
 
@@ -3519,6 +3573,18 @@ function setProfileStatus(message, kind = "info") {
   if (!selectors.profileStatus) return;
   selectors.profileStatus.textContent = message;
   selectors.profileStatus.dataset.kind = kind;
+}
+
+function showWorkbenchToast(message = "", kind = "info") {
+  const toast = document.createElement("div");
+  toast.className = `workbench-toast workbench-toast-${cssSafeClassName(kind)}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  window.setTimeout(() => toast.classList.add("visible"), 20);
+  window.setTimeout(() => {
+    toast.classList.remove("visible");
+    window.setTimeout(() => toast.remove(), 220);
+  }, 2600);
 }
 
 function serializeProfileDraft(profile = state.profileDraft) {
@@ -3682,6 +3748,17 @@ function clearSelectedDiffTokens() {
 }
 
 function getOptions() {
+  const selectedObjects = [...selectors.objectToggles.querySelectorAll("input:checked")].map((input) => input.dataset.objectType);
+  const analysisMode = resolveAnalysisMode({
+    profile: state.profileDraft,
+    options: { semanticDebug: Boolean(selectors.semanticDebugToggle?.checked) },
+  });
+  const compareScope = resolveCompareScope({
+    profile: state.profileDraft,
+    selectedObjects,
+    oldText: selectors.oldInput?.value || "",
+    newText: selectors.newInput?.value || "",
+  });
   return {
     vendor: state.profileDraft.vendor,
     normalizeSpacing: selectors.normalizeSpacingToggle.checked,
@@ -3691,7 +3768,9 @@ function getOptions() {
     ignoreGenerated: selectors.ignoreGeneratedToggle.checked,
     semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
     fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
-    selectedObjects: [...selectors.objectToggles.querySelectorAll("input:checked")].map((input) => input.dataset.objectType),
+    selectedObjects,
+    analysisMode,
+    compareScope,
     filter: selectors.filterInput.value.trim().toLowerCase(),
     resultFilter: selectors.resultFilterSelect.value,
     profile: state.profileDraft,
@@ -3751,6 +3830,7 @@ function runCompare() {
       : "차이 없음";
     selectors.lastComparedAt.textContent = `마지막 비교: ${formatDate(Date.now())}`;
     renderSummaryCards(report, state.lastSemanticSummary);
+    renderOverviewReport(report);
   } catch (error) {
     handleCompareError(error);
   }
@@ -3982,9 +4062,12 @@ function renderSemanticPreview() {
     options: getOptions(),
     includeManualCandidates: true,
   });
-  const { oldVendor, newVendor, oldResult, newResult, plan, manualMap } = runtime;
+  const { oldVendor, newVendor, oldResult, newResult, plan, manualMap, audit, rawAudit, analysisContext } = runtime;
   state.lastSemanticPlan = plan;
   state.lastManualMap = manualMap || {};
+  state.lastStandardsAudit = audit || null;
+  state.lastStandardsAuditRaw = rawAudit || null;
+  state.lastAnalysisContext = analysisContext || null;
   state.lastCoverageDiagnostics = buildSemanticCoverageDiagnostics({
     oldText: selectors.oldInput.value,
     newText: selectors.newInput.value,
@@ -4241,6 +4324,11 @@ function buildCurrentDashboardData(report, semantic = state.lastSemanticSummary)
     sessionName: state.lastSessionName || "현재 입력",
     comparedAt: selectors.lastComparedAt?.textContent?.replace(/^마지막 비교:\s*/, "") || "",
     coverageDiagnostics: state.lastCoverageDiagnostics,
+    audit: state.lastStandardsAudit || {},
+    fixtureScope: state.profileDraft?.fixturePolicy || null,
+    analysisMode: state.lastAnalysisContext?.analysisMode || getOptions().analysisMode,
+    compareScope: state.lastAnalysisContext?.compareScope || getOptions().compareScope,
+    selectedObjects: getOptions().selectedObjects,
   });
   state.lastDashboardData = dashboard;
   return dashboard;
@@ -4260,11 +4348,76 @@ function renderMetricCard({ label, value, detail = "", state = "", action = "", 
   `;
 }
 
+function renderStandardsAuditSummary(audit = {}) {
+  const summary = audit.summary || {};
+  const bySeverity = summary.bySeverity || {};
+  const migration = summary.byMigrationImpact || {};
+  const activeFindings = (audit.findings || []).filter((finding) => !finding.suppressed);
+  const suppressedFindings = (audit.findings || []).filter((finding) => finding.suppressed);
+
+  return `
+    <section class="summary-section audit-summary-section" data-review-panel="standards-audit">
+      <div class="summary-section-head">
+        <h3>표준 점검 요약</h3>
+        <button type="button" data-summary-action="overview">통합 리포트</button>
+      </div>
+      <div class="audit-metric-row">
+        ${renderMetricCard({ label: "위험 항목", value: bySeverity.critical || 0, detail: "즉시 조치", state: bySeverity.critical ? "removed" : "ok", action: "audit-critical" })}
+        ${renderMetricCard({ label: "경고 항목", value: bySeverity.warning || 0, detail: "표준 위반 가능", state: bySeverity.warning ? "warning" : "ok", action: "audit-warning" })}
+        ${renderMetricCard({ label: "수동 검토 항목", value: bySeverity["manual-review"] || 0, detail: "판단 필요", state: bySeverity["manual-review"] ? "warning" : "ok", action: "audit-manual" })}
+        ${renderMetricCard({ label: "미지원/부분 지원 항목", value: bySeverity.unsupported || 0, detail: "전환 주의", state: bySeverity.unsupported ? "warning" : "ok", action: "audit-unsupported" })}
+        ${renderMetricCard({ label: "전환 위험 설정", value: (migration["blocks-auto-generation"] || 0) + (migration["manual-conversion-required"] || 0) + (migration["target-default-risk"] || 0), detail: "migration impact", state: "changed", action: "audit-migration" })}
+        ${renderMetricCard({ label: "예외/숨김 처리된 항목", value: suppressedFindings.length, detail: "active risk 제외", state: "changed", action: "audit-suppressed" })}
+      </div>
+      <div class="audit-finding-list">
+        ${activeFindings.slice(0, 8).map(renderAuditFindingCompact).join("") || `<div class="small-note">활성 표준 점검 항목 없음</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderAuditFindingCompact(finding = {}) {
+  const severity = finding.suppressed ? "suppressed" : finding.severity || "info";
+  const exceptionTargetId = registerAuditExceptionTarget(finding, "summary-audit");
+  return `
+    <article class="audit-finding-item audit-severity-${escapeHtml(cssSafeClassName(severity))}" data-audit-finding-id="${escapeHtml(finding.id || "")}">
+      <div>
+        <strong>${escapeHtml(AUDIT_SEVERITY_LABELS_KO[severity] || severity)} · ${escapeHtml(finding.titleKo || "검토 항목")}</strong>
+        <span>${escapeHtml(finding.objectType || "-")} ${escapeHtml(finding.objectKey || "-")}</span>
+      </div>
+      <p>${escapeHtml(finding.recommendationKo || finding.descriptionKo || "")}</p>
+      <div class="exception-action-row">
+        <button type="button" data-audit-detail="${escapeHtml(finding.id || "")}">상세</button>
+        ${renderExceptionActionControls(exceptionTargetId)}
+      </div>
+    </article>
+  `;
+}
+
+function renderHiddenDiagnosticsLinks(context = {}, counts = {}) {
+  if (context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible) return "";
+  return `
+    <section class="summary-section summary-hidden-diagnostics">
+      <div class="summary-section-head">
+        <h3>고급 결과</h3>
+      </div>
+      <div class="summary-action-grid">
+        <button type="button" data-summary-filter="standards-audit">표준 점검 결과 보기</button>
+        <button type="button" data-summary-filter="audit-migration">전환 준비도 보기</button>
+        <button type="button" data-summary-filter="coverage">고급 진단 보기</button>
+        <button type="button" data-summary-filter="audit-suppressed">예외/숨김 처리된 항목</button>
+      </div>
+      <p class="small-note">현재 모드에서는 표준 점검, 전환 준비도, 고급 진단을 활성 이슈로 표시하지 않음. 예외/숨김 항목 ${escapeHtml(counts.auditSuppressed || 0)}개.</p>
+    </section>
+  `;
+}
+
 function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
   if (!selectors.summaryCards || !report) return;
+  state.exceptionTargets = new Map();
   const semanticSummary = semantic || {};
   const dashboard = buildCurrentDashboardData(report, semanticSummary);
-  const { lineSummary, counts, fieldAnalysis, review, severity, context } = dashboard;
+  const { lineSummary, counts, fieldAnalysis, review, severity, context, audit } = dashboard;
   const risk = severity.level || "ok";
   const support = context.support || {};
   const coverage = semanticSummary.coveragePercent == null ? null : Number(semanticSummary.coveragePercent);
@@ -4290,6 +4443,11 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
         <span>세션: ${escapeHtml(context.sessionName || "현재 입력")}</span>
         <span>비교 시각: ${escapeHtml(context.comparedAt || "방금 실행")}</span>
         <span>파싱 객체: ${escapeHtml(context.parsedObjectCount || 0)}개</span>
+        <span>모드: ${escapeHtml(context.modeLabelKo || "단순 비교")}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.currentScope || `현재 비교 범위: ${context.scopeLabelKo || "전체"}`)}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.standardsAudit || "표준 점검: 꺼짐")}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.migrationReadiness || "전환 준비도: 꺼짐")}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.debugDiagnostics || "고급 진단 숨김")}</span>
         ${state.compareDirty ? "<span>비교 후 변경됨</span>" : ""}
       </div>
       <div class="operator-metric-grid">
@@ -4303,6 +4461,9 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
         ${renderMetricCard({ label: "분석된 라인 비율", value: coverageLabel, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0} 라인`, state: coverage != null && coverage >= 70 ? "ok" : "warning", action: "coverage" })}
         ${renderMetricCard({ label: "숨김 처리 라인", value: semanticSummary.noopSuppressed ?? lineSummary.suppressed, detail: "의미상 동일/구조 라인", state: "changed", action: "suppressed" })}
         ${renderMetricCard({ label: "직접 연결", value: counts.manual, detail: "사용자 저장 매핑", state: counts.manual ? "changed" : "ok", action: "manual" })}
+        ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
+          ? renderMetricCard({ label: "표준 점검", value: counts.auditActive, detail: `예외 ${counts.auditSuppressed}개`, state: counts.auditCritical ? "removed" : counts.auditWarning ? "warning" : "ok", action: "standards-audit" })
+          : ""}
       </div>
     </section>
 
@@ -4314,6 +4475,9 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
     ` : ""}
 
     ${dashboard.lowCoverage ? renderCoverageWarning(semanticSummary, support, context.coverageDiagnostics) : ""}
+    ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
+      ? renderStandardsAuditSummary(audit)
+      : renderHiddenDiagnosticsLinks(context, counts)}
 
     <section class="summary-workspace-grid">
       <div class="summary-workspace-main">
@@ -4330,15 +4494,9 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
             <h3>즉시 검토 항목</h3>
             <button type="button" data-summary-action="semantic">의미 비교 보기</button>
           </div>
-          <div class="summary-review-grid">
-            ${renderReviewPanel("unmatched-old", "기존 설정에서만 있음", review.unmatchedOld, "removed")}
-            ${renderReviewPanel("unmatched-new", "신규 설정에서만 있음", review.unmatchedNew, "added")}
-            ${renderReviewPanel("ambiguous", "매핑 후보 여러 개", review.ambiguous, "warning")}
-            ${renderReviewPanel("low-confidence", "낮은 신뢰도 객체", review.lowConfidence, "warning")}
-            ${renderReviewPanel("abnormal", "비정상/검토 필요 값", review.abnormal, "danger")}
-            ${renderReviewPanel("relationship", "연결/참조 관계 변경", review.relationshipChanges, "changed")}
-          </div>
+          ${renderSummaryIssueWorkspace(review)}
         </section>
+        ${renderProfileExceptionManager()}
       </div>
 
       <aside class="summary-workspace-side">
@@ -4468,6 +4626,7 @@ function renderReviewPanel(panelKey, title, items = [], tone = "") {
 
 function renderReviewItem(panelKey, item = {}) {
   const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
+  const exceptionTargetId = registerReviewExceptionTarget(panelKey, item, "summary-review");
   const fields = [
     item.commonFields ? `공통 ${item.commonFields}` : "",
     item.differentFields ? `다름 ${item.differentFields}` : "",
@@ -4483,9 +4642,254 @@ function renderReviewItem(panelKey, item = {}) {
         ${item.score ? `<small>일치도 ${escapeHtml(item.score)}%</small>` : ""}
         ${renderCandidatePreview(item.candidates)}
       </div>
-      <button type="button" data-object-jump="${escapeHtml(jumpKey)}">이동</button>
+      <div class="summary-review-actions">
+        <button type="button" data-object-jump="${escapeHtml(jumpKey)}">이동</button>
+        ${renderExceptionActionControls(exceptionTargetId)}
+      </div>
     </article>
   `;
+}
+
+const reviewIssueMeta = {
+  "unmatched-old": { label: "기존 설정에만 있음", tone: "old-only" },
+  "unmatched-new": { label: "신규 설정에만 있음", tone: "new-only" },
+  ambiguous: { label: "매핑 후보 여러 개", tone: "warning" },
+  "low-confidence": { label: "낮은 신뢰도", tone: "warning" },
+  abnormal: { label: "검토 필요 값", tone: "review" },
+  relationship: { label: "관계 변경", tone: "changed" },
+};
+
+function renderSummaryIssueWorkspace(review = {}) {
+  const rows = buildSummaryIssueRows(review);
+  const firstTargetId = rows[0]?.targetId || "";
+  return `
+    <div class="summary-issue-workspace" data-summary-issue-root>
+      <div class="summary-issue-toolbar">
+        <div class="summary-issue-counts">
+          ${Object.entries(reviewIssueMeta).map(([key, meta]) => {
+            const count = rows.filter((row) => row.panelKey === key).length;
+            return `<button type="button" data-summary-issue-filter="${escapeHtml(key)}">${escapeHtml(meta.label)} <strong>${escapeHtml(count)}</strong></button>`;
+          }).join("")}
+        </div>
+        <label class="summary-issue-search">
+          <span>검색</span>
+          <input type="search" data-summary-issue-search placeholder="객체, 사유, 필드 검색" />
+        </label>
+      </div>
+      <div class="summary-issue-layout">
+        <div class="summary-issue-list" data-summary-issue-list>
+          ${rows.length ? rows.map((row, index) => renderSummaryIssueRow(row, index === 0)).join("") : `
+            <div class="summary-empty-state">
+              <strong>즉시 검토 항목 없음</strong>
+              <span>현재 비교 범위에서 활성 검토 항목이 없음.</span>
+            </div>
+          `}
+        </div>
+        <aside class="summary-issue-detail" data-summary-issue-detail>
+          ${firstTargetId ? renderSummaryIssueDetail(firstTargetId) : `<div class="summary-empty-state"><strong>선택 항목 없음</strong><span>검토 항목을 선택하면 상세가 표시됨.</span></div>`}
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+function buildSummaryIssueRows(review = {}) {
+  const groups = [
+    ["unmatched-old", review.unmatchedOld || []],
+    ["unmatched-new", review.unmatchedNew || []],
+    ["ambiguous", review.ambiguous || []],
+    ["low-confidence", review.lowConfidence || []],
+    ["abnormal", review.abnormal || []],
+    ["relationship", review.relationshipChanges || []],
+  ];
+  return groups.flatMap(([panelKey, items]) => items.map((item) => {
+    const targetId = registerReviewExceptionTarget(panelKey, item, "summary-review");
+    const target = state.exceptionTargets.get(targetId) || {};
+    const fields = summarizeReviewFields(item);
+    return {
+      targetId,
+      panelKey,
+      statusLabel: reviewIssueMeta[panelKey]?.label || panelKey,
+      tone: reviewIssueMeta[panelKey]?.tone || "review",
+      objectType: item.objectType || target.objectType || "-",
+      displayName: buildReviewDisplayName(item),
+      objectKey: item.oldKey || item.newKey || item.objectKey || target.objectKey || "",
+      reason: readableReviewReason(panelKey, item.reason || target.title || ""),
+      fieldText: fields.text,
+      valueText: fields.valueText,
+      score: item.score || "",
+    };
+  }));
+}
+
+function renderSummaryIssueRow(row = {}, selected = false) {
+  return `
+    <article class="summary-issue-row summary-issue-${escapeHtml(row.tone)}${selected ? " selected" : ""}" data-summary-issue-target="${escapeHtml(row.targetId)}" data-summary-issue-kind="${escapeHtml(row.panelKey)}" data-summary-issue-search-text="${escapeHtml([row.statusLabel, row.objectType, row.displayName, row.reason, row.fieldText, row.valueText].join(" ").toLowerCase())}">
+      <div class="summary-issue-status">${escapeHtml(row.statusLabel)}</div>
+      <div class="summary-issue-main">
+        <strong>${escapeHtml(row.displayName)}</strong>
+        <span>${escapeHtml(row.reason)}</span>
+        <small>${escapeHtml(row.objectType)} · ${escapeHtml(row.objectKey || "-")}</small>
+      </div>
+      <div class="summary-issue-fields">
+        <span>${escapeHtml(row.fieldText || "필드 -")}</span>
+        ${row.valueText ? `<small>${escapeHtml(row.valueText)}</small>` : ""}
+      </div>
+      <div class="summary-issue-actions">
+        <button type="button" data-summary-issue-open="${escapeHtml(row.targetId)}">상세</button>
+        <button type="button" data-issue-jump="${escapeHtml(row.targetId)}">비교 보기</button>
+        <button type="button" data-add-exception="${escapeHtml(row.targetId)}" data-exception-fixed-scope="object">이 객체 예외</button>
+        <button type="button" data-add-exception="${escapeHtml(row.targetId)}" data-exception-fixed-scope="profile">프로파일 예외</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderSummaryIssueDetail(targetId = "") {
+  const target = state.exceptionTargets?.get?.(targetId);
+  if (!target) return `<div class="summary-empty-state"><strong>상세 없음</strong><span>검토 항목을 다시 선택.</span></div>`;
+  const fields = Array.isArray(target.fieldRows) ? target.fieldRows : [];
+  return `
+    <div class="summary-issue-detail-card" data-summary-issue-detail-id="${escapeHtml(targetId)}">
+      <div class="summary-issue-detail-head">
+        <span>${escapeHtml(issueKindLabel(target.panelKey, target.findingType))}</span>
+        <strong>${escapeHtml(target.displayName || target.description || target.objectKey || "-")}</strong>
+        <small>${escapeHtml(target.objectType || "-")} · ${escapeHtml(target.objectKey || "-")}</small>
+      </div>
+      <dl class="summary-issue-detail-grid">
+        <div><dt>사유</dt><dd>${escapeHtml(readableReviewReason(target.panelKey, target.title || ""))}</dd></div>
+        <div><dt>필드</dt><dd>${escapeHtml(target.field || "-")}</dd></div>
+        <div><dt>구분</dt><dd>${escapeHtml(target.category || "-")}</dd></div>
+        <div><dt>상태</dt><dd>${escapeHtml(target.findingType || "-")}</dd></div>
+        <div><dt>Old Key</dt><dd>${escapeHtml(target.oldKey || "-")}</dd></div>
+        <div><dt>New Key</dt><dd>${escapeHtml(target.newKey || "-")}</dd></div>
+      </dl>
+      ${fields.length ? `
+        <div class="summary-issue-field-table">
+          <div>필드</div><div>상태</div><div>기존값</div><div>신규값</div>
+          ${fields.slice(0, 8).map((row) => `
+            <div>${escapeHtml(row.field || "-")}</div>
+            <div>${escapeHtml(fieldStatusLabel(row.status))}</div>
+            <div>${escapeHtml(row.oldValue || "-")}</div>
+            <div>${escapeHtml(row.newValue || "-")}</div>
+          `).join("")}
+        </div>
+      ` : ""}
+      <p class="small-note">예외는 활성 검토 항목에서 제외되고 예외/숨김 목록으로 이동함.</p>
+      <div class="summary-issue-detail-actions">
+        <button type="button" data-add-exception="${escapeHtml(targetId)}" data-exception-fixed-scope="object">이 객체에서만 예외</button>
+        <button type="button" data-add-exception="${escapeHtml(targetId)}" data-exception-fixed-scope="profile">현재 프로파일에서 예외</button>
+        <button type="button" data-issue-jump="${escapeHtml(targetId)}">비교 화면에서 보기</button>
+      </div>
+    </div>
+  `;
+}
+
+function summarizeReviewFields(item = {}) {
+  const rows = Array.isArray(item.fieldRows) ? item.fieldRows : [];
+  const actionableRows = rows.filter((row) => {
+    const status = String(row.status || "").toLowerCase();
+    return row.field && !["same", "equal", "present", "ignored"].includes(status);
+  });
+  const selectedRows = (actionableRows.length ? actionableRows : rows).slice(0, 3);
+  const text = selectedRows.map((row) => row.field).filter(Boolean).join(", ");
+  const valueText = selectedRows
+    .map((row) => formatFieldValueChange(row))
+    .filter(Boolean)
+    .join(" · ");
+  return { text, valueText };
+}
+
+function formatFieldValueChange(row = {}) {
+  const oldValue = String(row.oldValue || "").trim();
+  const newValue = String(row.newValue || "").trim();
+  if (!oldValue && !newValue) return "";
+  if (oldValue && newValue && oldValue !== newValue) return `${row.field}: ${oldValue} → ${newValue}`;
+  if (oldValue && !newValue) return `${row.field}: 기존 ${oldValue}`;
+  if (!oldValue && newValue) return `${row.field}: 신규 ${newValue}`;
+  return `${row.field}: ${oldValue}`;
+}
+
+function buildReviewDisplayName(item = {}) {
+  const rows = Array.isArray(item.fieldRows) ? item.fieldRows : [];
+  const descriptionRow = rows.find((row) => row.field === "description");
+  const description = String(descriptionRow?.newValue || descriptionRow?.oldValue || "").trim();
+  const label = String(item.label || item.objectKey || item.oldKey || item.newKey || "").trim();
+  if (description && label && !description.includes(label)) return `${description} · ${label}`;
+  return description || label || "-";
+}
+
+function readableReviewReason(panelKey = "", reason = "") {
+  const fallback = {
+    "unmatched-old": "기존 설정에만 있어 누락 여부 확인 필요",
+    "unmatched-new": "신규 설정에만 있어 추가 여부 확인 필요",
+    ambiguous: "매핑 후보가 여러 개 있어 확인 필요",
+    "low-confidence": "일치도가 낮아 수동 검토 필요",
+    abnormal: "중요 설정 항목 값 변경",
+    relationship: "연결/참조 관계 변경",
+  };
+  const text = String(reason || "").trim();
+  if (!text || /[?�]/.test(text)) return fallback[panelKey] || "검토 필요";
+  return text;
+}
+
+function issueKindLabel(panelKey = "", findingType = "") {
+  return reviewIssueMeta[panelKey]?.label || findingType || "검토 항목";
+}
+
+function fieldStatusLabel(status = "") {
+  const key = String(status || "").toLowerCase();
+  return {
+    same: "동일",
+    different: "차이",
+    "missing-old": "기존 누락",
+    "missing-new": "신규 누락",
+    added: "추가",
+    missing: "누락",
+    ignored: "예외 처리",
+  }[key] || status || "-";
+}
+
+function renderProfileExceptionManager() {
+  const exceptions = getEnabledProfileExceptions();
+  return `
+    <section class="summary-section profile-exception-manager" data-review-panel="suppressed">
+      <div class="summary-section-head">
+        <h3>예외/숨김 처리된 항목</h3>
+        <span>${escapeHtml(exceptions.length)}개</span>
+      </div>
+      ${exceptions.length ? `
+        <div class="profile-exception-table">
+          <div>범위</div><div>객체</div><div>필드</div><div>규칙/구분</div><div>사유</div><div>동작</div>
+          ${exceptions.map((exception) => renderProfileExceptionRow(exception)).join("")}
+        </div>
+      ` : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외를 추가할 수 있음.</span></div>`}
+    </section>
+  `;
+}
+
+function renderProfileExceptionRow(exception = {}) {
+  const target = exception.target || {};
+  const scopeLabel = exception.scope === "profile" ? "현재 프로파일" : "이 객체";
+  const objectLabel = target.displayName || [target.objectType, target.objectKey].filter(Boolean).join(" ") || "-";
+  const ruleLabel = [target.ruleId, target.category || target.findingType].filter(Boolean).join(" · ") || "-";
+  return `
+    <div>${escapeHtml(scopeLabel)}</div>
+    <div>
+      <strong>${escapeHtml(objectLabel)}</strong>
+      <small>${escapeHtml(target.objectType || "-")} · ${escapeHtml(target.objectKey || "-")}</small>
+    </div>
+    <div>${escapeHtml(target.fieldPath || "-")}</div>
+    <div>${escapeHtml(ruleLabel)}</div>
+    <div>${escapeHtml(exception.reasonKo || "사용자 예외")}</div>
+    <div class="profile-exception-actions">
+      <button type="button" data-remove-exception="${escapeHtml(exception.id || "")}">예외 해제</button>
+    </div>
+  `;
+}
+
+function getEnabledProfileExceptions() {
+  return (state.profileDraft?.exceptions || []).filter((exception) => exception && exception.enabled !== false);
 }
 
 function renderCandidatePreview(candidates = []) {
@@ -4495,6 +4899,81 @@ function renderCandidatePreview(candidates = []) {
       ${candidates.slice(0, 3).map((candidate) => `<span>${escapeHtml(candidate.key)} · ${escapeHtml(candidate.score)}%</span>`).join("")}
     </div>
   `;
+}
+
+function renderExceptionActionControls(targetId = "") {
+  if (!targetId) return "";
+  return `
+    <div class="exception-inline-control" data-exception-control="${escapeHtml(targetId)}">
+      <select data-exception-scope="${escapeHtml(targetId)}" aria-label="예외 범위">
+        <option value="object">이 객체에서만 예외</option>
+        <option value="profile">현재 프로파일에서 예외</option>
+      </select>
+      <button type="button" data-add-exception="${escapeHtml(targetId)}">예외 추가</button>
+    </div>
+  `;
+}
+
+function registerReviewExceptionTarget(panelKey = "", item = {}, source = "summary-review") {
+  const targetId = createId();
+  const field = primaryReviewExceptionField(item);
+  const side = item.side || (panelKey === "unmatched-old" ? "old" : panelKey === "unmatched-new" ? "new" : "both");
+  const objectKey = item.oldKey || item.newKey || item.objectKey || "";
+  state.exceptionTargets.set(targetId, {
+    source,
+    targetType: "review",
+    issueId: item.planId || targetId,
+    panelKey,
+    objectType: item.objectType || "",
+    objectKey,
+    oldKey: item.oldKey || "",
+    newKey: item.newKey || "",
+    side,
+    field,
+    fieldRows: Array.isArray(item.fieldRows) ? item.fieldRows : [],
+    findingType: item.status || panelKey,
+    category: "semantic-compare",
+    title: item.reason || panelKey || "검토 항목",
+    description: `${item.objectType || "object"} ${item.label || objectKey || ""}`.trim(),
+    displayName: buildReviewDisplayName(item),
+    oldValue: firstFieldValue(item.fieldRows, field, "oldValue"),
+    newValue: firstFieldValue(item.fieldRows, field, "newValue"),
+  });
+  return targetId;
+}
+
+function registerAuditExceptionTarget(finding = {}, source = "summary-audit") {
+  const targetId = createId();
+  state.exceptionTargets.set(targetId, {
+    source,
+    targetType: "audit",
+    findingId: finding.id || "",
+    ruleId: finding.ruleId || "",
+    category: finding.category || "",
+    objectType: finding.objectType || "",
+    objectKey: finding.objectKey || "",
+    side: finding.side || "both",
+    field: finding.fieldPath || "",
+    findingType: "audit-finding",
+    title: finding.titleKo || finding.ruleId || "표준 점검 항목",
+    description: finding.descriptionKo || finding.recommendationKo || "",
+  });
+  return targetId;
+}
+
+function primaryReviewExceptionField(item = {}) {
+  const rows = Array.isArray(item.fieldRows) ? item.fieldRows : [];
+  const actionable = rows.find((row) => {
+    const status = String(row.status || "").toLowerCase();
+    return row.field && !["same", "equal", "present", "ignored"].includes(status);
+  });
+  return actionable?.field || rows.find((row) => row.field)?.field || "";
+}
+
+function firstFieldValue(rows = [], field = "", valueKey = "oldValue") {
+  if (!Array.isArray(rows)) return "";
+  const exact = rows.find((row) => row.field === field);
+  return String((exact || rows.find((row) => row?.[valueKey]))?.[valueKey] || "");
 }
 
 function renderTopTypePreview(title, rows = []) {
@@ -4550,6 +5029,7 @@ function bindSummaryActions() {
       scrollToDiffObject(button.dataset.objectJump);
     });
   });
+  bindSummaryIssueWorkspaceActions();
   selectors.summaryCards?.querySelectorAll("[data-field-type-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
@@ -4557,11 +5037,348 @@ function bindSummaryActions() {
       setResultTab("objects");
     });
   });
+  selectors.summaryCards?.querySelectorAll("[data-audit-detail]").forEach((button) => {
+    button.addEventListener("click", () => openAuditFindingDetail(button.dataset.auditDetail));
+  });
+  selectors.summaryCards?.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.dataset.addException || "";
+      const scope = button.dataset.exceptionFixedScope || selectors.summaryCards?.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+  selectors.summaryCards?.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
+    });
+  });
+}
+
+function bindSummaryIssueWorkspaceActions() {
+  const root = selectors.summaryCards?.querySelector("[data-summary-issue-root]");
+  if (!root) return;
+  root.querySelectorAll("[data-summary-issue-target]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
+      selectSummaryIssue(row.dataset.summaryIssueTarget || "");
+    });
+  });
+  root.querySelectorAll("[data-summary-issue-open]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectSummaryIssue(button.dataset.summaryIssueOpen || "");
+    });
+  });
+  root.querySelectorAll("[data-issue-jump]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openIssueInCompare(button.dataset.issueJump || "");
+    });
+  });
+  const search = root.querySelector("[data-summary-issue-search]");
+  search?.addEventListener("input", () => filterSummaryIssueRows(root));
+  root.querySelectorAll("[data-summary-issue-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const active = button.classList.toggle("active");
+      root.querySelectorAll("[data-summary-issue-filter]").forEach((item) => {
+        if (item !== button) item.classList.remove("active");
+      });
+      root.dataset.issueFilter = active ? button.dataset.summaryIssueFilter || "" : "";
+      filterSummaryIssueRows(root);
+    });
+  });
+}
+
+function selectSummaryIssue(targetId = "") {
+  const root = selectors.summaryCards?.querySelector("[data-summary-issue-root]");
+  if (!root || !targetId) return;
+  root.querySelectorAll("[data-summary-issue-target]").forEach((row) => {
+    row.classList.toggle("selected", row.dataset.summaryIssueTarget === targetId);
+  });
+  const detail = root.querySelector("[data-summary-issue-detail]");
+  if (detail) {
+    detail.innerHTML = renderSummaryIssueDetail(targetId);
+    bindSummaryIssueDetailActions(detail);
+  }
+}
+
+function bindSummaryIssueDetailActions(detail) {
+  detail.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExceptionFromTarget(button.dataset.addException || "", button.dataset.exceptionFixedScope || "object", button);
+    });
+  });
+  detail.querySelectorAll("[data-issue-jump]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openIssueInCompare(button.dataset.issueJump || "");
+    });
+  });
+}
+
+function filterSummaryIssueRows(root) {
+  const query = String(root.querySelector("[data-summary-issue-search]")?.value || "").trim().toLowerCase();
+  const filter = root.dataset.issueFilter || "";
+  let visible = 0;
+  root.querySelectorAll("[data-summary-issue-target]").forEach((row) => {
+    const text = row.dataset.summaryIssueSearchText || "";
+    const kind = row.dataset.summaryIssueKind || "";
+    const show = (!query || text.includes(query)) && (!filter || filter === kind);
+    row.hidden = !show;
+    if (show) visible += 1;
+  });
+  root.classList.toggle("summary-issue-filter-empty", visible === 0);
+}
+
+function openAuditFindingDetail(findingId = "") {
+  const finding = (state.lastStandardsAudit?.findings || []).find((item) => item.id === findingId);
+  if (!finding) return;
+  setResultTab("overview");
+  renderOverviewReport(state.lastReport);
+  const detail = selectors.overviewReport?.querySelector(`[data-audit-detail-id="${cssEscape(findingId)}"]`);
+  if (detail) {
+    detail.open = true;
+    detail.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    detail.classList.add("summary-panel-pulse");
+    window.setTimeout(() => detail.classList.remove("summary-panel-pulse"), 900);
+  }
+}
+
+function openIssueInCompare(targetId = "") {
+  const target = state.exceptionTargets?.get?.(targetId);
+  if (!target) {
+    showWorkbenchToast("이동할 검토 항목 없음", "error");
+    return;
+  }
+  state.activeIssueContext = { ...target, targetId };
+  scrollToDiffObject(target.objectKey || target.oldKey || target.newKey || "");
+  renderCompareIssueContextBanner();
+}
+
+function renderCompareIssueContextBanner() {
+  const grid = selectors.diffConnectorSvg?.closest(".editor-grid");
+  if (!grid) return;
+  let banner = grid.parentElement?.querySelector("[data-compare-issue-context]");
+  if (!state.activeIssueContext) {
+    banner?.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.className = "compare-issue-context-banner";
+    banner.dataset.compareIssueContext = "true";
+    grid.parentElement?.insertBefore(banner, grid);
+  }
+  const target = state.activeIssueContext;
+  banner.innerHTML = `
+    <div>
+      <strong>요약에서 이동한 항목</strong>
+      <span>${escapeHtml(target.displayName || target.description || target.objectKey || "-")}</span>
+      <small>${escapeHtml(readableReviewReason(target.panelKey, target.title || ""))} · ${escapeHtml(target.field || "-")}</small>
+    </div>
+    <div>
+      <button type="button" data-add-exception="${escapeHtml(target.targetId || "")}" data-exception-fixed-scope="object">예외 추가</button>
+      <button type="button" data-clear-issue-context>선택 해제</button>
+    </div>
+  `;
+  banner.querySelector("[data-clear-issue-context]")?.addEventListener("click", () => {
+    state.activeIssueContext = null;
+    document.querySelectorAll(".object-active").forEach((line) => line.classList.remove("object-active"));
+    renderCompareIssueContextBanner();
+  });
+  banner.querySelector("[data-add-exception]")?.addEventListener("click", (event) => {
+    const button = event.currentTarget;
+    addExceptionFromTarget(button.dataset.addException || "", button.dataset.exceptionFixedScope || "object", button);
+  });
+}
+
+async function addExceptionFromTarget(targetId = "", exceptionScope = "object", triggerButton = null) {
+  const target = state.exceptionTargets?.get?.(targetId);
+  if (!target) {
+    setProfileStatus("예외 대상 없음", "error");
+    showWorkbenchToast("예외 대상 없음", "error");
+    return;
+  }
+
+  const exception = buildProfileExceptionFromTarget(target, exceptionScope);
+  if (!exception) {
+    setProfileStatus("예외 생성 실패", "error");
+    showWorkbenchToast("예외 생성 실패", "error");
+    return;
+  }
+
+  if (!confirmProfileExceptionCreate(exception)) return;
+
+  const previousText = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "추가 중...";
+  }
+
+  try {
+    if (!Array.isArray(state.profileDraft.exceptions)) state.profileDraft.exceptions = [];
+    const duplicate = state.profileDraft.exceptions.some((item) => sameProfileException(item, exception));
+    if (!duplicate) state.profileDraft.exceptions.push(exception);
+
+    await saveProfile();
+    if (state.lastReport) {
+      runCompare();
+      setResultTab("summary");
+    }
+    const message = duplicate
+      ? "이미 등록된 예외"
+      : exception.scope === "profile"
+        ? "현재 프로파일에 예외가 저장됨"
+        : "이 객체 예외가 추가됨";
+    setProfileStatus(`${message}: ${exception.reasonKo}`, duplicate ? "info" : "saved");
+    showWorkbenchToast(`${message}. 활성 검토 항목에서 제외됨.`, duplicate ? "info" : "success");
+  } catch (error) {
+    setProfileStatus(`예외 추가 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`예외 추가 실패: ${error?.message || error}`, "error");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText || "예외 추가";
+    }
+  }
+}
+
+function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object") {
+  const objectScoped = exceptionScope === "object";
+  const objectType = String(target.objectType || "").trim();
+  const objectKey = String(target.objectKey || "").trim();
+  const field = String(target.field || "").trim();
+  const ruleId = String(target.ruleId || "").trim();
+  const category = String(target.category || "").trim();
+  const findingType = String(target.findingType || target.panelKey || target.targetType || "").trim();
+  const displayName = String(target.displayName || target.description || objectKey || "").trim();
+
+  if (!objectType && !objectKey && !field && !ruleId && !findingType) return null;
+
+  const scopeLabel = objectScoped ? "이 객체" : "현재 프로파일";
+  const reasonKo = `${scopeLabel} 예외: ${target.title || displayName || field || findingType || objectType}`;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  return {
+    id: createId(),
+    scope: objectScoped ? "object" : "profile",
+    createdAt: new Date().toISOString(),
+    createdBy: "user",
+    createdFromIssueId: target.findingId || target.issueId || target.planId || "",
+    reasonKo,
+    reason: reasonKo,
+    target: {
+      ruleId,
+      category,
+      objectType,
+      objectKey,
+      displayName,
+      fieldPath: field,
+      side: normalizeExceptionSide(target.side || "both"),
+      oldValue: target.oldValue ?? "",
+      newValue: target.newValue ?? "",
+      sourceLineIds: Array.isArray(target.sourceLineIds) ? target.sourceLineIds : [],
+      targetLineIds: Array.isArray(target.targetLineIds) ? target.targetLineIds : [],
+      findingType,
+    },
+    match: {
+      mode: objectScoped ? "exact-object" : "profile-field-rule",
+      objectType,
+      objectKey: objectScoped ? objectKey : "",
+      fieldPath: field,
+      ruleId,
+      category,
+      findingType,
+      valuePattern: "",
+      vendorPair,
+    },
+    enabled: true,
+  };
+}
+
+function sameProfileException(left = {}, right = {}) {
+  const leftTarget = left.target || {};
+  const rightTarget = right.target || {};
+  const leftMatch = left.match || {};
+  const rightMatch = right.match || {};
+  return [
+    ["scope", left.scope, right.scope],
+    ["side", leftTarget.side, rightTarget.side],
+    ["objectType", leftMatch.objectType || leftTarget.objectType, rightMatch.objectType || rightTarget.objectType],
+    ["objectKey", leftMatch.objectKey || leftTarget.objectKey, rightMatch.objectKey || rightTarget.objectKey],
+    ["fieldPath", leftMatch.fieldPath || leftTarget.fieldPath, rightMatch.fieldPath || rightTarget.fieldPath],
+    ["ruleId", leftMatch.ruleId || leftTarget.ruleId, rightMatch.ruleId || rightTarget.ruleId],
+    ["category", leftMatch.category || leftTarget.category, rightMatch.category || rightTarget.category],
+    ["findingType", leftMatch.findingType || leftTarget.findingType, rightMatch.findingType || rightTarget.findingType],
+  ].every(([, leftValue, rightValue]) => canonicalizeComparableLine(leftValue || "") === canonicalizeComparableLine(rightValue || ""));
+}
+
+function confirmProfileExceptionCreate(exception = {}) {
+  const target = exception.target || {};
+  const scopeLabel = exception.scope === "profile" ? "현재 프로파일에서 예외" : "이 객체에서만 예외";
+  const profileWarning = exception.scope === "profile"
+    ? "\n주의: 같은 objectType + fieldPath + ruleId/findingType 조건에도 적용됨."
+    : "";
+  return window.confirm([
+    "예외 추가",
+    `범위: ${scopeLabel}`,
+    `대상: ${target.displayName || target.objectKey || "-"}`,
+    `객체: ${target.objectType || "-"}`,
+    `필드: ${target.fieldPath || "-"}`,
+    `규칙/상태: ${target.ruleId || target.findingType || "-"}`,
+    `예상 영향: 활성 검토 항목에서 제외되고 예외/숨김 목록으로 이동`,
+    profileWarning,
+  ].filter(Boolean).join("\n"));
+}
+
+async function removeProfileException(exceptionId = "", triggerButton = null) {
+  if (!exceptionId) return;
+  const exceptions = Array.isArray(state.profileDraft.exceptions) ? state.profileDraft.exceptions : [];
+  const target = exceptions.find((item) => item.id === exceptionId);
+  if (!target) {
+    showWorkbenchToast("해제할 예외 없음", "error");
+    return;
+  }
+  if (!window.confirm(`예외 해제\n대상: ${target.target?.displayName || target.target?.objectKey || "-"}\n해제 후 활성 검토 항목으로 복원됨.`)) return;
+  const previousText = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "해제 중...";
+  }
+  try {
+    state.profileDraft.exceptions = exceptions.filter((item) => item.id !== exceptionId);
+    await saveProfile();
+    if (state.lastReport) {
+      runCompare();
+      setResultTab("summary");
+    }
+    setProfileStatus("예외 해제 완료", "saved");
+    showWorkbenchToast("예외가 해제됨. 활성 검토 항목으로 복원됨.", "success");
+  } catch (error) {
+    setProfileStatus(`예외 해제 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`예외 해제 실패: ${error?.message || error}`, "error");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText || "예외 해제";
+    }
+  }
+}
+
+function normalizeExceptionSide(side = "both") {
+  const value = String(side || "both").toLowerCase();
+  if (value === "old" || value === "existing") return "old";
+  if (value === "new" || value === "target" || value === "generated") return "new";
+  return "both";
 }
 
 function focusSummaryReviewPanel(panelKey = "") {
+  const normalizedPanelKey = String(panelKey || "").startsWith("audit-") ? "standards-audit" : panelKey;
   const target = selectors.summaryCards?.querySelector(`[data-review-panel="${cssEscape(panelKey)}"]`)
-    || selectors.summaryCards?.querySelector(`[data-summary-review-kind="${cssEscape(panelKey)}"]`);
+    || selectors.summaryCards?.querySelector(`[data-review-panel="${cssEscape(normalizedPanelKey)}"]`)
+    || selectors.summaryCards?.querySelector(`[data-summary-review-kind="${cssEscape(normalizedPanelKey)}"]`);
   if (target) {
     target.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
     target.classList.add("summary-panel-pulse");
@@ -6892,10 +7709,34 @@ function buildSemanticRuntime({
     oldObjects: oldResult.objects,
     newObjects: newResult.objects,
     manualMap,
+    profile: state.profileDraft || {},
   });
 
+  const analysisContext = buildAnalysisContext({
+    mode: options.analysisMode,
+    scope: options.compareScope,
+    profile: state.profileDraft || {},
+    selectedObjects: options.selectedObjects,
+    oldText,
+    newText,
+  });
+  const rawAudit = runStandardsAuditForSides({
+    oldResult,
+    newResult,
+    profile: state.profileDraft || {},
+    oldVendor,
+    newVendor,
+  });
+  const audit = filterAuditForModeScope(rawAudit, analysisContext);
   const rawPlan = createComparisonPlan(matches, state.profileDraft || {});
-  const scopedPlan = filterSemanticPlanByScope(rawPlan, options.selectedObjects);
+  const scopedRawPlan = filterPlanByModeScope(
+    filterSemanticPlanByScope(rawPlan, options.selectedObjects),
+    {
+      scope: analysisContext.compareScope,
+      selectedObjects: options.selectedObjects,
+    },
+  );
+  const scopedPlan = attachAuditFindingsToPlan(scopedRawPlan, audit);
   const sortedPlan = options.sortObjects === false
     ? scopedPlan
     : sortSemanticComparisonPlan(scopedPlan);
@@ -6911,6 +7752,9 @@ function buildSemanticRuntime({
     matches,
     plan,
     manualMap,
+    audit,
+    rawAudit,
+    analysisContext,
   };
 }
 
@@ -6993,9 +7837,9 @@ function buildSemanticObjectBlockRows(plan = []) {
       }),
       oldState: oldObject ? semanticBlockState(item, "old") : "placeholder",
       newState: newObject ? semanticBlockState(item, "new") : "placeholder",
-      semanticCovered: item.status === "matched",
+      semanticCovered: isSemanticItemFullyMatched(item),
       semanticReason: item.reason || "",
-      objectMatched: item.status === "matched",
+      objectMatched: isSemanticItemFullyMatched(item),
       semanticObjectLine: true,
       semanticObjectStart: true,
       semanticObjectEnd: true,
@@ -7037,6 +7881,7 @@ function buildSemanticObjectGapRow(item = {}, objectIndex = 0) {
 }
 
 function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
+  const objectStatus = semanticRenderStatusForSide(item, object, side);
   if (!object) {
     return {
       number: "",
@@ -7047,6 +7892,9 @@ function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
       semanticObjectIndex: objectIndex,
       semanticPairKey: item.id || "",
       semanticField: "",
+      objectStatus,
+      objectScore: item.score ?? "",
+      objectReason: item.reason || "",
       objectMatched: false,
       semanticCovered: true,
       semanticReason: "semantic-object-placeholder",
@@ -7094,12 +7942,12 @@ function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
     objectKey,
     objectIdentity: identity,
     semanticObjectIndex: objectIndex,
-    objectStatus: item.status || "",
+    objectStatus,
     objectScore: item.score ?? "",
     objectReason: item.reason || "",
     semanticPairKey: item.id || "",
     semanticField: "",
-    objectMatched: item.status === "matched",
+    objectMatched: isSemanticItemFullyMatched(item),
     semanticCovered: true,
     semanticReason: item.reason || "",
     highlights: [],
@@ -7107,6 +7955,21 @@ function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
     semanticObjectStart: true,
     semanticObjectEnd: true,
   };
+}
+
+function semanticRenderStatusForSide(item = {}, object = null, side = "") {
+  if (object && side === "old" && !item.newObject) return "old-only";
+  if (object && side === "new" && !item.oldObject) return "new-only";
+  if (!object) {
+    if (side === "old" && item.newObject) return "new-only";
+    if (side === "new" && item.oldObject) return "old-only";
+    return item.status || "unmatched";
+  }
+  return item.status || "";
+}
+
+function isSemanticItemFullyMatched(item = {}) {
+  return item.status === "matched" && Boolean(item.oldObject && item.newObject);
 }
 
 function semanticBlockState(item = {}, side = "") {
@@ -7243,6 +8106,7 @@ function renderSemanticObjectBlockHtml({
   const reason = semanticReasonLabel(item.reason || "-");
   const fieldCount = Object.keys(fields || {}).length;
   const sideLabel = side === "old" ? "기존" : "신규";
+  const objectStatus = semanticRenderStatusForSide(item, object, side);
 
   return `
     <section class="semantic-diff-object-block semantic-diff-object-${escapeHtml(state)}" data-semantic-object-block="true">
@@ -7272,6 +8136,7 @@ function renderSemanticObjectBlockHtml({
         objectType,
         fields,
         matchIndex,
+        objectStatus,
       })).join("")
       : `<div class="semantic-diff-empty-line">객체 라인 없음</div>`}
       </div>
@@ -7282,9 +8147,23 @@ function renderSemanticObjectBlockHtml({
 function semanticObjectVisualState(item = {}) {
   if (item.status === "matched" && String(item.reason || "").toLowerCase() === "manual") return "manual";
   if (item.status === "matched" || item.status === "candidate") return "matched";
-  if (item.status === "old-only" || item.status === "new-only") return "unmatched";
+  if (isUnmatchedObjectStatus(item.status)) return "unmatched";
   if (Array.isArray(item.ambiguousAlternatives) && item.ambiguousAlternatives.length) return "ambiguous";
   return "partial";
+}
+
+function isUnmatchedObjectStatus(status = "") {
+  return [
+    "old-only",
+    "new-only",
+    "unmatched",
+    "unmatched-old",
+    "unmatched-new",
+    "unmatched-source",
+    "unmatched-target",
+    "source-only",
+    "target-only",
+  ].includes(String(status || "").toLowerCase());
 }
 
 function renderSemanticObjectConfigLine({
@@ -7295,6 +8174,7 @@ function renderSemanticObjectConfigLine({
   objectType,
   fields,
   matchIndex,
+  objectStatus = "",
 }) {
   const normalized = canonicalizeComparableLine(line);
   const matched = findSemanticLineRelationForRawLine({
@@ -7309,11 +8189,14 @@ function renderSemanticObjectConfigLine({
   const structural = isSemanticStructuralLine(line);
   const relationKey = matched?.relationKey || "";
   const relationState = matched?.relationState || "";
+  const normalizedObjectStatus = String(objectStatus || item?.status || "").toLowerCase();
+  const unmatchedObject = isUnmatchedObjectStatus(normalizedObjectStatus);
   const classes = [
     "semantic-diff-config-line",
     relationKey ? "is-line-related" : "",
-    matched?.status ? "is-matched" : "is-covered",
+    matched?.status ? "is-matched" : (unmatchedObject ? "is-unmatched" : "is-covered"),
     relationState ? `line-relation-${cssSafeClassName(relationState)}` : "",
+    normalizedObjectStatus ? `object-status-${cssSafeClassName(normalizedObjectStatus)}` : "",
     structural ? "is-structural" : "",
     field ? `field-${cssSafeClassName(field)}` : "",
   ].filter(Boolean);
@@ -7539,7 +8422,7 @@ function buildSemanticObjectLineRows(item = {}, objectIndex = 0) {
 
       semanticCovered: status === "equal",
       semanticReason: item.reason || "",
-      objectMatched: item.status === "matched",
+      objectMatched: isSemanticItemFullyMatched(item),
       semanticObjectLine: true,
       semanticObjectStart: lineIndex === 0,
       semanticObjectEnd: lineIndex === maxLines - 1,
@@ -7554,7 +8437,7 @@ function buildSemanticObjectLineRows(item = {}, objectIndex = 0) {
 
 function getLineMatchStates(lineMatch = {}, item = {}) {
   const status = String(lineMatch.status || "").toLowerCase();
-  const objectMatched = item.status === "matched" || item.status === "candidate";
+  const objectMatched = isSemanticItemFullyMatched(item);
 
   if (status === "missing") return { oldState: "missing", newState: "placeholder" };
   if (status === "added") return { oldState: "placeholder", newState: "added" };
@@ -7627,6 +8510,9 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
     reason = "object-raw-line-covered",
   }) {
     const mappingKey = `${item.id || "semantic-object"}:raw-line:${visualLineIndex}`;
+    const sourceOnly = Boolean(oldLine && !newLine);
+    const targetOnly = Boolean(newLine && !oldLine);
+    const rowObjectStatus = sourceOnly ? "old-only" : targetOnly ? "new-only" : "";
     const oldMatched = Boolean(lineMatch?.oldLines?.some((line) =>
       canonicalizeComparableLine(line) === canonicalizeComparableLine(oldLine)
     ));
@@ -7643,6 +8529,7 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
           item,
           objectIndex,
           lineIndex: visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
           lineMatch: {
             status: oldMatched ? "equal" : "covered",
             semanticCovered: true,
@@ -7655,6 +8542,7 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
           item,
           objectIndex,
           lineIndex: visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
           mappingKey,
         }),
 
@@ -7666,6 +8554,7 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
           item,
           objectIndex,
           lineIndex: visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
           lineMatch: {
             status: newMatched ? "equal" : "covered",
             semanticCovered: true,
@@ -7678,14 +8567,15 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
           item,
           objectIndex,
           lineIndex: visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
           mappingKey,
         }),
 
-      oldState: oldLine ? (oldMatched ? "equal" : "ignored") : "placeholder",
-      newState: newLine ? (newMatched ? "equal" : "ignored") : "placeholder",
+      oldState: sourceOnly ? "missing" : oldLine ? (oldMatched ? "equal" : "ignored") : "placeholder",
+      newState: targetOnly ? "added" : newLine ? (newMatched ? "equal" : "ignored") : "placeholder",
       semanticCovered: true,
       semanticReason: reason,
-      objectMatched: item.status === "matched",
+      objectMatched: isSemanticItemFullyMatched(item),
       semanticObjectLine: true,
       semanticObjectStart: rows.length === 0,
       semanticObjectEnd: false,
@@ -7829,7 +8719,9 @@ function buildSemanticLineRow({
   lineIndex,
   lineMatch = null,
   mappingKey = "",
+  objectStatusOverride = "",
 }) {
+  const objectStatus = objectStatusOverride || semanticRenderStatusForSide(item, object, side);
   return {
     number: "",
     text: line,
@@ -7839,8 +8731,12 @@ function buildSemanticLineRow({
     semanticObjectIndex: objectIndex,
     semanticPairKey: item.id || "",
     semanticField: item.matchKeyFields?.[0] || "",
-    objectMatched: item.status === "matched",
-    semanticCovered: Boolean(lineMatch?.semanticCovered || item.status === "matched"),
+    objectStatus,
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    objectIdentity: object?.normalizedIdentity || object?.identity || object?.name || object?.sourceName || object?.id || "",
+    objectMatched: isSemanticItemFullyMatched(item),
+    semanticCovered: Boolean(lineMatch?.semanticCovered || isSemanticItemFullyMatched(item)),
     semanticReason: lineMatch?.reason || item.reason || "",
     semanticLineMappingKey: mappingKey,
     semanticObjectStart: lineIndex === 0,
@@ -7860,7 +8756,9 @@ function buildSemanticPlaceholderLineRow({
   objectIndex,
   lineIndex,
   mappingKey = "",
+  objectStatusOverride = "",
 }) {
+  const objectStatus = objectStatusOverride || semanticRenderStatusForSide(item, null, side);
   return {
     number: "",
     text: "",
@@ -7871,7 +8769,10 @@ function buildSemanticPlaceholderLineRow({
     semanticPairKey: item.id || "",
     semanticLineMappingKey: mappingKey,
     semanticField: "",
-    objectMatched: item.status === "matched",
+    objectStatus,
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    objectMatched: isSemanticItemFullyMatched(item),
     semanticCovered: true,
     semanticReason: "semantic-visual-padding",
     highlights: [],
@@ -7917,6 +8818,7 @@ function buildSemanticRawBlockRow({
   item,
   index,
 }) {
+  const objectStatus = semanticRenderStatusForSide(item, object, side);
   return {
     number: "",
     text,
@@ -7924,8 +8826,12 @@ function buildSemanticRawBlockRow({
     key: `${item.id || "semantic-object"}:${side}:${index}`,
     objectKey: `${item.objectType || object?.normalizedType || "object"}:${object?.sourceName || object?.id || index}`,
     semanticField: item.matchKeyFields?.[0] || "",
-    objectMatched: item.status === "matched",
-    semanticCovered: item.status === "matched",
+    objectStatus,
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    objectIdentity: object?.normalizedIdentity || object?.identity || object?.name || object?.sourceName || object?.id || "",
+    objectMatched: isSemanticItemFullyMatched(item),
+    semanticCovered: isSemanticItemFullyMatched(item),
     semanticReason: item.reason || "",
     highlights: [],
   };
@@ -8371,7 +9277,14 @@ function buildMatchedObjectDiffRows(oldObject, newObject) {
     const newChanged = rowTouchesChangedField(newRow, changedFields);
 
     rows.push({
-      oldRow,
+      oldRow: !newRow
+        ? {
+          ...oldRow,
+          objectMatched: false,
+          objectStatus: "old-only",
+          semanticReason: "unmatched-source-line",
+        }
+        : oldRow,
       newRow,
       oldState: !newRow ? "missing" : oldChanged || newChanged ? "changed" : "equal",
       newState: !newRow ? "placeholder" : oldChanged || newChanged ? "changed" : "equal",
@@ -8383,7 +9296,12 @@ function buildMatchedObjectDiffRows(oldObject, newObject) {
 
     rows.push({
       oldRow: null,
-      newRow,
+      newRow: {
+        ...newRow,
+        objectMatched: false,
+        objectStatus: "new-only",
+        semanticReason: "unmatched-target-line",
+      },
       oldState: "placeholder",
       newState: "added",
     });
@@ -8739,7 +9657,9 @@ function appendUnusedObjectLines(rows, object, usedIndexes, side) {
       normalized: canonicalizeComparableLine(line),
       highlights: buildLineSemanticHighlights(object.rawLines[index] || line, object.type, object.canonicalFields || {}, (object.fieldOccurrences || []).filter((item) => item.rawLineIndex === index)),
       ignoredVisual: isVisualIgnoredLine(line, object.type, side),
-      objectMatched: true,
+      objectMatched: false,
+      objectStatus: side === "old" ? "old-only" : "new-only",
+      semanticReason: side === "old" ? "unmatched-source-line" : "unmatched-target-line",
     };
     rows.push({
       oldRow: side === "old" ? diffRow : null,
@@ -9022,6 +9942,7 @@ function renderDiff(rows) {
     renderDiffObjectToolbars();
     syncSemanticObjectBlockWidths();
     if (state.activeDiffObjectKey) highlightObjectLines(state.activeDiffObjectKey);
+    renderCompareIssueContextBanner();
     scheduleSemanticObjectStartAlignment();
   } catch (error) {
     console.error("renderDiff failed", error);
@@ -9502,6 +10423,7 @@ function collectVisibleDiffObjectGroups(pane, paneRect) {
         status: line.dataset.objectStatus || "",
         reason: line.dataset.objectReason || "",
         score: line.dataset.objectScore || "",
+        pane,
         paneRect,
         state: line.classList.contains("changed") ? "changed" : "equal",
       });
@@ -10737,7 +11659,7 @@ function renderOverviewReport(report) {
   const objects = [...(report.oldObjects || []), ...(report.newObjects || [])].filter((object) => object.type !== "global");
   const byType = groupBy(objects, (object) => object.type);
   const dashboard = state.lastDashboardData || buildCurrentDashboardData(report);
-  const { fieldAnalysis, review, graph, severity, context, lineSummary } = dashboard;
+  const { fieldAnalysis, review, graph, severity, context, lineSummary, audit } = dashboard;
   selectors.overviewReport.innerHTML = `
     <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}">
       <div>
@@ -10766,9 +11688,17 @@ function renderOverviewReport(report) {
       <h3>검토 테이블</h3>
       ${renderReportReviewTable(review)}
     </section>
+    <section class="overview-section report-audit-section">
+      <h3>표준 점검 리포트</h3>
+      ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
+        ? renderAuditReportSections(audit)
+        : `<div class="small-note">현재 모드에서는 표시하지 않음. 표준 점검 또는 전환 준비도 모드에서 확인.</div>`}
+    </section>
     <section class="overview-section report-coverage-section">
       <h3>분석된 라인 진단</h3>
-      ${renderCoverageDiagnostics(context.coverageDiagnostics)}
+      ${context.debugDiagnosticsVisible
+        ? renderCoverageDiagnostics(context.coverageDiagnostics)
+        : `<div class="small-note">고급 진단 숨김. 전체 진단 모드에서 확인.</div>`}
     </section>
     <section class="overview-section report-field-section">
       <h3>공통 필드 분석</h3>
@@ -10848,33 +11778,246 @@ function renderReportReviewTable(review = {}) {
     ...(review.lowConfidence || []).map((item) => ({ ...item, group: "낮은 신뢰도" })),
     ...(review.abnormal || []).map((item) => ({ ...item, group: "검토 필요 값" })),
     ...(review.relationshipChanges || []).map((item) => ({ ...item, group: "연결/참조 관계" })),
-  ].slice(0, 40);
+  ];
+  const fieldColumns = getReportReviewFieldColumns(rows);
+  const filterOptions = getReportReviewFilterOptions(rows, fieldColumns);
 
   return `
-    <div class="report-review-table">
-      <div class="summary-table-head">구분</div>
-      <div class="summary-table-head">객체</div>
-      <div class="summary-table-head">사유</div>
-      <div class="summary-table-head">필드</div>
-      <div class="summary-table-head">동작</div>
-      ${rows.length ? rows.map((item) => {
-        const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
-        const fieldText = [
-          item.commonFields ? `공통 ${item.commonFields}` : "",
-          item.differentFields ? `다름 ${item.differentFields}` : "",
-          item.missingOldFields ? `기존 누락 ${item.missingOldFields}` : "",
-          item.missingNewFields ? `신규 누락 ${item.missingNewFields}` : "",
-        ].filter(Boolean).join(" · ") || "-";
-        return `
-          <div>${escapeHtml(item.group)}</div>
-          <div><strong>${escapeHtml(item.objectType)}</strong> ${escapeHtml(item.label || "-")}</div>
-          <div>${escapeHtml(item.reason || "-")}${item.score ? ` · 일치도 ${escapeHtml(item.score)}%` : ""}</div>
-          <div>${escapeHtml(fieldText)}</div>
-          <div><button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button></div>
-        `;
-      }).join("") : `<div class="summary-table-empty">검토 항목 없음</div>`}
+    <div class="report-review-root" data-report-review-root>
+      <div class="report-review-tools">
+        <input type="search" data-report-review-search placeholder="전체 검색" aria-label="검토 테이블 전체 검색" />
+        <button type="button" data-report-review-clear>초기화</button>
+        <span data-report-review-count>${escapeHtml(rows.length)}/${escapeHtml(rows.length)}</span>
+      </div>
+      <div class="report-review-table-wrap">
+      <table class="report-review-field-table">
+        <thead>
+          <tr>
+            <th>${renderReportReviewHeaderSelect("구분", "group", filterOptions.groups)}</th>
+            <th>${renderReportReviewHeaderSelect("객체 타입", "type", filterOptions.types)}</th>
+            <th>${renderReportReviewHeaderSearch("객체 키", "key")}</th>
+            <th>${renderReportReviewHeaderSearch("사유", "reason")}</th>
+            ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses)}</th>`).join("")}
+            <th>${renderReportReviewHeaderSearch("일치도", "score")}</th>
+            <th><div class="report-review-th"><div class="report-review-th-bar"><span>동작</span></div></div></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.map((item) => {
+            const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
+            const meta = getReportReviewRowMeta(item);
+            const objectKey = item.label || item.objectKey || "-";
+            const exceptionTargetId = registerReviewExceptionTarget(item.group || "", item, "report-review");
+            return `
+              <tr
+                data-report-review-row
+                data-review-group="${escapeHtml(item.group || "")}"
+                data-review-type="${escapeHtml(item.objectType || "")}"
+                data-review-key="${escapeHtml(objectKey)}"
+                data-review-reason="${escapeHtml(item.reason || "")}"
+                data-review-score="${escapeHtml(item.score || "")}"
+                data-review-fields="${escapeHtml(meta.fields.join(" "))}"
+                data-review-statuses="${escapeHtml(meta.statuses.join(" "))}"
+                data-review-search="${escapeHtml(meta.searchText)}">
+                <td>${escapeHtml(item.group)}</td>
+                <td>${escapeHtml(item.objectType || "-")}</td>
+                <td><strong>${escapeHtml(objectKey)}</strong></td>
+                <td>${escapeHtml(item.reason || "-")}</td>
+                ${fieldColumns.map((field) => renderReportReviewFieldCell(item, field)).join("")}
+                <td>${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>
+                <td>
+                  <div class="report-review-actions">
+                    <button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button>
+                    ${renderExceptionActionControls(exceptionTargetId)}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join("") : `<tr><td colspan="${fieldColumns.length + 6}" class="report-review-empty">검토 항목 없음</td></tr>`}
+        </tbody>
+      </table>
+      <div class="report-review-filter-empty" data-report-review-filter-empty hidden>조건에 맞는 검토 항목 없음</div>
+      </div>
     </div>
   `;
+}
+
+function renderReportReviewHeaderSearch(title = "", key = "") {
+  return `
+    <div class="report-review-th">
+      ${renderReportReviewHeaderBar(title)}
+      <div class="report-review-filter-panel" data-report-filter-panel hidden>
+        <input type="search" data-report-column-search="${escapeHtml(key)}" placeholder="검색" aria-label="${escapeHtml(title)} 검색" />
+      </div>
+    </div>
+  `;
+}
+
+function renderReportReviewHeaderSelect(title = "", key = "", options = []) {
+  return `
+    <div class="report-review-th">
+      ${renderReportReviewHeaderBar(title)}
+      <div class="report-review-filter-panel" data-report-filter-panel hidden>
+        <select data-report-column-filter="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 필터">
+          <option value="all">전체</option>
+          ${options.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function renderReportReviewFieldHeader(field = "", statuses = []) {
+  return `
+    <div class="report-review-th report-review-field-th">
+      ${renderReportReviewHeaderBar(field)}
+      <div class="report-review-filter-panel" data-report-filter-panel hidden>
+        <input type="search" data-report-field-search="${escapeHtml(field)}" placeholder="값 검색" aria-label="${escapeHtml(field)} 값 검색" />
+        <select data-report-field-status-filter="${escapeHtml(field)}" aria-label="${escapeHtml(field)} 상태 필터">
+          <option value="all">상태 전체</option>
+          ${statuses.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(reportFieldStatusLabel(value))}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function renderReportReviewHeaderBar(title = "") {
+  return `
+    <div class="report-review-th-bar">
+      <span>${escapeHtml(title)}</span>
+      <button type="button" class="report-review-filter-toggle" data-report-filter-toggle aria-expanded="false" aria-label="${escapeHtml(title)} 필터 열기">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M2 3h12L9.5 8.2v3.6l-3 1.7V8.2L2 3z" fill="currentColor" />
+        </svg>
+      </button>
+    </div>
+  `;
+}
+
+const REPORT_REVIEW_DEFAULT_FIELDS = [
+  "neighbor",
+  "peerip",
+  "description",
+  "group",
+  "admin-state",
+  "peer-as",
+  "import.policy",
+  "export.policy",
+  "authentication-key",
+];
+
+function getReportReviewFieldColumns(rows = []) {
+  const present = new Set();
+  rows.forEach((item) => {
+    (item.fieldRows || []).forEach((row) => {
+      if (row?.field) present.add(String(row.field));
+    });
+  });
+  const preferred = REPORT_REVIEW_DEFAULT_FIELDS.filter((field) => present.has(field));
+  const extras = [...present]
+    .filter((field) => !REPORT_REVIEW_DEFAULT_FIELDS.includes(field))
+    .sort();
+  return [...preferred, ...extras].slice(0, 14);
+}
+
+function getReportReviewFilterOptions(rows = [], fieldColumns = []) {
+  const groups = new Set();
+  const types = new Set();
+  const fields = new Set(fieldColumns);
+  const statuses = new Set();
+
+  rows.forEach((item) => {
+    if (item.group) groups.add(String(item.group));
+    if (item.objectType) types.add(String(item.objectType));
+    (item.fieldRows || []).forEach((row) => {
+      if (row?.field) fields.add(String(row.field));
+      if (row?.status) statuses.add(String(row.status).toLowerCase());
+    });
+  });
+
+  return {
+    groups: [...groups].sort(),
+    types: [...types].sort(),
+    fields: [...fields].sort(),
+    statuses: [...statuses].sort(),
+  };
+}
+
+function getReportReviewRowMeta(item = {}) {
+  const fields = [];
+  const statuses = [];
+  const fieldText = [];
+
+  (item.fieldRows || []).forEach((row) => {
+    const field = String(row.field || "").trim();
+    const status = String(row.status || "").toLowerCase();
+    if (field) fields.push(field);
+    if (status) statuses.push(status);
+    fieldText.push(field, status, row.oldValue || "", row.newValue || "");
+  });
+
+  return {
+    fields: [...new Set(fields)],
+    statuses: [...new Set(statuses)],
+    searchText: [
+      item.group,
+      item.objectType,
+      item.label,
+      item.objectKey,
+      item.reason,
+      item.score,
+      ...fieldText,
+    ].map((value) => String(value || "").toLowerCase()).join(" "),
+  };
+}
+
+function renderReportReviewFieldCell(item = {}, field = "") {
+  const row = (item.fieldRows || []).find((entry) => entry.field === field);
+  if (!row) {
+    return `<td class="report-field-empty" data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="">-</td>`;
+  }
+
+  const oldValue = maskReportFieldValue(field, row.oldValue);
+  const newValue = maskReportFieldValue(field, row.newValue);
+  const status = String(row.status || "").toLowerCase();
+  const label = reportFieldStatusLabel(status);
+  const value = formatReportFieldValue(status, oldValue, newValue);
+  const searchText = [value, label, oldValue, newValue, status].map((entry) => String(entry || "").toLowerCase()).join(" ");
+
+  return `
+    <td
+      class="report-field-cell report-field-status-${escapeHtml(status || "unknown")}"
+      data-report-field-cell="${escapeHtml(field)}"
+      data-field-status="${escapeHtml(status)}"
+      data-field-search="${escapeHtml(searchText)}">
+      <span>${escapeHtml(value || "-")}</span>
+      <small>${escapeHtml(label)}</small>
+    </td>
+  `;
+}
+
+function reportFieldStatusLabel(status = "") {
+  if (["same", "equal", "present"].includes(status)) return "동일";
+  if (["added", "missing-old"].includes(status)) return "신규";
+  if (["missing", "missing-new"].includes(status)) return "기존";
+  if (["changed", "different"].includes(status)) return "변경";
+  if (status === "structure-converted") return "구조 전환";
+  if (status === "inheritance-unresolved") return "상속 확인";
+  return status || "-";
+}
+
+function formatReportFieldValue(status = "", oldValue = "", newValue = "") {
+  if (["changed", "different"].includes(status) && oldValue && newValue) return `${oldValue} → ${newValue}`;
+  if (newValue) return newValue;
+  if (oldValue) return oldValue;
+  return "";
+}
+
+function maskReportFieldValue(field = "", value = "") {
+  if (!value) return "";
+  if (/auth|password|secret|key|hash|certificate/i.test(field)) return "값 있음";
+  return String(value);
 }
 
 function renderRelationshipGraph(graph = {}) {
@@ -10948,6 +12091,7 @@ function renderRelationshipGraph(graph = {}) {
 
 function bindReportGraphInteractions() {
   if (!selectors.overviewReport) return;
+  bindReportReviewTableInteractions();
   selectors.overviewReport.querySelectorAll("[data-object-jump]").forEach((item) => {
     item.addEventListener("click", () => {
       const objectKey = item.dataset.objectJump;
@@ -10959,6 +12103,14 @@ function bindReportGraphInteractions() {
       if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
       renderObjectNavigator();
       setResultTab("objects");
+    });
+  });
+  selectors.overviewReport.querySelectorAll(".report-audit-section [data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.dataset.addException || "";
+      const scope = selectors.overviewReport?.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      addExceptionFromTarget(targetId, scope, button);
     });
   });
 
@@ -10986,6 +12138,154 @@ function bindReportGraphInteractions() {
   selectors.overviewReport.querySelector("[data-graph-fit]")?.addEventListener("click", () => {
     graphRoot?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   });
+}
+
+function bindReportReviewTableInteractions() {
+  const root = selectors.overviewReport?.querySelector("[data-report-review-root]");
+  if (!root) return;
+
+  const search = root.querySelector("[data-report-review-search]");
+  const clear = root.querySelector("[data-report-review-clear]");
+  const count = root.querySelector("[data-report-review-count]");
+  const empty = root.querySelector("[data-report-review-filter-empty]");
+  const filters = [...root.querySelectorAll("[data-report-review-filter]")];
+  const columnFilters = [...root.querySelectorAll("[data-report-column-filter]")];
+  const columnSearches = [...root.querySelectorAll("[data-report-column-search]")];
+  const fieldSearches = [...root.querySelectorAll("[data-report-field-search]")];
+  const fieldStatusFilters = [...root.querySelectorAll("[data-report-field-status-filter]")];
+  const filterToggles = [...root.querySelectorAll("[data-report-filter-toggle]")];
+  const rows = [...root.querySelectorAll("[data-report-review-row]")];
+  root.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.dataset.addException || "";
+      const scope = root.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+
+  const apply = () => {
+    const query = String(search?.value || "").trim().toLowerCase();
+    const values = Object.fromEntries(filters.map((filter) => [
+      filter.dataset.reportReviewFilter,
+      filter.value || "all",
+    ]));
+    const columnValues = Object.fromEntries(columnFilters.map((filter) => [
+      filter.dataset.reportColumnFilter,
+      filter.value || "all",
+    ]));
+    const columnQueries = Object.fromEntries(columnSearches.map((filter) => [
+      filter.dataset.reportColumnSearch,
+      String(filter.value || "").trim().toLowerCase(),
+    ]));
+    const fieldQueries = fieldSearches.map((filter) => ({
+      field: filter.dataset.reportFieldSearch || "",
+      query: String(filter.value || "").trim().toLowerCase(),
+    }));
+    const fieldStatuses = fieldStatusFilters.map((filter) => ({
+      field: filter.dataset.reportFieldStatusFilter || "",
+      value: filter.value || "all",
+    }));
+    let visibleCount = 0;
+    const groupFilter = columnValues.group || values.group || "all";
+    const typeFilter = columnValues.type || values.type || "all";
+    const fieldFilter = values.field || "all";
+    const statusFilter = values.status || "all";
+
+    rows.forEach((row) => {
+      const groupMatch = groupFilter === "all" || row.dataset.reviewGroup === groupFilter;
+      const typeMatch = typeFilter === "all" || row.dataset.reviewType === typeFilter;
+      const fieldMatch = fieldFilter === "all" || splitReportReviewTokens(row.dataset.reviewFields).includes(fieldFilter);
+      const statusMatch = statusFilter === "all" || splitReportReviewTokens(row.dataset.reviewStatuses).includes(statusFilter);
+      const keyMatch = !columnQueries.key || String(row.dataset.reviewKey || "").toLowerCase().includes(columnQueries.key);
+      const reasonMatch = !columnQueries.reason || String(row.dataset.reviewReason || "").toLowerCase().includes(columnQueries.reason);
+      const scoreMatch = !columnQueries.score || String(row.dataset.reviewScore || "").toLowerCase().includes(columnQueries.score);
+      const fieldQueryMatch = fieldQueries.every(({ field, query: fieldQuery }) => {
+        if (!fieldQuery) return true;
+        return String(getReportReviewFieldCell(row, field)?.dataset.fieldSearch || "").includes(fieldQuery);
+      });
+      const fieldStatusMatch = fieldStatuses.every(({ field, value }) => {
+        if (value === "all") return true;
+        return String(getReportReviewFieldCell(row, field)?.dataset.fieldStatus || "") === value;
+      });
+      const queryMatch = !query || String(row.dataset.reviewSearch || "").includes(query);
+      const visible = groupMatch &&
+        typeMatch &&
+        fieldMatch &&
+        statusMatch &&
+        keyMatch &&
+        reasonMatch &&
+        scoreMatch &&
+        fieldQueryMatch &&
+        fieldStatusMatch &&
+        queryMatch;
+      row.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+
+    if (count) count.textContent = `${visibleCount}/${rows.length}`;
+    if (empty) empty.hidden = visibleCount > 0 || rows.length === 0;
+  };
+
+  search?.addEventListener("input", apply);
+  filters.forEach((filter) => filter.addEventListener("change", apply));
+  columnFilters.forEach((filter) => filter.addEventListener("change", apply));
+  columnSearches.forEach((filter) => filter.addEventListener("input", apply));
+  fieldSearches.forEach((filter) => filter.addEventListener("input", apply));
+  fieldStatusFilters.forEach((filter) => filter.addEventListener("change", apply));
+  filterToggles.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const panel = button.closest(".report-review-th")?.querySelector("[data-report-filter-panel]");
+      const willOpen = panel?.hidden;
+      root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
+        item.hidden = true;
+      });
+      root.querySelectorAll("[data-report-filter-toggle]").forEach((item) => {
+        item.setAttribute("aria-expanded", "false");
+      });
+      if (panel && willOpen) {
+        panel.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        panel.querySelector("input, select")?.focus();
+      }
+    });
+  });
+  root.addEventListener("click", (event) => {
+    if (event.target.closest(".report-review-th")) return;
+    root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
+      item.hidden = true;
+    });
+    root.querySelectorAll("[data-report-filter-toggle]").forEach((item) => {
+      item.setAttribute("aria-expanded", "false");
+    });
+  });
+  clear?.addEventListener("click", () => {
+    if (search) search.value = "";
+    [...filters, ...columnFilters, ...fieldStatusFilters].forEach((filter) => {
+      filter.value = "all";
+    });
+    [...columnSearches, ...fieldSearches].forEach((filter) => {
+      filter.value = "";
+    });
+    root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
+      item.hidden = true;
+    });
+    filterToggles.forEach((button) => {
+      button.setAttribute("aria-expanded", "false");
+    });
+    apply();
+  });
+  apply();
+}
+
+function splitReportReviewTokens(value = "") {
+  return String(value || "").split(/\s+/).filter(Boolean);
+}
+
+function getReportReviewFieldCell(row, field = "") {
+  return [...row.querySelectorAll("[data-report-field-cell]")]
+    .find((cell) => cell.dataset.reportFieldCell === field);
 }
 
 function setGraphFocus(graphRoot, nodeId = "") {
@@ -11162,6 +12462,7 @@ function scrollToDiffObject(objectKey) {
   scrollPaneToLine(selectors.newDiffPane, pairedNew || newTarget || primary);
   state.syncingDiffScroll = false;
   highlightObjectLines(objectKey);
+  renderCompareIssueContextBanner();
   scheduleDiffConnectorRender();
 }
 
@@ -11191,6 +12492,21 @@ function highlightObjectLines(objectKey) {
   window.setTimeout(() => lines.forEach((line) => line.classList.remove("object-flash")), 1400);
 }
 
+function isUnmatchedRenderRow(row = {}, state = "", counterpart = null) {
+  const status = String(row?.objectStatus || "").toLowerCase();
+  if (isUnmatchedObjectStatus(status)) return true;
+
+  const hasText = Boolean(String(row?.text || "").trim());
+  const counterpartMissing = !counterpart
+    || counterpart.placeholder
+    || counterpart.hidden
+    || !String(counterpart.text || "").trim();
+
+  if (!hasText || !counterpartMissing || row?.objectMatched) return false;
+  return ["missing", "added", "placeholder"].includes(String(state || "").toLowerCase())
+    || Boolean(row?.semanticObjectStart || row?.semanticObjectBlock || row?.rawHtml);
+}
+
 function cssEscape(value) {
   if (window.CSS?.escape) return window.CSS.escape(value);
   return String(value).replace(/["\\]/g, "\\$&");
@@ -11202,6 +12518,9 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
   const counterpartType = counterpart?.objectKey
     ? splitObjectKey(counterpart.objectKey).type
     : objectType;
+  const renderUnmatched = isUnmatchedRenderRow(row, state, counterpart);
+  const effectiveObjectStatus = row?.objectStatus
+    || (renderUnmatched ? (side === "old" ? "old-only" : "new-only") : "");
 
   if (row?.semanticObjectBlock || row?.rawHtml) {
     const wrapperClasses = [
@@ -11209,7 +12528,8 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
       state,
       objectType ? `object-type-${cssSafeClassName(objectType)}` : "",
       row?.objectMatched ? "object-matched" : "",
-      row?.objectStatus ? `object-status-${cssSafeClassName(row.objectStatus)}` : "",
+      effectiveObjectStatus ? `object-status-${cssSafeClassName(effectiveObjectStatus)}` : "",
+      renderUnmatched ? "object-unmatched-row" : "",
       row?.objectReason ? `object-reason-${cssSafeClassName(row.objectReason)}` : "",
       row?.semanticObjectStart ? "semantic-object-start" : "",
       row?.semanticObjectEnd ? "semantic-object-end" : "",
@@ -11224,7 +12544,7 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
         data-object-key="${escapeHtml(row?.objectKey || "")}"
         data-object-identity="${escapeHtml(row?.objectIdentity || "")}"
         data-semantic-object-index="${escapeHtml(row?.semanticObjectIndex ?? "")}"
-        data-object-status="${escapeHtml(row?.objectStatus || "")}"
+        data-object-status="${escapeHtml(effectiveObjectStatus || "")}"
         data-object-score="${escapeHtml(row?.objectScore || "")}"
         data-object-reason="${escapeHtml(row?.objectReason || "")}"
         data-semantic-pair-key="${escapeHtml(row?.semanticPairKey || "")}"
@@ -11236,6 +12556,9 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
 
   const classes = ["diff-line", state];
   if (objectType) classes.push(`object-type-${cssSafeClassName(objectType)}`);
+  if (effectiveObjectStatus) classes.push(`object-status-${cssSafeClassName(effectiveObjectStatus)}`);
+  if (renderUnmatched) classes.push("object-unmatched-row");
+  if (row?.objectReason) classes.push(`object-reason-${cssSafeClassName(row.objectReason)}`);
 
   if (row?.objectMatched) {
     classes.push(
@@ -11281,7 +12604,7 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
     data-object-type="${escapeHtml(objectType)}"
     data-object-key="${escapeHtml(row?.objectKey || "")}"
     data-object-identity="${escapeHtml(row?.objectIdentity || "")}"
-    data-object-status="${escapeHtml(row?.objectStatus || "")}"
+    data-object-status="${escapeHtml(effectiveObjectStatus || "")}"
     data-object-score="${escapeHtml(row?.objectScore || "")}"
     data-object-reason="${escapeHtml(row?.objectReason || "")}"
     data-semantic-object-index="${escapeHtml(row?.semanticObjectIndex ?? "")}"
@@ -11296,8 +12619,8 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
 }
 
 function renderDiffObjectToolbars() {
-  renderDiffObjectToolbar("old");
-  renderDiffObjectToolbar("new");
+  // Compare editor no longer shows the bottom object move/delete tray.
+  // Object review stays in Summary/Integrated Report.
 }
 
 function renderDiffObjectToolbar(source) {
@@ -11392,6 +12715,81 @@ function highlightSharedTokens(text, counterpartText, objectType = "", counterpa
     html = html.replaceAll(marker, `<span class="diff-token-match token-color-${colorIndex}${fieldClass}" data-token-kind="${item.kind}" data-token-match="${item.match}" data-semantic-field="${escapeHtml(field)}" data-token="${escapeHtml(item.token)}">${escapeHtml(item.token)}</span>`);
   });
   return html;
+}
+
+function renderAuditReportSections(audit = {}) {
+  const findings = audit.findings || [];
+  if (!findings.length) return `<div class="small-note">표준 점검 항목 없음</div>`;
+  const active = findings.filter((finding) => !finding.suppressed);
+  const suppressed = findings.filter((finding) => finding.suppressed);
+  const sections = [
+    ["QoS 분석", "qos"],
+    ["Filter/ACL 분석", "filter-acl"],
+    ["Routing/BGP Policy 분석", "routing-bgp"],
+    ["Subscriber/Service 분석", "subscriber-service"],
+    ["Management/Security 분석", "management-security"],
+    ["전환 위험 분석", "migration"],
+    ["수동 검토 목록", "manual-review"],
+    ["미지원 설정 목록", "unsupported"],
+  ];
+
+  return `
+    <div class="audit-report-grid">
+      ${sections.map(([title, key]) => renderAuditFindingSection(title, filterAuditFindings(active, key))).join("")}
+      ${renderAuditFindingSection("예외 처리 목록", suppressed)}
+    </div>
+  `;
+}
+
+function filterAuditFindings(findings = [], key = "") {
+  if (key === "migration") {
+    return findings.filter((finding) => finding.migrationImpact && finding.migrationImpact !== "no-impact");
+  }
+  if (key === "manual-review" || key === "unsupported") {
+    return findings.filter((finding) => finding.severity === key);
+  }
+  return findings.filter((finding) => finding.category === key);
+}
+
+function renderAuditFindingSection(title, findings = []) {
+  return `
+    <section class="audit-report-section">
+      <h4>${escapeHtml(title)} (${escapeHtml(findings.length)})</h4>
+      ${findings.length ? findings.slice(0, 20).map(renderAuditFindingDetail).join("") : `<div class="small-note">항목 없음</div>`}
+    </section>
+  `;
+}
+
+function renderAuditFindingDetail(finding = {}) {
+  const severity = finding.suppressed ? "suppressed" : finding.severity || "info";
+  const exceptionTargetId = registerAuditExceptionTarget(finding, "report-audit");
+  const source = (finding.sourceLines || []).slice(0, 6).map((line) =>
+    `<code>${escapeHtml(line.line || "-")}: ${escapeHtml(line.text || "")}</code>`
+  ).join("");
+  return `
+    <details class="audit-detail audit-severity-${escapeHtml(cssSafeClassName(severity))}" data-audit-detail-id="${escapeHtml(finding.id || "")}">
+      <summary>
+        <span>${escapeHtml(AUDIT_SEVERITY_LABELS_KO[severity] || severity)}</span>
+        <strong>${escapeHtml(finding.titleKo || "검토 항목")}</strong>
+        <em>${escapeHtml(finding.objectType || "-")} ${escapeHtml(finding.objectKey || "-")}</em>
+      </summary>
+      <div class="audit-detail-body">
+        <p>${escapeHtml(finding.descriptionKo || "")}</p>
+        <div class="audit-detail-grid">
+          <div><span>규칙</span><strong>${escapeHtml(finding.ruleId || "-")}</strong></div>
+          <div><span>필드</span><strong>${escapeHtml(finding.fieldPath || "-")}</strong></div>
+          <div><span>현재값</span><strong>${escapeHtml(finding.actualValue || "-")}</strong></div>
+          <div><span>표준값</span><strong>${escapeHtml(finding.expectedValue || "-")}</strong></div>
+          <div><span>전환 영향</span><strong>${escapeHtml(MIGRATION_IMPACT_LABELS_KO[finding.migrationImpact] || finding.migrationImpact || "-")}</strong></div>
+          <div><span>프로파일</span><strong>${escapeHtml(finding.policyProfile || "-")}</strong></div>
+        </div>
+        <p><strong>권장 조치:</strong> ${escapeHtml(finding.recommendationKo || "-")}</p>
+        ${finding.suppressed ? `<p><strong>예외:</strong> ${escapeHtml(finding.suppressionReason || "-")}</p>` : ""}
+        ${!finding.suppressed ? renderExceptionActionControls(exceptionTargetId) : ""}
+        <div class="audit-source-lines">${source || `<span class="small-note">소스 라인 없음</span>`}</div>
+      </div>
+    </details>
+  `;
 }
 
 function buildTokenHighlightRegex(token) {
@@ -11924,6 +13322,7 @@ function normalizeProfile(profile) {
       ignore: Array.isArray(profile.rules?.ignore) ? profile.rules.ignore : [],
       required: Array.isArray(profile.rules?.required) ? profile.rules.required : [],
     },
+    exceptions: normalizeProfileExceptions(profile.exceptions),
     examples: normalizeExamples(profile.examples),
     identityRules: normalizeIdentityRules(profile.identityRules),
     lineMappings: normalizeLineMappings(profile.lineMappings),
@@ -11937,6 +13336,51 @@ function normalizeProfile(profile) {
     semanticLineGroups: normalizeSemanticLineGroups(profile.semanticLineGroups),
     parserRules: normalizeParserRules(profile.parserRules),
   };
+}
+
+function normalizeProfileExceptions(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const target = item.target && typeof item.target === "object" ? item.target : {};
+      const match = item.match && typeof item.match === "object" ? item.match : {};
+      const scope = item.scope === "profile" ? "profile" : "object";
+      return {
+        id: item.id || createId(),
+        scope,
+        createdAt: item.createdAt || new Date().toISOString(),
+        createdBy: item.createdBy || "user",
+        createdFromIssueId: item.createdFromIssueId || target.createdFromIssueId || "",
+        reasonKo: item.reasonKo || item.reason || target.reasonKo || "사용자 예외",
+        target: {
+          ruleId: target.ruleId || item.ruleId || "",
+          category: target.category || item.category || "",
+          objectType: target.objectType || item.objectType || "",
+          objectKey: target.objectKey || item.objectKey || "",
+          displayName: target.displayName || item.displayName || "",
+          fieldPath: target.fieldPath || item.fieldPath || item.field || "",
+          side: normalizeExceptionSide(target.side || item.side || "both"),
+          oldValue: target.oldValue ?? item.oldValue ?? "",
+          newValue: target.newValue ?? item.newValue ?? "",
+          sourceLineIds: Array.isArray(target.sourceLineIds) ? target.sourceLineIds : [],
+          targetLineIds: Array.isArray(target.targetLineIds) ? target.targetLineIds : [],
+          findingType: target.findingType || item.findingType || "",
+        },
+        match: {
+          mode: match.mode || (scope === "profile" ? "profile-field-rule" : "exact-object"),
+          objectType: match.objectType || target.objectType || item.objectType || "",
+          objectKey: scope === "object" ? (match.objectKey || target.objectKey || item.objectKey || "") : "",
+          fieldPath: match.fieldPath || target.fieldPath || item.fieldPath || item.field || "",
+          ruleId: match.ruleId || target.ruleId || item.ruleId || "",
+          category: match.category || target.category || item.category || "",
+          findingType: match.findingType || target.findingType || item.findingType || "",
+          valuePattern: match.valuePattern || item.valuePattern || "",
+          vendorPair: match.vendorPair || item.vendorPair || "",
+        },
+        enabled: item.enabled !== false,
+      };
+    });
 }
 
 function normalizeSemanticObjects(value) {

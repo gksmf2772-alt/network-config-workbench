@@ -6,7 +6,15 @@
   "scripts": {
     "dev": "vite",
     "test": "node --test tests/*.test.js",
-    "validate:compare": "node scripts/validateCompareFixtures.js",
+    "validate:inventory": "node scripts/validate-inventory.mjs",
+    "validate:compare": "node scripts/validate-compare-workflows.mjs --mode compare",
+    "validate:audit": "node scripts/validate-compare-workflows.mjs --mode audit",
+    "validate:report": "node scripts/validate-compare-workflows.mjs --mode report",
+    "validate:graph": "node scripts/validate-compare-workflows.mjs --mode graph",
+    "validate:quality": "node scripts/analyze-validation-quality.mjs",
+    "validate:stress": "node scripts/validate-stress.mjs --iterations 1000",
+    "validate:all": "node scripts/validate-all.mjs",
+    "validate:compare:fixtures": "node scripts/validateCompareFixtures.js",
     "validate:compare:stress": "node scripts/validateCompareFixtures.js --iterations 1000 --scope bgp",
     "build": "vite build",
     "preview": "vite preview"

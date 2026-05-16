@@ -67,6 +67,26 @@ test("Nokia Classic static route matches MD-CLI one-line route semantically", ()
   assert.equal(result.plan[0].relationshipSummary[0].status, "matched");
 });
 
+test("Nokia Classic indirect static route preserves next-hop for audit and migration review", () => {
+  const config = [
+    "static-route-entry 125.144.253.0/24",
+    "    indirect 125.144.5.1",
+    "        tunnel-next-hop",
+    "            resolution disabled",
+    "        exit",
+    "        no shutdown",
+    "    exit",
+    "exit",
+  ].join("\n");
+
+  const result = parse("nokia-classic", config, "old");
+  assert.equal(result.objects.length, 1);
+  assert.equal(result.objects[0].normalizedType, "static-route");
+  assert.equal(result.objects[0].fields["next-hop"], "125.144.5.1");
+  assert.equal(result.objects[0].fields["next-hop-type"], "indirect");
+  assert.equal(result.objects[0].fields["tunnel-next-hop"], "true");
+});
+
 test("Nokia MD-CLI nested static route preserves route, next-hop, state and tag", () => {
   const config = [
     'router "Base" {',

@@ -6,7 +6,9 @@ import {
   FileCode2,
   GitCompare,
   RotateCcw,
+  Settings,
   SlidersHorizontal,
+  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import ConfigEditor from "./ConfigEditor.jsx";
@@ -22,21 +24,34 @@ function SwitchRow({ id, defaultChecked, children }) {
   return <AppCheckbox id={id} defaultChecked={defaultChecked} label={children} className="switch-row ncw-switch-row" />;
 }
 
+const SETTINGS_MENUS = [
+  { id: "compare", label: "비교 옵션" },
+  { id: "scope", label: "객체 범위" },
+  { id: "view", label: "보기" },
+  { id: "status", label: "상태" },
+];
+
 export default function ConfigInputPanel() {
-  const [controlsCollapsed, setControlsCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsMenu, setSettingsMenu] = useState("compare");
 
   return (
     <section id="compareTab" className="tab-panel active">
       <div className="workspace">
+        {settingsOpen ? (
+          <button
+            className="compare-settings-scrim"
+            type="button"
+            aria-label="비교 설정 닫기"
+            onClick={() => setSettingsOpen(false)}
+          />
+        ) : null}
         <motion.aside
-          className="control-panel ncw-control-panel"
-          initial={{ opacity: 0, x: -18 }}
-          animate={{
-            opacity: controlsCollapsed ? 0.92 : 1,
-            x: controlsCollapsed ? -10 : 0,
-            width: controlsCollapsed ? 44 : "auto",
-          }}
+          className={`control-panel ncw-control-panel compare-settings-panel ${settingsOpen ? "is-open" : ""}`}
+          initial={false}
+          animate={{ opacity: settingsOpen ? 1 : 0, y: settingsOpen ? 0 : -8 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
+          aria-hidden={!settingsOpen}
         >
           <AppIconButton
             id="toggleControlsBtn"
@@ -44,12 +59,37 @@ export default function ConfigInputPanel() {
             type="button"
             title="비교 옵션 숨기기"
             aria-label="비교 옵션 숨기기"
-            onClick={() => setControlsCollapsed((value) => !value)}
+            onClick={() => setSettingsOpen((value) => !value)}
           >
             <ChevronLeft className="h-4 w-4" />
           </AppIconButton>
 
-          <AppPanel className="ncw-side-card">
+          <div className="compare-settings-panel__header">
+            <div>
+              <strong>비교 설정</strong>
+              <span>메뉴별 옵션 설정</span>
+            </div>
+            <AppIconButton type="button" title="닫기" aria-label="닫기" onClick={() => setSettingsOpen(false)}>
+              <X className="h-4 w-4" />
+            </AppIconButton>
+          </div>
+
+          <div className="compare-settings-panel__body">
+            <nav className="compare-settings-menu" aria-label="비교 설정 메뉴">
+              {SETTINGS_MENUS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={settingsMenu === item.id ? "is-active" : ""}
+                  onClick={() => setSettingsMenu(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="compare-settings-content">
+          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "compare" ? "is-active" : ""}`}>
             <AppSectionHeader icon={SlidersHorizontal} title="비교 옵션" description="정규화, 정렬, 의미 기반 차이점 필터" />
             <div className="app-panel__content grid gap-3">
               <SwitchRow id="normalizeSpacingToggle" defaultChecked>공백 정규화</SwitchRow>
@@ -61,22 +101,14 @@ export default function ConfigInputPanel() {
             </div>
           </AppPanel>
 
-          <AppPanel className="ncw-side-card">
-            <AppSectionHeader title="프로파일" description="벤더 매핑 및 의미 규칙 적용" />
-            <div className="app-panel__content grid gap-3">
-              <label>프로파일<AppSelect id="profileSelect" /></label>
-              <AppButton id="loadProfileBtn" type="button" variant="secondary">프로파일 적용</AppButton>
-            </div>
-          </AppPanel>
-
-          <AppPanel className="ncw-side-card">
+          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "scope" ? "is-active" : ""}`}>
             <AppSectionHeader title="객체 범위" />
             <div className="app-panel__content">
               <div id="objectToggles" className="chip-grid" />
             </div>
           </AppPanel>
 
-          <AppPanel className="ncw-side-card">
+          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "view" ? "is-active" : ""}`}>
             <AppSectionHeader title="보기" />
             <div className="app-panel__content grid gap-3">
               <label>
@@ -128,7 +160,7 @@ export default function ConfigInputPanel() {
             </div>
           </AppPanel>
 
-          <AppPanel className="ncw-side-card">
+          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "status" ? "is-active" : ""}`}>
             <AppSectionHeader title="상태" />
             <div className="app-panel__content">
               <div className="status-card">
@@ -137,6 +169,8 @@ export default function ConfigInputPanel() {
               </div>
             </div>
           </AppPanel>
+            </div>
+          </div>
         </motion.aside>
 
         <section className="compare-area">
@@ -147,6 +181,20 @@ export default function ConfigInputPanel() {
             transition={{ duration: 0.16, ease: "easeOut", delay: 0.04 }}
           >
             <AppToolbar>
+              <AppButton
+                id="openCompareSettingsBtn"
+                className="compare-settings-trigger"
+                type="button"
+                variant="secondary"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings /> 설정
+              </AppButton>
+              <div className="compare-profile-inline">
+                <span>프로파일</span>
+                <AppSelect id="profileSelect" />
+                <AppButton id="loadProfileBtn" type="button" variant="secondary">적용</AppButton>
+              </div>
               <AppButton id="compareBtn" type="button"><GitCompare />비교 실행</AppButton>
               <AppButton id="alignBtn" type="button" variant="secondary">객체 정렬</AppButton>
               <AppIconButton id="restoreInitialBtn" type="button" title="초기 입력 원복"><RotateCcw /></AppIconButton>

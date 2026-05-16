@@ -25,6 +25,9 @@ function getFieldDisplayStatus(fieldSummary) {
   if (fieldSummary?.violation) return fieldSummary.violationReason || "정책 위반";
   if (fieldSummary?.ignored) return "무시";
   const status = fieldSummary?.effectiveStatus || fieldSummary?.status || "unknown";
+  if (status === "structure-converted") return "구조 전환";
+  if (status === "group-inherited") return "그룹 상속";
+  if (status === "inheritance-unresolved") return "상속 확인 필요";
   return ({
     equal: "동일",
     matched: "매칭",
@@ -60,11 +63,21 @@ function renderFieldSummary(fieldSummary = {}) {
             <span class="semantic-field-status">${escapeHtml(getFieldDisplayStatus(field))}</span>
           </div>
           <div class="semantic-field-values compact">${getFieldCompactValue(field)}</div>
+          ${renderFieldSourceBadges(field)}
           ${field.violation ? `<div class="semantic-violation">위반: ${escapeHtml(field.violationReason)}</div>` : ""}
         </div>
       `).join("")}
     </div>
   `;
+}
+
+function renderFieldSourceBadges(field = {}) {
+  const labels = [
+    ...(Array.isArray(field.oldSourceLabels) ? field.oldSourceLabels.map((label) => `기존: ${label}`) : []),
+    ...(Array.isArray(field.newSourceLabels) ? field.newSourceLabels.map((label) => `신규: ${label}`) : []),
+  ].filter(Boolean);
+  if (!labels.length) return "";
+  return `<div class="semantic-field-source">${labels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>`;
 }
 
 function getLineDisplayStatus(lineMatch) {
@@ -228,6 +241,53 @@ function relationshipIssueCount(relationships = []) {
   }).length;
 }
 
+function auditSeverityLabel(severity = "") {
+  return ({
+    critical: "위험",
+    warning: "경고",
+    "manual-review": "수동 검토",
+    unsupported: "미지원",
+    suppressed: "예외 처리됨",
+    info: "정보",
+  })[severity] || severity || "표준 점검";
+}
+
+function renderAuditBadges(item = {}) {
+  const findings = Array.isArray(item.auditFindings) ? item.auditFindings : [];
+  if (!findings.length) return "";
+  const active = findings.filter((finding) => !finding.suppressed);
+  const severity = item.auditSeverity || (active[0]?.severity) || (findings.some((finding) => finding.suppressed) ? "suppressed" : "info");
+  const count = active.length || findings.length;
+  return `<span class="semantic-object-metric audit-badge audit-badge-${escapeHtml(severity)}">${escapeHtml(auditSeverityLabel(severity))} ${escapeHtml(count)}</span>`;
+}
+
+function renderAuditFindingDetails(item = {}) {
+  const findings = Array.isArray(item.auditFindings) ? item.auditFindings : [];
+  if (!findings.length) return "";
+  return `
+    <details class="semantic-detail-block semantic-audit-detail">
+      <summary>표준 점검 (${findings.length})</summary>
+      <div class="semantic-audit-list">
+        ${findings.map((finding) => {
+          const severity = finding.suppressed ? "suppressed" : finding.severity || "info";
+          const source = (finding.sourceLines || []).slice(0, 4).map((line) => `${line.line || "-"}: ${line.text || ""}`).join("\n");
+          return `
+            <article class="semantic-audit-item audit-badge-${escapeHtml(severity)}">
+              <strong>${escapeHtml(auditSeverityLabel(severity))} · ${escapeHtml(finding.titleKo || "검토 항목")}</strong>
+              <span>필드: ${escapeHtml(finding.fieldPath || "-")}</span>
+              <span>현재값: ${escapeHtml(finding.actualValue || "-")}</span>
+              <span>표준값: ${escapeHtml(finding.expectedValue || "-")}</span>
+              <p>${escapeHtml(finding.descriptionKo || "")}</p>
+              <p>권장 조치: ${escapeHtml(finding.recommendationKo || "-")}</p>
+              ${source ? `<pre>${escapeHtml(source)}</pre>` : ""}
+            </article>
+          `;
+        }).join("")}
+      </div>
+    </details>
+  `;
+}
+
 function fieldChangedCount(fieldSummary = {}) {
   return Object.values(fieldSummary || {}).filter((item) => {
     const status = String(item?.effectiveStatus || item?.status || "").toLowerCase();
@@ -242,7 +302,7 @@ function summarizePlan(plan = []) {
     if (state === "matched" || state === "manual") acc.matched += 1;
     else if (state === "ambiguous") acc.ambiguous += 1;
     else acc.unmatched += 1;
-    acc.violations += item.policyViolationCount || 0;
+    acc.violations += (item.policyViolationCount || 0) + (item.auditFindingCount || 0);
     return acc;
   }, { total: 0, matched: 0, unmatched: 0, ambiguous: 0, violations: 0 });
 }
@@ -275,6 +335,7 @@ export function renderComparisonPlanHtml(plan = []) {
         const stateClass = getSemanticStateClass(item);
         const stateLabel = getSemanticStateLabel(item);
         const violations = item.policyViolationCount || 0;
+        const auditFindings = item.auditFindingCount || 0;
         const relationshipIssues = relationshipIssueCount(item.relationshipSummary || []);
         const changedFields = fieldChangedCount(item.fieldSummary || {});
 
@@ -290,6 +351,7 @@ export function renderComparisonPlanHtml(plan = []) {
               </span>
               <span class="semantic-object-metric">점수 ${item.score ?? "-"}</span>
               <span class="semantic-object-metric">위반 ${violations}</span>
+              ${renderAuditBadges(item)}
               <span class="semantic-object-metric">관계 ${relationshipIssues}</span>
               <span class="semantic-object-metric">필드 ${changedFields}/${item.fieldStats?.totalFields ?? 0}</span>
             </summary>
@@ -308,6 +370,7 @@ export function renderComparisonPlanHtml(plan = []) {
               ${item.ambiguousAlternatives?.length ? `<details class="semantic-detail-block"><summary>대체 후보 (${item.ambiguousAlternatives.length})</summary>${renderAmbiguousAlternatives(item)}</details>` : ""}
               ${item.manualCandidates?.length ? `<details class="semantic-detail-block" open><summary>수동 매핑 후보 (${item.manualCandidates.length})</summary>${renderManualCandidates(item)}</details>` : ""}
               <details class="semantic-detail-block"><summary>필드 비교 (${item.fieldStats?.totalFields ?? 0})</summary>${renderFieldSummary(item.fieldSummary)}</details>
+              ${auditFindings ? renderAuditFindingDetails(item) : ""}
               ${renderRelationshipSummary(item.relationshipSummary)}
               ${renderLineMatches(item.lineMatches)}
             </div>

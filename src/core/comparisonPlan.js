@@ -3,6 +3,10 @@ import { compareObjectPlanLines } from "./lineDiff.js";
 import { applyFieldPolicies } from "./fieldPolicy.js";
 import { evaluatePolicyContext } from "./policyEvaluator.js";
 import { applyDefaultNoopLineSuppression } from "./semanticRules.js";
+import {
+  formatBgpFieldSourceKo,
+  isBgpInheritanceUnresolved,
+} from "./bgpEffectiveResolver.js";
 
 function getObjectType(match) {
   return (
@@ -89,6 +93,8 @@ function collectTokenMatchesFromLineMatches(lineMatches = []) {
 
         oldLine: fieldMatch.oldLine,
         newLine: fieldMatch.newLine,
+        oldSource: fieldMatch.oldSource,
+        newSource: fieldMatch.newSource,
 
         sourceReason: lineMatch.reason,
       });
@@ -128,6 +134,8 @@ function collectObjectLevelFieldMatches({
         newRawValue: null,
         oldLine: null,
         newLine: null,
+        oldSource: oldField.source,
+        newSource: null,
         sourceReason: "object-field-missing",
       });
       continue;
@@ -143,6 +151,8 @@ function collectObjectLevelFieldMatches({
         newRawValue: newField.rawValue,
         oldLine: null,
         newLine: null,
+        oldSource: oldField.source,
+        newSource: newField.source,
         sourceReason: "object-field-equal",
       });
     } else {
@@ -155,6 +165,8 @@ function collectObjectLevelFieldMatches({
         newRawValue: newField.rawValue,
         oldLine: null,
         newLine: null,
+        oldSource: oldField.source,
+        newSource: newField.source,
         sourceReason: "object-field-changed",
       });
     }
@@ -174,6 +186,8 @@ function collectObjectLevelFieldMatches({
       newRawValue: newField.rawValue,
       oldLine: null,
       newLine: null,
+      oldSource: null,
+      newSource: newField.source,
       sourceReason: "object-field-added",
     });
   }
@@ -204,15 +218,20 @@ function collectObjectFields(object) {
   for (const [field, value] of Object.entries(candidateFields)) {
     if (value == null || value === "") continue;
 
-    fields[field] = {
+    addObjectCompareField(fields, {
       field,
       value,
       rawValue: value,
-    };
+      source: getObjectFieldSource(object, field),
+    });
   }
 
-  if (object.fields && typeof object.fields === "object") {
-    for (const [field, value] of Object.entries(object.fields)) {
+  const semanticFields = objectType === "bgp" && object.effectiveFields
+    ? object.effectiveFields
+    : object.fields;
+
+  if (semanticFields && typeof semanticFields === "object") {
+    for (const [field, value] of Object.entries(semanticFields)) {
       if (value == null || value === "") continue;
       if (fields[field]) continue;
       if (
@@ -221,17 +240,57 @@ function collectObjectFields(object) {
       ) {
         continue;
       }
-      if (!isVisibleCompareField(field)) continue;
 
-      fields[field] = {
+      addObjectCompareField(fields, {
         field,
         value,
         rawValue: value,
-      };
+        source: getObjectFieldSource(object, field),
+      });
     }
   }
 
   return fields;
+}
+
+function addObjectCompareField(fields, {
+  field,
+  value,
+  rawValue = value,
+  source = null,
+} = {}) {
+  const compareField = canonicalCompareField(field);
+  if (!isVisibleCompareField(compareField)) return;
+
+  const nextField = {
+    field: compareField,
+    rawField: field,
+    value,
+    rawValue,
+    source,
+  };
+  const existing = fields[compareField];
+
+  if (!existing) {
+    fields[compareField] = nextField;
+    return;
+  }
+
+  const nextIsCanonical = field === compareField;
+  const existingIsAlias = existing.rawField && existing.rawField !== compareField;
+
+  if (nextIsCanonical && existingIsAlias) {
+    fields[compareField] = nextField;
+  }
+}
+
+function getObjectFieldSource(object = {}, field = "") {
+  const compareField = canonicalCompareField(field);
+  return (
+    object.fieldSources?.[compareField] ||
+    object.fieldSources?.[field] ||
+    buildDefaultFieldSource(object, compareField)
+  );
 }
 
 const VISIBLE_COMPARE_FIELDS = new Set([
@@ -242,6 +301,9 @@ const VISIBLE_COMPARE_FIELDS = new Set([
   "peer-as",
   "peerIp",
   "neighbor",
+  "group",
+  "import.policy",
+  "export.policy",
   "route",
   "next-hop",
   "metric",
@@ -259,16 +321,33 @@ const VISIBLE_COMPARE_FIELDS = new Set([
   "sap",
 ]);
 
+const COMPARE_FIELD_ALIASES = {
+  state: "admin-state",
+};
+
+function canonicalCompareField(field = "") {
+  const key = String(field || "").trim();
+  return COMPARE_FIELD_ALIASES[key] || key;
+}
+
 function isVisibleCompareField(field) {
-  return VISIBLE_COMPARE_FIELDS.has(field);
+  return VISIBLE_COMPARE_FIELDS.has(canonicalCompareField(field));
 }
 
 export function createFieldSummary(tokenMatches = []) {
   const summary = {};
 
   for (const tokenMatch of tokenMatches) {
-    const field = tokenMatch.field || "unknown";
+    const rawField = tokenMatch.field || "unknown";
+    const field = canonicalCompareField(rawField);
     if (!isVisibleCompareField(field)) continue;
+    const normalizedTokenMatch = rawField === field
+      ? tokenMatch
+      : {
+          ...tokenMatch,
+          field,
+          rawField,
+        };
 
     if (!summary[field]) {
       summary[field] = {
@@ -280,30 +359,40 @@ export function createFieldSummary(tokenMatches = []) {
         added: 0,
         oldValues: [],
         newValues: [],
+        oldSources: [],
+        newSources: [],
         matches: [],
       };
     }
 
     const item = summary[field];
 
-    item.matches.push(tokenMatch);
+    item.matches.push(normalizedTokenMatch);
 
-    if (tokenMatch.status === "equal") {
+    if (normalizedTokenMatch.status === "equal") {
       item.equal += 1;
-    } else if (tokenMatch.status === "changed") {
+    } else if (normalizedTokenMatch.status === "changed") {
       item.changed += 1;
-    } else if (tokenMatch.status === "missing") {
+    } else if (normalizedTokenMatch.status === "missing") {
       item.missing += 1;
-    } else if (tokenMatch.status === "added") {
+    } else if (normalizedTokenMatch.status === "added") {
       item.added += 1;
     }
 
-    if (tokenMatch.oldValue != null) {
-      item.oldValues.push(tokenMatch.oldValue);
+    if (normalizedTokenMatch.oldValue != null) {
+      item.oldValues.push(normalizedTokenMatch.oldValue);
     }
 
-    if (tokenMatch.newValue != null) {
-      item.newValues.push(tokenMatch.newValue);
+    if (normalizedTokenMatch.newValue != null) {
+      item.newValues.push(normalizedTokenMatch.newValue);
+    }
+
+    if (normalizedTokenMatch.oldSource) {
+      item.oldSources.push(normalizedTokenMatch.oldSource);
+    }
+
+    if (normalizedTokenMatch.newSource) {
+      item.newSources.push(normalizedTokenMatch.newSource);
     }
   }
 
@@ -327,6 +416,8 @@ export function createFieldSummary(tokenMatches = []) {
       item.status = "equal";
       item.oldValues = [oldCanonicalValue];
       item.newValues = [newCanonicalValue];
+      item.oldSourceLabels = uniqueSourceLabels(item.oldSources);
+      item.newSourceLabels = uniqueSourceLabels(item.newSources);
       continue;
     }
 
@@ -352,9 +443,23 @@ export function createFieldSummary(tokenMatches = []) {
 
     item.oldValues = [...new Set(item.oldValues)];
     item.newValues = [...new Set(item.newValues)];
+    item.oldSourceLabels = uniqueSourceLabels(item.oldSources);
+    item.newSourceLabels = uniqueSourceLabels(item.newSources);
   }
 
   return summary;
+}
+
+function uniqueSourceLabels(sources = []) {
+  const labels = [];
+  const seen = new Set();
+  for (const source of sources || []) {
+    const label = formatBgpFieldSourceKo(source);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
+  }
+  return labels;
 }
 
 function pickCanonicalFieldValue(field, values = []) {
@@ -396,6 +501,7 @@ function getEqualFieldNames(fieldSummary = {}) {
           item.effectiveStatus === "equal"
       )
       .map((item) => String(item.field || "").trim())
+      .map(canonicalCompareField)
       .filter(Boolean)
   );
 }
@@ -412,7 +518,7 @@ function isLineCoveredByEqualField(lineMatch, equalFields) {
     : [];
 
   return fieldMatches.some((fieldMatch) => {
-    const field = String(fieldMatch.field || "").trim();
+    const field = canonicalCompareField(fieldMatch.field || "");
     return equalFields.has(field);
   });
 }
@@ -439,12 +545,28 @@ function applySemanticLineCoverage(
   });
 }
 
+function buildDefaultFieldSource(object = {}, field = "") {
+  if ((object.normalizedType || object.type) !== "bgp") return null;
+  if (field === "group") {
+    return {
+      source: "mdcli-group-reference",
+      labelKo: "그룹 참조",
+      group: object.fields?.group || object.groupReference || "",
+    };
+  }
+  return {
+    source: "direct-neighbor",
+    labelKo: "직접 설정",
+  };
+}
+
 function applyPolicySuppressionToLineMatches({
   lineMatches = [],
   objectType = "",
   profile = {},
   oldObject = null,
   newObject = null,
+  findingType = "",
 } = {}) {
   return lineMatches.map((lineMatch) => {
     const fieldMatches = Array.isArray(lineMatch.fieldMatches) ? lineMatch.fieldMatches : [];
@@ -461,6 +583,7 @@ function applyPolicySuppressionToLineMatches({
           objectKey: objectKeyForPolicy(oldObject, objectType),
           field,
           fieldValue: fieldMatch.oldValue,
+          findingType,
         })
         : null;
       const newPolicy = fieldMatch.newLine || fieldMatch.newValue != null
@@ -472,6 +595,7 @@ function applyPolicySuppressionToLineMatches({
           objectKey: objectKeyForPolicy(newObject, objectType),
           field,
           fieldValue: fieldMatch.newValue,
+          findingType,
         })
         : null;
 
@@ -487,6 +611,7 @@ function applyPolicySuppressionToLineMatches({
         side: "old",
         objectType,
         objectKey: objectKeyForPolicy(oldObject, objectType),
+        findingType,
       });
       if (policy.suppressed) policyHits.push(policy);
     });
@@ -498,6 +623,7 @@ function applyPolicySuppressionToLineMatches({
         side: "new",
         objectType,
         objectKey: objectKeyForPolicy(newObject, objectType),
+        findingType,
       });
       if (policy.suppressed) policyHits.push(policy);
     });
@@ -520,6 +646,137 @@ function applyPolicySuppressionToLineMatches({
       })),
     };
   });
+}
+
+function applyLineExceptionSuppressionToFieldPolicy({
+  policyResult = {},
+  objectType = "",
+  profile = {},
+  oldObject = null,
+  newObject = null,
+  findingType = "",
+} = {}) {
+  const fieldSummary = { ...(policyResult.fieldSummary || {}) };
+  const suppressedFields = new Set();
+  const suppressionReasons = {};
+
+  for (const [field, summary] of Object.entries(fieldSummary)) {
+    const matches = Array.isArray(summary.matches) ? summary.matches : [];
+    const policyHits = [];
+
+    for (const match of matches) {
+      const oldPolicy = match.oldLine || match.oldValue != null
+        ? evaluatePolicyContext({
+          profile,
+          rawLine: match.oldLine || "",
+          side: "old",
+          objectType,
+          objectKey: objectKeyForPolicy(oldObject, objectType),
+          field,
+          fieldValue: match.oldValue,
+          findingType,
+        })
+        : null;
+      const newPolicy = match.newLine || match.newValue != null
+        ? evaluatePolicyContext({
+          profile,
+          rawLine: match.newLine || "",
+          side: "new",
+          objectType,
+          objectKey: objectKeyForPolicy(newObject, objectType),
+          field,
+          fieldValue: match.newValue,
+          findingType,
+        })
+        : null;
+
+      [oldPolicy, newPolicy].filter(Boolean).forEach((policy) => {
+        if (policy.suppressed) policyHits.push(policy);
+      });
+    }
+
+    if (!policyHits.length) continue;
+
+    suppressedFields.add(field);
+    suppressionReasons[field] = policyHits[0].reason || "policy-suppressed";
+    fieldSummary[field] = {
+      ...summary,
+      ignored: true,
+      violation: false,
+      violationReason: null,
+      policyReason: suppressionReasons[field],
+      effectiveStatus: "ignored",
+      policyHits,
+    };
+  }
+
+  if (!suppressedFields.size) return policyResult;
+
+  return {
+    ...policyResult,
+    fieldSummary,
+    violations: (policyResult.violations || []).filter((violation) => !suppressedFields.has(violation.field)),
+    violationCount: (policyResult.violations || []).filter((violation) => !suppressedFields.has(violation.field)).length,
+  };
+}
+
+function applyBgpInheritanceStatusToFieldPolicy({
+  policyResult = {},
+  objectType = "",
+  oldObject = null,
+  newObject = null,
+} = {}) {
+  if (objectType !== "bgp") return policyResult;
+  const fieldSummary = { ...(policyResult.fieldSummary || {}) };
+  const suppressedFields = new Set();
+
+  for (const [field, summary] of Object.entries(fieldSummary)) {
+    if (field === "group" && newObject?.groupReference) {
+      fieldSummary[field] = {
+        ...summary,
+        violation: false,
+        violationReason: null,
+        effectiveStatus: "structure-converted",
+        status: summary.status === "added" ? "structure-converted" : summary.status,
+        policyReason: "MD-CLI 그룹 구조",
+        newSourceLabels: summary.newSourceLabels?.length
+          ? summary.newSourceLabels
+          : [`group ${newObject.groupReference}`],
+      };
+      suppressedFields.add(field);
+      continue;
+    }
+
+    if (
+      summary.status === "missing" &&
+      newObject &&
+      isBgpInheritanceUnresolved(newObject, field)
+    ) {
+      fieldSummary[field] = {
+        ...summary,
+        ignored: true,
+        violation: false,
+        violationReason: null,
+        effectiveStatus: "inheritance-unresolved",
+        policyReason: newObject.bgpInheritance?.messageKo || "상속 확인 필요",
+        newSourceLabels: ["상속 확인 필요"],
+      };
+      suppressedFields.add(field);
+    }
+  }
+
+  if (!suppressedFields.size) return {
+    ...policyResult,
+    fieldSummary,
+  };
+
+  const violations = (policyResult.violations || []).filter((violation) => !suppressedFields.has(violation.field));
+  return {
+    ...policyResult,
+    fieldSummary,
+    violations,
+    violationCount: violations.length,
+  };
 }
 
 function isPolicySuppressedPlanItem({
@@ -810,13 +1067,27 @@ export function createObjectComparePlan(
 
   const rawFieldSummary = createFieldSummary(tokenMatches);
 
-  const policyResult = applyFieldPolicies({
+  const rawPolicyResult = applyFieldPolicies({
     objectType,
     fieldSummary: rawFieldSummary,
     profile,
   });
+  const policyResult = applyLineExceptionSuppressionToFieldPolicy({
+    policyResult: rawPolicyResult,
+    objectType,
+    profile,
+    oldObject: match.oldObject || null,
+    newObject: match.newObject || null,
+    findingType: match.status || "",
+  });
+  const effectivePolicyResult = applyBgpInheritanceStatusToFieldPolicy({
+    policyResult,
+    objectType,
+    oldObject: match.oldObject || null,
+    newObject: match.newObject || null,
+  });
 
-  const fieldSummary = policyResult.fieldSummary;
+  const fieldSummary = effectivePolicyResult.fieldSummary;
   const fieldStats = summarizeFieldSummary(fieldSummary);
 
   const localRelationships =
@@ -885,6 +1156,7 @@ export function createObjectComparePlan(
     profile,
     oldObject: match.oldObject || null,
     newObject: match.newObject || null,
+    findingType: match.status || "",
   });
 
   const policySuppressed = isPolicySuppressedPlanItem({
@@ -927,8 +1199,8 @@ export function createObjectComparePlan(
 
     relationshipSummary: dedupedRelationshipSummary,
 
-    policyViolations: policyResult.violations,
-    policyViolationCount: policyResult.violationCount,
+    policyViolations: effectivePolicyResult.violations,
+    policyViolationCount: effectivePolicyResult.violationCount,
 
     warnings: [],
   };

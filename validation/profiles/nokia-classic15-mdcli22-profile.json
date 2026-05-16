@@ -1,0 +1,50 @@
+{
+  "name": "nokia-classic15-mdcli22-validation",
+  "vendorPresetId": "nokia-classic-to-md-cli",
+  "oldVendor": "nokia-classic",
+  "newVendor": "nokia-md-cli",
+  "rules": {
+    "ignore": [
+      {
+        "source": "new",
+        "pattern": "metric 100",
+        "matchMode": "contains",
+        "reason": "validation metric exception"
+      },
+      {
+        "source": "new",
+        "pattern": "authentication-key",
+        "matchMode": "contains",
+        "reason": "validation auth-key exception"
+      }
+    ]
+  },
+  "validationPolicies": {
+    "bgp": [
+      {
+        "field": "authentication-key",
+        "policy": "ignore",
+        "message": "validation auth-key ignore"
+      }
+    ],
+    "static-route": [
+      {
+        "field": "metric",
+        "policy": "ignore",
+        "message": "validation metric ignore"
+      }
+    ]
+  },
+  "standardsAudit": {
+    "profileId": "classic-to-mdcli-migration-standard",
+    "rules": {
+      "bgpRequiresAuthentication": true,
+      "bgpRequiresImportPolicy": true,
+      "bgpRequiresExportPolicy": true,
+      "bgpRequiresMaxPrefix": true,
+      "sapRequiresIngressQos": true,
+      "sapRequiresEgressQos": true,
+      "managementPlaneManualReview": true
+    }
+  }
+}

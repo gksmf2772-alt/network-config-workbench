@@ -31,12 +31,17 @@ export default function ConfigEditor({ side, title, icon: Icon }) {
         </AppToolbar>
       </div>
       <div id={`${prefix}DropZone`} className="drop-zone">파일을 드롭하거나 설정 텍스트를 붙여넣기</div>
-      <AppCodeEditorFrame>
+      <AppCodeEditorFrame className="config-drop-editor" tabIndex={0}>
         <pre id={`${prefix}LineNumbers`} className="line-numbers">1</pre>
-        <textarea id={`${prefix}ConfigInput`} spellCheck="false" wrap="off" />
+        <textarea
+          id={`${prefix}ConfigInput`}
+          spellCheck="false"
+          wrap="off"
+          placeholder="파일을 드래그하거나 설정 텍스트를 붙여넣기"
+          aria-label={`${title} 입력`}
+        />
         <div id={`${prefix}DiffPane`} className="embedded-diff" />
       </AppCodeEditorFrame>
-      <div id={`${prefix}DiffObjectToolbar`} className="diff-object-toolbar" hidden />
     </motion.article>
   );
 }

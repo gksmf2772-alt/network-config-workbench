@@ -20,7 +20,7 @@ export default function SemanticSummaryPanel() {
           의미 비교 요약
         </AppButton>
         <AppButton id="objectsTabBtn" className="result-tab" type="button" data-result-tab="objects" role="tab" aria-selected="false" variant="tab">
-          객체 이동/검색
+          설정 이동/검색
         </AppButton>
         <AppButton id="overviewTabBtn" className="result-tab" type="button" data-result-tab="overview" role="tab" aria-selected="false" variant="tab">
           통합 리포트

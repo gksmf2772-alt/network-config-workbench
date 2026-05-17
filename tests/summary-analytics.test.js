@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 import {
   buildFieldOverlapAnalysis,
@@ -101,6 +102,136 @@ test("field overlap aggregates aliases and changed fields", () => {
   assert.equal(route.differentFields, 1);
   assert.equal(route.aliasMatches.includes("next-hop"), true);
   assert.equal(analysis.aggregateByType.some((row) => row.objectType === "interface"), true);
+});
+
+test("common field analysis excludes suppressed fields from policy-applied rate", () => {
+  const oldFields = {};
+  const newFields = {};
+  const fieldSummary = {};
+
+  for (let index = 0; index < 10; index += 1) {
+    const field = `same-${index}`;
+    oldFields[field] = "same";
+    newFields[field] = "same";
+    fieldSummary[field] = { field, status: "equal", oldValues: ["same"], newValues: ["same"] };
+  }
+  for (let index = 0; index < 5; index += 1) {
+    const field = `diff-${index}`;
+    oldFields[field] = "old";
+    newFields[field] = "new";
+    fieldSummary[field] = { field, status: "changed", oldValues: ["old"], newValues: ["new"] };
+  }
+  for (let index = 0; index < 3; index += 1) {
+    const field = `diff-${index}`;
+    fieldSummary[field] = {
+      ...fieldSummary[field],
+      ignored: true,
+      effectiveStatus: "ignored",
+      policyHits: [{ sourcePolicy: "profile-exception" }],
+    };
+  }
+
+  const analysis = buildFieldOverlapAnalysis([{
+    id: "policy-rate",
+    status: "matched",
+    objectType: "bgp",
+    score: 100,
+    oldObject: { normalizedType: "bgp", normalizedIdentity: "peer", fields: oldFields },
+    newObject: { normalizedType: "bgp", normalizedIdentity: "peer", fields: newFields },
+    fieldSummary,
+  }]);
+
+  assert.equal(analysis.aggregate.sameFields, 10);
+  assert.equal(analysis.aggregate.differentFields, 2);
+  assert.equal(analysis.aggregate.suppressedFields, 3);
+  assert.equal(analysis.aggregate.totalComparableFields, 12);
+  assert.equal(analysis.aggregate.rawTotalComparableFields, 15);
+  assert.equal(analysis.aggregate.rawDifferentFields, 5);
+  assert.equal(analysis.aggregate.rawOverlapPercent, 67);
+  assert.equal(analysis.aggregate.overlapPercent, 83);
+});
+
+test("profile exception changes common field analysis and type breakdown", () => {
+  const exceptionPlan = [{
+    id: "bgp-profile-exception",
+    status: "matched",
+    objectType: "bgp",
+    score: 100,
+    oldObject: {
+      normalizedType: "bgp",
+      normalizedIdentity: "peer",
+      fields: { neighbor: "192.0.2.1", group: "old-group", "admin-state": "disable" },
+    },
+    newObject: {
+      normalizedType: "bgp",
+      normalizedIdentity: "peer",
+      fields: { neighbor: "192.0.2.1", group: "new-group", "admin-state": "enable" },
+    },
+    fieldSummary: {
+      neighbor: { field: "neighbor", status: "equal", oldValues: ["192.0.2.1"], newValues: ["192.0.2.1"] },
+      group: {
+        field: "group",
+        status: "changed",
+        effectiveStatus: "ignored",
+        ignored: true,
+        oldValues: ["old-group"],
+        newValues: ["new-group"],
+        policyHits: [{ sourcePolicy: "profile-exception" }],
+      },
+      "admin-state": {
+        field: "admin-state",
+        status: "changed",
+        oldValues: ["disable"],
+        newValues: ["enable"],
+      },
+    },
+  }];
+  const analysis = buildFieldOverlapAnalysis(exceptionPlan);
+  const review = buildReviewItems(exceptionPlan);
+  const bgp = analysis.aggregateByType.find((row) => row.objectType === "bgp");
+
+  assert.equal(analysis.aggregate.rawOverlapPercent, 33);
+  assert.equal(analysis.aggregate.overlapPercent, 50);
+  assert.equal(analysis.aggregate.suppressedFields, 1);
+  assert.equal(analysis.aggregate.differentFields, 1);
+  assert.equal(bgp.changedFields, 1);
+  assert.equal(bgp.suppressedFields, 1);
+  assert.deepEqual(
+    review.abnormal[0].fieldRows
+      .filter((row) => !["same", "equal", "present"].includes(row.status))
+      .map((row) => row.field),
+    ["state"]
+  );
+});
+
+test("integrated report uses summary field analysis object", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [{
+      id: "report-rate",
+      status: "matched",
+      objectType: "interface",
+      score: 100,
+      oldObject: { normalizedType: "interface", normalizedIdentity: "lag-1", fields: { name: "lag-1", description: "old" } },
+      newObject: { normalizedType: "interface", normalizedIdentity: "lag-1", fields: { name: "lag-1", description: "new" } },
+      fieldSummary: {
+        name: { field: "name", status: "equal", oldValues: ["lag-1"], newValues: ["lag-1"] },
+        description: {
+          field: "description",
+          status: "changed",
+          ignored: true,
+          effectiveStatus: "ignored",
+          policyHits: [{ sourcePolicy: "user-exception" }],
+        },
+      },
+    }],
+    semanticSummary: {},
+  });
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.equal(dashboard.fieldAnalysis.aggregate.rawOverlapPercent, 50);
+  assert.equal(dashboard.fieldAnalysis.aggregate.overlapPercent, 100);
+  assert.equal((source.match(/renderFieldOverlapSummary\(fieldAnalysis\)/g) || []).length >= 2, true);
 });
 
 test("review items expose unmatched, ambiguous, low confidence, and relationship changes", () => {

@@ -150,7 +150,7 @@ function RuleRow({ item, type, bridge }) {
         <span className="pm-rule-label">{item.oldLabel || "-"}</span>
         <span className="pm-arrow">-&gt;</span>
         <span className="pm-rule-label">{item.newLabel || "-"}</span>
-        {isToken ? <span className="pm-field">{item.field || "필드"}</span> : null}
+        {isToken ? <span className="pm-field">{item.field || "설정 항목"}</span> : null}
       </AppButton>
       <AppIconButton
         type="button"

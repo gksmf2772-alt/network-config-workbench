@@ -1,11 +1,11 @@
 # Final Validation Report
-Generated: 2026-05-16T17:03:08.115Z
+Generated: 2026-05-17T11:00:40.831Z
 ## 1. Repository Validation Inventory
 - configs found: 31
 - profiles found: 2
 - policies found: 3
 - sessions found: 1
-- ambiguous/missing inputs: 3 ambiguous, 1 missing
+- ambiguous/missing inputs: 4 ambiguous, 1 missing
 ## 2. Validation Cases
 - juniper-to-nokia-mdcli-22: blocked (missing-source-config)
 - synthetic-juniper-set-smoke: passed synthetic smoke
@@ -42,7 +42,7 @@ Generated: 2026-05-16T17:03:08.115Z
 - report: passed (2 passed, 1 blocked, 0 failed)
 - graph: passed (2 passed, 1 blocked, 0 failed)
 - primary graph nodes 464, edges 260, invalid edges 0
-- compare HTML length 9519107, undefined false, NaN false
+- compare HTML length 9637141, undefined false, NaN false
 ## 8. Migration/Generation Validation
 - migration readiness: blocked
 - generation validation: not-applicable
@@ -54,6 +54,9 @@ Generated: 2026-05-16T17:03:08.115Z
 - npm.cmd test: passed
 - npm.cmd run build: passed
 - npm.cmd run validate:compare:fixtures: passed
+- npm.cmd run validate:profile-exceptions: passed
+- npm.cmd run validate:object-review: passed
+- npm.cmd run validate:field-dedupe: passed
 - validate:compare: passed
 - validate:audit: passed
 - validate:report: passed
@@ -90,3 +93,37 @@ Generated: 2026-05-16T17:03:08.115Z
 - advanced policy files: validation/policies/classic15-mdcli22-advanced-policy.json, validation/policies/classic15-mdcli22-line-exceptions.json, validation/policies/classic15-mdcli22-field-aliases.json
 - high unmatched count is expected from partial feature-split target fixtures, not a parser crash.
 - detail reports: validation-results/unmatched-analysis.md, unsupported-line-analysis.md, finding-priority-analysis.md, fixture-completeness-analysis.md, parser-backlog.md, blocks-auto-generation-analysis.md, conversion-policy-required-analysis.md, actual-missing-analysis.md, matcher-effectiveness-analysis.md, mode-scope-validation.md
+
+## 13. Profile Exception Application
+- active profile: profile-exception-application-fixture
+- loaded profile exceptions: 1
+- matched exception IDs: ex-profile-bgp-group-added-mdcli
+- active issues: 6 -> 4
+- suppressed issues: 0 -> 2
+- BGP group active issues: 2 -> 0
+- profile-suppressed BGP group issues: 0 -> 2
+- admin-state active issues kept: 2
+- invariant profileGroupSuppressed: true
+- invariant adminStateStillActive: true
+- detail reports: validation-results/profile-exception-application.md, validation-results/profile-exception-application.json
+
+## 14. Object Review Grouping
+- active profile: object-review-grouping-fixture
+- object groups before: 2
+- object groups after profile exception: 2
+- active issues: 6 -> 4
+- suppressed issues: 0 -> 2
+- profile-suppressed issues: 0 -> 2
+- invariant oneRowPerObjectBefore: true
+- invariant groupSuppressedAcrossObjects: true
+- invariant stateDescriptionRemainActive: true
+- detail reports: validation-results/object-review-grouping.md, validation-results/object-review-grouping.json
+
+## 15. Field Issue Dedupe
+- status: passed
+- duplicate field rows before: 1
+- duplicate field rows after: 0
+- description duplicate count: 2 -> 1
+- description row active/suppressed: 1/1
+- suppressed-only group excluded from active rows: true
+- detail reports: validation-results/field-issue-dedupe.md, validation-results/field-issue-dedupe.json

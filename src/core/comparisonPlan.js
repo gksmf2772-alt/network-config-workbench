@@ -1,7 +1,10 @@
 // src/core/comparisonPlan.js
 import { compareObjectPlanLines } from "./lineDiff.js";
 import { applyFieldPolicies } from "./fieldPolicy.js";
-import { evaluatePolicyContext } from "./policyEvaluator.js";
+import {
+  evaluatePolicyContext,
+  findMatchingComparisonExclusion,
+} from "./policyEvaluator.js";
 import { applyDefaultNoopLineSuppression } from "./semanticRules.js";
 import {
   formatBgpFieldSourceKo,
@@ -659,10 +662,19 @@ function applyLineExceptionSuppressionToFieldPolicy({
   const fieldSummary = { ...(policyResult.fieldSummary || {}) };
   const suppressedFields = new Set();
   const suppressionReasons = {};
+  const vendorPair = profileVendorPair(profile);
 
   for (const [field, summary] of Object.entries(fieldSummary)) {
     const matches = Array.isArray(summary.matches) ? summary.matches : [];
     const policyHits = [];
+    const fieldContext = buildSemanticFieldPolicyContext({
+      profile,
+      objectType,
+      field,
+      summary,
+      findingType,
+      vendorPair,
+    });
 
     for (const match of matches) {
       const oldPolicy = match.oldLine || match.oldValue != null
@@ -674,6 +686,7 @@ function applyLineExceptionSuppressionToFieldPolicy({
           objectKey: objectKeyForPolicy(oldObject, objectType),
           field,
           fieldValue: match.oldValue,
+          ...fieldContext,
           findingType,
         })
         : null;
@@ -686,6 +699,7 @@ function applyLineExceptionSuppressionToFieldPolicy({
           objectKey: objectKeyForPolicy(newObject, objectType),
           field,
           fieldValue: match.newValue,
+          ...fieldContext,
           findingType,
         })
         : null;
@@ -693,6 +707,37 @@ function applyLineExceptionSuppressionToFieldPolicy({
       [oldPolicy, newPolicy].filter(Boolean).forEach((policy) => {
         if (policy.suppressed) policyHits.push(policy);
       });
+    }
+
+    if (!policyHits.length) {
+      const oldValue = firstSummaryValue(summary.oldValues);
+      const newValue = firstSummaryValue(summary.newValues);
+      const sides = [
+        oldObject ? {
+          side: "old",
+          objectKey: objectKeyForPolicy(oldObject, objectType),
+          fieldValue: oldValue,
+          rawLine: "",
+        } : null,
+        newObject ? {
+          side: "new",
+          objectKey: objectKeyForPolicy(newObject, objectType),
+          fieldValue: newValue,
+          rawLine: "",
+        } : null,
+      ].filter(Boolean);
+
+      for (const sideContext of sides) {
+        const policy = evaluatePolicyContext({
+          profile,
+          objectType,
+          field,
+          ...fieldContext,
+          findingType,
+          ...sideContext,
+        });
+        if (policy.suppressed) policyHits.push(policy);
+      }
     }
 
     if (!policyHits.length) continue;
@@ -794,9 +839,219 @@ function isPolicySuppressedPlanItem({
   return allFieldsIgnored || allLinesIgnored;
 }
 
+function comparisonSideForPlanItem(status = "", oldObject = null, newObject = null) {
+  if (status === "old-only" || (oldObject && !newObject)) return "old";
+  if (status === "new-only" || (newObject && !oldObject)) return "new";
+  return "both";
+}
+
+function comparisonSettingRuleId(status = "") {
+  if (status === "old-only" || status === "new-only") return "semantic-compare.unmatched-setting";
+  return "semantic-compare.setting";
+}
+
+function findPlanItemComparisonExclusion({
+  match = {},
+  objectType = "",
+  profile = {},
+} = {}) {
+  const side = comparisonSideForPlanItem(match.status, match.oldObject || null, match.newObject || null);
+  const object = side === "new" ? match.newObject : side === "old" ? match.oldObject : (match.oldObject || match.newObject);
+  const objectKey = objectKeyForPolicy(object, objectType);
+  if (!objectKey || !objectType) return null;
+  return findMatchingComparisonExclusion({
+    profile,
+    side,
+    objectType,
+    objectKey,
+    settingType: objectType,
+    settingKey: objectKey,
+    matchStatus: match.status || "",
+    ruleId: comparisonSettingRuleId(match.status || ""),
+    vendorPair: profileVendorPair(profile),
+  });
+}
+
+function markFieldSummaryComparisonExcluded(fieldSummary = {}, exclusion = {}) {
+  return Object.fromEntries(Object.entries(fieldSummary || {}).map(([field, summary]) => [
+    field,
+    {
+      ...(summary || {}),
+      effectiveStatus: "ignored",
+      ignored: true,
+      suppressed: true,
+      policyReason: exclusion.reasonKo || exclusion.reason || "비교 제외 규칙 적용",
+      policyHits: [
+        ...(
+          Array.isArray(summary?.policyHits)
+            ? summary.policyHits
+            : []
+        ),
+        {
+          suppressed: true,
+          ignored: true,
+          reason: exclusion.reasonKo || exclusion.reason || "비교 제외 규칙 적용",
+          sourcePolicy: "comparison-exclusion",
+          source: "comparison-exclusion",
+          policyId: exclusion.id || "",
+          rule: exclusion,
+        },
+      ],
+    },
+  ]));
+}
+
+function markLineMatchesComparisonExcluded(lineMatches = [], exclusion = {}) {
+  return lineMatches.map((lineMatch) => ({
+    ...lineMatch,
+    status: "ignored",
+    reason: exclusion.reasonKo || exclusion.reason || "comparison-exclusion",
+    semanticCovered: true,
+    ignored: true,
+    suppressed: true,
+    policySource: "comparison-exclusion",
+    policyHits: [
+      ...(
+        Array.isArray(lineMatch.policyHits)
+          ? lineMatch.policyHits
+          : []
+      ),
+      {
+        suppressed: true,
+        ignored: true,
+        reason: exclusion.reasonKo || exclusion.reason || "비교 제외 규칙 적용",
+        sourcePolicy: "comparison-exclusion",
+        source: "comparison-exclusion",
+        policyId: exclusion.id || "",
+        rule: exclusion,
+      },
+    ],
+    fieldMatches: (Array.isArray(lineMatch.fieldMatches) ? lineMatch.fieldMatches : []).map((fieldMatch) => ({
+      ...fieldMatch,
+      status: "ignored",
+      ignored: true,
+    })),
+  }));
+}
+
+function buildComparisonExclusionIssue({
+  itemId = "",
+  match = {},
+  objectType = "",
+  exclusion = {},
+} = {}) {
+  const side = comparisonSideForPlanItem(match.status, match.oldObject || null, match.newObject || null);
+  const object = side === "new" ? match.newObject : side === "old" ? match.oldObject : (match.oldObject || match.newObject);
+  const objectKey = objectKeyForPolicy(object, objectType);
+  return {
+    id: `${itemId || objectKey}:excluded`,
+    panelKey: "excluded",
+    objectType,
+    objectKey,
+    oldKey: match.oldObject ? objectKeyForPolicy(match.oldObject, objectType) : "",
+    newKey: match.newObject ? objectKeyForPolicy(match.newObject, objectType) : "",
+    displayName: object?.fields?.description || object?.canonicalFields?.description || object?.description || object?.normalizedIdentity || object?.identity || object?.sourceName || objectKey,
+    fieldPath: "",
+    status: "excluded",
+    statusLabel: "비교 제외됨",
+    reason: exclusion.reasonKo || exclusion.reason || "비교 제외 규칙 적용",
+    ruleId: comparisonSettingRuleId(match.status || ""),
+    issueType: "object-difference",
+    classification: "비교 제외됨",
+    suppressed: true,
+    excluded: true,
+    sourcePolicy: "comparison-exclusion",
+    policyId: exclusion.id || "",
+    policySource: "comparison-exclusion",
+    side,
+    matchStatus: match.status || "",
+  };
+}
+
 function objectKeyForPolicy(object = {}, objectType = "") {
   if (!object) return "";
   return object.key || `${objectType}:${object.normalizedIdentity || object.identity || object.sourceName || object.id || ""}`;
+}
+
+function buildSemanticFieldPolicyContext({
+  profile = {},
+  objectType = "",
+  field = "",
+  summary = {},
+  findingType = "",
+  vendorPair = "",
+} = {}) {
+  const changeType = normalizeSemanticChangeType(summary.effectiveStatus || summary.status || "");
+  return {
+    ruleId: semanticFieldRuleId(objectType, field, summary),
+    category: "semantic-compare",
+    issueType: "field-difference",
+    changeType,
+    oldValue: firstSummaryValue(summary.oldValues),
+    newValue: firstSummaryValue(summary.newValues),
+    vendorPair: vendorPair || profileVendorPair(profile),
+    findingType: changeType || findingType,
+  };
+}
+
+function semanticFieldRuleId(objectType = "", field = "", summary = {}) {
+  if (isImportantSemanticField(objectType, field)) return "semantic-compare.important-field-change";
+  const status = normalizeSemanticChangeType(summary.effectiveStatus || summary.status || "");
+  if (status === "added") return "semantic-compare.field-added";
+  if (status === "missing") return "semantic-compare.field-missing";
+  return "semantic-compare.field-difference";
+}
+
+function isImportantSemanticField(objectType = "", field = "") {
+  const normalizedField = String(field || "").toLowerCase();
+  if (objectType === "bgp") {
+    return [
+      "neighbor",
+      "peerip",
+      "group",
+      "peer-as",
+      "import.policy",
+      "export.policy",
+      "state",
+      "admin-state",
+      "description",
+      "authentication-key",
+    ].includes(normalizedField);
+  }
+  return [
+    "route",
+    "next-hop",
+    "gateway",
+    "tag",
+    "metric",
+    "state",
+    "admin-state",
+    "description",
+    "sap",
+    "port",
+    "lag",
+    "interface",
+  ].includes(normalizedField);
+}
+
+function normalizeSemanticChangeType(status = "") {
+  const value = String(status || "").toLowerCase();
+  if (value === "structure-converted") return "structure-converted";
+  if (value === "missing-old") return "added";
+  if (value === "missing-new") return "missing";
+  if (value === "different") return "changed";
+  return value || "changed";
+}
+
+function firstSummaryValue(values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  return String(list.find((value) => value != null && String(value).trim()) ?? "");
+}
+
+function profileVendorPair(profile = {}) {
+  const oldVendor = profile.oldVendor || profile.vendorPreset?.oldVendor || "";
+  const newVendor = profile.newVendor || profile.vendorPreset?.newVendor || "";
+  return [oldVendor, newVendor].filter(Boolean).join("->");
 }
 
 function isInterfaceStructuralLine(line = "") {
@@ -1159,11 +1414,34 @@ export function createObjectComparePlan(
     findingType: match.status || "",
   });
 
-  const policySuppressed = isPolicySuppressedPlanItem({
+  const fieldSummaryBeforeExclusion = fieldSummary;
+  const coveredLineMatchesBeforeExclusion = coveredLineMatches;
+  const policySuppressedBeforeExclusion = isPolicySuppressedPlanItem({
     status: match.status,
-    fieldSummary,
-    lineMatches: coveredLineMatches,
+    fieldSummary: fieldSummaryBeforeExclusion,
+    lineMatches: coveredLineMatchesBeforeExclusion,
   });
+  const comparisonExclusion = findPlanItemComparisonExclusion({
+    match,
+    objectType,
+    profile,
+  });
+  const comparisonExcluded = Boolean(comparisonExclusion);
+  const effectiveFieldSummary = comparisonExcluded
+    ? markFieldSummaryComparisonExcluded(fieldSummaryBeforeExclusion, comparisonExclusion)
+    : fieldSummaryBeforeExclusion;
+  const effectiveLineMatches = comparisonExcluded
+    ? markLineMatchesComparisonExcluded(coveredLineMatchesBeforeExclusion, comparisonExclusion)
+    : coveredLineMatchesBeforeExclusion;
+  const policySuppressed = policySuppressedBeforeExclusion || comparisonExcluded;
+  const comparisonExclusionIssue = comparisonExcluded
+    ? buildComparisonExclusionIssue({
+      itemId: getComparePlanId(match, index),
+      match,
+      objectType,
+      exclusion: comparisonExclusion,
+    })
+    : null;
 
   return {
     id: getComparePlanId(match, index),
@@ -1190,17 +1468,25 @@ export function createObjectComparePlan(
       
     lineCompareMode: inferLineCompareMode(match),
 
-    lineMatches: coveredLineMatches,
+    lineMatches: effectiveLineMatches,
     tokenMatches,
-    fieldSummary,
-    fieldStats,
+    fieldSummary: effectiveFieldSummary,
+    fieldStats: comparisonExcluded ? summarizeFieldSummary(effectiveFieldSummary) : fieldStats,
     policySuppressed,
-    suppressionReason: policySuppressed ? "explicit-policy" : "",
+    suppressionReason: comparisonExcluded
+      ? "comparison-exclusion"
+      : (policySuppressed ? "explicit-policy" : ""),
+    comparisonExcluded,
+    excluded: comparisonExcluded,
+    exclusionRule: comparisonExclusion,
+    exclusionPolicyId: comparisonExclusion?.id || "",
+    exclusionReason: comparisonExclusion?.reasonKo || comparisonExclusion?.reason || "",
+    exclusionIssue: comparisonExclusionIssue,
 
     relationshipSummary: dedupedRelationshipSummary,
 
-    policyViolations: effectivePolicyResult.violations,
-    policyViolationCount: effectivePolicyResult.violationCount,
+    policyViolations: comparisonExcluded ? [] : effectivePolicyResult.violations,
+    policyViolationCount: comparisonExcluded ? 0 : effectivePolicyResult.violationCount,
 
     warnings: [],
   };

@@ -43,6 +43,12 @@
   --status-unmatched-border: #fb923c;
   --status-unmatched-accent: #f97316;
   --status-unmatched-text: #7c2d12;
+  --diff-unmatched-bg: #fff7ed;
+  --diff-unmatched-bg-soft: #ffedd5;
+  --diff-unmatched-bg-strong: #fed7aa;
+  --diff-unmatched-border: #fdba74;
+  --diff-unmatched-accent: #f97316;
+  --diff-unmatched-text: #9a3412;
   --status-review-bg: #fef9c3;
   --status-review-border: #facc15;
   --status-review-text: #713f12;
@@ -79,6 +85,12 @@
   --status-unmatched-border: #fb923c;
   --status-unmatched-accent: #fdba74;
   --status-unmatched-text: #ffedd5;
+  --diff-unmatched-bg: rgba(154, 52, 18, 0.42);
+  --diff-unmatched-bg-soft: rgba(124, 45, 18, 0.30);
+  --diff-unmatched-bg-strong: rgba(194, 65, 12, 0.45);
+  --diff-unmatched-border: #fb923c;
+  --diff-unmatched-accent: #fdba74;
+  --diff-unmatched-text: #ffedd5;
   --status-review-bg: rgba(133, 77, 14, 0.36);
   --status-review-border: #facc15;
   --status-review-text: #fef9c3;
@@ -115,6 +127,12 @@
   --status-unmatched-border: #cc5500;
   --status-unmatched-accent: #b45309;
   --status-unmatched-text: #000000;
+  --diff-unmatched-bg: #fff3e0;
+  --diff-unmatched-bg-soft: #ffe0b2;
+  --diff-unmatched-bg-strong: #ffcc80;
+  --diff-unmatched-border: #cc5500;
+  --diff-unmatched-accent: #b45309;
+  --diff-unmatched-text: #000000;
   --status-review-bg: #fff59d;
   --status-review-border: #8a6d00;
   --status-review-text: #000000;
@@ -1305,10 +1323,8 @@ label {
   outline-offset: -1px;
 }
 
-.semantic-diff-config-line.line-relation-hover .diff-token-match,
-.semantic-diff-config-line.line-relation-selected .diff-token-match,
-.diff-line.line-relation-hover .diff-token-match,
-.diff-line.line-relation-selected .diff-token-match {
+.diff-token-match.line-relation-hover,
+.diff-token-match.line-relation-selected {
   border-color: rgba(13, 148, 136, 0.58);
   background: rgba(204, 251, 241, 0.86);
 }
@@ -1429,7 +1445,8 @@ label {
 }
 
 .code-frame.diff-mode {
-  display: block;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   overflow: hidden;
 }
@@ -1990,8 +2007,8 @@ textarea::placeholder {
 
 .graph-node-status-old-only rect,
 .graph-node-status-new-only rect {
-  fill: #fff1f2;
-  stroke: rgba(220, 38, 38, 0.45);
+  fill: var(--status-unmatched-bg);
+  stroke: var(--status-unmatched-border);
 }
 
 .graph-node-status-candidate rect {
@@ -2450,6 +2467,8 @@ textarea::placeholder {
 
 .code-frame.diff-mode .embedded-diff {
   display: block;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .diff-line {
@@ -3515,8 +3534,42 @@ textarea::placeholder {
   word-break: break-word;
 }
 
+.semantic-field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.semantic-field-actions button {
+  min-height: 30px;
+  border: 1px solid #8cceea;
+  border-radius: 7px;
+  background: #f6fbff;
+  color: #075985;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.semantic-field-actions button:hover {
+  background: #e0f2fe;
+}
+
+.semantic-field-actions-suppressed {
+  align-items: center;
+  justify-content: space-between;
+  color: #57606a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .semantic-field-ignored {
   opacity: 0.72;
+  border-color: #cbd5e1;
+  background: #f8fafc !important;
+  color: #475569;
 }
 
 .semantic-field-changed {
@@ -3842,9 +3895,38 @@ textarea::placeholder {
 }
 
 .semantic-state-unmatched {
-  border-color: #fecdd3;
-  background: #fff1f2;
-  color: #9f1239;
+  border-color: var(--status-unmatched-border);
+  background: var(--status-unmatched-bg);
+  color: var(--status-unmatched-text);
+}
+
+.semantic-object-card.semantic-state-unmatched,
+.semantic-object-card[data-match-status="old-only"],
+.semantic-object-card[data-match-status="new-only"] {
+  border-color: var(--status-unmatched-border) !important;
+  border-left: 5px solid var(--status-unmatched-accent) !important;
+  background: var(--status-unmatched-bg) !important;
+}
+
+.semantic-object-card.semantic-state-unmatched:hover,
+.semantic-object-card.semantic-state-unmatched[open] {
+  background: var(--status-unmatched-bg-strong) !important;
+}
+
+.semantic-object-excluded,
+.summary-issue-row.summary-issue-suppressed {
+  border-color: var(--border) !important;
+  border-left-color: var(--muted) !important;
+  background: var(--surface-muted, #f8fafc) !important;
+  color: var(--muted) !important;
+}
+
+.semantic-setting-exclusion-actions,
+.setting-exclusion-inline-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .semantic-state-manual {
@@ -3866,7 +3948,7 @@ textarea::placeholder {
 .diff-line.semantic-state-manual { border-left-color: #8b5cf6; }
 .diff-line.semantic-state-partial { border-left-color: #0ea5e9; }
 .diff-line.semantic-state-ambiguous { border-left-color: #f59e0b; }
-.diff-line.semantic-state-unmatched { border-left-color: #f43f5e; }
+.diff-line.semantic-state-unmatched { border-left-color: var(--status-unmatched-accent); }
 
 body[data-field-highlight="off"] .diff-token-match {
   border: 0;
@@ -4637,6 +4719,7 @@ textarea[id$="ConfigInput"],
 .summary-issue-counts button,
 .summary-issue-search input,
 .summary-issue-actions button,
+.summary-issue-row-actions button,
 .summary-issue-detail-actions button,
 .profile-exception-actions button,
 .compare-issue-context-banner button {
@@ -4676,8 +4759,8 @@ textarea[id$="ConfigInput"],
 
 .summary-issue-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
-  gap: 10px;
+  grid-template-columns: minmax(520px, 1fr) minmax(520px, 44%);
+  gap: 14px;
   align-items: start;
 }
 
@@ -4709,15 +4792,20 @@ textarea[id$="ConfigInput"],
 
 .summary-issue-old-only,
 .summary-issue-new-only {
-  border-color: var(--status-unmatched-border, #f59e0b);
-  border-left-color: var(--status-unmatched-accent, #d97706);
-  background: var(--status-unmatched-bg, #ffedd5);
+  border-color: var(--line);
+  border-left-color: rgba(245, 158, 11, 0.65);
+  background: var(--panel);
 }
 
 .summary-issue-warning,
 .summary-issue-review {
   border-left-color: #f59e0b;
   background: #fffbeb;
+}
+
+.summary-issue-suppressed {
+  border-left-color: #94a3b8;
+  background: #f8fafc;
 }
 
 .summary-issue-status {
@@ -4766,7 +4854,20 @@ textarea[id$="ConfigInput"],
   font-weight: 800;
 }
 
+.summary-issue-chip {
+  display: inline-block;
+  margin: 0 4px 3px 0;
+  padding: 2px 6px;
+  border: 1px solid rgba(8, 145, 178, 0.25);
+  border-radius: 6px;
+  background: #ecfeff;
+  color: #155e75;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .summary-issue-actions,
+.summary-issue-row-actions,
 .summary-issue-detail-actions,
 .profile-exception-actions {
   display: flex;
@@ -4778,7 +4879,7 @@ textarea[id$="ConfigInput"],
 .summary-issue-detail {
   position: sticky;
   top: 8px;
-  min-width: 0;
+  min-width: 520px;
 }
 
 .summary-issue-detail-card,
@@ -4845,6 +4946,18 @@ textarea[id$="ConfigInput"],
   font-size: 12px;
 }
 
+.summary-issue-field-table-wide {
+  grid-template-columns:
+    minmax(76px, 0.7fr)
+    minmax(76px, 0.7fr)
+    minmax(150px, 1.2fr)
+    minmax(110px, 1fr)
+    minmax(110px, 1fr)
+    minmax(90px, 0.8fr)
+    minmax(150px, 1fr);
+  overflow-x: auto;
+}
+
 .profile-exception-table {
   grid-template-columns: 110px minmax(160px, 1.2fr) 120px minmax(120px, 0.8fr) minmax(160px, 1fr) auto;
   font-size: 12px;
@@ -4855,6 +4968,144 @@ textarea[id$="ConfigInput"],
   background: var(--panel-muted);
   color: var(--text);
   font-weight: 900;
+}
+
+.summary-issue-field-table-wide > div:nth-child(-n+7) {
+  background: var(--panel-muted);
+  color: var(--text);
+  font-weight: 900;
+}
+
+.summary-issue-suppressed-note {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.summary-object-issue-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.summary-object-issue-section {
+  display: grid;
+  gap: 8px;
+}
+
+.summary-object-issue-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.summary-object-issue-section-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summary-object-issue-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.summary-object-issue-card.suppressed {
+  border-left-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.summary-object-issue-card-main,
+.summary-object-issue-meta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.summary-object-issue-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.summary-object-issue-card-title strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.summary-object-issue-card-title span,
+.summary-object-issue-badge {
+  padding: 2px 6px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.summary-object-issue-badge {
+  border-color: rgba(100, 116, 139, 0.3);
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.summary-object-issue-reason,
+.summary-object-issue-subnote {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.summary-object-issue-subnote {
+  color: var(--muted);
+}
+
+.summary-object-issue-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.summary-object-issue-values span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.summary-object-issue-meta {
+  align-content: start;
+  justify-items: end;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summary-empty-row {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .profile-exception-table strong,
@@ -4870,15 +5121,24 @@ textarea[id$="ConfigInput"],
 }
 
 .compare-issue-context-banner {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 70;
+  width: min(720px, calc(100% - 24px));
+  min-height: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  margin: 8px 0;
-  padding: 10px 12px;
+  margin: 0;
+  padding: 8px 10px;
   border: 1px solid rgba(8, 145, 178, 0.35);
   border-radius: 8px;
   background: #ecfeff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  transform: translateX(-50%);
+  pointer-events: auto;
 }
 
 .compare-issue-context-banner div:first-child {
@@ -4936,6 +5196,7 @@ textarea[id$="ConfigInput"],
 
   .summary-issue-detail {
     position: static;
+    min-width: 0;
   }
 
   .summary-issue-row {
@@ -6464,23 +6725,24 @@ body[data-field-highlight="off"] .semantic-diff-config-line {
 
 .semantic-object-block-wrapper.object-status-old-only,
 .semantic-object-block-wrapper.object-status-new-only {
-  background: rgba(248, 113, 113, 0.10) !important;
+  background: var(--status-unmatched-bg) !important;
   border-radius: 10px !important;
 }
 
 .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
 .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
 .semantic-object-block-wrapper .semantic-diff-object-unmatched {
-  border-left-color: #ef4444 !important;
-  background: linear-gradient(90deg, rgba(255, 241, 242, 0.98), rgba(254, 226, 226, 0.78)) !important;
+  border-left-color: var(--status-unmatched-accent) !important;
+  background: var(--status-unmatched-bg) !important;
   box-shadow:
-    inset 0 0 0 1px rgba(239, 68, 68, 0.24),
+    inset 0 0 0 1px rgba(249, 115, 22, 0.24),
     0 8px 18px rgba(127, 29, 29, 0.055) !important;
 }
 
 .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-head,
 .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-head {
-  background: rgba(254, 226, 226, 0.76) !important;
+  background: var(--status-unmatched-bg-strong) !important;
+  color: var(--status-unmatched-text) !important;
 }
 
 .diff-line.object-type-bgp.semantic-object-start {
@@ -7269,6 +7531,145 @@ body[data-field-highlight="off"] .semantic-diff-config-line {
 .embedded-diff .diff-line[data-object-status="new-only"] .diff-line-number,
 .embedded-diff .diff-line[data-object-status="unmatched"] .diff-line-number {
   border-left: 5px solid var(--status-unmatched-accent) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"],
+.embedded-diff .diff-line.object-unmatched-row,
+.embedded-diff .diff-line.object-status-old-only,
+.embedded-diff .diff-line.object-status-new-only,
+.embedded-diff .diff-line.object-status-unmatched,
+.embedded-diff .diff-line.object-status-unmatched-old,
+.embedded-diff .diff-line.object-status-unmatched-new,
+.embedded-diff .diff-line.object-status-source-only,
+.embedded-diff .diff-line.object-status-target-only,
+.embedded-diff .diff-line[data-object-status="old-only"],
+.embedded-diff .diff-line[data-object-status="new-only"],
+.embedded-diff .diff-line[data-object-status="unmatched"],
+.embedded-diff .diff-line[data-object-status="unmatched-old"],
+.embedded-diff .diff-line[data-object-status="unmatched-new"],
+.embedded-diff .diff-line[data-object-status="source-only"],
+.embedded-diff .diff-line[data-object-status="target-only"] {
+  background: var(--diff-unmatched-bg) !important;
+  color: var(--text) !important;
+  border-radius: 0 !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-diff-object-block.semantic-diff-object-unmatched {
+  border: 1px solid var(--diff-unmatched-border) !important;
+  border-left: 5px solid var(--diff-unmatched-accent) !important;
+  background: var(--diff-unmatched-bg) !important;
+  color: var(--diff-unmatched-text) !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.28) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"] .semantic-diff-object-head {
+  background: var(--diff-unmatched-bg-soft) !important;
+  color: var(--diff-unmatched-text) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-diff-config-line.is-unmatched,
+.embedded-diff .semantic-diff-config-line.object-status-old-only,
+.embedded-diff .semantic-diff-config-line.object-status-new-only,
+.embedded-diff .semantic-diff-config-line.object-status-unmatched {
+  background: var(--diff-unmatched-bg) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-old-only,
+.embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-new-only,
+.embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-unmatched,
+.embedded-diff .diff-line.semantic-pair-hover.object-status-old-only,
+.embedded-diff .diff-line.semantic-pair-hover.object-status-new-only,
+.embedded-diff .diff-line.semantic-pair-hover.object-status-unmatched {
+  background: var(--diff-unmatched-bg-strong) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-status-comparison-excluded,
+.embedded-diff .semantic-object-block-wrapper.object-status-suppressed,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="comparison-excluded"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="suppressed"] {
+  background: #f8fafc !important;
+  color: var(--muted) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-status-comparison-excluded .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-suppressed .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="comparison-excluded"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="suppressed"] .semantic-diff-object-block,
+.embedded-diff .semantic-diff-object-excluded,
+.embedded-diff .semantic-diff-object-suppressed {
+  border: 1px solid #cbd5e1 !important;
+  border-left: 5px solid #94a3b8 !important;
+  background: #f8fafc !important;
+  color: var(--muted) !important;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.22) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-status-comparison-excluded .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-suppressed .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="comparison-excluded"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="suppressed"] .semantic-diff-object-head,
+.embedded-diff .semantic-diff-object-excluded .semantic-diff-object-head,
+.embedded-diff .semantic-diff-object-suppressed .semantic-diff-object-head {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
 }
 
 @media (max-width: 980px) {

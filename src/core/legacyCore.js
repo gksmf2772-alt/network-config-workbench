@@ -11,12 +11,18 @@
 } from "./vendorPresets.js";
 
 import {
+  getSemanticDiffBlockState,
   getSemanticStateClass,
 } from "./semanticTheme.js";
 
 import {
   buildSummaryDashboardData,
 } from "./summaryAnalytics.js";
+import {
+  buildObjectReviewGroups,
+  buildObjectFieldReviewRows,
+  REVIEW_SOURCE_LABELS,
+} from "./objectReviewGroups.js";
 import {
   buildAnalysisContext,
   filterAuditForModeScope,
@@ -29,6 +35,8 @@ import {
 } from "./coverageDiagnostics.js";
 import {
   evaluatePolicyContext,
+  comparisonExclusionMatchesContext,
+  profileExceptionMatchesContext,
 } from "./policyEvaluator.js";
 import {
   AUDIT_SEVERITY_LABELS_KO,
@@ -256,6 +264,7 @@ const state = {
   lastStandardsAuditRaw: null,
   lastAnalysisContext: null,
   exceptionTargets: new Map(),
+  summaryIssueGroups: new Map(),
   activeIssueContext: null,
   lastSessionName: "",
   semanticPairKeyboardBound: false,
@@ -615,7 +624,7 @@ function createDefaultExamples() {
 async function init() {
   selectors.oldInput.value = defaultSamples.oldConfig;
   selectors.newInput.value = defaultSamples.newConfig;
-  captureInitialConfigSnapshot(true);
+  resetInitialConfigSnapshot();
   renderObjectToggles();
   renderProfileEditor();
   bindEvents();
@@ -1797,6 +1806,7 @@ function renderPolicyEditor() {
     <div class="policy-rows">
       ${policies.length ? policies.map(renderPolicyRow).join("") : `<div class="small-note">정책이 없습니다. 필드 정책을 추가하세요.</div>`}
     </div>
+    ${renderProfileExceptionEditorTable(type)}
   `;
 
   selectors.policyEditor.querySelector("#addPolicyRowBtn").addEventListener("click", () => {
@@ -1822,6 +1832,16 @@ function renderPolicyEditor() {
       state.profileDraft.validationPolicies[type].splice(index, 1);
       renderProfileEditor();
       markProfileDirty("Compare Policy", "삭제", type);
+      markCompareStale();
+    });
+  });
+
+  selectors.policyEditor.querySelectorAll("[data-profile-exception-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const exceptionId = button.dataset.profileExceptionRemove || "";
+      state.profileDraft.exceptions = (state.profileDraft.exceptions || []).filter((item) => item.id !== exceptionId);
+      renderProfileEditor();
+      markProfileDirty("Profile Exception", "삭제", exceptionId);
       markCompareStale();
     });
   });
@@ -3491,6 +3511,37 @@ function bindDropZone(zone, input, meta) {
   });
 }
 
+function renderProfileExceptionEditorTable(objectType = "") {
+  const exceptions = (state.profileDraft.exceptions || [])
+    .filter((item) => item.enabled !== false)
+    .filter((item) => !objectType || item.target?.objectType === objectType || item.match?.objectType === objectType);
+  return `
+    <div class="profile-exception-editor">
+      <div class="policy-toolbar">
+        <strong>프로파일 예외</strong>
+        <span class="small-note">${escapeHtml(objectType)} 기준 ${escapeHtml(exceptions.length)}개</span>
+      </div>
+      ${exceptions.length ? `
+        <div class="profile-exception-table compact">
+          <div>범위</div><div>필드</div><div>규칙</div><div>상태</div><div>사유</div><div>동작</div>
+          ${exceptions.map((exception) => {
+            const target = exception.target || {};
+            const match = exception.match || {};
+            return `
+              <div>${escapeHtml(exception.scope === "profile" ? "프로파일" : "객체")}</div>
+              <div>${escapeHtml(target.fieldPath || match.fieldPath || "-")}</div>
+              <div>${escapeHtml(target.ruleId || match.ruleId || "-")}</div>
+              <div>${escapeHtml(target.changeType || match.changeType || target.status || "-")}</div>
+              <div>${escapeHtml(exception.reasonKo || "-")}</div>
+              <div><button type="button" data-profile-exception-remove="${escapeHtml(exception.id || "")}">삭제</button></div>
+            `;
+          }).join("")}
+        </div>
+      ` : `<div class="small-note">이 객체 타입의 프로파일 예외 없음.</div>`}
+    </div>
+  `;
+}
+
 function captureInitialConfigSnapshot(force = false) {
   const oldValue = selectors.oldInput?.value || "";
   const newValue = selectors.newInput?.value || "";
@@ -3829,8 +3880,6 @@ function runCompare() {
       ? `차이 ${report.items.length}건`
       : "차이 없음";
     selectors.lastComparedAt.textContent = `마지막 비교: ${formatDate(Date.now())}`;
-    renderSummaryCards(report, state.lastSemanticSummary);
-    renderOverviewReport(report);
   } catch (error) {
     handleCompareError(error);
   }
@@ -4111,19 +4160,26 @@ function renderSemanticPreview() {
     console.groupEnd();
   }
 
-  const html = renderComparisonPlanHtml(plan);
+  if (state.lastReport) {
+    renderSummaryCards(state.lastReport, state.lastSemanticSummary);
+    renderOverviewReport(state.lastReport);
+  } else {
+    state.exceptionTargets = new Map();
+  }
+
+  const html = renderComparisonPlanHtml(plan, {
+    getFieldExceptionTargetId: (item, field) => registerSemanticFieldExceptionTarget(item, field),
+    getSettingExclusionTargetId: (item) => registerSemanticSettingExclusionTarget(item, "semantic-preview"),
+  });
 
   container.innerHTML = `
     <div class="semantic-preview-header">
       <strong>의미 기반 비교</strong>
       <span>${escapeHtml(vendorLabel(oldVendor))} → ${escapeHtml(vendorLabel(newVendor))}</span>
+      <small>설정 항목 카드에서 예외 선택 가능</small>
     </div>
     ${html}
   `;
-  if (state.lastReport) {
-    renderSummaryCards(state.lastReport, state.lastSemanticSummary);
-    renderOverviewReport(state.lastReport);
-  }
 
   container.querySelectorAll(".semantic-candidate-select-btn").forEach((button) => {
     button.addEventListener("click", () => {
@@ -4170,6 +4226,27 @@ function renderSemanticPreview() {
       }
       renderSemanticPreview();
       scheduleSettledDiffConnectorRender();
+    });
+  });
+
+  container.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExceptionFromTarget(button.dataset.addException || "", button.dataset.exceptionFixedScope || "object", button);
+    });
+  });
+
+  container.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
+    });
+  });
+
+  container.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
     });
   });
 
@@ -4414,7 +4491,8 @@ function renderHiddenDiagnosticsLinks(context = {}, counts = {}) {
 
 function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
   if (!selectors.summaryCards || !report) return;
-  state.exceptionTargets = new Map();
+  state.exceptionTargets = preserveSemanticExceptionTargets(state.exceptionTargets);
+  state.summaryIssueGroups = new Map();
   const semanticSummary = semantic || {};
   const dashboard = buildCurrentDashboardData(report, semanticSummary);
   const { lineSummary, counts, fieldAnalysis, review, severity, context, audit } = dashboard;
@@ -4442,7 +4520,7 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
         <span>프로파일: ${escapeHtml(context.profileName || "프로파일 없음")}</span>
         <span>세션: ${escapeHtml(context.sessionName || "현재 입력")}</span>
         <span>비교 시각: ${escapeHtml(context.comparedAt || "방금 실행")}</span>
-        <span>파싱 객체: ${escapeHtml(context.parsedObjectCount || 0)}개</span>
+        <span>파싱 설정: ${escapeHtml(context.parsedObjectCount || 0)}개</span>
         <span>모드: ${escapeHtml(context.modeLabelKo || "단순 비교")}</span>
         <span>${escapeHtml(context.modeScopeLabelsKo?.currentScope || `현재 비교 범위: ${context.scopeLabelKo || "전체"}`)}</span>
         <span>${escapeHtml(context.modeScopeLabelsKo?.standardsAudit || "표준 점검: 꺼짐")}</span>
@@ -4453,13 +4531,14 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
       <div class="operator-metric-grid">
         ${renderMetricCard({ label: "라인 변경", value: lineSummary.changed, detail: `추가 ${lineSummary.added} / 삭제 ${lineSummary.removed}`, state: "changed", action: "line-diff", help: "변경된 라인 그룹으로 이동" })}
         ${renderMetricCard({ label: "의미 일치도", value: `${semanticSummary.matchPercent ?? 0}%`, detail: `평균 일치도 ${semanticSummary.averageScore ?? 0}`, state: (semanticSummary.matchPercent ?? 0) >= 80 ? "ok" : "warning", action: "field-overlap" })}
-        ${renderMetricCard({ label: "연결된 객체", value: counts.matched, detail: `전체 ${semanticSummary.totalObjects ?? 0}개`, state: "ok", action: "matched" })}
+        ${renderMetricCard({ label: "연결된 설정", value: counts.matched, detail: `전체 ${semanticSummary.totalObjects ?? 0}개`, state: "ok", action: "matched" })}
         ${renderMetricCard({ label: "기존 설정에서만 있음", value: counts.oldOnly, detail: "삭제/누락 가능성", state: counts.oldOnly ? "removed" : "ok", action: "unmatched-old" })}
         ${renderMetricCard({ label: "신규 설정에서만 있음", value: counts.newOnly, detail: "신규 추가 가능성", state: counts.newOnly ? "added" : "ok", action: "unmatched-new" })}
         ${renderMetricCard({ label: "확인 필요 후보", value: counts.ambiguous, detail: "매핑 후보 여러 개", state: counts.ambiguous ? "warning" : "ok", action: "ambiguous" })}
         ${renderMetricCard({ label: "낮은 신뢰도", value: counts.lowConfidence, detail: "수동 검토 권장", state: counts.lowConfidence ? "warning" : "ok", action: "low-confidence" })}
         ${renderMetricCard({ label: "분석된 라인 비율", value: coverageLabel, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0} 라인`, state: coverage != null && coverage >= 70 ? "ok" : "warning", action: "coverage" })}
         ${renderMetricCard({ label: "숨김 처리 라인", value: semanticSummary.noopSuppressed ?? lineSummary.suppressed, detail: "의미상 동일/구조 라인", state: "changed", action: "suppressed" })}
+        ${renderMetricCard({ label: "비교 제외된 항목", value: counts.excluded || 0, detail: "활성 검토 제외", state: counts.excluded ? "changed" : "ok", action: "suppressed" })}
         ${renderMetricCard({ label: "직접 연결", value: counts.manual, detail: "사용자 저장 매핑", state: counts.manual ? "changed" : "ok", action: "manual" })}
         ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
           ? renderMetricCard({ label: "표준 점검", value: counts.auditActive, detail: `예외 ${counts.auditSuppressed}개`, state: counts.auditCritical ? "removed" : counts.auditWarning ? "warning" : "ok", action: "standards-audit" })
@@ -4503,10 +4582,10 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
         <section class="summary-section">
           <div class="summary-section-head">
             <h3>변경 미리보기</h3>
-            <button type="button" data-summary-action="objects">객체 목록</button>
+            <button type="button" data-summary-action="objects">설정 목록</button>
           </div>
-          ${renderTopTypePreview("변경 많은 객체 타입", dashboard.topChangedTypes)}
-          ${renderTopTypePreview("미연결 객체 타입", dashboard.topUnmatchedTypes)}
+          ${renderTopTypePreview("변경 많은 설정 종류", dashboard.topChangedTypes)}
+          ${renderTopTypePreview("연결되지 않은 설정 종류", dashboard.topUnmatchedTypes)}
           ${renderLowOverlapPreview(fieldAnalysis.pairs)}
         </section>
 
@@ -4532,10 +4611,10 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
 function buildOperatorAlerts({ dashboard, semanticSummary, report }) {
   const { review, counts, context } = dashboard;
   return [
-    counts.oldOnly ? `기존 설정에서만 있는 객체 ${counts.oldOnly}개` : "",
-    counts.newOnly ? `신규 설정에서만 있는 객체 ${counts.newOnly}개` : "",
+    counts.oldOnly ? `기존 설정에만 있는 항목 ${counts.oldOnly}개` : "",
+    counts.newOnly ? `신규 설정에만 있는 항목 ${counts.newOnly}개` : "",
     counts.ambiguous ? `매핑 후보 여러 개 ${counts.ambiguous}개` : "",
-    counts.lowConfidence ? `낮은 신뢰도 객체 ${counts.lowConfidence}개` : "",
+    counts.lowConfidence ? `낮은 신뢰도 설정 ${counts.lowConfidence}개` : "",
     review.relationshipChanges.length ? `연결/참조 관계 변경 ${review.relationshipChanges.length}개` : "",
     review.abnormal.length ? `비정상/검토 필요 값 ${review.abnormal.length}개` : "",
     Number(semanticSummary.coveragePercent || 0) < 60 ? `분석된 라인 비율 ${semanticSummary.coveragePercent || 0}%` : "",
@@ -4565,19 +4644,23 @@ function renderCoverageWarning(semanticSummary = {}, support = {}, diagnostics =
 function renderFieldOverlapSummary(fieldAnalysis = {}) {
   const aggregate = fieldAnalysis.aggregate || {};
   const rows = fieldAnalysis.aggregateByType || [];
+  const excludedByPolicy = Number(aggregate.policyExcludedFields || 0);
+  const rawPercent = Number(aggregate.rawOverlapPercent ?? aggregate.overlapPercent ?? 0);
+  const appliedPercent = Number(aggregate.overlapPercent ?? 0);
   return `
     <div class="field-overlap-hero">
       <div>
-        <span>전체 공통 필드</span>
-        <strong>${escapeHtml(aggregate.overlapPercent ?? 0)}%</strong>
+        <span>공통 필드 분석</span>
+        <strong>${escapeHtml(appliedPercent)}%</strong>
       </div>
-      <div class="field-overlap-bar" aria-label="공통 필드 비율 ${escapeHtml(aggregate.overlapPercent ?? 0)}%">
-        <span style="width:${Math.max(0, Math.min(100, Number(aggregate.overlapPercent || 0)))}%"></span>
+      <div class="field-overlap-bar" aria-label="예외/숨김 처리된 항목 제외 기준 공통률 ${escapeHtml(appliedPercent)}%">
+        <span style="width:${Math.max(0, Math.min(100, appliedPercent))}%"></span>
       </div>
-      <small>같음 ${escapeHtml(aggregate.sameFields || 0)} · 다름 ${escapeHtml(aggregate.differentFields || 0)} · 기존 누락 ${escapeHtml(aggregate.missingOldFields || 0)} · 신규 누락 ${escapeHtml(aggregate.missingNewFields || 0)}</small>
+      <small>예외/숨김 처리된 항목 제외 기준 · 같음 ${escapeHtml(aggregate.sameFields || 0)} · 다름 ${escapeHtml(aggregate.differentFields || 0)} · 기존 누락 ${escapeHtml(aggregate.missingOldFields || 0)} · 신규 누락 ${escapeHtml(aggregate.missingNewFields || 0)}</small>
+      <small>원본 기준 ${escapeHtml(rawPercent)}% · 예외/숨김/제외 ${escapeHtml(excludedByPolicy)}개 제외</small>
     </div>
     <div class="summary-table field-overlap-table">
-      <div class="summary-table-head">객체 타입</div>
+      <div class="summary-table-head">설정 종류</div>
       <div class="summary-table-head">연결</div>
       <div class="summary-table-head">같은 필드</div>
       <div class="summary-table-head">다른 필드</div>
@@ -4590,7 +4673,7 @@ function renderFieldOverlapSummary(fieldAnalysis = {}) {
         <div>${escapeHtml(row.changedFields)}</div>
         <div>${escapeHtml(row.missingOldFields + row.missingNewFields)}</div>
         <div><span class="mini-overlap"><span style="width:${Math.max(0, Math.min(100, Number(row.averageOverlap || 0)))}%"></span></span>${escapeHtml(row.averageOverlap)}%</div>
-      `).join("") : `<div class="summary-table-empty">연결된 객체의 필드 분석 결과가 없습니다.</div>`}
+      `).join("") : `<div class="summary-table-empty">연결된 설정의 설정 항목 분석 결과가 없습니다.</div>`}
     </div>
     ${renderFieldHotList(fieldAnalysis.byField || [])}
   `;
@@ -4650,6 +4733,10 @@ function renderReviewItem(panelKey, item = {}) {
   `;
 }
 
+function preserveSemanticExceptionTargets(targets = new Map()) {
+  return new Map([...targets.entries()].filter(([, target]) => target?.source === "semantic-field"));
+}
+
 const reviewIssueMeta = {
   "unmatched-old": { label: "기존 설정에만 있음", tone: "old-only" },
   "unmatched-new": { label: "신규 설정에만 있음", tone: "new-only" },
@@ -4660,7 +4747,7 @@ const reviewIssueMeta = {
 };
 
 function renderSummaryIssueWorkspace(review = {}) {
-  const rows = buildSummaryIssueRows(review);
+  const rows = buildSummaryIssueRows(review, state.lastSemanticPlan || []);
   const firstTargetId = rows[0]?.targetId || "";
   return `
     <div class="summary-issue-workspace" data-summary-issue-root>
@@ -4673,7 +4760,7 @@ function renderSummaryIssueWorkspace(review = {}) {
         </div>
         <label class="summary-issue-search">
           <span>검색</span>
-          <input type="search" data-summary-issue-search placeholder="객체, 사유, 필드 검색" />
+          <input type="search" data-summary-issue-search placeholder="설정, 사유, 항목 검색" />
         </label>
       </div>
       <div class="summary-issue-layout">
@@ -4693,33 +4780,49 @@ function renderSummaryIssueWorkspace(review = {}) {
   `;
 }
 
-function buildSummaryIssueRows(review = {}) {
-  const groups = [
-    ["unmatched-old", review.unmatchedOld || []],
-    ["unmatched-new", review.unmatchedNew || []],
-    ["ambiguous", review.ambiguous || []],
-    ["low-confidence", review.lowConfidence || []],
-    ["abnormal", review.abnormal || []],
-    ["relationship", review.relationshipChanges || []],
-  ];
-  return groups.flatMap(([panelKey, items]) => items.map((item) => {
-    const targetId = registerReviewExceptionTarget(panelKey, item, "summary-review");
-    const target = state.exceptionTargets.get(targetId) || {};
-    const fields = summarizeReviewFields(item);
-    return {
-      targetId,
-      panelKey,
-      statusLabel: reviewIssueMeta[panelKey]?.label || panelKey,
-      tone: reviewIssueMeta[panelKey]?.tone || "review",
-      objectType: item.objectType || target.objectType || "-",
-      displayName: buildReviewDisplayName(item),
-      objectKey: item.oldKey || item.newKey || item.objectKey || target.objectKey || "",
-      reason: readableReviewReason(panelKey, item.reason || target.title || ""),
-      fieldText: fields.text,
-      valueText: fields.valueText,
-      score: item.score || "",
-    };
+function buildSummaryIssueRows(review = {}, plan = []) {
+  state.summaryIssueGroups = new Map();
+  return buildObjectReviewGroups({ review, plan }).map(hydrateSummaryObjectGroup);
+}
+
+function hydrateSummaryObjectGroup(group = {}) {
+  const targetId = createId();
+  const activeIssues = (group.activeIssues || []).map((issue) => ({
+    ...issue,
+    issueTargetId: registerReviewExceptionTarget(
+      issue.panelKey,
+      issue.sourceItem || {},
+      "summary-review",
+      issue.fieldRow || null
+    ),
   }));
+  const suppressedIssues = group.suppressedIssues || [];
+  const excludedIssues = group.excludedIssues || [];
+  const hydrated = {
+    ...group,
+    targetId,
+    activeIssues,
+    suppressedIssues,
+    excludedIssues,
+  };
+  const panelKey = activeIssues[0]?.panelKey || "suppressed";
+  state.summaryIssueGroups.set(targetId, hydrated);
+  return {
+    targetId,
+    panelKey,
+    statusLabel: group.activeIssueCount ? "검토 필요" : "예외 처리됨",
+    tone: group.activeIssueCount ? (reviewIssueMeta[panelKey]?.tone || "review") : "suppressed",
+    objectType: group.objectType || "-",
+    displayName: group.displayName || "-",
+    objectKey: group.objectKey || group.oldKey || group.newKey || "",
+    reason: group.representativeReason || "검토 필요",
+    fieldText: (group.issueFields || []).slice(0, 5).join(", "),
+    valueText: group.severitySummary || "",
+    score: group.score || "",
+    activeIssueCount: group.activeIssueCount || 0,
+    suppressedIssueCount: group.suppressedIssueCount || 0,
+    excludedIssueCount: group.excludedIssueCount || 0,
+  };
 }
 
 function renderSummaryIssueRow(row = {}, selected = false) {
@@ -4729,60 +4832,159 @@ function renderSummaryIssueRow(row = {}, selected = false) {
       <div class="summary-issue-main">
         <strong>${escapeHtml(row.displayName)}</strong>
         <span>${escapeHtml(row.reason)}</span>
-        <small>${escapeHtml(row.objectType)} · ${escapeHtml(row.objectKey || "-")}</small>
+        <small>${escapeHtml(row.objectType)} · ${escapeHtml(row.objectKey || "-")}${row.score ? ` · ${escapeHtml(row.score)}%` : ""}</small>
       </div>
       <div class="summary-issue-fields">
-        <span>${escapeHtml(row.fieldText || "필드 -")}</span>
-        ${row.valueText ? `<small>${escapeHtml(row.valueText)}</small>` : ""}
+        <span>검토 ${escapeHtml(row.activeIssueCount || 0)} / 예외 ${escapeHtml(row.suppressedIssueCount || 0)} / 비교 제외 ${escapeHtml(row.excludedIssueCount || 0)}</span>
+        ${row.fieldText ? `<small>${renderIssueChips(row.fieldText)}</small>` : ""}
       </div>
       <div class="summary-issue-actions">
         <button type="button" data-summary-issue-open="${escapeHtml(row.targetId)}">상세</button>
         <button type="button" data-issue-jump="${escapeHtml(row.targetId)}">비교 보기</button>
-        <button type="button" data-add-exception="${escapeHtml(row.targetId)}" data-exception-fixed-scope="object">이 객체 예외</button>
-        <button type="button" data-add-exception="${escapeHtml(row.targetId)}" data-exception-fixed-scope="profile">프로파일 예외</button>
       </div>
     </article>
   `;
 }
 
 function renderSummaryIssueDetail(targetId = "") {
-  const target = state.exceptionTargets?.get?.(targetId);
-  if (!target) return `<div class="summary-empty-state"><strong>상세 없음</strong><span>검토 항목을 다시 선택.</span></div>`;
-  const fields = Array.isArray(target.fieldRows) ? target.fieldRows : [];
+  const group = state.summaryIssueGroups?.get?.(targetId);
+  if (!group) return `<div class="summary-empty-state"><strong>상세 없음</strong><span>검토 항목을 다시 선택.</span></div>`;
+  const fieldRows = buildObjectFieldReviewRows(group);
+  const activeRows = fieldRows.filter((row) => row.activeCount > 0);
+  const suppressedOnlyRows = fieldRows.filter((row) => row.activeCount === 0 && row.suppressedCount > 0);
+  const exclusionTargetId = registerSummarySettingExclusionTarget(group);
   return `
     <div class="summary-issue-detail-card" data-summary-issue-detail-id="${escapeHtml(targetId)}">
       <div class="summary-issue-detail-head">
-        <span>${escapeHtml(issueKindLabel(target.panelKey, target.findingType))}</span>
-        <strong>${escapeHtml(target.displayName || target.description || target.objectKey || "-")}</strong>
-        <small>${escapeHtml(target.objectType || "-")} · ${escapeHtml(target.objectKey || "-")}</small>
+        <span>${escapeHtml(group.activeIssueCount ? "설정 검토" : "예외 처리됨")}</span>
+        <strong>${escapeHtml(group.displayName || group.objectKey || "-")}</strong>
+        <small>${escapeHtml(group.objectType || "-")} · ${escapeHtml(group.objectKey || "-")}</small>
       </div>
       <dl class="summary-issue-detail-grid">
-        <div><dt>사유</dt><dd>${escapeHtml(readableReviewReason(target.panelKey, target.title || ""))}</dd></div>
-        <div><dt>필드</dt><dd>${escapeHtml(target.field || "-")}</dd></div>
-        <div><dt>구분</dt><dd>${escapeHtml(target.category || "-")}</dd></div>
-        <div><dt>상태</dt><dd>${escapeHtml(target.findingType || "-")}</dd></div>
-        <div><dt>Old Key</dt><dd>${escapeHtml(target.oldKey || "-")}</dd></div>
-        <div><dt>New Key</dt><dd>${escapeHtml(target.newKey || "-")}</dd></div>
+        <div><dt>대표 사유</dt><dd>${escapeHtml(group.representativeReason || "-")}</dd></div>
+        <div><dt>검토 항목</dt><dd>${escapeHtml(group.activeIssueCount || 0)}개 / 예외 ${escapeHtml(group.suppressedIssueCount || 0)}개 / 비교 제외 ${escapeHtml(group.excludedIssueCount || 0)}개</dd></div>
+        <div><dt>상태</dt><dd>${escapeHtml(group.matchStatus || "-")}</dd></div>
+        <div><dt>일치도</dt><dd>${group.score ? `${escapeHtml(group.score)}%` : "-"}</dd></div>
+        <div><dt>Old Key</dt><dd>${escapeHtml(group.oldKey || "-")}</dd></div>
+        <div><dt>New Key</dt><dd>${escapeHtml(group.newKey || "-")}</dd></div>
       </dl>
-      ${fields.length ? `
-        <div class="summary-issue-field-table">
-          <div>필드</div><div>상태</div><div>기존값</div><div>신규값</div>
-          ${fields.slice(0, 8).map((row) => `
-            <div>${escapeHtml(row.field || "-")}</div>
-            <div>${escapeHtml(fieldStatusLabel(row.status))}</div>
-            <div>${escapeHtml(row.oldValue || "-")}</div>
-            <div>${escapeHtml(row.newValue || "-")}</div>
-          `).join("")}
+      <div class="summary-object-issue-sections">
+        <section class="summary-object-issue-section">
+          <div class="summary-object-issue-section-head">
+            <strong>활성 검토 항목</strong>
+            <span>${escapeHtml(activeRows.length)}개 설정 항목</span>
+          </div>
+          ${activeRows.length ? activeRows.map((row) => renderSummaryFieldReviewCard(row, false)).join("") : `
+            <div class="summary-empty-row">활성 검토 항목 없음</div>
+          `}
+        </section>
+        ${suppressedOnlyRows.length ? `
+          <section class="summary-object-issue-section summary-object-issue-section-muted">
+            <div class="summary-object-issue-section-head">
+              <strong>예외/숨김 처리된 항목</strong>
+              <span>${escapeHtml(suppressedOnlyRows.length)}개 설정 항목</span>
+            </div>
+            ${suppressedOnlyRows.map((row) => renderSummaryFieldReviewCard(row, true)).join("")}
+          </section>
+        ` : ""}
+      </div>
+      ${group.suppressedIssues?.length ? `
+        <div class="summary-issue-suppressed-note">
+          예외 처리 항목 ${escapeHtml(group.suppressedIssues.length)}개. 같은 설정 항목의 활성/예외 상세는 한 줄 안에서 분리 표시됨.
         </div>
       ` : ""}
-      <p class="small-note">예외는 활성 검토 항목에서 제외되고 예외/숨김 목록으로 이동함.</p>
       <div class="summary-issue-detail-actions">
-        <button type="button" data-add-exception="${escapeHtml(targetId)}" data-exception-fixed-scope="object">이 객체에서만 예외</button>
-        <button type="button" data-add-exception="${escapeHtml(targetId)}" data-exception-fixed-scope="profile">현재 프로파일에서 예외</button>
         <button type="button" data-issue-jump="${escapeHtml(targetId)}">비교 화면에서 보기</button>
+        ${renderSettingExclusionActionControls(exclusionTargetId)}
       </div>
     </div>
   `;
+}
+
+function renderSummaryFieldReviewCard(row = {}, suppressedOnly = false) {
+  const primaryIssue = suppressedOnly ? (row.suppressedIssues?.[0] || {}) : (row.activeIssues?.[0] || {});
+  const actions = suppressedOnly
+    ? renderSuppressedFieldActions(row)
+    : renderActiveFieldActions(primaryIssue);
+  const suppressedBadge = !suppressedOnly && row.suppressedCount
+    ? `<span class="summary-object-issue-badge">예외 ${escapeHtml(row.suppressedCount)}개 적용</span>`
+    : "";
+  const suppressedDetail = !suppressedOnly && row.suppressedCount
+    ? `<div class="summary-object-issue-subnote">예외 상세: ${escapeHtml(row.suppressionReason || "예외 처리됨")}</div>`
+    : "";
+  return `
+    <article class="summary-object-issue-card${suppressedOnly ? " suppressed" : ""}">
+      <div class="summary-object-issue-card-main">
+        <div class="summary-object-issue-card-title">
+          <strong>${escapeHtml(row.fieldPath || "설정")}</strong>
+          <span>${escapeHtml(suppressedOnly ? "예외 처리" : row.statusLabel || fieldStatusLabel(row.status))}</span>
+          ${suppressedBadge}
+        </div>
+        <div class="summary-object-issue-reason">${escapeHtml(row.representativeReason || row.suppressionReason || "-")}</div>
+        <div class="summary-object-issue-values">
+          <span>기존: ${escapeHtml(row.oldValue || "-")}</span>
+          <span>신규: ${escapeHtml(row.newValue || "-")}</span>
+        </div>
+        ${suppressedDetail}
+      </div>
+      <div class="summary-object-issue-meta">
+        <span>${escapeHtml(suppressedOnly ? "예외 처리됨" : row.classification || "-")}</span>
+        <small>${escapeHtml(row.ruleId || "-")}</small>
+        <div class="summary-issue-row-actions">${actions}</div>
+      </div>
+    </article>
+  `;
+}
+
+function renderActiveFieldActions(issue = {}) {
+  if (!issue.issueTargetId) return `<span class="small-note">예외 대상 없음</span>`;
+  return `<span class="small-note">하단 의미 기반 비교에서 예외 선택</span>`;
+}
+
+function renderSuppressedFieldActions(row = {}) {
+  const policyIds = [...new Set((row.suppressedIssues || []).map((issue) => issue.policyId).filter(Boolean))];
+  if (!policyIds.length) return `<span class="small-note">정책 적용</span>`;
+  return policyIds
+    .map((policyId) => `<button type="button" data-remove-exception="${escapeHtml(policyId)}">예외 해제</button>`)
+    .join("");
+}
+
+function renderSummaryDetailIssueRow(issue = {}, suppressed = false) {
+  const actions = suppressed
+    ? issue.policyId
+      ? `<button type="button" data-remove-exception="${escapeHtml(issue.policyId)}">예외 해제</button>`
+      : `<span class="small-note">정책 적용</span>`
+    : `<span class="small-note">하단 의미 기반 비교에서 예외 선택</span>`;
+  return `
+    <div>${escapeHtml(issue.fieldPath || "설정")}</div>
+    <div>${escapeHtml(issue.statusLabel || fieldStatusLabel(issue.status))}</div>
+    <div>${escapeHtml(issue.reason || "-")}</div>
+    <div>${escapeHtml(issue.oldValue || "-")}</div>
+    <div>${escapeHtml(issue.newValue || "-")}</div>
+    <div>${escapeHtml(suppressed ? "예외 처리됨" : issue.classification || "-")}</div>
+    <div class="summary-issue-row-actions">${actions}</div>
+  `;
+}
+
+function renderIssueChips(fieldText = "") {
+  return String(fieldText || "")
+    .split(",")
+    .map((field) => field.trim())
+    .filter(Boolean)
+    .slice(0, 5)
+    .map((field) => `<span class="summary-issue-chip">${escapeHtml(field)}</span>`)
+    .join("");
+}
+
+function reviewReasonForField(panelKey = "", row = {}, item = {}) {
+  const field = String(row.field || "").toLowerCase();
+  const status = String(row.status || "").toLowerCase();
+  if (field === "group" && item.objectType === "bgp") return "MD-CLI BGP group 구조 전환";
+  if (status === "structure-converted") return "구조 전환";
+  if (status === "added" || status === "missing-old") return "신규값 추가 확인";
+  if (status === "missing" || status === "missing-new") return "신규 설정 누락 확인";
+  if (status === "different" || status === "changed") return "값 변경 확인";
+  return readableReviewReason(panelKey, item.reason || "");
 }
 
 function summarizeReviewFields(item = {}) {
@@ -4842,6 +5044,8 @@ function fieldStatusLabel(status = "") {
   return {
     same: "동일",
     different: "차이",
+    changed: "차이",
+    "structure-converted": "구조 전환",
     "missing-old": "기존 누락",
     "missing-new": "신규 누락",
     added: "추가",
@@ -4852,38 +5056,40 @@ function fieldStatusLabel(status = "") {
 
 function renderProfileExceptionManager() {
   const exceptions = getEnabledProfileExceptions();
+  const exclusionCount = exceptions.filter((item) => item.type === "comparison-exclusion").length;
   return `
     <section class="summary-section profile-exception-manager" data-review-panel="suppressed">
       <div class="summary-section-head">
-        <h3>예외/숨김 처리된 항목</h3>
-        <span>${escapeHtml(exceptions.length)}개</span>
+        <h3>예외/비교 제외된 항목</h3>
+        <span>${escapeHtml(exceptions.length)}개${exclusionCount ? ` · 비교 제외 ${escapeHtml(exclusionCount)}개` : ""}</span>
       </div>
       ${exceptions.length ? `
         <div class="profile-exception-table">
-          <div>범위</div><div>객체</div><div>필드</div><div>규칙/구분</div><div>사유</div><div>동작</div>
+          <div>범위</div><div>설정</div><div>설정 항목</div><div>규칙/구분</div><div>사유</div><div>동작</div>
           ${exceptions.map((exception) => renderProfileExceptionRow(exception)).join("")}
         </div>
-      ` : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외를 추가할 수 있음.</span></div>`}
+      ` : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외 또는 비교 제외를 추가할 수 있음.</span></div>`}
     </section>
   `;
 }
 
 function renderProfileExceptionRow(exception = {}) {
   const target = exception.target || {};
-  const scopeLabel = exception.scope === "profile" ? "현재 프로파일" : "이 객체";
-  const objectLabel = target.displayName || [target.objectType, target.objectKey].filter(Boolean).join(" ") || "-";
-  const ruleLabel = [target.ruleId, target.category || target.findingType].filter(Boolean).join(" · ") || "-";
+  const isExclusion = exception.type === "comparison-exclusion";
+  const scopeLabel = exception.scope === "profile" ? "현재 프로파일" : isExclusion ? "이 설정" : "이 설정";
+  const objectLabel = target.displayName || [target.settingType || target.objectType, target.settingKey || target.objectKey || target.createdFromObjectKey].filter(Boolean).join(" ") || "-";
+  const ruleLabel = [target.ruleId, target.matchStatus || target.category || target.findingType].filter(Boolean).join(" · ") || "-";
   return `
     <div>${escapeHtml(scopeLabel)}</div>
     <div>
       <strong>${escapeHtml(objectLabel)}</strong>
-      <small>${escapeHtml(target.objectType || "-")} · ${escapeHtml(target.objectKey || "-")}</small>
+      <small>${escapeHtml(target.settingType || target.objectType || "-")} · ${escapeHtml(target.settingKey || target.objectKey || target.createdFromObjectKey || "-")}</small>
     </div>
     <div>${escapeHtml(target.fieldPath || "-")}</div>
     <div>${escapeHtml(ruleLabel)}</div>
-    <div>${escapeHtml(exception.reasonKo || "사용자 예외")}</div>
+    <div>${escapeHtml(exception.reasonKo || (isExclusion ? "비교 제외 규칙" : "사용자 예외"))}</div>
     <div class="profile-exception-actions">
-      <button type="button" data-remove-exception="${escapeHtml(exception.id || "")}">예외 해제</button>
+      <button type="button" data-remove-exception="${escapeHtml(exception.id || "")}">${isExclusion ? "비교 제외 해제" : "예외 해제"}</button>
     </div>
   `;
 }
@@ -4906,7 +5112,7 @@ function renderExceptionActionControls(targetId = "") {
   return `
     <div class="exception-inline-control" data-exception-control="${escapeHtml(targetId)}">
       <select data-exception-scope="${escapeHtml(targetId)}" aria-label="예외 범위">
-        <option value="object">이 객체에서만 예외</option>
+        <option value="object">이 설정에서만 예외</option>
         <option value="profile">현재 프로파일에서 예외</option>
       </select>
       <button type="button" data-add-exception="${escapeHtml(targetId)}">예외 추가</button>
@@ -4914,15 +5120,122 @@ function renderExceptionActionControls(targetId = "") {
   `;
 }
 
-function registerReviewExceptionTarget(panelKey = "", item = {}, source = "summary-review") {
+function renderSettingExclusionActionControls(targetId = "") {
+  if (!targetId) return "";
+  return `
+    <div class="exception-inline-control setting-exclusion-inline-control" data-exclusion-control="${escapeHtml(targetId)}">
+      <button type="button" data-add-exclusion="${escapeHtml(targetId)}" data-exclusion-fixed-scope="setting">이 설정만 비교 제외</button>
+      <button type="button" data-add-exclusion="${escapeHtml(targetId)}" data-exclusion-fixed-scope="profile">현재 프로파일에서 같은 조건 비교 제외</button>
+    </div>
+  `;
+}
+
+function registerSemanticFieldExceptionTarget(item = {}, fieldSummary = {}) {
+  const field = String(fieldSummary.field || "").trim();
+  const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+  if (!field || !objectType) return "";
+  const changeType = normalizeExceptionChangeType(fieldSummary.effectiveStatus || fieldSummary.status || item.status || "");
+  const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
   const targetId = createId();
-  const field = primaryReviewExceptionField(item);
+  const displayName = buildSemanticExceptionDisplayName(item, objectType, objectKey);
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source: "semantic-field",
+    targetType: "semantic-field",
+    findingType: changeType,
+    issueType: "field-difference",
+    changeType,
+    panelKey: changeType || "semantic-field",
+    ruleId: semanticExceptionRuleId(objectType, field, changeType),
+    category: "semantic-compare",
+    objectType,
+    objectKey,
+    oldKey: item.oldObject ? exceptionObjectKeyFromPlanItem({ oldObject: item.oldObject }, objectType) : "",
+    newKey: item.newObject ? exceptionObjectKeyFromPlanItem({ newObject: item.newObject }, objectType) : "",
+    displayName,
+    description: displayName,
+    field,
+    status: changeType,
+    statusLabel: getSemanticFieldStatusLabel(fieldSummary),
+    oldValue: firstSummaryValue(fieldSummary.oldValues),
+    newValue: firstSummaryValue(fieldSummary.newValues),
+    side: "both",
+    title: `${field} ${getSemanticFieldStatusLabel(fieldSummary)}`,
+    sourceLineIds: [],
+    targetLineIds: [],
+    planId: item.id || "",
+  });
+  return targetId;
+}
+
+function registerSemanticSettingExclusionTarget(item = {}, source = "summary-review") {
+  const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+  const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
+  if (!objectType || !objectKey || !isSettingExclusionStatus(item.status)) return "";
+  const targetId = createId();
+  const side = settingExclusionSideFromPlanItem(item);
+  const displayName = buildSemanticExceptionDisplayName(item, objectType, objectKey);
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source,
+    targetType: "setting-exclusion",
+    issueId: `${item.id || objectKey}:comparison-exclusion`,
+    panelKey: item.status === "old-only" ? "unmatched-old" : "unmatched-new",
+    ruleId: "semantic-compare.unmatched-setting",
+    category: "semantic-compare",
+    objectType,
+    settingType: objectType,
+    objectKey,
+    settingKey: objectKey,
+    oldKey: item.oldObject ? exceptionObjectKeyFromPlanItem({ oldObject: item.oldObject }, objectType) : "",
+    newKey: item.newObject ? exceptionObjectKeyFromPlanItem({ newObject: item.newObject }, objectType) : "",
+    displayName,
+    description: displayName,
+    field: "",
+    side,
+    status: item.status || "",
+    matchStatus: item.status || "",
+    statusLabel: getSemanticDiffStatusLabel(item.status),
+    title: `${displayName} ${getSemanticDiffStatusLabel(item.status)}`,
+    planId: item.id || "",
+  });
+  return targetId;
+}
+
+function isSettingExclusionStatus(status = "") {
+  return ["old-only", "new-only", "unmatched-source", "unmatched-target", "source-only", "target-only", "unmatched"].includes(String(status || "").toLowerCase());
+}
+
+function settingExclusionSideFromPlanItem(item = {}) {
+  const status = String(item.status || "").toLowerCase();
+  if (status === "old-only" || (item.oldObject && !item.newObject)) return "old";
+  if (status === "new-only" || (item.newObject && !item.oldObject)) return "new";
+  return "both";
+}
+
+function buildSemanticExceptionDisplayName(item = {}, objectType = "", objectKey = "") {
+  const object = item.oldObject || item.newObject || {};
+  const description = String(object.fields?.description || object.canonicalFields?.description || object.description || "").trim();
+  const identity = String(object.normalizedIdentity || object.identity || object.sourceName || object.id || objectKey || "").trim();
+  if (description && identity && !description.includes(identity)) return `${description} · ${identity}`;
+  return description || identity || objectKey || objectType || "-";
+}
+
+function getSemanticFieldStatusLabel(fieldSummary = {}) {
+  return fieldStatusLabel(normalizeExceptionChangeType(fieldSummary.effectiveStatus || fieldSummary.status || ""));
+}
+
+function registerReviewExceptionTarget(panelKey = "", item = {}, source = "summary-review", fieldRow = null) {
+  const targetId = createId();
+  const field = fieldRow?.field || primaryReviewExceptionField(item);
   const side = item.side || (panelKey === "unmatched-old" ? "old" : panelKey === "unmatched-new" ? "new" : "both");
   const objectKey = item.oldKey || item.newKey || item.objectKey || "";
+  const changeType = normalizeExceptionChangeType(fieldRow?.status || item.status || panelKey);
+  const ruleId = semanticExceptionRuleId(item.objectType || "", field, changeType);
   state.exceptionTargets.set(targetId, {
     source,
     targetType: "review",
-    issueId: item.planId || targetId,
+    issueId: [item.planId || targetId, field || "object", changeType].join(":"),
     panelKey,
     objectType: item.objectType || "",
     objectKey,
@@ -4932,12 +5245,50 @@ function registerReviewExceptionTarget(panelKey = "", item = {}, source = "summa
     field,
     fieldRows: Array.isArray(item.fieldRows) ? item.fieldRows : [],
     findingType: item.status || panelKey,
+    ruleId,
+    issueType: field ? "field-difference" : "object-difference",
+    changeType,
+    status: changeType,
     category: "semantic-compare",
-    title: item.reason || panelKey || "검토 항목",
+    title: fieldRow ? reviewReasonForField(panelKey, fieldRow, item) : (item.reason || panelKey || "검토 항목"),
     description: `${item.objectType || "object"} ${item.label || objectKey || ""}`.trim(),
     displayName: buildReviewDisplayName(item),
-    oldValue: firstFieldValue(item.fieldRows, field, "oldValue"),
-    newValue: firstFieldValue(item.fieldRows, field, "newValue"),
+    oldValue: fieldRow?.oldValue ?? firstFieldValue(item.fieldRows, field, "oldValue"),
+    newValue: fieldRow?.newValue ?? firstFieldValue(item.fieldRows, field, "newValue"),
+  });
+  return targetId;
+}
+
+function registerSummarySettingExclusionTarget(group = {}) {
+  if (!isSettingExclusionStatus(group.matchStatus)) return "";
+  const objectType = String(group.objectType || "").trim();
+  const objectKey = String(group.objectKey || group.oldKey || group.newKey || "").trim();
+  if (!objectType || !objectKey) return "";
+  const targetId = createId();
+  const side = group.matchStatus === "new-only" ? "new" : group.matchStatus === "old-only" ? "old" : "both";
+  const displayName = String(group.displayName || objectKey || "").trim();
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source: "summary-review",
+    targetType: "setting-exclusion",
+    issueId: `${group.objectId || objectKey}:comparison-exclusion`,
+    panelKey: group.matchStatus === "old-only" ? "unmatched-old" : "unmatched-new",
+    ruleId: "semantic-compare.unmatched-setting",
+    category: "semantic-compare",
+    objectType,
+    settingType: objectType,
+    objectKey,
+    settingKey: objectKey,
+    oldKey: group.oldKey || "",
+    newKey: group.newKey || "",
+    displayName,
+    description: displayName,
+    field: "",
+    side,
+    status: group.matchStatus || "",
+    matchStatus: group.matchStatus || "",
+    statusLabel: getSemanticDiffStatusLabel(group.matchStatus),
+    title: `${displayName} ${getSemanticDiffStatusLabel(group.matchStatus)}`,
   });
   return targetId;
 }
@@ -4970,6 +5321,54 @@ function primaryReviewExceptionField(item = {}) {
   return actionable?.field || rows.find((row) => row.field)?.field || "";
 }
 
+function normalizeExceptionChangeType(status = "") {
+  const value = String(status || "").toLowerCase();
+  if (value === "structure-converted") return "structure-converted";
+  if (value === "missing-old") return "added";
+  if (value === "missing-new") return "missing";
+  if (value === "different") return "changed";
+  return value || "changed";
+}
+
+function semanticExceptionRuleId(objectType = "", field = "", changeType = "") {
+  if (isImportantExceptionField(objectType, field)) return "semantic-compare.important-field-change";
+  if (changeType === "added") return "semantic-compare.field-added";
+  if (changeType === "missing") return "semantic-compare.field-missing";
+  return "semantic-compare.field-difference";
+}
+
+function isImportantExceptionField(objectType = "", field = "") {
+  const normalizedField = String(field || "").toLowerCase();
+  if (objectType === "bgp") {
+    return [
+      "neighbor",
+      "peerip",
+      "group",
+      "peer-as",
+      "import.policy",
+      "export.policy",
+      "state",
+      "admin-state",
+      "description",
+      "authentication-key",
+    ].includes(normalizedField);
+  }
+  return [
+    "route",
+    "next-hop",
+    "gateway",
+    "tag",
+    "metric",
+    "state",
+    "admin-state",
+    "description",
+    "sap",
+    "port",
+    "lag",
+    "interface",
+  ].includes(normalizedField);
+}
+
 function firstFieldValue(rows = [], field = "", valueKey = "oldValue") {
   if (!Array.isArray(rows)) return "";
   const exact = rows.find((row) => row.field === field);
@@ -4992,13 +5391,13 @@ function renderLowOverlapPreview(pairs = []) {
     .slice(0, 5);
   return `
     <div class="summary-side-block">
-      <strong>공통 필드 낮은 객체</strong>
+      <strong>공통 설정 항목 낮은 설정</strong>
       ${rows.length ? rows.map((pair) => `
         <button type="button" class="summary-low-overlap" data-object-jump="${escapeHtml(pair.oldKey || pair.newKey)}">
           <span>${escapeHtml(pair.label)}</span>
           <b>${escapeHtml(pair.overlapPercent)}%</b>
         </button>
-      `).join("") : `<p class="small-note">낮은 공통률 객체 없음</p>`}
+      `).join("") : `<p class="small-note">낮은 공통률 설정 없음</p>`}
     </div>
   `;
 }
@@ -5046,6 +5445,12 @@ function bindSummaryActions() {
       const targetId = button.dataset.addException || "";
       const scope = button.dataset.exceptionFixedScope || selectors.summaryCards?.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
       addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+  selectors.summaryCards?.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
     });
   });
   selectors.summaryCards?.querySelectorAll("[data-remove-exception]").forEach((button) => {
@@ -5117,6 +5522,18 @@ function bindSummaryIssueDetailActions(detail) {
       openIssueInCompare(button.dataset.issueJump || "");
     });
   });
+  detail.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
+    });
+  });
+  detail.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
+    });
+  });
 }
 
 function filterSummaryIssueRows(root) {
@@ -5148,12 +5565,14 @@ function openAuditFindingDetail(findingId = "") {
 }
 
 function openIssueInCompare(targetId = "") {
-  const target = state.exceptionTargets?.get?.(targetId);
+  const group = state.summaryIssueGroups?.get?.(targetId);
+  const issueTargetId = group?.activeIssues?.[0]?.issueTargetId || "";
+  const target = state.exceptionTargets?.get?.(targetId) || state.exceptionTargets?.get?.(issueTargetId) || group;
   if (!target) {
     showWorkbenchToast("이동할 검토 항목 없음", "error");
     return;
   }
-  state.activeIssueContext = { ...target, targetId };
+  state.activeIssueContext = { ...target, targetId: issueTargetId || targetId };
   scrollToDiffObject(target.objectKey || target.oldKey || target.newKey || "");
   renderCompareIssueContextBanner();
 }
@@ -5161,7 +5580,8 @@ function openIssueInCompare(targetId = "") {
 function renderCompareIssueContextBanner() {
   const grid = selectors.diffConnectorSvg?.closest(".editor-grid");
   if (!grid) return;
-  let banner = grid.parentElement?.querySelector("[data-compare-issue-context]");
+  let banner = grid.querySelector("[data-compare-issue-context]")
+    || grid.parentElement?.querySelector("[data-compare-issue-context]");
   if (!state.activeIssueContext) {
     banner?.remove();
     return;
@@ -5170,7 +5590,9 @@ function renderCompareIssueContextBanner() {
     banner = document.createElement("div");
     banner.className = "compare-issue-context-banner";
     banner.dataset.compareIssueContext = "true";
-    grid.parentElement?.insertBefore(banner, grid);
+    grid.appendChild(banner);
+  } else if (banner.parentElement !== grid) {
+    grid.appendChild(banner);
   }
   const target = state.activeIssueContext;
   banner.innerHTML = `
@@ -5180,7 +5602,7 @@ function renderCompareIssueContextBanner() {
       <small>${escapeHtml(readableReviewReason(target.panelKey, target.title || ""))} · ${escapeHtml(target.field || "-")}</small>
     </div>
     <div>
-      <button type="button" data-add-exception="${escapeHtml(target.targetId || "")}" data-exception-fixed-scope="object">예외 추가</button>
+      <span class="small-note">예외는 하단 의미 기반 비교에서 선택</span>
       <button type="button" data-clear-issue-context>선택 해제</button>
     </div>
   `;
@@ -5188,10 +5610,6 @@ function renderCompareIssueContextBanner() {
     state.activeIssueContext = null;
     document.querySelectorAll(".object-active").forEach((line) => line.classList.remove("object-active"));
     renderCompareIssueContextBanner();
-  });
-  banner.querySelector("[data-add-exception]")?.addEventListener("click", (event) => {
-    const button = event.currentTarget;
-    addExceptionFromTarget(button.dataset.addException || "", button.dataset.exceptionFixedScope || "object", button);
   });
 }
 
@@ -5210,7 +5628,8 @@ async function addExceptionFromTarget(targetId = "", exceptionScope = "object", 
     return;
   }
 
-  if (!confirmProfileExceptionCreate(exception)) return;
+  const estimatedImpact = estimateExceptionImpact(exception);
+  if (!confirmProfileExceptionCreate(exception, estimatedImpact)) return;
 
   const previousText = triggerButton?.textContent || "";
   if (triggerButton) {
@@ -5224,6 +5643,7 @@ async function addExceptionFromTarget(targetId = "", exceptionScope = "object", 
     if (!duplicate) state.profileDraft.exceptions.push(exception);
 
     await saveProfile();
+    await syncActiveSessionProfileReference();
     if (state.lastReport) {
       runCompare();
       setResultTab("summary");
@@ -5232,9 +5652,9 @@ async function addExceptionFromTarget(targetId = "", exceptionScope = "object", 
       ? "이미 등록된 예외"
       : exception.scope === "profile"
         ? "현재 프로파일에 예외가 저장됨"
-        : "이 객체 예외가 추가됨";
+        : "이 설정 예외가 추가됨";
     setProfileStatus(`${message}: ${exception.reasonKo}`, duplicate ? "info" : "saved");
-    showWorkbenchToast(`${message}. 활성 검토 항목에서 제외됨.`, duplicate ? "info" : "success");
+    showWorkbenchToast(`${message}. ${estimatedImpact || 1}개 항목에 적용됨.`, duplicate ? "info" : "success");
   } catch (error) {
     setProfileStatus(`예외 추가 실패: ${error?.message || error}`, "error");
     showWorkbenchToast(`예외 추가 실패: ${error?.message || error}`, "error");
@@ -5242,6 +5662,59 @@ async function addExceptionFromTarget(targetId = "", exceptionScope = "object", 
     if (triggerButton) {
       triggerButton.disabled = false;
       triggerButton.textContent = previousText || "예외 추가";
+    }
+  }
+}
+
+async function addExclusionFromTarget(targetId = "", exclusionScope = "setting", triggerButton = null) {
+  const target = state.exceptionTargets?.get?.(targetId);
+  if (!target) {
+    setProfileStatus("비교 제외 대상 없음", "error");
+    showWorkbenchToast("비교 제외 대상 없음", "error");
+    return;
+  }
+
+  const exclusion = buildComparisonExclusionFromTarget(target, exclusionScope);
+  if (!exclusion) {
+    setProfileStatus("비교 제외 규칙 생성 실패", "error");
+    showWorkbenchToast("비교 제외 규칙 생성 실패", "error");
+    return;
+  }
+
+  const estimatedImpact = estimateComparisonExclusionImpact(exclusion);
+  if (!confirmComparisonExclusionCreate(exclusion, estimatedImpact)) return;
+
+  const previousText = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "적용 중...";
+  }
+
+  try {
+    if (!Array.isArray(state.profileDraft.exceptions)) state.profileDraft.exceptions = [];
+    const duplicate = state.profileDraft.exceptions.some((item) => sameProfileException(item, exclusion));
+    if (!duplicate) state.profileDraft.exceptions.push(exclusion);
+
+    await saveProfile();
+    await syncActiveSessionProfileReference();
+    if (state.lastReport) {
+      runCompare();
+      setResultTab("summary");
+    }
+    const message = duplicate
+      ? "이미 등록된 비교 제외 규칙"
+      : exclusion.scope === "profile"
+        ? "현재 프로파일에 비교 제외 규칙 저장됨"
+        : "이 설정 비교 제외 규칙 추가됨";
+    setProfileStatus(`${message}: ${exclusion.reasonKo}`, duplicate ? "info" : "saved");
+    showWorkbenchToast(`${message}. ${estimatedImpact || 1}개 설정에 적용됨.`, duplicate ? "info" : "success");
+  } catch (error) {
+    setProfileStatus(`비교 제외 추가 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`비교 제외 추가 실패: ${error?.message || error}`, "error");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText || "비교 제외";
     }
   }
 }
@@ -5254,11 +5727,14 @@ function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object")
   const ruleId = String(target.ruleId || "").trim();
   const category = String(target.category || "").trim();
   const findingType = String(target.findingType || target.panelKey || target.targetType || "").trim();
+  const issueType = String(target.issueType || (field ? "field-difference" : "object-difference")).trim();
+  const changeType = normalizeExceptionChangeType(target.changeType || target.status || findingType);
+  const matchFindingType = objectScoped ? findingType : changeType;
   const displayName = String(target.displayName || target.description || objectKey || "").trim();
 
   if (!objectType && !objectKey && !field && !ruleId && !findingType) return null;
 
-  const scopeLabel = objectScoped ? "이 객체" : "현재 프로파일";
+  const scopeLabel = objectScoped ? "이 설정" : "현재 프로파일";
   const reasonKo = `${scopeLabel} 예외: ${target.title || displayName || field || findingType || objectType}`;
   const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
   return {
@@ -5272,8 +5748,10 @@ function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object")
     target: {
       ruleId,
       category,
+      vendorPair,
       objectType,
-      objectKey,
+      objectKey: objectScoped ? objectKey : "",
+      createdFromObjectKey: objectScoped ? "" : objectKey,
       displayName,
       fieldPath: field,
       side: normalizeExceptionSide(target.side || "both"),
@@ -5281,20 +5759,83 @@ function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object")
       newValue: target.newValue ?? "",
       sourceLineIds: Array.isArray(target.sourceLineIds) ? target.sourceLineIds : [],
       targetLineIds: Array.isArray(target.targetLineIds) ? target.targetLineIds : [],
-      findingType,
+      findingType: matchFindingType,
+      issueType,
+      status: changeType,
+      changeType,
     },
     match: {
-      mode: objectScoped ? "exact-object" : "profile-field-rule",
+      mode: objectScoped ? "exact-object-field-rule" : "profile-field-rule",
       objectType,
       objectKey: objectScoped ? objectKey : "",
       fieldPath: field,
       ruleId,
       category,
-      findingType,
-      valuePattern: "",
+      findingType: matchFindingType,
+      issueType,
+      changeType,
+      changeTypes: [...new Set([changeType, target.status, changeType === "structure-converted" ? "added" : ""].filter(Boolean))],
+      valueMode: "any",
+      newValuePattern: exceptionScope === "profile" ? "*" : "",
       vendorPair,
     },
     enabled: true,
+  };
+}
+
+function buildComparisonExclusionFromTarget(target = {}, exclusionScope = "setting") {
+  const profileScoped = exclusionScope === "profile";
+  const objectType = String(target.settingType || target.objectType || "").trim();
+  const objectKey = String(target.settingKey || target.objectKey || "").trim();
+  const side = normalizeExceptionSide(target.side || "both");
+  const matchStatus = String(target.matchStatus || target.status || "").trim();
+  const ruleId = String(target.ruleId || "semantic-compare.unmatched-setting").trim();
+  const displayName = String(target.displayName || target.description || objectKey || "").trim();
+  if (!objectType || !objectKey || !matchStatus) return null;
+
+  const scopeLabel = profileScoped ? "현재 프로파일에서 같은 조건" : "이 설정만";
+  const sideLabel = side === "old" ? "기존 설정에만 있는" : side === "new" ? "신규 설정에만 있는" : "반대편 설정이 없는";
+  const reasonKo = `${scopeLabel} 비교 제외: ${sideLabel} ${objectType} ${displayName || objectKey}`;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  return {
+    id: createId(),
+    type: "comparison-exclusion",
+    scope: profileScoped ? "profile" : "setting",
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    createdBy: "user",
+    createdFromIssueId: target.issueId || target.planId || "",
+    reasonKo,
+    reason: reasonKo,
+    target: {
+      ruleId,
+      category: "semantic-compare",
+      vendorPair,
+      objectType,
+      settingType: objectType,
+      objectKey: profileScoped ? "" : objectKey,
+      settingKey: profileScoped ? "" : objectKey,
+      createdFromObjectKey: profileScoped ? objectKey : "",
+      displayName,
+      fieldPath: "",
+      side,
+      matchStatus,
+      status: matchStatus,
+      issueType: "object-difference",
+      findingType: matchStatus,
+    },
+    match: {
+      mode: profileScoped ? "profile-setting-status" : "exact-setting",
+      vendorPair,
+      objectType,
+      settingType: objectType,
+      objectKey: profileScoped ? "" : objectKey,
+      settingKey: profileScoped ? "" : objectKey,
+      side,
+      matchStatus,
+      ruleId,
+      category: "semantic-compare",
+    },
   };
 }
 
@@ -5303,34 +5844,136 @@ function sameProfileException(left = {}, right = {}) {
   const rightTarget = right.target || {};
   const leftMatch = left.match || {};
   const rightMatch = right.match || {};
-  return [
+  const leftScope = left.scope === "profile" ? "profile" : "object";
+  const rightScope = right.scope === "profile" ? "profile" : "object";
+  const checks = [
+    ["type", left.type || "", right.type || ""],
     ["scope", left.scope, right.scope],
+    ["mode", leftMatch.mode || "", rightMatch.mode || ""],
     ["side", leftTarget.side, rightTarget.side],
-    ["objectType", leftMatch.objectType || leftTarget.objectType, rightMatch.objectType || rightTarget.objectType],
-    ["objectKey", leftMatch.objectKey || leftTarget.objectKey, rightMatch.objectKey || rightTarget.objectKey],
+    ["objectType", leftMatch.settingType || leftMatch.objectType || leftTarget.settingType || leftTarget.objectType, rightMatch.settingType || rightMatch.objectType || rightTarget.settingType || rightTarget.objectType],
     ["fieldPath", leftMatch.fieldPath || leftTarget.fieldPath, rightMatch.fieldPath || rightTarget.fieldPath],
     ["ruleId", leftMatch.ruleId || leftTarget.ruleId, rightMatch.ruleId || rightTarget.ruleId],
     ["category", leftMatch.category || leftTarget.category, rightMatch.category || rightTarget.category],
     ["findingType", leftMatch.findingType || leftTarget.findingType, rightMatch.findingType || rightTarget.findingType],
-  ].every(([, leftValue, rightValue]) => canonicalizeComparableLine(leftValue || "") === canonicalizeComparableLine(rightValue || ""));
+    ["issueType", leftMatch.issueType || leftTarget.issueType, rightMatch.issueType || rightTarget.issueType],
+    ["changeType", leftMatch.changeType || leftTarget.changeType, rightMatch.changeType || rightTarget.changeType],
+    ["matchStatus", leftMatch.matchStatus || leftTarget.matchStatus || leftTarget.status, rightMatch.matchStatus || rightTarget.matchStatus || rightTarget.status],
+  ];
+  if (leftScope !== "profile" || rightScope !== "profile") {
+    checks.push(["objectKey", leftMatch.settingKey || leftMatch.objectKey || leftTarget.settingKey || leftTarget.objectKey, rightMatch.settingKey || rightMatch.objectKey || rightTarget.settingKey || rightTarget.objectKey]);
+  }
+  return checks.every(([key, leftValue, rightValue]) => canonicalizeExceptionComparable(key, leftValue) === canonicalizeExceptionComparable(key, rightValue));
 }
 
-function confirmProfileExceptionCreate(exception = {}) {
+function canonicalizeExceptionComparable(key = "", value = "") {
+  const normalized = canonicalizeComparableLine(value || "");
+  if (key === "ruleId") return canonicalizeComparableLine(normalized.split(/[·|,]/)[0] || "");
+  if (key === "fieldPath") return normalized.replace(/\s+/g, "-");
+  return normalized;
+}
+
+function confirmProfileExceptionCreate(exception = {}, estimatedImpact = 0) {
   const target = exception.target || {};
-  const scopeLabel = exception.scope === "profile" ? "현재 프로파일에서 예외" : "이 객체에서만 예외";
+  const scopeLabel = exception.scope === "profile" ? "현재 프로파일에서 예외" : "이 설정에서만 예외";
   const profileWarning = exception.scope === "profile"
-    ? "\n주의: 같은 objectType + fieldPath + ruleId/findingType 조건에도 적용됨."
+    ? "\n주의: 같은 프로파일의 동일 설정 종류 + 설정 항목 + 규칙/변경 조건에도 적용됨."
     : "";
   return window.confirm([
     "예외 추가",
     `범위: ${scopeLabel}`,
     `대상: ${target.displayName || target.objectKey || "-"}`,
-    `객체: ${target.objectType || "-"}`,
-    `필드: ${target.fieldPath || "-"}`,
-    `규칙/상태: ${target.ruleId || target.findingType || "-"}`,
-    `예상 영향: 활성 검토 항목에서 제외되고 예외/숨김 목록으로 이동`,
+    `설정 종류: ${target.objectType || "-"}`,
+    `설정 항목: ${target.fieldPath || "-"}`,
+    `규칙/상태: ${target.ruleId || target.findingType || "-"} / ${target.changeType || target.status || "-"}`,
+    `예상 영향: ${estimatedImpact || 1}개 항목이 활성 검토에서 제외되고 예외/숨김 목록으로 이동`,
     profileWarning,
   ].filter(Boolean).join("\n"));
+}
+
+function estimateExceptionImpact(exception = {}) {
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+  if (!plan.length) return 1;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  let count = 0;
+  for (const item of plan) {
+    const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+    const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
+    for (const [field, summary] of Object.entries(item.fieldSummary || {})) {
+      const changeType = normalizeExceptionChangeType(summary?.effectiveStatus || summary?.status || "");
+      if (!["added", "missing", "changed", "structure-converted"].includes(changeType)) continue;
+      const matched = profileExceptionMatchesContext(exception, {
+        side: "both",
+        objectType,
+        objectKey,
+        field,
+        fieldValue: firstSummaryValue(summary?.newValues) || firstSummaryValue(summary?.oldValues),
+        ruleId: semanticExceptionRuleId(objectType, field, changeType),
+        category: "semantic-compare",
+        findingType: changeType,
+        issueType: "field-difference",
+        changeType,
+        oldValue: firstSummaryValue(summary?.oldValues),
+        newValue: firstSummaryValue(summary?.newValues),
+        vendorPair,
+      });
+      if (matched) count += 1;
+    }
+  }
+  return count || 1;
+}
+
+function estimateComparisonExclusionImpact(exclusion = {}) {
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+  if (!plan.length) return 1;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  let count = 0;
+  for (const item of plan) {
+    const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+    const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
+    const side = settingExclusionSideFromPlanItem(item);
+    if (comparisonExclusionMatchesContext(exclusion, {
+      side,
+      objectType,
+      objectKey,
+      matchStatus: item.status || "",
+      ruleId: "semantic-compare.unmatched-setting",
+      vendorPair,
+    })) {
+      count += 1;
+    }
+  }
+  return count || 1;
+}
+
+function confirmComparisonExclusionCreate(exclusion = {}, estimatedImpact = 0) {
+  const target = exclusion.target || {};
+  const scopeLabel = exclusion.scope === "profile"
+    ? "현재 프로파일에서 같은 조건 비교 제외"
+    : "이 설정만 비교 제외";
+  const profileWarning = exclusion.scope === "profile"
+    ? "\n주의: 같은 프로파일의 동일 vendorPair + 설정 종류 + 방향 + 연결 상태 + 규칙 조건에도 적용됨."
+    : "";
+  return window.confirm([
+    "설정 비교 제외",
+    `범위: ${scopeLabel}`,
+    `대상: ${target.displayName || target.objectKey || target.createdFromObjectKey || "-"}`,
+    `설정 종류: ${target.objectType || "-"}`,
+    `방향/상태: ${target.side || "-"} / ${target.matchStatus || target.status || "-"}`,
+    `예상 영향: ${estimatedImpact || 1}개 설정이 활성 검토에서 빠지고 비교 제외 목록으로 이동`,
+    profileWarning,
+  ].filter(Boolean).join("\n"));
+}
+
+function exceptionObjectKeyFromPlanItem(item = {}, objectType = "") {
+  const object = item.oldObject || item.newObject || {};
+  const identity = object.normalizedIdentity || object.identity || object.sourceName || object.name || object.id || "";
+  return object.key || `${objectType}:${identity}`;
+}
+
+function firstSummaryValue(values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  return String(list.find((value) => value !== undefined && value !== null && String(value).trim()) ?? "");
 }
 
 async function removeProfileException(exceptionId = "", triggerButton = null) {
@@ -5341,7 +5984,9 @@ async function removeProfileException(exceptionId = "", triggerButton = null) {
     showWorkbenchToast("해제할 예외 없음", "error");
     return;
   }
-  if (!window.confirm(`예외 해제\n대상: ${target.target?.displayName || target.target?.objectKey || "-"}\n해제 후 활성 검토 항목으로 복원됨.`)) return;
+  const isExclusion = target.type === "comparison-exclusion";
+  const actionLabel = isExclusion ? "비교 제외 해제" : "예외 해제";
+  if (!window.confirm(`${actionLabel}\n대상: ${target.target?.displayName || target.target?.settingKey || target.target?.objectKey || target.target?.createdFromObjectKey || "-"}\n해제 후 활성 검토 항목으로 복원됨.`)) return;
   const previousText = triggerButton?.textContent || "";
   if (triggerButton) {
     triggerButton.disabled = true;
@@ -5350,19 +5995,20 @@ async function removeProfileException(exceptionId = "", triggerButton = null) {
   try {
     state.profileDraft.exceptions = exceptions.filter((item) => item.id !== exceptionId);
     await saveProfile();
+    await syncActiveSessionProfileReference();
     if (state.lastReport) {
       runCompare();
       setResultTab("summary");
     }
-    setProfileStatus("예외 해제 완료", "saved");
-    showWorkbenchToast("예외가 해제됨. 활성 검토 항목으로 복원됨.", "success");
+    setProfileStatus(`${actionLabel} 완료`, "saved");
+    showWorkbenchToast(`${actionLabel}됨. 활성 검토 항목으로 복원됨.`, "success");
   } catch (error) {
-    setProfileStatus(`예외 해제 실패: ${error?.message || error}`, "error");
-    showWorkbenchToast(`예외 해제 실패: ${error?.message || error}`, "error");
+    setProfileStatus(`${actionLabel} 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`${actionLabel} 실패: ${error?.message || error}`, "error");
   } finally {
     if (triggerButton) {
       triggerButton.disabled = false;
-      triggerButton.textContent = previousText || "예외 해제";
+      triggerButton.textContent = previousText || actionLabel;
     }
   }
 }
@@ -7065,6 +7711,10 @@ function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
   keys.forEach((key, objectIndex) => {
     const oldObject = oldMap.get(key) || null;
     const newObject = newMap.get(key) || null;
+    const objectStatus = oldObject && newObject
+      ? "matched"
+      : (oldObject ? "old-only" : "new-only");
+    const objectMatched = Boolean(oldObject && newObject);
 
     const oldLines = getObjectDisplayLines(oldObject);
     const newLines = getObjectDisplayLines(newObject);
@@ -7076,16 +7726,16 @@ function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
 
       rows.push({
         oldRow: oldLine
-          ? buildPairedObjectLineRow(oldObject, oldLine, objectIndex, lineIndex, maxLines, "old")
-          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "old"),
+          ? buildPairedObjectLineRow(oldObject, oldLine, objectIndex, lineIndex, maxLines, "old", objectStatus, objectMatched)
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "old", objectStatus, objectMatched),
         newRow: newLine
-          ? buildPairedObjectLineRow(newObject, newLine, objectIndex, lineIndex, maxLines, "new")
-          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "new"),
-        oldState: oldLine ? "equal" : "placeholder",
-        newState: newLine ? "equal" : "placeholder",
+          ? buildPairedObjectLineRow(newObject, newLine, objectIndex, lineIndex, maxLines, "new", objectStatus, objectMatched)
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "new", objectStatus, objectMatched),
+        oldState: oldLine ? (objectStatus === "old-only" ? "missing" : "equal") : "placeholder",
+        newState: newLine ? (objectStatus === "new-only" ? "added" : "equal") : "placeholder",
         semanticCovered: true,
         semanticReason: "paired-object-block",
-        objectMatched: Boolean(oldObject && newObject),
+        objectMatched,
         semanticObjectLine: true,
         semanticObjectStart: lineIndex === 0,
         semanticObjectEnd: lineIndex === maxLines - 1,
@@ -7103,7 +7753,7 @@ function getObjectDisplayLines(object) {
   return [];
 }
 
-function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines, side) {
+function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines, side, objectStatus = "matched", objectMatched = true) {
   const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
   const objectKey = object?.key || `${objectType}:${object?.name || object?.normalizedIdentity || objectIndex}`;
   const lineText = String(line || "");
@@ -7121,8 +7771,8 @@ function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines
     key: `${objectKey}:${side}:${lineIndex}`,
     objectKey,
     objectIdentity: identity,
-    objectStatus: "matched",
-    objectScore: 100,
+    objectStatus,
+    objectScore: objectMatched ? 100 : "",
     semanticPairKey: objectKey,
     semanticObjectIndex: objectIndex,
     semanticObjectStart: lineIndex === 0,
@@ -7135,13 +7785,13 @@ function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines
       object?.canonicalFields || object?.fields || {},
       []
     ),
-    objectMatched: true,
+    objectMatched,
     semanticCovered: true,
     semanticReason: "paired-object-block-line",
   };
 }
 
-function buildPairedPlaceholderRow(object, objectIndex, lineIndex, maxLines, side) {
+function buildPairedPlaceholderRow(object, objectIndex, lineIndex, maxLines, side, objectStatus = "matched", objectMatched = true) {
   const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
   const objectKey = object?.key || `${objectType}:placeholder:${objectIndex}`;
   const identity =
@@ -7158,8 +7808,8 @@ function buildPairedPlaceholderRow(object, objectIndex, lineIndex, maxLines, sid
     key: `${objectKey}:${side}:placeholder:${lineIndex}`,
     objectKey,
     objectIdentity: identity,
-    objectStatus: "matched",
-    objectScore: 100,
+    objectStatus,
+    objectScore: objectMatched ? 100 : "",
     semanticPairKey: objectKey,
     semanticObjectIndex: objectIndex,
     semanticObjectStart: lineIndex === 0,
@@ -7169,7 +7819,7 @@ function buildPairedPlaceholderRow(object, objectIndex, lineIndex, maxLines, sid
     highlights: [],
     placeholder: true,
     hidden: true,
-    objectMatched: true,
+    objectMatched,
     semanticCovered: true,
     semanticReason: "paired-object-placeholder",
   };
@@ -7211,7 +7861,7 @@ function compareCanonicalObjects(oldObject, newObject, profile = state.profileDr
       details.push({
         kind: oldHas ? "missing-line" : "added-line",
         field,
-        rule: oldHas ? "기존 필드가 신규 객체에 없음" : "신규 필드가 기존 객체에 없음",
+        rule: oldHas ? "기존 설정 항목이 신규 설정에 없음" : "신규 설정 항목이 기존 설정에 없음",
         oldText: oldHas ? `${field} ${oldFields[field]}` : "-",
         newText: newHas ? `${field} ${newFields[field]}` : "-",
       });
@@ -7317,10 +7967,10 @@ function buildPolicyRequiredItems(oldObject, newObject, profile) {
     if (!violated) return [];
 
     const defaultMessage = {
-      required: `필드 '${field}'는 신규 객체에 반드시 있어야 합니다.`,
-      presence: `필드 '${field}'는 양쪽 객체에서 존재 여부가 같아야 합니다.`,
-      conditional: `기존 객체에 있는 필드 '${field}'가 신규 객체에 없습니다.`,
-    }[policy.policy] || `필드 '${field}' 정책을 위반했습니다.`;
+      required: `설정 항목 '${field}'는 신규 설정에 반드시 있어야 합니다.`,
+      presence: `설정 항목 '${field}'는 양쪽 설정에서 존재 여부가 같아야 합니다.`,
+      conditional: `기존 설정에 있는 설정 항목 '${field}'가 신규 설정에 없습니다.`,
+    }[policy.policy] || `설정 항목 '${field}' 정책을 위반했습니다.`;
     return [{
       type: "required",
       key: `policy-required:${oldObject.key}:${field}`,
@@ -7407,7 +8057,7 @@ function buildObjectChangeDetails(oldObject, newObject, requiredItems = []) {
     details.push({
       kind: "missing-line",
       field: oldLine.field,
-      rule: "기존 라인이 신규 객체에 없음",
+      rule: "기존 라인이 신규 설정에 없음",
       oldText: oldLine.text,
       newText: "-",
     });
@@ -7418,7 +8068,7 @@ function buildObjectChangeDetails(oldObject, newObject, requiredItems = []) {
     details.push({
       kind: "added-line",
       field: newLine.field,
-      rule: "신규 라인이 기존 객체에 없음",
+      rule: "신규 라인이 기존 설정에 없음",
       oldText: "-",
       newText: newLine.text,
     });
@@ -7450,12 +8100,12 @@ function groupDetailLinesByField(lines) {
 }
 
 function summarizeObjectChange(details) {
-  if (!details.length) return "객체 내용이 다릅니다.";
+  if (!details.length) return "설정 내용이 다릅니다.";
   const first = details[0];
-  if (first.kind === "field-changed") return `필드 '${first.field}' 값이 다릅니다.`;
-  if (first.kind === "missing-line") return `필드 '${first.field}'가 신규 객체에 없습니다.`;
-  if (first.kind === "added-line") return `필드 '${first.field}'가 신규 객체에 추가되었습니다.`;
-  return "객체 내용이 다릅니다.";
+  if (first.kind === "field-changed") return `설정 항목 '${first.field}' 값이 다릅니다.`;
+  if (first.kind === "missing-line") return `설정 항목 '${first.field}'가 신규 설정에 없습니다.`;
+  if (first.kind === "added-line") return `설정 항목 '${first.field}'가 신규 설정에 추가되었습니다.`;
+  return "설정 내용이 다릅니다.";
 }
 
 function hasComparableField(object, field) {
@@ -7958,6 +8608,8 @@ function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
 }
 
 function semanticRenderStatusForSide(item = {}, object = null, side = "") {
+  if (item.comparisonExcluded || item.excluded) return "comparison-excluded";
+  if (item.policySuppressed || item.suppressed) return "suppressed";
   if (object && side === "old" && !item.newObject) return "old-only";
   if (object && side === "new" && !item.oldObject) return "new-only";
   if (!object) {
@@ -8101,7 +8753,9 @@ function renderSemanticObjectBlockHtml({
   matchIndex,
 }) {
   const state = semanticObjectVisualState(item);
-  const stateLabel = getSemanticDiffStatusLabel(item.status);
+  const stateLabel = item.comparisonExcluded || item.excluded
+    ? "비교 제외됨"
+    : (item.policySuppressed || item.suppressed ? "예외/숨김 처리됨" : getSemanticDiffStatusLabel(item.status));
   const score = item.score ?? "-";
   const reason = semanticReasonLabel(item.reason || "-");
   const fieldCount = Object.keys(fields || {}).length;
@@ -8138,16 +8792,19 @@ function renderSemanticObjectBlockHtml({
         matchIndex,
         objectStatus,
       })).join("")
-      : `<div class="semantic-diff-empty-line">객체 라인 없음</div>`}
+      : `<div class="semantic-diff-empty-line">설정 라인 없음</div>`}
       </div>
     </section>
   `;
 }
 
 function semanticObjectVisualState(item = {}) {
-  if (item.status === "matched" && String(item.reason || "").toLowerCase() === "manual") return "manual";
-  if (item.status === "matched" || item.status === "candidate") return "matched";
-  if (isUnmatchedObjectStatus(item.status)) return "unmatched";
+  const state = getSemanticDiffBlockState(item);
+  if (state === "manual") return "manual";
+  if (state === "matched") return "matched";
+  if (state === "excluded") return "excluded";
+  if (state === "suppressed") return "suppressed";
+  if (state === "unmatched") return "unmatched";
   if (Array.isArray(item.ambiguousAlternatives) && item.ambiguousAlternatives.length) return "ambiguous";
   return "partial";
 }
@@ -8222,8 +8879,8 @@ function getSemanticDiffStatusLabel(status = "") {
   return ({
     matched: "연결됨",
     candidate: "후보",
-    "old-only": "기존만 있음",
-    "new-only": "신규만 있음",
+    "old-only": "기존 설정에만 있음",
+    "new-only": "신규 설정에만 있음",
     ambiguous: "확인 필요",
     partial: "부분 일치",
     unknown: "알 수 없음",
@@ -8235,7 +8892,7 @@ function semanticReasonLabel(reason = "") {
     manual: "사용자가 직접 연결",
     "manual-candidate": "직접 연결 후보",
     exact: "정확히 일치",
-    identity: "객체 기준 일치",
+    identity: "설정 기준 일치",
     "semantic-score": "의미 점수 기반",
     "line-score": "라인 유사도 기반",
     candidate: "후보",
@@ -11677,7 +12334,7 @@ function renderOverviewReport(report) {
       <h3>운영 요약</h3>
       <div class="overview-grid overview-summary-grid">
         <div class="overview-card"><strong>${report.summary.total}</strong><span>전체 차이</span></div>
-        <div class="overview-card"><strong>${report.summary.changed}</strong><span>변경 객체</span></div>
+        <div class="overview-card"><strong>${report.summary.changed}</strong><span>변경 설정</span></div>
         <div class="overview-card"><strong>${report.summary.missing}</strong><span>누락</span></div>
         <div class="overview-card"><strong>${report.summary.added}</strong><span>추가</span></div>
         <div class="overview-card"><strong>${escapeHtml(lineSummary.changed)}</strong><span>라인 변경</span></div>
@@ -11708,10 +12365,10 @@ function renderOverviewReport(report) {
       <div class="report-graph-head">
         <div>
           <h3>관계 그래프</h3>
-          <p>객체 연결, 직접 연결, 참조 관계를 2D로 표시합니다.</p>
+          <p>설정 연결, 직접 연결, 참조 관계를 2D로 표시합니다.</p>
         </div>
         <div class="report-graph-tools">
-          <input type="search" class="report-graph-search" placeholder="객체/필드 검색" aria-label="그래프 노드 검색" />
+          <input type="search" class="report-graph-search" placeholder="설정/항목 검색" aria-label="그래프 노드 검색" />
           <button type="button" data-graph-fit>전체 보기</button>
           <label><input type="checkbox" data-graph-labels checked /> 라벨</label>
         </div>
@@ -11719,7 +12376,7 @@ function renderOverviewReport(report) {
       ${renderRelationshipGraph(graph)}
     </section>
     <section class="overview-section">
-      <h3>객체 수</h3>
+      <h3>설정 수</h3>
       <div class="overview-grid">
         ${[...byType.entries()].sort(([left], [right]) => objectTypeRank(left) - objectTypeRank(right)).map(([type, list]) => {
           const oldCount = list.filter((object) => object.source === "old").length;
@@ -11774,6 +12431,7 @@ function renderReportReviewTable(review = {}) {
   const rows = [
     ...(review.unmatchedOld || []).map((item) => ({ ...item, group: "기존 설정에서만 있음" })),
     ...(review.unmatchedNew || []).map((item) => ({ ...item, group: "신규 설정에서만 있음" })),
+    ...(review.excluded || []).map((item) => ({ ...item, group: "비교 제외됨" })),
     ...(review.ambiguous || []).map((item) => ({ ...item, group: "매핑 후보 여러 개" })),
     ...(review.lowConfidence || []).map((item) => ({ ...item, group: "낮은 신뢰도" })),
     ...(review.abnormal || []).map((item) => ({ ...item, group: "검토 필요 값" })),
@@ -11794,8 +12452,8 @@ function renderReportReviewTable(review = {}) {
         <thead>
           <tr>
             <th>${renderReportReviewHeaderSelect("구분", "group", filterOptions.groups)}</th>
-            <th>${renderReportReviewHeaderSelect("객체 타입", "type", filterOptions.types)}</th>
-            <th>${renderReportReviewHeaderSearch("객체 키", "key")}</th>
+            <th>${renderReportReviewHeaderSelect("설정 종류", "type", filterOptions.types)}</th>
+            <th>${renderReportReviewHeaderSearch("설정 키", "key")}</th>
             <th>${renderReportReviewHeaderSearch("사유", "reason")}</th>
             ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses)}</th>`).join("")}
             <th>${renderReportReviewHeaderSearch("일치도", "score")}</th>
@@ -11807,7 +12465,6 @@ function renderReportReviewTable(review = {}) {
             const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
             const meta = getReportReviewRowMeta(item);
             const objectKey = item.label || item.objectKey || "-";
-            const exceptionTargetId = registerReviewExceptionTarget(item.group || "", item, "report-review");
             return `
               <tr
                 data-report-review-row
@@ -11828,7 +12485,7 @@ function renderReportReviewTable(review = {}) {
                 <td>
                   <div class="report-review-actions">
                     <button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button>
-                    ${renderExceptionActionControls(exceptionTargetId)}
+                    ${item.group === "비교 제외됨" && item.policyId ? `<button type="button" data-remove-exception="${escapeHtml(item.policyId)}">비교 제외 해제</button>` : ""}
                   </div>
                 </td>
               </tr>
@@ -12023,7 +12680,7 @@ function maskReportFieldValue(field = "", value = "") {
 function renderRelationshipGraph(graph = {}) {
   const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
   const edges = Array.isArray(graph.edges) ? graph.edges : [];
-  if (!nodes.length) return `<div class="report-graph-empty">그래프로 표시할 의미 기반 객체가 없습니다.</div>`;
+  if (!nodes.length) return `<div class="report-graph-empty">그래프로 표시할 의미 기반 설정이 없습니다.</div>`;
 
   const oldNodes = nodes.filter((node) => node.side === "old");
   const newNodes = nodes.filter((node) => node.side === "new");
@@ -12036,7 +12693,7 @@ function renderRelationshipGraph(graph = {}) {
 
   return `
     <div class="report-graph" data-graph-root>
-      <svg viewBox="0 0 1040 ${height}" role="img" aria-label="설정 객체 관계 그래프">
+      <svg viewBox="0 0 1040 ${height}" role="img" aria-label="설정 관계 그래프">
         <defs>
           <marker id="graph-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z"></path>
@@ -12075,10 +12732,10 @@ function renderRelationshipGraph(graph = {}) {
                 data-graph-search="${escapeHtml([node.objectType, node.label, node.key, node.status].join(" ").toLowerCase())}"
                 transform="translate(${point.x}, ${point.y})">
                 <rect x="-72" y="-22" width="144" height="44" rx="8"></rect>
-                <text class="graph-node-type" x="-62" y="-5">${escapeHtml(node.objectType || "object")}</text>
+                <text class="graph-node-type" x="-62" y="-5">${escapeHtml(node.objectType || "설정")}</text>
                 <text class="graph-node-label" x="-62" y="13">${escapeHtml(truncateText(node.label || node.key || "-", 22))}</text>
                 ${node.confidence ? `<text class="graph-node-score" x="60" y="-6">${escapeHtml(node.confidence)}%</text>` : ""}
-                <title>${escapeHtml(node.objectType || "object")} ${escapeHtml(node.label || "-")} · ${escapeHtml(node.status || "")}</title>
+                <title>${escapeHtml(node.objectType || "설정")} ${escapeHtml(node.label || "-")} · ${escapeHtml(node.status || "")}</title>
               </g>
             `;
           }).join("")}
@@ -12161,6 +12818,12 @@ function bindReportReviewTableInteractions() {
       const targetId = button.dataset.addException || "";
       const scope = root.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
       addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+  root.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
     });
   });
 
@@ -12619,8 +13282,11 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
 }
 
 function renderDiffObjectToolbars() {
-  // Compare editor no longer shows the bottom object move/delete tray.
-  // Object review stays in Summary/Integrated Report.
+  [selectors.oldDiffObjectToolbar, selectors.newDiffObjectToolbar].forEach((toolbar) => {
+    if (!toolbar) return;
+    toolbar.hidden = true;
+    toolbar.innerHTML = "";
+  });
 }
 
 function renderDiffObjectToolbar(source) {
@@ -13108,12 +13774,48 @@ async function loadSelectedSession() {
   selectors.oldInput.value = session.oldConfig;
   selectors.newInput.value = session.newConfig;
 
-  if (session.profileSnapshot) {
-    state.profileDraft = normalizeProfile(session.profileSnapshot);
-    if (!state.profileDraft.manualMap) {
-      state.profileDraft.manualMap = session.manualMap || {};
-    }
+  let loadedProfile = null;
+  let loadedFromLibrary = false;
+  const profiles = await readRecords("profiles", "configWorkbenchProfiles");
+  if (session.profileId) {
+    loadedProfile = profiles.find((item) => item.id === session.profileId) || null;
+    loadedFromLibrary = Boolean(loadedProfile);
+  }
+
+  if (!loadedProfile && session.profileSnapshot) {
+    const snapshot = session.profileSnapshot;
+    loadedProfile = profiles.find((item) =>
+      (snapshot.id && item.id === snapshot.id) ||
+      (snapshot.name && item.name === snapshot.name)
+    ) || null;
+    loadedFromLibrary = Boolean(loadedProfile);
+  }
+
+  if (!loadedProfile && session.profileSnapshot) {
+    loadedProfile = session.profileSnapshot;
+  }
+
+  if (loadedProfile) {
+    state.profileDraft = normalizeProfile(loadedProfile);
+    state.activeProfileId = loadedFromLibrary
+      ? loadedProfile.id
+      : (state.profileDraft.id || session.profileId || state.activeProfileId);
+    state.selectedProfileLibraryId = loadedFromLibrary ? loadedProfile.id : state.selectedProfileLibraryId;
+    state.profileDraft.manualMap = {
+      ...(session.manualMap || {}),
+      ...(state.profileDraft.manualMap || {}),
+    };
     saveManualMapToLocalStorage(state.profileDraft.manualMap || {});
+    commitProfileSnapshot();
+    renderProfileEditor();
+    await refreshProfileSelect();
+    if (selectors.profileSelect && state.activeProfileId) selectors.profileSelect.value = state.activeProfileId;
+    setProfileStatus(
+      loadedFromLibrary
+        ? "세션 로드: 최신 저장 프로파일 적용"
+        : "세션 로드: 저장 시점 프로파일 스냅샷 적용",
+      loadedFromLibrary ? "applied" : "info"
+    );
   } else if (session.manualMap) {
     state.profileDraft.manualMap = session.manualMap;
     saveManualMapToLocalStorage(session.manualMap);
@@ -13121,20 +13823,6 @@ async function loadSelectedSession() {
   captureInitialConfigSnapshot(true);
   updateLineNumbers();
 
-
-  if (!session.profileSnapshot && session.profileId) {
-    const profiles = await readRecords("profiles", "configWorkbenchProfiles");
-    const profile = profiles.find((item) => item.id === session.profileId);
-    if (profile) {
-      state.activeProfileId = profile.id;
-      state.profileDraft = normalizeProfile(profile);
-      if (!state.profileDraft.manualMap) {
-        state.profileDraft.manualMap = {};
-      }
-      renderProfileEditor();
-      await refreshProfileSelect();
-    }
-  }
   markCompareStale();
 }
 
@@ -13185,6 +13873,21 @@ async function saveProfile() {
   selectors.profileSelect.value = record.id;
   commitProfileSnapshot();
   setProfileStatus(`프로파일 저장 완료: ${record.name} / ${formatDate(record.updatedAt)}`, "saved");
+}
+
+async function syncActiveSessionProfileReference() {
+  const sessionId = selectors.historySelect?.value || "";
+  if (!sessionId || !state.profileDraft?.id) return;
+  const sessions = await readRecords("sessions", "configWorkbenchSessions");
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) return;
+  await saveRecord("sessions", {
+    ...session,
+    profileId: state.profileDraft.id,
+    manualMap: state.profileDraft.manualMap || session.manualMap || {},
+    profileSnapshot: deepClone(state.profileDraft),
+    updatedAt: Date.now(),
+  }, "configWorkbenchSessions");
 }
 
 async function saveProfileAs() {
@@ -13345,19 +14048,37 @@ function normalizeProfileExceptions(value) {
     .map((item) => {
       const target = item.target && typeof item.target === "object" ? item.target : {};
       const match = item.match && typeof item.match === "object" ? item.match : {};
-      const scope = item.scope === "profile" ? "profile" : "object";
+      const type = item.type || "";
+      const comparisonExclusion = type === "comparison-exclusion" || ["exact-setting", "profile-setting-status"].includes(String(match.mode || "").toLowerCase());
+      const scope = item.scope === "profile" ? "profile" : (comparisonExclusion && item.scope === "setting" ? "setting" : "object");
+      const targetChangeType = target.changeType || item.changeType || target.status || item.status || "";
+      const targetFindingType = normalizeProfileScopeFindingType(
+        target.findingType || item.findingType || "",
+        targetChangeType,
+        scope
+      );
+      const matchFindingType = normalizeProfileScopeFindingType(
+        match.findingType || target.findingType || item.findingType || "",
+        match.changeType || targetChangeType,
+        scope
+      );
       return {
         id: item.id || createId(),
+        type,
         scope,
         createdAt: item.createdAt || new Date().toISOString(),
         createdBy: item.createdBy || "user",
         createdFromIssueId: item.createdFromIssueId || target.createdFromIssueId || "",
-        reasonKo: item.reasonKo || item.reason || target.reasonKo || "사용자 예외",
+        reasonKo: item.reasonKo || item.reason || target.reasonKo || (comparisonExclusion ? "비교 제외 규칙" : "사용자 예외"),
         target: {
           ruleId: target.ruleId || item.ruleId || "",
           category: target.category || item.category || "",
-          objectType: target.objectType || item.objectType || "",
-          objectKey: target.objectKey || item.objectKey || "",
+          vendorPair: target.vendorPair || item.vendorPair || match.vendorPair || "",
+          objectType: target.settingType || target.objectType || item.settingType || item.objectType || "",
+          settingType: target.settingType || target.objectType || item.settingType || item.objectType || "",
+          objectKey: scope !== "profile" ? (target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
+          settingKey: scope !== "profile" ? (target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
+          createdFromObjectKey: target.createdFromObjectKey || item.createdFromObjectKey || (scope === "profile" ? (target.objectKey || item.objectKey || "") : ""),
           displayName: target.displayName || item.displayName || "",
           fieldPath: target.fieldPath || item.fieldPath || item.field || "",
           side: normalizeExceptionSide(target.side || item.side || "both"),
@@ -13365,22 +14086,57 @@ function normalizeProfileExceptions(value) {
           newValue: target.newValue ?? item.newValue ?? "",
           sourceLineIds: Array.isArray(target.sourceLineIds) ? target.sourceLineIds : [],
           targetLineIds: Array.isArray(target.targetLineIds) ? target.targetLineIds : [],
-          findingType: target.findingType || item.findingType || "",
+          findingType: targetFindingType,
+          issueType: target.issueType || item.issueType || "",
+          matchStatus: target.matchStatus || item.matchStatus || "",
+          status: target.status || item.status || "",
+          changeType: targetChangeType,
         },
         match: {
-          mode: match.mode || (scope === "profile" ? "profile-field-rule" : "exact-object"),
-          objectType: match.objectType || target.objectType || item.objectType || "",
-          objectKey: scope === "object" ? (match.objectKey || target.objectKey || item.objectKey || "") : "",
+          mode: comparisonExclusion
+            ? (scope === "profile" ? "profile-setting-status" : "exact-setting")
+            : (scope === "profile" ? "profile-field-rule" : (match.mode || "exact-object-field-rule")),
+          objectType: match.settingType || match.objectType || target.settingType || target.objectType || item.settingType || item.objectType || "",
+          settingType: match.settingType || match.objectType || target.settingType || target.objectType || item.settingType || item.objectType || "",
+          objectKey: scope !== "profile" ? (match.settingKey || match.objectKey || target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
+          settingKey: scope !== "profile" ? (match.settingKey || match.objectKey || target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
           fieldPath: match.fieldPath || target.fieldPath || item.fieldPath || item.field || "",
           ruleId: match.ruleId || target.ruleId || item.ruleId || "",
           category: match.category || target.category || item.category || "",
-          findingType: match.findingType || target.findingType || item.findingType || "",
+          findingType: matchFindingType,
+          issueType: match.issueType || target.issueType || item.issueType || "",
+          matchStatus: match.matchStatus || target.matchStatus || item.matchStatus || "",
+          changeType: match.changeType || targetChangeType,
+          changeTypes: Array.isArray(match.changeTypes) ? match.changeTypes : [],
+          valueMode: match.valueMode || item.valueMode || "",
           valuePattern: match.valuePattern || item.valuePattern || "",
+          oldValuePattern: match.oldValuePattern || item.oldValuePattern || "",
+          newValuePattern: match.newValuePattern || item.newValuePattern || "",
           vendorPair: match.vendorPair || item.vendorPair || "",
         },
         enabled: item.enabled !== false,
       };
     });
+}
+
+function normalizeProfileScopeFindingType(findingType = "", changeType = "", scope = "object") {
+  if (scope !== "profile") return findingType || "";
+  const normalized = canonicalizeComparableLine(findingType || "");
+  const broadReviewTypes = new Set([
+    "abnormal",
+    "relationship",
+    "unmatched-old",
+    "unmatched-new",
+    "low-confidence",
+    "ambiguous",
+    "summary-review",
+    "review",
+    "semantic-field",
+  ]);
+  if (!normalized || broadReviewTypes.has(normalized)) {
+    return normalizeExceptionChangeType(changeType || "");
+  }
+  return findingType;
 }
 
 function normalizeSemanticObjects(value) {

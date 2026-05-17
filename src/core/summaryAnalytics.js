@@ -91,7 +91,9 @@ export function buildSummaryDashboardData({
   compareScope = "all",
   selectedObjects = [],
 } = {}) {
-  const reviewablePlan = plan.filter((item) => !item.policySuppressed);
+  const reviewablePlan = plan.filter(isActivePlanItem);
+  const excludedPlan = plan.filter(isExcludedPlanItem);
+  const suppressedPlan = plan.filter((item) => item.policySuppressed && !isExcludedPlanItem(item));
   const lineSummary = buildLineSummary(report);
   const fieldAnalysis = buildFieldOverlapAnalysis(reviewablePlan);
   const review = buildReviewItems(plan);
@@ -117,12 +119,14 @@ export function buildSummaryDashboardData({
     auditSummary,
   });
 
-  const fixtureScopeAnalysis = buildFixtureScopeAnalysis(plan, fixtureScope);
+  const fixtureScopeAnalysis = buildFixtureScopeAnalysis(reviewablePlan, fixtureScope);
 
   const counts = {
-    matched: countByStatus(plan, "matched"),
+    matched: countByStatus(reviewablePlan, "matched"),
     oldOnly: countByStatus(reviewablePlan, "old-only"),
     newOnly: countByStatus(reviewablePlan, "new-only"),
+    excluded: excludedPlan.length,
+    suppressed: suppressedPlan.length,
     ambiguous: review.ambiguous.length,
     lowConfidence: review.lowConfidence.length,
     relationshipDiffs: review.relationshipChanges.length,
@@ -151,6 +155,7 @@ export function buildSummaryDashboardData({
     lineSummary,
     fieldAnalysis,
     review,
+    excludedIssues: buildExcludedReviewItems(excludedPlan),
     graph,
     audit: {
       ...audit,
@@ -181,6 +186,36 @@ export function buildSummaryDashboardData({
       debugDiagnosticsVisible: analysisContext.debugDiagnosticsVisible,
       modeScopeLabelsKo: analysisContext.labelsKo,
     },
+  };
+}
+
+function isExcludedPlanItem(item = {}) {
+  return Boolean(item?.comparisonExcluded || item?.excluded || item?.exclusionIssue);
+}
+
+function isActivePlanItem(item = {}) {
+  return Boolean(item) && !item.policySuppressed && !isExcludedPlanItem(item);
+}
+
+function buildExcludedReviewItems(plan = []) {
+  return plan.filter(isExcludedPlanItem).map(buildExcludedReviewItem);
+}
+
+function buildExcludedReviewItem(item = {}) {
+  const object = item.oldObject || item.newObject || {};
+  const objectType = item.objectType || getObjectType(object);
+  const side = item.newObject && !item.oldObject ? "new" : item.oldObject && !item.newObject ? "old" : "both";
+  const base = buildReviewBase(item);
+  return {
+    ...base,
+    side,
+    reason: item.exclusionReason || item.exclusionIssue?.reason || "비교 제외 규칙 적용",
+    classification: "비교 제외됨",
+    status: "excluded",
+    policyId: item.exclusionPolicyId || item.exclusionRule?.id || "",
+    ruleId: item.exclusionIssue?.ruleId || "semantic-compare.unmatched-setting",
+    objectType,
+    objectKey: objectKey(object, objectType),
   };
 }
 
@@ -249,6 +284,7 @@ function buildFixtureScopeAnalysis(plan = [], fixtureScope = null) {
 
 export function buildFieldOverlapAnalysis(plan = []) {
   const pairs = plan
+    .filter(isActivePlanItem)
     .filter((item) => item.oldObject && item.newObject)
     .map((item) => buildFieldOverlapPair(item));
 
@@ -263,6 +299,13 @@ export function buildFieldOverlapAnalysis(plan = []) {
         result.aliasMatches += pair.aliasMatches.length;
         result.reviewNeeded += pair.reviewNeeded ? 1 : 0;
         result.overlapTotal += pair.overlapPercent;
+        result.rawTotalComparableFields += pair.rawTotalComparableFields;
+        result.rawSameFields += pair.rawSameFields;
+        result.rawDifferentFields += pair.rawDifferentFields;
+        result.rawMissingOldFields += pair.rawMissingOldFields;
+        result.rawMissingNewFields += pair.rawMissingNewFields;
+        result.suppressedFields += pair.suppressedFields;
+        result.excludedFields += pair.excludedFields;
         return result;
       }, {
         matchedObjects: 0,
@@ -273,6 +316,13 @@ export function buildFieldOverlapAnalysis(plan = []) {
         aliasMatches: 0,
         reviewNeeded: 0,
         overlapTotal: 0,
+        rawTotalComparableFields: 0,
+        rawSameFields: 0,
+        rawDifferentFields: 0,
+        rawMissingOldFields: 0,
+        rawMissingNewFields: 0,
+        suppressedFields: 0,
+        excludedFields: 0,
       });
 
       return {
@@ -280,6 +330,9 @@ export function buildFieldOverlapAnalysis(plan = []) {
         ...totals,
         averageOverlap: totals.matchedObjects
           ? Math.round(totals.overlapTotal / totals.matchedObjects)
+          : 0,
+        rawOverlapPercent: totals.rawTotalComparableFields
+          ? Math.round((totals.rawSameFields / totals.rawTotalComparableFields) * 100)
           : 0,
       };
     })
@@ -294,6 +347,13 @@ export function buildFieldOverlapAnalysis(plan = []) {
     result.missingNewFields += pair.missingNewFields;
     result.aliasMatches += pair.aliasMatches.length;
     result.reviewNeeded += pair.reviewNeeded ? 1 : 0;
+    result.rawTotalComparableFields += pair.rawTotalComparableFields;
+    result.rawSameFields += pair.rawSameFields;
+    result.rawDifferentFields += pair.rawDifferentFields;
+    result.rawMissingOldFields += pair.rawMissingOldFields;
+    result.rawMissingNewFields += pair.rawMissingNewFields;
+    result.suppressedFields += pair.suppressedFields;
+    result.excludedFields += pair.excludedFields;
     return result;
   }, {
     totalPairs: 0,
@@ -304,11 +364,23 @@ export function buildFieldOverlapAnalysis(plan = []) {
     missingNewFields: 0,
     aliasMatches: 0,
     reviewNeeded: 0,
+    rawTotalComparableFields: 0,
+    rawSameFields: 0,
+    rawDifferentFields: 0,
+    rawMissingOldFields: 0,
+    rawMissingNewFields: 0,
+    suppressedFields: 0,
+    excludedFields: 0,
   });
 
   aggregate.overlapPercent = aggregate.totalComparableFields
     ? Math.round((aggregate.sameFields / aggregate.totalComparableFields) * 100)
     : 0;
+  aggregate.rawOverlapPercent = aggregate.rawTotalComparableFields
+    ? Math.round((aggregate.rawSameFields / aggregate.rawTotalComparableFields) * 100)
+    : 0;
+  aggregate.policyAppliedComparableFields = aggregate.totalComparableFields;
+  aggregate.policyExcludedFields = aggregate.suppressedFields + aggregate.excludedFields;
 
   const byField = [...groupBy(pairs.flatMap((pair) => pair.fieldRows), (row) => row.field).entries()]
     .map(([field, list]) => ({
@@ -336,6 +408,7 @@ export function buildReviewItems(plan = []) {
     critical: [],
     unmatchedOld: [],
     unmatchedNew: [],
+    excluded: [],
     abnormal: [],
     ambiguous: [],
     lowConfidence: [],
@@ -344,7 +417,12 @@ export function buildReviewItems(plan = []) {
   };
 
   plan.forEach((item) => {
-    if (item.policySuppressed) return;
+    if (!isActivePlanItem(item)) {
+      if (isExcludedPlanItem(item)) {
+        review.excluded.push(buildExcludedReviewItem(item));
+      }
+      return;
+    }
     const base = buildReviewBase(item);
     if (item.status === "old-only") {
       review.unmatchedOld.push({
@@ -428,7 +506,8 @@ export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
   const nodes = [];
   const edges = [];
   const nodeIds = new Set();
-  const limitedPlan = plan.filter((item) => !item.policySuppressed).slice(0, 140);
+  const activePlan = plan.filter(isActivePlanItem);
+  const limitedPlan = activePlan.slice(0, 140);
 
   limitedPlan.forEach((item, index) => {
     const oldNode = item.oldObject ? graphNodeFromObject(item.oldObject, item, "old", index) : null;
@@ -492,8 +571,8 @@ export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
   return {
     nodes,
     edges,
-    truncated: plan.length > limitedPlan.length,
-    totalPlanItems: plan.length,
+    truncated: activePlan.length > limitedPlan.length,
+    totalPlanItems: activePlan.length,
   };
 }
 
@@ -526,10 +605,54 @@ export function deriveSeverity({
 
 function buildFieldOverlapPair(item = {}) {
   const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "object";
+  const rawFieldRows = buildRawFieldOverlapRows(item);
+  const { fieldRows, suppressedFields, excludedFields } = buildPolicyAppliedFieldOverlapRows(item, rawFieldRows);
+  const rawCounts = summarizeFieldOverlapRows(rawFieldRows);
+  const policyCounts = summarizeFieldOverlapRows(fieldRows);
+
+  const sameFields = policyCounts.sameFields;
+  const differentFields = policyCounts.differentFields;
+  const missingOldFields = policyCounts.missingOldFields;
+  const missingNewFields = policyCounts.missingNewFields;
+  const totalComparableFields = policyCounts.totalComparableFields;
+  const overlapPercent = policyCounts.overlapPercent;
+
+  return {
+    planId: item.id || "",
+    objectType,
+    oldKey: objectKey(item.oldObject, objectType),
+    newKey: objectKey(item.newObject, objectType),
+    label: `${objectType} ${objectIdentity(item.oldObject || item.newObject)}`,
+    score: toScore(item.score),
+    totalComparableFields,
+    sameFields,
+    differentFields,
+    missingOldFields,
+    missingNewFields,
+    overlapPercent,
+    rawTotalComparableFields: rawCounts.totalComparableFields,
+    rawSameFields: rawCounts.sameFields,
+    rawDifferentFields: rawCounts.differentFields,
+    rawMissingOldFields: rawCounts.missingOldFields,
+    rawMissingNewFields: rawCounts.missingNewFields,
+    rawOverlapPercent: rawCounts.overlapPercent,
+    suppressedFields,
+    excludedFields,
+    highImpactChangedFields: fieldRows
+      .filter((row) => row.status !== "same" && IMPORTANT_FIELDS.has(normalizeFieldName(row.field)))
+      .map((row) => row.field),
+    aliasMatches: fieldRows.filter((row) => row.aliasMatched).map((row) => row.field),
+    reviewNeeded: differentFields > 0 || missingOldFields > 0 || missingNewFields > 0 || toScore(item.score) < 80,
+    fieldRows,
+  };
+}
+
+function buildRawFieldOverlapRows(item = {}) {
   const oldFields = normalizeFields(item.oldObject?.fields || item.oldObject?.canonicalFields || {});
   const newFields = normalizeFields(item.newObject?.fields || item.newObject?.canonicalFields || {});
   const fields = new Set([...Object.keys(oldFields), ...Object.keys(newFields)]);
-  const fieldRows = [...fields].sort().map((field) => {
+
+  return [...fields].sort().map((field) => {
     const hasOld = Object.prototype.hasOwnProperty.call(oldFields, field);
     const hasNew = Object.prototype.hasOwnProperty.call(newFields, field);
     const oldValue = hasOld ? displayFieldValue(field, oldFields[field]) : "";
@@ -549,33 +672,106 @@ function buildFieldOverlapPair(item = {}) {
       aliasMatched,
     };
   });
+}
 
+function buildPolicyAppliedFieldOverlapRows(item = {}, rawFieldRows = []) {
+  const rawByField = new Map(rawFieldRows.map((row) => [normalizeFieldName(row.field), row]));
+  const summaryEntries = Object.entries(item.fieldSummary || {})
+    .map(([field, summary]) => [normalizeFieldName(field), summary])
+    .filter(([field]) => field);
+
+  if (!summaryEntries.length) {
+    return {
+      fieldRows: rawFieldRows,
+      suppressedFields: 0,
+      excludedFields: 0,
+    };
+  }
+
+  let suppressedFields = 0;
+  let excludedFields = 0;
+  const fieldRows = [];
+
+  for (const [field, summary] of summaryEntries) {
+    const fallback = rawByField.get(field) || {
+      field,
+      status: "same",
+      oldValue: compactFieldValues(summary?.oldValues),
+      newValue: compactFieldValues(summary?.newValues),
+      aliasMatched: false,
+    };
+    const policyState = policyAppliedFieldState(summary);
+    if (policyState === "excluded") {
+      excludedFields += 1;
+      continue;
+    }
+    if (policyState === "suppressed") {
+      suppressedFields += 1;
+      continue;
+    }
+
+    fieldRows.push({
+      field,
+      status: normalizeFieldOverlapStatus(summary, fallback.status),
+      oldValue: compactFieldValues(summary?.oldValues) || fallback.oldValue || "",
+      newValue: compactFieldValues(summary?.newValues) || fallback.newValue || "",
+      aliasMatched: fallback.aliasMatched || hasAliasSource(field, item),
+    });
+  }
+
+  return {
+    fieldRows,
+    suppressedFields,
+    excludedFields,
+  };
+}
+
+function policyAppliedFieldState(summary = {}) {
+  const status = String(summary?.effectiveStatus || summary?.status || "").toLowerCase();
+  const sourcePolicy = String(summary?.sourcePolicy || summary?.policySource || "").toLowerCase();
+  const policyHitSources = (summary?.policyHits || [])
+    .map((hit) => String(hit?.sourcePolicy || hit?.policySource || "").toLowerCase());
+  const sources = [sourcePolicy, ...policyHitSources];
+
+  if (sources.includes("comparison-exclusion") || status === "comparison-excluded") return "excluded";
+  if (
+    summary?.ignored ||
+    summary?.suppressed ||
+    status === "ignored" ||
+    status === "inheritance-unresolved" ||
+    status === "structure-converted" ||
+    sources.includes("profile-exception") ||
+    sources.includes("user-exception") ||
+    sources.includes("advanced-policy")
+  ) {
+    return "suppressed";
+  }
+  return "active";
+}
+
+function normalizeFieldOverlapStatus(summary = {}, fallbackStatus = "same") {
+  const status = String(summary?.effectiveStatus || summary?.status || "").toLowerCase();
+  if (["same", "equal", "present"].includes(status)) return "same";
+  if (["changed", "different", "conflict"].includes(status)) return "different";
+  if (["missing", "missing-new"].includes(status)) return "missing-new";
+  if (["added", "missing-old"].includes(status)) return "missing-old";
+  return fallbackStatus || "same";
+}
+
+function summarizeFieldOverlapRows(fieldRows = []) {
   const sameFields = fieldRows.filter((row) => row.status === "same").length;
   const differentFields = fieldRows.filter((row) => row.status === "different").length;
   const missingOldFields = fieldRows.filter((row) => row.status === "missing-old").length;
   const missingNewFields = fieldRows.filter((row) => row.status === "missing-new").length;
   const totalComparableFields = fieldRows.length;
   const overlapPercent = totalComparableFields ? Math.round((sameFields / totalComparableFields) * 100) : 0;
-
   return {
-    planId: item.id || "",
-    objectType,
-    oldKey: objectKey(item.oldObject, objectType),
-    newKey: objectKey(item.newObject, objectType),
-    label: `${objectType} ${objectIdentity(item.oldObject || item.newObject)}`,
-    score: toScore(item.score),
-    totalComparableFields,
     sameFields,
     differentFields,
     missingOldFields,
     missingNewFields,
+    totalComparableFields,
     overlapPercent,
-    highImpactChangedFields: fieldRows
-      .filter((row) => row.status !== "same" && IMPORTANT_FIELDS.has(normalizeFieldName(row.field)))
-      .map((row) => row.field),
-    aliasMatches: fieldRows.filter((row) => row.aliasMatched).map((row) => row.field),
-    reviewNeeded: differentFields > 0 || missingOldFields > 0 || missingNewFields > 0 || toScore(item.score) < 80,
-    fieldRows,
   };
 }
 
@@ -638,6 +834,8 @@ function buildReviewTableFieldRows(item = {}, overlap = null) {
 function ensureDescriptionReviewFieldRow(rows = [], item = {}) {
   const oldValue = getObjectDescription(item.oldObject);
   const newValue = getObjectDescription(item.newObject);
+  const descriptionSummary = item.fieldSummary?.description;
+  if (descriptionSummary && policyAppliedFieldState(descriptionSummary) !== "active") return rows;
   const existingIndex = rows.findIndex((row) => normalizeFieldName(row.field) === "description");
 
   if (existingIndex >= 0) {
@@ -746,7 +944,7 @@ function toScore(score) {
 }
 
 function countByStatus(plan = [], status) {
-  return plan.filter((item) => !item.policySuppressed && item.status === status).length;
+  return plan.filter((item) => isActivePlanItem(item) && item.status === status).length;
 }
 
 function countMap(items = [], keyFn) {

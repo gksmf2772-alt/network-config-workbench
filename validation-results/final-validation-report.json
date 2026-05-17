@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-05-16T17:03:08.115Z",
+  "generatedAt": "2026-05-17T11:00:40.831Z",
   "inventory": {
-    "generatedAt": "2026-05-16T17:03:01.876Z",
+    "generatedAt": "2026-05-17T11:00:33.487Z",
     "searchedPaths": [
       "examples",
       "example",
@@ -937,6 +937,22 @@
     "foundPresets": [
       {
         "kind": "preset",
+        "path": "scripts/validate-object-review-grouping.mjs",
+        "size": 8157,
+        "signals": [
+          "vendor-preset"
+        ]
+      },
+      {
+        "kind": "preset",
+        "path": "scripts/validate-profile-exceptions.mjs",
+        "size": 11510,
+        "signals": [
+          "vendor-preset"
+        ]
+      },
+      {
+        "kind": "preset",
         "path": "scripts/validateCompareFixtures.js",
         "size": 8929,
         "signals": [
@@ -946,7 +962,7 @@
       {
         "kind": "preset",
         "path": "scripts/validationWorkflow.mjs",
-        "size": 54438,
+        "size": 54646,
         "signals": [
           "vendor-preset"
         ]
@@ -961,8 +977,16 @@
       },
       {
         "kind": "preset",
+        "path": "src/core/comparisonPlan.js",
+        "size": 47834,
+        "signals": [
+          "vendor-preset"
+        ]
+      },
+      {
+        "kind": "preset",
         "path": "src/core/legacyCore.js",
-        "size": 578685,
+        "size": 613376,
         "signals": [
           "vendor-preset"
         ]
@@ -986,7 +1010,7 @@
       {
         "kind": "preset",
         "path": "tests/policy-coverage.test.js",
-        "size": 14231,
+        "size": 27832,
         "signals": [
           "vendor-preset"
         ]
@@ -1032,7 +1056,7 @@
       {
         "kind": "standards-audit-profile",
         "path": "scripts/analyze-validation-quality.mjs",
-        "size": 98180,
+        "size": 103022,
         "signals": [
           "standards-audit"
         ]
@@ -1056,7 +1080,7 @@
       {
         "kind": "standards-audit-profile",
         "path": "src/core/summaryAnalytics.js",
-        "size": 30499,
+        "size": 32097,
         "signals": [
           "standards-audit"
         ]
@@ -1139,6 +1163,14 @@
       }
     ],
     "unknownOrAmbiguousFiles": [
+      {
+        "kind": "unknown",
+        "path": ".agents/skills/network-config-compare/SKILL.md",
+        "size": 2337,
+        "signals": [
+          "ambiguous-name"
+        ]
+      },
       {
         "kind": "unknown",
         "path": "예제 및 테스트 설정/test 신규 static.txt",
@@ -1284,7 +1316,7 @@
     {
       "command": "validate:compare",
       "mode": "compare",
-      "generatedAt": "2026-05-16T17:03:03.662Z",
+      "generatedAt": "2026-05-17T11:00:35.460Z",
       "status": "passed",
       "pass": true,
       "counts": {
@@ -1419,6 +1451,8 @@
               "matched": 3,
               "oldOnly": 2,
               "newOnly": 0,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 0,
               "lowConfidence": 0,
               "relationshipDiffs": 0,
@@ -1468,7 +1502,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 25614,
+            "htmlLength": 26075,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -1484,7 +1518,7 @@
             ]
           },
           "notesKo": "Juniper 실제 설정 기반 검증은 수행되지 않았습니다. Synthetic smoke fixture만 사용했습니다.",
-          "signature": "f7a73615182fd6339d6a9cd67a9be7f05c0dadfff8c8f5e0102c3ad8c5494d0d"
+          "signature": "781b8c7807be472a59d8d915fa63daa60c40ace866c2d67170bec2c3b289dd08"
         },
         {
           "id": "nokia-classic15-to-nokia-mdcli-22",
@@ -1575,6 +1609,8 @@
               "matched": 61,
               "oldOnly": 575,
               "newOnly": 447,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 5,
               "lowConfidence": 60,
               "relationshipDiffs": 68,
@@ -1626,7 +1662,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 9519107,
+            "htmlLength": 9637141,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -1676,14 +1712,14 @@
             ],
             "newUnparsedSample": []
           },
-          "signature": "72f827229057eddcb6405c86b45530cc79c80d806d6fed5165fbbbd04eaf94f2"
+          "signature": "60b4c657a384883a3f27643fd19522a1be831cbefb739d8f5f2f1cb87ae9ba25"
         }
       ]
     },
     {
       "command": "validate:audit",
       "mode": "audit",
-      "generatedAt": "2026-05-16T17:03:05.162Z",
+      "generatedAt": "2026-05-17T11:00:37.300Z",
       "status": "passed",
       "pass": true,
       "counts": {
@@ -1818,6 +1854,8 @@
               "matched": 3,
               "oldOnly": 2,
               "newOnly": 0,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 0,
               "lowConfidence": 0,
               "relationshipDiffs": 0,
@@ -1867,7 +1905,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 25614,
+            "htmlLength": 26075,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -1883,7 +1921,7 @@
             ]
           },
           "notesKo": "Juniper 실제 설정 기반 검증은 수행되지 않았습니다. Synthetic smoke fixture만 사용했습니다.",
-          "signature": "f7a73615182fd6339d6a9cd67a9be7f05c0dadfff8c8f5e0102c3ad8c5494d0d"
+          "signature": "781b8c7807be472a59d8d915fa63daa60c40ace866c2d67170bec2c3b289dd08"
         },
         {
           "id": "nokia-classic15-to-nokia-mdcli-22",
@@ -1974,6 +2012,8 @@
               "matched": 61,
               "oldOnly": 575,
               "newOnly": 447,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 5,
               "lowConfidence": 60,
               "relationshipDiffs": 68,
@@ -2025,7 +2065,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 9519107,
+            "htmlLength": 9637141,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -2075,14 +2115,14 @@
             ],
             "newUnparsedSample": []
           },
-          "signature": "72f827229057eddcb6405c86b45530cc79c80d806d6fed5165fbbbd04eaf94f2"
+          "signature": "60b4c657a384883a3f27643fd19522a1be831cbefb739d8f5f2f1cb87ae9ba25"
         }
       ]
     },
     {
       "command": "validate:report",
       "mode": "report",
-      "generatedAt": "2026-05-16T17:03:06.622Z",
+      "generatedAt": "2026-05-17T11:00:39.091Z",
       "status": "passed",
       "pass": true,
       "counts": {
@@ -2217,6 +2257,8 @@
               "matched": 3,
               "oldOnly": 2,
               "newOnly": 0,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 0,
               "lowConfidence": 0,
               "relationshipDiffs": 0,
@@ -2266,7 +2308,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 25614,
+            "htmlLength": 26075,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -2282,7 +2324,7 @@
             ]
           },
           "notesKo": "Juniper 실제 설정 기반 검증은 수행되지 않았습니다. Synthetic smoke fixture만 사용했습니다.",
-          "signature": "f7a73615182fd6339d6a9cd67a9be7f05c0dadfff8c8f5e0102c3ad8c5494d0d"
+          "signature": "781b8c7807be472a59d8d915fa63daa60c40ace866c2d67170bec2c3b289dd08"
         },
         {
           "id": "nokia-classic15-to-nokia-mdcli-22",
@@ -2373,6 +2415,8 @@
               "matched": 61,
               "oldOnly": 575,
               "newOnly": 447,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 5,
               "lowConfidence": 60,
               "relationshipDiffs": 68,
@@ -2424,7 +2468,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 9519107,
+            "htmlLength": 9637141,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -2474,14 +2518,14 @@
             ],
             "newUnparsedSample": []
           },
-          "signature": "72f827229057eddcb6405c86b45530cc79c80d806d6fed5165fbbbd04eaf94f2"
+          "signature": "60b4c657a384883a3f27643fd19522a1be831cbefb739d8f5f2f1cb87ae9ba25"
         }
       ]
     },
     {
       "command": "validate:graph",
       "mode": "graph",
-      "generatedAt": "2026-05-16T17:03:08.112Z",
+      "generatedAt": "2026-05-17T11:00:40.829Z",
       "status": "passed",
       "pass": true,
       "counts": {
@@ -2616,6 +2660,8 @@
               "matched": 3,
               "oldOnly": 2,
               "newOnly": 0,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 0,
               "lowConfidence": 0,
               "relationshipDiffs": 0,
@@ -2665,7 +2711,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 25614,
+            "htmlLength": 26075,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -2681,7 +2727,7 @@
             ]
           },
           "notesKo": "Juniper 실제 설정 기반 검증은 수행되지 않았습니다. Synthetic smoke fixture만 사용했습니다.",
-          "signature": "f7a73615182fd6339d6a9cd67a9be7f05c0dadfff8c8f5e0102c3ad8c5494d0d"
+          "signature": "781b8c7807be472a59d8d915fa63daa60c40ace866c2d67170bec2c3b289dd08"
         },
         {
           "id": "nokia-classic15-to-nokia-mdcli-22",
@@ -2772,6 +2818,8 @@
               "matched": 61,
               "oldOnly": 575,
               "newOnly": 447,
+              "excluded": 0,
+              "suppressed": 0,
               "ambiguous": 5,
               "lowConfidence": 60,
               "relationshipDiffs": 68,
@@ -2823,7 +2871,7 @@
             "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
           },
           "compare": {
-            "htmlLength": 9519107,
+            "htmlLength": 9637141,
             "hasUndefined": false,
             "hasNaN": false
           },
@@ -2873,7 +2921,7 @@
             ],
             "newUnparsedSample": []
           },
-          "signature": "72f827229057eddcb6405c86b45530cc79c80d806d6fed5165fbbbd04eaf94f2"
+          "signature": "60b4c657a384883a3f27643fd19522a1be831cbefb739d8f5f2f1cb87ae9ba25"
         }
       ]
     }
@@ -2894,7 +2942,7 @@
       "juniper-to-nokia-mdcli-22"
     ],
     "pass": true,
-    "durationMs": 422164,
+    "durationMs": 396760,
     "failingCaseId": "",
     "failingIteration": null,
     "failingSeed": "",
@@ -2981,6 +3029,8 @@
             "matched": 56,
             "oldOnly": 640,
             "newOnly": 0,
+            "excluded": 0,
+            "suppressed": 0,
             "ambiguous": 0,
             "lowConfidence": 0,
             "relationshipDiffs": 68,
@@ -3031,7 +3081,7 @@
           "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
         },
         "compare": {
-          "htmlLength": 6945163,
+          "htmlLength": 7023080,
           "hasUndefined": false,
           "hasNaN": false
         },
@@ -3081,7 +3131,7 @@
           ],
           "newUnparsedSample": []
         },
-        "signature": "5f468c78f5adbd492e1b3efece299468cac9b8373567f715b58c9de8a04b3d06"
+        "signature": "1abfa9101c7b61297e0f90cc8645ad179a0ff4fff19f38a36a8bc3f1f2aee288"
       }
     ]
   },
@@ -3090,24 +3140,48 @@
       "command": "npm.cmd test",
       "status": "passed",
       "exitCode": 0,
-      "durationMs": 667,
-      "stdoutTail": "✔ exception rule suppresses audit finding and summary counts stay aligned (2.1737ms)\n✔ graph node and edge generation includes active audit findings (0.3265ms)\n✔ vendor support state marks placeholder vendors as non-runnable (0.959ms)\n✔ Nokia Classic static route matches MD-CLI one-line route semantically (11.8831ms)\n✔ Nokia Classic indirect static route preserves next-hop for audit and migration review (0.8341ms)\n✔ Nokia MD-CLI nested static route preserves route, next-hop, state and tag (0.7129ms)\n✔ Nokia MD-CLI one-line service objects normalize subscriber, SAP, hosts and sub-sla fields (1.3478ms)\n✔ field overlap aggregates aliases and changed fields (9.726ms)\n✔ review items expose unmatched, ambiguous, low confidence, and relationship changes (1.4752ms)\n✔ graph data creates mapping and relationship edges (0.6003ms)\n✔ dashboard data derives operator severity and line metrics (2.0539ms)\nℹ tests 55\nℹ suites 0\nℹ pass 55\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 342.4024\n",
+      "durationMs": 762,
+      "stdoutTail": "✔ exception rule suppresses audit finding and summary counts stay aligned (2.4962ms)\n✔ graph node and edge generation includes active audit findings (0.3387ms)\n✔ vendor support state marks placeholder vendors as non-runnable (0.7751ms)\n✔ Nokia Classic static route matches MD-CLI one-line route semantically (15.821ms)\n✔ Nokia Classic indirect static route preserves next-hop for audit and migration review (1.3846ms)\n✔ Nokia MD-CLI nested static route preserves route, next-hop, state and tag (0.9809ms)\n✔ Nokia MD-CLI one-line service objects normalize subscriber, SAP, hosts and sub-sla fields (1.5685ms)\n✔ field overlap aggregates aliases and changed fields (13.7936ms)\n✔ review items expose unmatched, ambiguous, low confidence, and relationship changes (1.1852ms)\n✔ graph data creates mapping and relationship edges (0.8296ms)\n✔ dashboard data derives operator severity and line metrics (1.9673ms)\nℹ tests 74\nℹ suites 0\nℹ pass 74\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 436.5928\n",
       "stderrTail": ""
     },
     {
       "command": "npm.cmd run build",
       "status": "passed",
       "exitCode": 0,
-      "durationMs": 3825,
-      "stdoutTail": "\n> network-config-workbench@0.1.0 build\n> vite build\n\n\u001b[36mvite v7.3.3 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n\u001b[32m✓\u001b[39m 2195 modules transformed.\nrendering chunks...\ncomputing gzip size...\n\u001b[2mdist/\u001b[22m\u001b[32mindex.html                     \u001b[39m\u001b[1m\u001b[2m  1.13 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip:   0.71 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[35massets/index-CvSLqRux.css      \u001b[39m\u001b[1m\u001b[2m148.48 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip:  25.21 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[36massets/index-GAmoerLd.js       \u001b[39m\u001b[1m\u001b[2m338.94 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip: 108.42 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[36massets/legacyCore-JqeJ4c5k.js  \u001b[39m\u001b[1m\u001b[2m445.22 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip: 118.57 kB\u001b[22m\n\u001b[32m✓ built in 3.12s\u001b[39m\n",
+      "durationMs": 4108,
+      "stdoutTail": "\n> network-config-workbench@0.1.0 build\n> vite build\n\n\u001b[36mvite v7.3.3 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n\u001b[32m✓\u001b[39m 2196 modules transformed.\nrendering chunks...\ncomputing gzip size...\n\u001b[2mdist/\u001b[22m\u001b[32mindex.html                     \u001b[39m\u001b[1m\u001b[2m  1.13 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip:   0.71 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[35massets/index-C0hFUye4.css      \u001b[39m\u001b[1m\u001b[2m153.07 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip:  25.92 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[36massets/index-CP9UETAd.js       \u001b[39m\u001b[1m\u001b[2m339.16 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip: 108.44 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[36massets/legacyCore-CMv9q6Na.js  \u001b[39m\u001b[1m\u001b[2m488.26 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip: 129.14 kB\u001b[22m\n\u001b[32m✓ built in 3.40s\u001b[39m\n",
       "stderrTail": ""
     },
     {
       "command": "npm.cmd run validate:compare:fixtures",
       "status": "passed",
       "exitCode": 0,
-      "durationMs": 1865,
-      "stdoutTail": "      \"newOnly\": 447,\n      \"ambiguous\": 5,\n      \"lowConfidence\": 60,\n      \"relationshipDiffs\": 68,\n      \"abnormal\": 969,\n      \"manual\": 0,\n      \"auditActive\": 0,\n      \"auditSuppressed\": 0,\n      \"auditCritical\": 0,\n      \"auditWarning\": 0,\n      \"auditManual\": 0,\n      \"auditUnsupported\": 0,\n      \"unmatchedPartialTargetScope\": 0,\n      \"unmatchedMatcherIssue\": 455,\n      \"unmatchedParserGap\": 68,\n      \"unmatchedRealMissingTarget\": 52\n    }\n  }\n}\n",
+      "durationMs": 2243,
+      "stdoutTail": "      \"suppressed\": 0,\n      \"ambiguous\": 5,\n      \"lowConfidence\": 60,\n      \"relationshipDiffs\": 68,\n      \"abnormal\": 969,\n      \"manual\": 0,\n      \"auditActive\": 0,\n      \"auditSuppressed\": 0,\n      \"auditCritical\": 0,\n      \"auditWarning\": 0,\n      \"auditManual\": 0,\n      \"auditUnsupported\": 0,\n      \"unmatchedPartialTargetScope\": 0,\n      \"unmatchedMatcherIssue\": 455,\n      \"unmatchedParserGap\": 68,\n      \"unmatchedRealMissingTarget\": 52\n    }\n  }\n}\n",
+      "stderrTail": ""
+    },
+    {
+      "command": "npm.cmd run validate:profile-exceptions",
+      "status": "passed",
+      "exitCode": 0,
+      "durationMs": 389,
+      "stdoutTail": "\n> network-config-workbench@0.1.0 validate:profile-exceptions\n> node scripts/validate-profile-exceptions.mjs\n\nprofile exception application validation passed\n",
+      "stderrTail": ""
+    },
+    {
+      "command": "npm.cmd run validate:object-review",
+      "status": "passed",
+      "exitCode": 0,
+      "durationMs": 351,
+      "stdoutTail": "\n> network-config-workbench@0.1.0 validate:object-review\n> node scripts/validate-object-review-grouping.mjs\n\nobject review grouping validation passed\n",
+      "stderrTail": ""
+    },
+    {
+      "command": "npm.cmd run validate:field-dedupe",
+      "status": "passed",
+      "exitCode": 0,
+      "durationMs": 321,
+      "stdoutTail": "      \"displayStatus\": \"active\"\n    }\n  ],\n  \"suppressedOnlyFieldRows\": [\n    {\n      \"fieldPath\": \"group\",\n      \"activeCount\": 0,\n      \"suppressedCount\": 1,\n      \"displayStatus\": \"suppressed\"\n    }\n  ],\n  \"checks\": {\n    \"descriptionMerged\": true,\n    \"descriptionActiveCount\": 1,\n    \"descriptionSuppressedCount\": 1,\n    \"suppressedOnlyGroupExcludedFromActiveRows\": true,\n    \"suppressedOnlyGroupVisibleInSuppressedRows\": true\n  }\n}\n",
       "stderrTail": ""
     },
     {
@@ -3133,7 +3207,7 @@
   ],
   "qualityAnalysis": {
     "unmatched": {
-      "generatedAt": "2026-05-16T17:03:55.137Z",
+      "generatedAt": "2026-05-17T11:01:25.320Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "matched": 61,
@@ -32747,7 +32821,7 @@
       ]
     },
     "unsupportedLines": {
-      "generatedAt": "2026-05-16T17:03:55.375Z",
+      "generatedAt": "2026-05-17T11:01:25.602Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "totalUnsupported": 736,
@@ -45534,7 +45608,7 @@
       ]
     },
     "findingPriority": {
-      "generatedAt": "2026-05-16T17:03:55.394Z",
+      "generatedAt": "2026-05-17T11:01:25.623Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "totalFindings": 682,
@@ -60938,7 +61012,7 @@
       ]
     },
     "fixtureCompleteness": {
-      "generatedAt": "2026-05-16T17:03:55.396Z",
+      "generatedAt": "2026-05-17T11:01:25.625Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "status": "partial-assembled-target",
@@ -61459,7 +61533,7 @@
       }
     },
     "parserBacklog": {
-      "generatedAt": "2026-05-16T17:03:55.410Z",
+      "generatedAt": "2026-05-17T11:01:25.638Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "groupCount": 7,
@@ -62154,7 +62228,7 @@
       ]
     },
     "blocksAutoGeneration": {
-      "generatedAt": "2026-05-16T17:03:55.397Z",
+      "generatedAt": "2026-05-17T11:01:25.625Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "baselineTotal": 71,
@@ -65107,7 +65181,7 @@
       ]
     },
     "conversionPolicyRequired": {
-      "generatedAt": "2026-05-16T17:03:55.397Z",
+      "generatedAt": "2026-05-17T11:01:25.626Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "total": 163,
@@ -73670,7 +73744,7 @@
       ]
     },
     "actualMissing": {
-      "generatedAt": "2026-05-16T17:03:55.400Z",
+      "generatedAt": "2026-05-17T11:01:25.629Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "summary": {
         "total": 111,
@@ -76384,7 +76458,7 @@
       ]
     },
     "matcherEffectiveness": {
-      "generatedAt": "2026-05-16T17:03:55.401Z",
+      "generatedAt": "2026-05-17T11:01:25.629Z",
       "caseId": "nokia-classic15-to-nokia-mdcli-22",
       "baseline": {
         "generatedAt": "2026-05-16T08:40:50.564Z",
@@ -77313,7 +77387,7 @@
       ]
     },
     "modeScopeValidation": {
-      "generatedAt": "2026-05-16T17:03:55.405Z",
+      "generatedAt": "2026-05-17T11:01:25.634Z",
       "status": "passed",
       "summary": {
         "cases": 8,
@@ -77405,6 +77479,560 @@
           }
         }
       ]
+    },
+    "profileExceptionApplication": {
+      "generatedAt": "2026-05-17T11:00:32.775Z",
+      "activeProfileName": "profile-exception-application-fixture",
+      "loadedProfileExceptionsCount": 1,
+      "matchedExceptionIds": [
+        "ex-profile-bgp-group-added-mdcli"
+      ],
+      "before": {
+        "objectCount": 2,
+        "summary": {
+          "activeIssueCount": 6,
+          "suppressedIssueCount": 0,
+          "activeGroupIssueCount": 2,
+          "suppressedProfileGroupIssueCount": 0,
+          "activeAdminStateIssueCount": 2,
+          "activeDescriptionIssueCount": 2,
+          "activeIssues": [
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.19",
+              "objectIdentity": "112.188.30.19",
+              "field": "description",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "changed",
+              "oldValue": "## to-Dobong-TOU-FK66 ##",
+              "newValue": "## Dobong-TOU-FK66 ##",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.19",
+              "objectIdentity": "112.188.30.19",
+              "field": "group",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "structure-converted",
+              "oldValue": "",
+              "newValue": "ACCESS-PEER",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.19",
+              "objectIdentity": "112.188.30.19",
+              "field": "admin-state",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "added",
+              "oldValue": "",
+              "newValue": "disabled",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.64",
+              "objectIdentity": "112.188.30.64",
+              "field": "description",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "changed",
+              "oldValue": "## to-Nowon-TOU-FN14 ##",
+              "newValue": "## Nowon-TOU-FN14 ##",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.64",
+              "objectIdentity": "112.188.30.64",
+              "field": "group",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "structure-converted",
+              "oldValue": "",
+              "newValue": "ACCESS-PEER",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.64",
+              "objectIdentity": "112.188.30.64",
+              "field": "admin-state",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "added",
+              "oldValue": "",
+              "newValue": "disabled",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            }
+          ],
+          "suppressedIssues": []
+        },
+        "dashboardCounts": {
+          "matched": 2,
+          "oldOnly": 0,
+          "newOnly": 0,
+          "excluded": 0,
+          "suppressed": 0,
+          "ambiguous": 0,
+          "lowConfidence": 0,
+          "relationshipDiffs": 0,
+          "abnormal": 2,
+          "manual": 0,
+          "auditActive": 0,
+          "auditSuppressed": 0,
+          "auditCritical": 0,
+          "auditWarning": 0,
+          "auditManual": 0,
+          "auditUnsupported": 0,
+          "unmatchedPartialTargetScope": 0,
+          "unmatchedMatcherIssue": 0,
+          "unmatchedParserGap": 0,
+          "unmatchedRealMissingTarget": 0
+        },
+        "graph": {
+          "nodes": 4,
+          "edges": 2
+        }
+      },
+      "after": {
+        "objectCount": 2,
+        "summary": {
+          "activeIssueCount": 4,
+          "suppressedIssueCount": 2,
+          "activeGroupIssueCount": 0,
+          "suppressedProfileGroupIssueCount": 2,
+          "activeAdminStateIssueCount": 2,
+          "activeDescriptionIssueCount": 2,
+          "activeIssues": [
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.19",
+              "objectIdentity": "112.188.30.19",
+              "field": "description",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "changed",
+              "oldValue": "## to-Dobong-TOU-FK66 ##",
+              "newValue": "## Dobong-TOU-FK66 ##",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.19",
+              "objectIdentity": "112.188.30.19",
+              "field": "admin-state",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "added",
+              "oldValue": "",
+              "newValue": "disabled",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.64",
+              "objectIdentity": "112.188.30.64",
+              "field": "description",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "changed",
+              "oldValue": "## to-Nowon-TOU-FN14 ##",
+              "newValue": "## Nowon-TOU-FN14 ##",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.64",
+              "objectIdentity": "112.188.30.64",
+              "field": "admin-state",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "added",
+              "oldValue": "",
+              "newValue": "disabled",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": false,
+              "sourcePolicy": "none",
+              "policyId": ""
+            }
+          ],
+          "suppressedIssues": [
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.19",
+              "objectIdentity": "112.188.30.19",
+              "field": "group",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "structure-converted",
+              "oldValue": "",
+              "newValue": "ACCESS-PEER",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": true,
+              "sourcePolicy": "profile-exception",
+              "policyId": "ex-profile-bgp-group-added-mdcli"
+            },
+            {
+              "objectType": "bgp",
+              "objectKey": "bgp:112.188.30.64",
+              "objectIdentity": "112.188.30.64",
+              "field": "group",
+              "ruleId": "semantic-compare.important-field-change",
+              "category": "semantic-compare",
+              "findingType": "matched",
+              "issueType": "field-difference",
+              "changeType": "structure-converted",
+              "oldValue": "",
+              "newValue": "ACCESS-PEER",
+              "vendorPair": "nokia-classic->nokia-md-cli",
+              "ignored": true,
+              "sourcePolicy": "profile-exception",
+              "policyId": "ex-profile-bgp-group-added-mdcli"
+            }
+          ]
+        },
+        "dashboardCounts": {
+          "matched": 2,
+          "oldOnly": 0,
+          "newOnly": 0,
+          "excluded": 0,
+          "suppressed": 0,
+          "ambiguous": 0,
+          "lowConfidence": 0,
+          "relationshipDiffs": 0,
+          "abnormal": 2,
+          "manual": 0,
+          "auditActive": 0,
+          "auditSuppressed": 0,
+          "auditCritical": 0,
+          "auditWarning": 0,
+          "auditManual": 0,
+          "auditUnsupported": 0,
+          "unmatchedPartialTargetScope": 0,
+          "unmatchedMatcherIssue": 0,
+          "unmatchedParserGap": 0,
+          "unmatchedRealMissingTarget": 0
+        },
+        "graph": {
+          "nodes": 4,
+          "edges": 2
+        }
+      },
+      "exceptionMatchAttempts": [
+        {
+          "objectKey": "bgp:112.188.30.19",
+          "fieldPath": "neighbor",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "equal",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        },
+        {
+          "objectKey": "bgp:112.188.30.19",
+          "fieldPath": "description",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "changed",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        },
+        {
+          "objectKey": "bgp:112.188.30.19",
+          "fieldPath": "group",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "structure-converted",
+          "matched": true,
+          "matchedExceptionId": "ex-profile-bgp-group-added-mdcli",
+          "unmatchedReason": ""
+        },
+        {
+          "objectKey": "bgp:112.188.30.19",
+          "fieldPath": "admin-state",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "added",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        },
+        {
+          "objectKey": "bgp:112.188.30.19",
+          "fieldPath": "peerIp",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "equal",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        },
+        {
+          "objectKey": "bgp:112.188.30.64",
+          "fieldPath": "neighbor",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "equal",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        },
+        {
+          "objectKey": "bgp:112.188.30.64",
+          "fieldPath": "description",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "changed",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        },
+        {
+          "objectKey": "bgp:112.188.30.64",
+          "fieldPath": "group",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "structure-converted",
+          "matched": true,
+          "matchedExceptionId": "ex-profile-bgp-group-added-mdcli",
+          "unmatchedReason": ""
+        },
+        {
+          "objectKey": "bgp:112.188.30.64",
+          "fieldPath": "admin-state",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "added",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        },
+        {
+          "objectKey": "bgp:112.188.30.64",
+          "fieldPath": "peerIp",
+          "ruleId": "semantic-compare.important-field-change",
+          "changeType": "equal",
+          "matched": false,
+          "matchedExceptionId": "",
+          "unmatchedReason": "fieldPath mismatch"
+        }
+      ],
+      "invariant": {
+        "profileGroupSuppressed": true,
+        "adminStateStillActive": true,
+        "graphEdgesStable": true
+      }
+    },
+    "objectReviewGrouping": {
+      "generatedAt": "2026-05-17T11:00:33.126Z",
+      "activeProfileName": "object-review-grouping-fixture",
+      "loadedProfileExceptionsCount": 1,
+      "before": {
+        "objectReviewGroupCount": 2,
+        "averageIssuesPerObject": 3,
+        "activeIssueCount": 6,
+        "suppressedIssueCount": 0,
+        "suppressedByProfileExceptionCount": 0,
+        "suppressedByObjectExceptionCount": 0,
+        "topIssueFields": [
+          {
+            "field": "description",
+            "count": 2
+          },
+          {
+            "field": "group",
+            "count": 2
+          },
+          {
+            "field": "state",
+            "count": 2
+          }
+        ],
+        "groups": [
+          {
+            "objectKey": "bgp:112.188.30.19",
+            "displayName": "## Dobong-TOU-FK66 ## · 112.188.30.19",
+            "activeIssueCount": 3,
+            "suppressedIssueCount": 0,
+            "issueFields": [
+              "description",
+              "group",
+              "state"
+            ],
+            "activeFields": [
+              "description",
+              "group",
+              "state"
+            ],
+            "suppressedFields": [],
+            "representativeReason": "값 변경 확인 외 2개"
+          },
+          {
+            "objectKey": "bgp:112.188.30.64",
+            "displayName": "## Nowon-TOU-FN14 ## · 112.188.30.64",
+            "activeIssueCount": 3,
+            "suppressedIssueCount": 0,
+            "issueFields": [
+              "description",
+              "group",
+              "state"
+            ],
+            "activeFields": [
+              "description",
+              "group",
+              "state"
+            ],
+            "suppressedFields": [],
+            "representativeReason": "값 변경 확인 외 2개"
+          }
+        ]
+      },
+      "after": {
+        "objectReviewGroupCount": 2,
+        "averageIssuesPerObject": 3,
+        "activeIssueCount": 4,
+        "suppressedIssueCount": 2,
+        "suppressedByProfileExceptionCount": 2,
+        "suppressedByObjectExceptionCount": 0,
+        "topIssueFields": [
+          {
+            "field": "description",
+            "count": 2
+          },
+          {
+            "field": "state",
+            "count": 2
+          }
+        ],
+        "groups": [
+          {
+            "objectKey": "bgp:112.188.30.19",
+            "displayName": "## Dobong-TOU-FK66 ## · 112.188.30.19",
+            "activeIssueCount": 2,
+            "suppressedIssueCount": 1,
+            "issueFields": [
+              "description",
+              "state"
+            ],
+            "activeFields": [
+              "description",
+              "state"
+            ],
+            "suppressedFields": [
+              "group"
+            ],
+            "representativeReason": "값 변경 확인 외 1개"
+          },
+          {
+            "objectKey": "bgp:112.188.30.64",
+            "displayName": "## Nowon-TOU-FN14 ## · 112.188.30.64",
+            "activeIssueCount": 2,
+            "suppressedIssueCount": 1,
+            "issueFields": [
+              "description",
+              "state"
+            ],
+            "activeFields": [
+              "description",
+              "state"
+            ],
+            "suppressedFields": [
+              "group"
+            ],
+            "representativeReason": "값 변경 확인 외 1개"
+          }
+        ]
+      },
+      "invariants": {
+        "oneRowPerObjectBefore": true,
+        "groupSuppressedAcrossObjects": true,
+        "stateDescriptionRemainActive": true
+      }
+    },
+    "fieldIssueDedupe": {
+      "command": "validate:field-dedupe",
+      "status": "passed",
+      "object": "## Dobong-TOU-FK66 ## · 112.188.30.19",
+      "duplicateFieldRowsBefore": 1,
+      "duplicateFieldRowsAfter": 0,
+      "descriptionDuplicateCountBefore": 2,
+      "descriptionDuplicateCountAfter": 1,
+      "activeFieldRows": [
+        {
+          "fieldPath": "description",
+          "activeCount": 1,
+          "suppressedCount": 1,
+          "displayStatus": "active-and-suppressed"
+        },
+        {
+          "fieldPath": "state",
+          "activeCount": 1,
+          "suppressedCount": 0,
+          "displayStatus": "active"
+        }
+      ],
+      "suppressedOnlyFieldRows": [
+        {
+          "fieldPath": "group",
+          "activeCount": 0,
+          "suppressedCount": 1,
+          "displayStatus": "suppressed"
+        }
+      ],
+      "checks": {
+        "descriptionMerged": true,
+        "descriptionActiveCount": 1,
+        "descriptionSuppressedCount": 1,
+        "suppressedOnlyGroupExcludedFromActiveRows": true,
+        "suppressedOnlyGroupVisibleInSuppressedRows": true
+      }
     }
   },
   "remainingLimitations": [
@@ -77413,5 +78041,559 @@
     "Config generation/migration engine is not implemented; only migration-readiness is validated.",
     "Filter/QoS/route-policy body parsing is partial and tracked as manual-review/parser coverage work.",
     "Current MD-CLI target fixture is partial feature-split data; high unmatched counts are expected."
-  ]
+  ],
+  "profileExceptionApplication": {
+    "generatedAt": "2026-05-17T11:00:32.775Z",
+    "activeProfileName": "profile-exception-application-fixture",
+    "loadedProfileExceptionsCount": 1,
+    "matchedExceptionIds": [
+      "ex-profile-bgp-group-added-mdcli"
+    ],
+    "before": {
+      "objectCount": 2,
+      "summary": {
+        "activeIssueCount": 6,
+        "suppressedIssueCount": 0,
+        "activeGroupIssueCount": 2,
+        "suppressedProfileGroupIssueCount": 0,
+        "activeAdminStateIssueCount": 2,
+        "activeDescriptionIssueCount": 2,
+        "activeIssues": [
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.19",
+            "objectIdentity": "112.188.30.19",
+            "field": "description",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "changed",
+            "oldValue": "## to-Dobong-TOU-FK66 ##",
+            "newValue": "## Dobong-TOU-FK66 ##",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.19",
+            "objectIdentity": "112.188.30.19",
+            "field": "group",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "structure-converted",
+            "oldValue": "",
+            "newValue": "ACCESS-PEER",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.19",
+            "objectIdentity": "112.188.30.19",
+            "field": "admin-state",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "added",
+            "oldValue": "",
+            "newValue": "disabled",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.64",
+            "objectIdentity": "112.188.30.64",
+            "field": "description",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "changed",
+            "oldValue": "## to-Nowon-TOU-FN14 ##",
+            "newValue": "## Nowon-TOU-FN14 ##",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.64",
+            "objectIdentity": "112.188.30.64",
+            "field": "group",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "structure-converted",
+            "oldValue": "",
+            "newValue": "ACCESS-PEER",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.64",
+            "objectIdentity": "112.188.30.64",
+            "field": "admin-state",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "added",
+            "oldValue": "",
+            "newValue": "disabled",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          }
+        ],
+        "suppressedIssues": []
+      },
+      "dashboardCounts": {
+        "matched": 2,
+        "oldOnly": 0,
+        "newOnly": 0,
+        "excluded": 0,
+        "suppressed": 0,
+        "ambiguous": 0,
+        "lowConfidence": 0,
+        "relationshipDiffs": 0,
+        "abnormal": 2,
+        "manual": 0,
+        "auditActive": 0,
+        "auditSuppressed": 0,
+        "auditCritical": 0,
+        "auditWarning": 0,
+        "auditManual": 0,
+        "auditUnsupported": 0,
+        "unmatchedPartialTargetScope": 0,
+        "unmatchedMatcherIssue": 0,
+        "unmatchedParserGap": 0,
+        "unmatchedRealMissingTarget": 0
+      },
+      "graph": {
+        "nodes": 4,
+        "edges": 2
+      }
+    },
+    "after": {
+      "objectCount": 2,
+      "summary": {
+        "activeIssueCount": 4,
+        "suppressedIssueCount": 2,
+        "activeGroupIssueCount": 0,
+        "suppressedProfileGroupIssueCount": 2,
+        "activeAdminStateIssueCount": 2,
+        "activeDescriptionIssueCount": 2,
+        "activeIssues": [
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.19",
+            "objectIdentity": "112.188.30.19",
+            "field": "description",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "changed",
+            "oldValue": "## to-Dobong-TOU-FK66 ##",
+            "newValue": "## Dobong-TOU-FK66 ##",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.19",
+            "objectIdentity": "112.188.30.19",
+            "field": "admin-state",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "added",
+            "oldValue": "",
+            "newValue": "disabled",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.64",
+            "objectIdentity": "112.188.30.64",
+            "field": "description",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "changed",
+            "oldValue": "## to-Nowon-TOU-FN14 ##",
+            "newValue": "## Nowon-TOU-FN14 ##",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.64",
+            "objectIdentity": "112.188.30.64",
+            "field": "admin-state",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "added",
+            "oldValue": "",
+            "newValue": "disabled",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": false,
+            "sourcePolicy": "none",
+            "policyId": ""
+          }
+        ],
+        "suppressedIssues": [
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.19",
+            "objectIdentity": "112.188.30.19",
+            "field": "group",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "structure-converted",
+            "oldValue": "",
+            "newValue": "ACCESS-PEER",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": true,
+            "sourcePolicy": "profile-exception",
+            "policyId": "ex-profile-bgp-group-added-mdcli"
+          },
+          {
+            "objectType": "bgp",
+            "objectKey": "bgp:112.188.30.64",
+            "objectIdentity": "112.188.30.64",
+            "field": "group",
+            "ruleId": "semantic-compare.important-field-change",
+            "category": "semantic-compare",
+            "findingType": "matched",
+            "issueType": "field-difference",
+            "changeType": "structure-converted",
+            "oldValue": "",
+            "newValue": "ACCESS-PEER",
+            "vendorPair": "nokia-classic->nokia-md-cli",
+            "ignored": true,
+            "sourcePolicy": "profile-exception",
+            "policyId": "ex-profile-bgp-group-added-mdcli"
+          }
+        ]
+      },
+      "dashboardCounts": {
+        "matched": 2,
+        "oldOnly": 0,
+        "newOnly": 0,
+        "excluded": 0,
+        "suppressed": 0,
+        "ambiguous": 0,
+        "lowConfidence": 0,
+        "relationshipDiffs": 0,
+        "abnormal": 2,
+        "manual": 0,
+        "auditActive": 0,
+        "auditSuppressed": 0,
+        "auditCritical": 0,
+        "auditWarning": 0,
+        "auditManual": 0,
+        "auditUnsupported": 0,
+        "unmatchedPartialTargetScope": 0,
+        "unmatchedMatcherIssue": 0,
+        "unmatchedParserGap": 0,
+        "unmatchedRealMissingTarget": 0
+      },
+      "graph": {
+        "nodes": 4,
+        "edges": 2
+      }
+    },
+    "exceptionMatchAttempts": [
+      {
+        "objectKey": "bgp:112.188.30.19",
+        "fieldPath": "neighbor",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "equal",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      },
+      {
+        "objectKey": "bgp:112.188.30.19",
+        "fieldPath": "description",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "changed",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      },
+      {
+        "objectKey": "bgp:112.188.30.19",
+        "fieldPath": "group",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "structure-converted",
+        "matched": true,
+        "matchedExceptionId": "ex-profile-bgp-group-added-mdcli",
+        "unmatchedReason": ""
+      },
+      {
+        "objectKey": "bgp:112.188.30.19",
+        "fieldPath": "admin-state",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "added",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      },
+      {
+        "objectKey": "bgp:112.188.30.19",
+        "fieldPath": "peerIp",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "equal",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      },
+      {
+        "objectKey": "bgp:112.188.30.64",
+        "fieldPath": "neighbor",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "equal",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      },
+      {
+        "objectKey": "bgp:112.188.30.64",
+        "fieldPath": "description",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "changed",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      },
+      {
+        "objectKey": "bgp:112.188.30.64",
+        "fieldPath": "group",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "structure-converted",
+        "matched": true,
+        "matchedExceptionId": "ex-profile-bgp-group-added-mdcli",
+        "unmatchedReason": ""
+      },
+      {
+        "objectKey": "bgp:112.188.30.64",
+        "fieldPath": "admin-state",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "added",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      },
+      {
+        "objectKey": "bgp:112.188.30.64",
+        "fieldPath": "peerIp",
+        "ruleId": "semantic-compare.important-field-change",
+        "changeType": "equal",
+        "matched": false,
+        "matchedExceptionId": "",
+        "unmatchedReason": "fieldPath mismatch"
+      }
+    ],
+    "invariant": {
+      "profileGroupSuppressed": true,
+      "adminStateStillActive": true,
+      "graphEdgesStable": true
+    }
+  },
+  "objectReviewGrouping": {
+    "generatedAt": "2026-05-17T11:00:33.126Z",
+    "activeProfileName": "object-review-grouping-fixture",
+    "loadedProfileExceptionsCount": 1,
+    "before": {
+      "objectReviewGroupCount": 2,
+      "averageIssuesPerObject": 3,
+      "activeIssueCount": 6,
+      "suppressedIssueCount": 0,
+      "suppressedByProfileExceptionCount": 0,
+      "suppressedByObjectExceptionCount": 0,
+      "topIssueFields": [
+        {
+          "field": "description",
+          "count": 2
+        },
+        {
+          "field": "group",
+          "count": 2
+        },
+        {
+          "field": "state",
+          "count": 2
+        }
+      ],
+      "groups": [
+        {
+          "objectKey": "bgp:112.188.30.19",
+          "displayName": "## Dobong-TOU-FK66 ## · 112.188.30.19",
+          "activeIssueCount": 3,
+          "suppressedIssueCount": 0,
+          "issueFields": [
+            "description",
+            "group",
+            "state"
+          ],
+          "activeFields": [
+            "description",
+            "group",
+            "state"
+          ],
+          "suppressedFields": [],
+          "representativeReason": "값 변경 확인 외 2개"
+        },
+        {
+          "objectKey": "bgp:112.188.30.64",
+          "displayName": "## Nowon-TOU-FN14 ## · 112.188.30.64",
+          "activeIssueCount": 3,
+          "suppressedIssueCount": 0,
+          "issueFields": [
+            "description",
+            "group",
+            "state"
+          ],
+          "activeFields": [
+            "description",
+            "group",
+            "state"
+          ],
+          "suppressedFields": [],
+          "representativeReason": "값 변경 확인 외 2개"
+        }
+      ]
+    },
+    "after": {
+      "objectReviewGroupCount": 2,
+      "averageIssuesPerObject": 3,
+      "activeIssueCount": 4,
+      "suppressedIssueCount": 2,
+      "suppressedByProfileExceptionCount": 2,
+      "suppressedByObjectExceptionCount": 0,
+      "topIssueFields": [
+        {
+          "field": "description",
+          "count": 2
+        },
+        {
+          "field": "state",
+          "count": 2
+        }
+      ],
+      "groups": [
+        {
+          "objectKey": "bgp:112.188.30.19",
+          "displayName": "## Dobong-TOU-FK66 ## · 112.188.30.19",
+          "activeIssueCount": 2,
+          "suppressedIssueCount": 1,
+          "issueFields": [
+            "description",
+            "state"
+          ],
+          "activeFields": [
+            "description",
+            "state"
+          ],
+          "suppressedFields": [
+            "group"
+          ],
+          "representativeReason": "값 변경 확인 외 1개"
+        },
+        {
+          "objectKey": "bgp:112.188.30.64",
+          "displayName": "## Nowon-TOU-FN14 ## · 112.188.30.64",
+          "activeIssueCount": 2,
+          "suppressedIssueCount": 1,
+          "issueFields": [
+            "description",
+            "state"
+          ],
+          "activeFields": [
+            "description",
+            "state"
+          ],
+          "suppressedFields": [
+            "group"
+          ],
+          "representativeReason": "값 변경 확인 외 1개"
+        }
+      ]
+    },
+    "invariants": {
+      "oneRowPerObjectBefore": true,
+      "groupSuppressedAcrossObjects": true,
+      "stateDescriptionRemainActive": true
+    }
+  },
+  "fieldIssueDedupe": {
+    "command": "validate:field-dedupe",
+    "status": "passed",
+    "object": "## Dobong-TOU-FK66 ## · 112.188.30.19",
+    "duplicateFieldRowsBefore": 1,
+    "duplicateFieldRowsAfter": 0,
+    "descriptionDuplicateCountBefore": 2,
+    "descriptionDuplicateCountAfter": 1,
+    "activeFieldRows": [
+      {
+        "fieldPath": "description",
+        "activeCount": 1,
+        "suppressedCount": 1,
+        "displayStatus": "active-and-suppressed"
+      },
+      {
+        "fieldPath": "state",
+        "activeCount": 1,
+        "suppressedCount": 0,
+        "displayStatus": "active"
+      }
+    ],
+    "suppressedOnlyFieldRows": [
+      {
+        "fieldPath": "group",
+        "activeCount": 0,
+        "suppressedCount": 1,
+        "displayStatus": "suppressed"
+      }
+    ],
+    "checks": {
+      "descriptionMerged": true,
+      "descriptionActiveCount": 1,
+      "descriptionSuppressedCount": 1,
+      "suppressedOnlyGroupExcludedFromActiveRows": true,
+      "suppressedOnlyGroupVisibleInSuppressedRows": true
+    }
+  }
 }

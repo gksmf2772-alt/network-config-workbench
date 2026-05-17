@@ -14,7 +14,7 @@
     "juniper-to-nokia-mdcli-22"
   ],
   "pass": true,
-  "durationMs": 371815,
+  "durationMs": 392521,
   "failingCaseId": "",
   "failingIteration": null,
   "failingSeed": "",
@@ -101,6 +101,8 @@
           "matched": 56,
           "oldOnly": 640,
           "newOnly": 0,
+          "excluded": 0,
+          "suppressed": 0,
           "ambiguous": 0,
           "lowConfidence": 0,
           "relationshipDiffs": 68,
@@ -151,7 +153,7 @@
         "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
       },
       "compare": {
-        "htmlLength": 6945163,
+        "htmlLength": 7023080,
         "hasUndefined": false,
         "hasNaN": false
       },
@@ -201,7 +203,7 @@
         ],
         "newUnparsedSample": []
       },
-      "signature": "5f468c78f5adbd492e1b3efece299468cac9b8373567f715b58c9de8a04b3d06"
+      "signature": "1abfa9101c7b61297e0f90cc8645ad179a0ff4fff19f38a36a8bc3f1f2aee288"
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-16T17:03:01.876Z",
+  "generatedAt": "2026-05-17T11:00:33.487Z",
   "searchedPaths": [
     "examples",
     "example",
@@ -935,6 +935,22 @@
   "foundPresets": [
     {
       "kind": "preset",
+      "path": "scripts/validate-object-review-grouping.mjs",
+      "size": 8157,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
+      "path": "scripts/validate-profile-exceptions.mjs",
+      "size": 11510,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
       "path": "scripts/validateCompareFixtures.js",
       "size": 8929,
       "signals": [
@@ -944,7 +960,7 @@
     {
       "kind": "preset",
       "path": "scripts/validationWorkflow.mjs",
-      "size": 54438,
+      "size": 54646,
       "signals": [
         "vendor-preset"
       ]
@@ -959,8 +975,16 @@
     },
     {
       "kind": "preset",
+      "path": "src/core/comparisonPlan.js",
+      "size": 47834,
+      "signals": [
+        "vendor-preset"
+      ]
+    },
+    {
+      "kind": "preset",
       "path": "src/core/legacyCore.js",
-      "size": 578685,
+      "size": 613376,
       "signals": [
         "vendor-preset"
       ]
@@ -984,7 +1008,7 @@
     {
       "kind": "preset",
       "path": "tests/policy-coverage.test.js",
-      "size": 14231,
+      "size": 27832,
       "signals": [
         "vendor-preset"
       ]
@@ -1030,7 +1054,7 @@
     {
       "kind": "standards-audit-profile",
       "path": "scripts/analyze-validation-quality.mjs",
-      "size": 98180,
+      "size": 103022,
       "signals": [
         "standards-audit"
       ]
@@ -1054,7 +1078,7 @@
     {
       "kind": "standards-audit-profile",
       "path": "src/core/summaryAnalytics.js",
-      "size": 30499,
+      "size": 32097,
       "signals": [
         "standards-audit"
       ]
@@ -1137,6 +1161,14 @@
     }
   ],
   "unknownOrAmbiguousFiles": [
+    {
+      "kind": "unknown",
+      "path": ".agents/skills/network-config-compare/SKILL.md",
+      "size": 2337,
+      "signals": [
+        "ambiguous-name"
+      ]
+    },
     {
       "kind": "unknown",
       "path": "예제 및 테스트 설정/test 신규 static.txt",

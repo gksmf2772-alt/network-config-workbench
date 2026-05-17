@@ -20,7 +20,7 @@ export default function HeaderBar() {
           벤더 간 의미 기반 검증
         </div>
         <h1>Network Config Workbench</h1>
-        <p>파서, 객체, 정책, 관계를 기준으로 네트워크 설정 마이그레이션을 검증.</p>
+        <p>파서, 설정, 정책, 관계 기준으로 네트워크 설정 마이그레이션을 검증합니다.</p>
       </div>
       <AppToolbar className="topbar-actions ncw-header-actions">
         <AppSelect id="historySelect" title="저장된 비교 이력" />

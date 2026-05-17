@@ -62,13 +62,13 @@ export default function ProfileEditor() {
     <AppPanel as="article" className="profile-editor">
       <AppSectionHeader
         title="프로파일 편집기"
-        description="객체 식별, 의미 필드, 정규화, 검증 정책 설정"
+        description="설정 식별, 의미 설정 항목, 정규화, 검증 정책 설정"
         actions={<AppButton id="newProfileBtn" type="button" variant="secondary"><Plus />새 프로파일</AppButton>}
       />
 
       <div className="profile-flow-note">
         <strong>규칙 흐름</strong>
-        <span>객체 매핑 → 식별 규칙 → 필드 추출 → 정규화 → GUI 매핑 → 검증 정책 → 예외</span>
+        <span>설정 매핑 → 식별 규칙 → 설정 항목 추출 → 정규화 → GUI 매핑 → 검증 정책 → 예외</span>
       </div>
 
       <label>프로파일 이름<input id="profileNameInput" defaultValue="Nokia 기본 검증" /></label>
@@ -89,19 +89,19 @@ export default function ProfileEditor() {
       </div>
       <div id="vendorSupportNotice" className="vendor-support-notice" role="status" />
 
-      <CollapsibleSection id="object-type-mapping" title="1. 객체 유형 매핑" summary="기존/신규 객체 유형 연결" defaultOpen>
-        <SectionIntro step="1" title="객체 유형 매핑">식별/필드 추출 전에 기존과 신규 객체 유형을 연결.</SectionIntro>
+      <CollapsibleSection id="object-type-mapping" title="1. 설정 종류 매핑" summary="기존/신규 설정 종류 연결" defaultOpen>
+        <SectionIntro step="1" title="설정 종류 매핑">식별/설정 항목 추출 전에 기존과 신규 설정 종류를 연결.</SectionIntro>
         <div id="mappingEditor" className="mapping-editor" />
       </CollapsibleSection>
 
-      <CollapsibleSection id="identity-rule" title="2. 식별 규칙" summary="기존/신규 객체 식별 기준" defaultOpen>
-        <SectionIntro step="2" title="식별 규칙">기존/신규 객체를 같은 의미 객체로 인식하는 기준.</SectionIntro>
+      <CollapsibleSection id="identity-rule" title="2. 식별 규칙" summary="기존/신규 설정 식별 기준" defaultOpen>
+        <SectionIntro step="2" title="식별 규칙">기존/신규 설정을 같은 의미 설정으로 인식하는 기준.</SectionIntro>
         <div id="identityRuleEditor" className="identity-rule-editor" />
       </CollapsibleSection>
 
       <CollapsibleSection id="mapping-workbench" title="3. 매핑 워크벤치" summary="라인/그룹/토큰 GUI 매핑" defaultOpen>
         <SectionIntro step="3" title="매핑 워크벤치">예제 설정에서 라인 그룹, 구조 매핑, 토큰 매핑 생성.</SectionIntro>
-        <label>객체 유형<AppSelect id="profileObjectTypeSelect" /></label>
+        <label>설정 종류<AppSelect id="profileObjectTypeSelect" /></label>
         <div className="profile-example-grid">
           <div>
             <div className="profile-example-title">기존 설정 예제</div>
@@ -120,7 +120,7 @@ export default function ProfileEditor() {
           <AppButton id="autoLearnRulesBtn" type="button" variant="secondary"><Sparkles />후보 생성</AppButton>
           <AppButton id="addLineMappingBtn" type="button" variant="secondary">구조 매핑 추가</AppButton>
           <AppButton id="addContextMappingBtn" type="button" variant="secondary">블록 매핑 추가</AppButton>
-          <AppButton id="addFieldMappingBtn" type="button" variant="secondary">필드 매핑 추가</AppButton>
+          <AppButton id="addFieldMappingBtn" type="button" variant="secondary">설정 항목 매핑 추가</AppButton>
           <AppButton id="createTokenGroupBtn" type="button" variant="secondary">토큰 그룹 생성</AppButton>
           <AppButton id="createLineGroupBtn" type="button" variant="secondary">라인 그룹 생성</AppButton>
           <AppButton id="addOldLineRuleBtn" type="button" variant="secondary">기존 예외 추가</AppButton>
@@ -128,7 +128,7 @@ export default function ProfileEditor() {
         </AppToolbar>
         <div className="candidate-scope-list" aria-label="후보 생성 범위">
           <span>식별</span>
-          <span>필드 추출</span>
+          <span>설정 항목 추출</span>
           <span>정규화</span>
           <span>구조 매핑</span>
           <span>토큰 매핑</span>
@@ -153,7 +153,7 @@ export default function ProfileEditor() {
               <div id="profileContextMappingRows" className="profile-mapping-rows" />
             </div>
             <div>
-              <h4>필드 매핑 호환</h4>
+              <h4>설정 항목 매핑 호환</h4>
               <div id="profileFieldMappingRows" className="profile-mapping-rows" />
             </div>
           </div>
@@ -169,7 +169,7 @@ export default function ProfileEditor() {
       </CollapsibleSection>
 
       <CollapsibleSection id="advanced-compare-policy" title="4. 고급 비교 정책" summary="검증 정책, 정규화, 파서 규칙" defaultOpen={false}>
-        <SectionIntro step="4" title="검증 정책">필드 추출/정규화 후 필수, 존재, 무시, 비교 동작 제어.</SectionIntro>
+        <SectionIntro step="4" title="검증 정책">설정 항목 추출/정규화 후 필수, 존재, 무시, 비교 동작 제어.</SectionIntro>
         <div id="policyEditor" className="policy-editor" />
         <div className="profile-section-subtitle">
           <h4>정규화 규칙</h4>
@@ -177,8 +177,8 @@ export default function ProfileEditor() {
         </div>
         <div id="normalizeEditor" className="normalize-editor" />
         <div className="profile-section-subtitle">
-          <h4>파서 규칙 / 필드 추출</h4>
-          <p>비교 및 의미 미리보기에서 사용하는 고급 필드 추출 규칙.</p>
+          <h4>파서 규칙 / 설정 항목 추출</h4>
+          <p>비교 및 의미 미리보기에서 사용하는 고급 설정 항목 추출 규칙.</p>
         </div>
         <div id="parserRuleEditor" className="parser-rule-editor" />
       </CollapsibleSection>

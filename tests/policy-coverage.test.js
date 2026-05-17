@@ -7,11 +7,13 @@ import {
   createComparisonPlan,
   matchNormalizedObjects,
   normalizeConfig,
+  renderComparisonPlanHtml,
 } from "../src/core/comparator.js";
 import { buildSemanticCoverageDiagnostics } from "../src/core/coverageDiagnostics.js";
+import { buildObjectFieldReviewRows, buildObjectReviewGroups } from "../src/core/objectReviewGroups.js";
 import { evaluatePolicyContext } from "../src/core/policyEvaluator.js";
 import { preprocessConfigInput } from "../src/core/routerLogPreprocessor.js";
-import { buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
+import { buildGraphData, buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
 import { VENDOR_IDS } from "../src/core/vendorPresets.js";
 
 test("router log extraction removes prompt command and keeps config with mapping", () => {
@@ -485,6 +487,239 @@ test("disabled profile exception restores active policy result", () => {
   assert.equal(result.suppressed, false);
 });
 
+test("profile exception persists and suppresses BGP group field on rerun", () => {
+  const base = runBgpGroupExceptionFixture();
+  assert.equal(countActiveFieldIssues(base.plan, "group"), 2);
+  assert.equal(countSuppressedProfileFieldIssues(base.plan, "group"), 0);
+
+  const profile = bgpGroupProfileExceptionProfile();
+  const rerun = runBgpGroupExceptionFixture(profile);
+  assert.equal(rerun.profile.exceptions.length, 1);
+  assert.equal(countActiveFieldIssues(rerun.plan, "group"), 0);
+  assert.equal(countSuppressedProfileFieldIssues(rerun.plan, "group"), 2);
+});
+
+test("object review grouping keeps one row per object with multiple issues", () => {
+  const groups = buildObjectReviewGroups({
+    review: {
+      abnormal: [{
+        planId: "pair-bgp-19",
+        objectType: "bgp",
+        oldKey: "bgp:112.188.30.19",
+        newKey: "bgp:112.188.30.19",
+        label: "112.188.30.19",
+        status: "matched",
+        score: 89,
+        fieldRows: [
+          { field: "group", status: "structure-converted", oldValue: "", newValue: "ACCESS-PEER" },
+          { field: "state", status: "added", oldValue: "", newValue: "disabled" },
+          { field: "description", status: "different", oldValue: "old-desc", newValue: "new-desc" },
+        ],
+      }],
+    },
+    plan: [],
+  });
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].activeIssueCount, 3);
+  assert.deepEqual(groups[0].issueFields, ["group", "state", "description"]);
+  assert.match(groups[0].representativeReason, /group .*전환/);
+});
+
+test("profile exception applies to same BGP field rule across objects only", () => {
+  const result = runBgpGroupExceptionFixture(bgpGroupProfileExceptionProfile());
+
+  assert.equal(countSuppressedProfileFieldIssues(result.plan, "group"), 2);
+  assert.equal(countActiveFieldIssues(result.plan, "admin-state"), 2);
+  assert.equal(countSuppressedProfileFieldIssues(result.plan, "admin-state"), 0);
+  assert.equal(countActiveFieldIssues(result.plan, "description"), 2);
+});
+
+test("object scoped exception suppresses only selected BGP object field", () => {
+  const result = runBgpGroupExceptionFixture({
+    exceptions: [{
+      id: "ex-object-bgp-group-19",
+      scope: "object",
+      enabled: true,
+      target: {
+        vendorPair: `${VENDOR_IDS.NOKIA_CLASSIC}->${VENDOR_IDS.NOKIA_MD_CLI}`,
+        objectType: "bgp",
+        objectKey: "bgp:112.188.30.19",
+        fieldPath: "group",
+        ruleId: "semantic-compare.important-field-change",
+        issueType: "field-difference",
+        status: "structure-converted",
+        changeType: "structure-converted",
+      },
+      match: {
+        mode: "exact-object-field-rule",
+        vendorPair: `${VENDOR_IDS.NOKIA_CLASSIC}->${VENDOR_IDS.NOKIA_MD_CLI}`,
+        objectType: "bgp",
+        objectKey: "bgp:112.188.30.19",
+        fieldPath: "group",
+        ruleId: "semantic-compare.important-field-change",
+        issueType: "field-difference",
+        changeTypes: ["added", "structure-converted"],
+        newValuePattern: "*",
+      },
+    }],
+  });
+
+  const byIp = Object.fromEntries(result.plan.map((item) => [
+    item.oldObject?.normalizedIdentity,
+    item.fieldSummary.group,
+  ]));
+  assert.equal(byIp["112.188.30.19"].ignored, true);
+  assert.equal(byIp["112.188.30.64"].ignored, false);
+});
+
+test("removing profile exception restores BGP group field issue", () => {
+  const suppressed = runBgpGroupExceptionFixture(bgpGroupProfileExceptionProfile());
+  const restored = runBgpGroupExceptionFixture({ exceptions: [] });
+
+  assert.equal(countActiveFieldIssues(suppressed.plan, "group"), 0);
+  assert.equal(countActiveFieldIssues(restored.plan, "group"), 2);
+});
+
+test("multiple issues on one BGP object remain field scoped", () => {
+  const result = runBgpGroupExceptionFixture(bgpGroupProfileExceptionProfile());
+  const first = result.plan.find((item) => item.oldObject?.normalizedIdentity === "112.188.30.19");
+
+  assert.equal(first.fieldSummary.group.ignored, true);
+  assert.equal(first.fieldSummary["admin-state"].ignored, false);
+  assert.equal(first.fieldSummary["admin-state"].status, "added");
+  assert.equal(first.fieldSummary.description.ignored, false);
+  assert.equal(first.fieldSummary.description.status, "changed");
+});
+
+test("summary and graph use suppressed canonical state for profile exception", () => {
+  const before = runBgpGroupExceptionFixture();
+  const after = runBgpGroupExceptionFixture(bgpGroupProfileExceptionProfile());
+  const beforeGraph = buildGraphData({ plan: before.plan, auditFindings: [] });
+  const afterGraph = buildGraphData({ plan: after.plan, auditFindings: [] });
+
+  assert.equal(countActiveFieldIssues(before.plan, "group"), 2);
+  assert.equal(countActiveFieldIssues(after.plan, "group"), 0);
+  assert.equal(after.dashboard.review.abnormal.every((item) =>
+    item.fieldRows.every((row) => row.field !== "group")
+  ), true);
+  assert.equal(beforeGraph.edges.length, afterGraph.edges.length);
+  assert.equal(afterGraph.edges.every((edge) => edge.status !== "profile-exception"), true);
+});
+
+test("object review grouping reflects profile suppressed group while keeping state active", () => {
+  const result = runBgpGroupExceptionFixture(bgpGroupProfileExceptionProfile());
+  const groups = buildObjectReviewGroups({
+    review: result.dashboard.review,
+    plan: result.plan,
+  });
+  const group = groups.find((item) => item.objectKey === "bgp:112.188.30.19");
+
+  assert.ok(group);
+  assert.equal(group.activeIssues.some((issue) => ["state", "admin-state"].includes(issue.fieldPath)), true);
+  assert.equal(group.activeIssues.some((issue) => issue.fieldPath === "group"), false);
+  assert.equal(group.suppressedIssues.some((issue) =>
+    issue.fieldPath === "group" && issue.sourcePolicy === "profile-exception"
+  ), true);
+});
+
+test("description field review row dedupes active and suppressed issues", () => {
+  const rows = buildObjectFieldReviewRows({
+    objectKey: "bgp:112.188.30.19",
+    activeIssues: [{
+      id: "active-description",
+      fieldPath: "description",
+      status: "changed",
+      statusLabel: "차이",
+      reason: "값 변경 확인",
+      oldValue: "old-desc",
+      newValue: "new-desc",
+      ruleId: "semantic-compare.important-field-change",
+    }],
+    suppressedIssues: [{
+      id: "suppressed-description",
+      fieldPath: "description",
+      status: "ignored",
+      statusLabel: "예외 처리",
+      reason: "고급 비교 정책: 필드 무시",
+      oldValue: "old-desc",
+      newValue: "new-desc",
+      ruleId: "semantic-compare.important-field-change",
+      sourcePolicy: "advanced-policy",
+    }, {
+      id: "suppressed-group",
+      fieldPath: "group",
+      status: "ignored",
+      statusLabel: "예외 처리",
+      reason: "MD-CLI 그룹 구조",
+      newValue: "ACCESS-PEER",
+      ruleId: "semantic-compare.important-field-change",
+      sourcePolicy: "profile-exception",
+    }],
+  });
+
+  const descriptionRows = rows.filter((row) => row.fieldPath === "description");
+  const activeRows = rows.filter((row) => row.activeCount > 0);
+  const suppressedOnlyRows = rows.filter((row) => row.activeCount === 0 && row.suppressedCount > 0);
+
+  assert.equal(descriptionRows.length, 1);
+  assert.equal(descriptionRows[0].activeCount, 1);
+  assert.equal(descriptionRows[0].suppressedCount, 1);
+  assert.deepEqual(activeRows.map((row) => row.fieldPath), ["description"]);
+  assert.deepEqual(suppressedOnlyRows.map((row) => row.fieldPath), ["group"]);
+});
+
+test("legacy profile exception mode/object key does not restrict profile-wide match", () => {
+  const result = runBgpGroupExceptionFixture({
+    exceptions: [{
+      id: "legacy-profile-exact-bgp-group",
+      scope: "profile",
+      enabled: true,
+      target: {
+        vendorPair: `${VENDOR_IDS.NOKIA_CLASSIC}->${VENDOR_IDS.NOKIA_MD_CLI}`,
+        objectType: "bgp",
+        objectKey: "bgp:112.188.30.19",
+        fieldPath: "group",
+        ruleId: "semantic-compare.important-field-change · semantic-compare",
+        issueType: "field-difference",
+        status: "structure-converted",
+      },
+      match: {
+        mode: "exact-object-field-rule",
+        vendorPair: `${VENDOR_IDS.NOKIA_CLASSIC}->${VENDOR_IDS.NOKIA_MD_CLI}`,
+        objectType: "bgp",
+        objectKey: "bgp:112.188.30.19",
+        fieldPath: "group",
+        ruleId: "semantic-compare.important-field-change · semantic-compare",
+        issueType: "field-difference",
+        changeTypes: ["added", "structure-converted"],
+        valueMode: "any",
+      },
+    }],
+  });
+
+  assert.equal(countActiveFieldIssues(result.plan, "group"), 0);
+  assert.equal(countSuppressedProfileFieldIssues(result.plan, "group"), 2);
+  assert.equal(countActiveFieldIssues(result.plan, "admin-state"), 2);
+  assert.equal(countActiveFieldIssues(result.plan, "description"), 2);
+});
+
+test("semantic compare field cards expose exception actions outside summary detail", () => {
+  const result = runBgpGroupExceptionFixture();
+  const targetIds = [];
+  const html = renderComparisonPlanHtml(result.plan, {
+    getFieldExceptionTargetId: (item, field) => {
+      targetIds.push(`${item.objectType}:${field.field}`);
+      return `target-${targetIds.length}`;
+    },
+  });
+
+  assert.match(html, /semantic-field-actions/);
+  assert.match(html, /data-add-exception="target-\d+"/);
+  assert.match(html, /data-exception-fixed-scope="profile"/);
+  assert.ok(targetIds.some((id) => id === "bgp:group"));
+});
+
 test("coverage unsupported count does not double subtract ignored target lines", () => {
   const coverage = buildSemanticCoverageDiagnostics({
     oldText: "system name fixture",
@@ -511,6 +746,120 @@ test("coverage unsupported count does not double subtract ignored target lines",
   assert.equal(coverage.sides.new.ignoredLineCount, 1);
   assert.equal(coverage.unparsedLineCount, 1);
 });
+
+function runBgpGroupExceptionFixture(profileOverrides = {}) {
+  const profile = {
+    oldVendor: VENDOR_IDS.NOKIA_CLASSIC,
+    newVendor: VENDOR_IDS.NOKIA_MD_CLI,
+    validationPolicies: {
+      bgp: [
+        { field: "description", policy: "compare" },
+      ],
+    },
+    ...profileOverrides,
+  };
+  const oldText = [
+    "configure",
+    "    router",
+    "        bgp",
+    "            neighbor 112.188.30.19",
+    "                description \"## to-Dobong-TOU-FK66 ##\"",
+    "                authentication-key \"OLDKEY\" hash2",
+    "            exit",
+    "            neighbor 112.188.30.64",
+    "                description \"## to-Nowon-TOU-FN14 ##\"",
+    "                authentication-key \"OLDKEY2\" hash2",
+    "            exit",
+    "        exit",
+    "    exit",
+  ].join("\n");
+  const newText = [
+    '/configure { router "Base" bgp neighbor "112.188.30.19" admin-state disable }',
+    '/configure { router "Base" bgp neighbor "112.188.30.19" description "## Dobong-TOU-FK66 ##" }',
+    '/configure { router "Base" bgp neighbor "112.188.30.19" group "ACCESS-PEER" }',
+    '/configure { router "Base" bgp neighbor "112.188.30.19" authentication-key "OLDKEY" }',
+    '/configure { router "Base" bgp neighbor "112.188.30.64" admin-state disable }',
+    '/configure { router "Base" bgp neighbor "112.188.30.64" description "## Nowon-TOU-FN14 ##" }',
+    '/configure { router "Base" bgp neighbor "112.188.30.64" group "ACCESS-PEER" }',
+    '/configure { router "Base" bgp neighbor "112.188.30.64" authentication-key "OLDKEY2" }',
+  ].join("\n");
+
+  const oldResult = normalizeConfig({
+    vendor: VENDOR_IDS.NOKIA_CLASSIC,
+    profile,
+    configText: oldText,
+    side: "old",
+  });
+  const newResult = normalizeConfig({
+    vendor: VENDOR_IDS.NOKIA_MD_CLI,
+    profile,
+    configText: newText,
+    side: "new",
+  });
+  const plan = createComparisonPlan(
+    matchNormalizedObjects({
+      oldObjects: oldResult.objects,
+      newObjects: newResult.objects,
+      manualMap: {},
+      profile,
+    }),
+    profile,
+  );
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan,
+    semanticSummary: {},
+  });
+  return { profile, oldResult, newResult, plan, dashboard };
+}
+
+function bgpGroupProfileExceptionProfile() {
+  return {
+    exceptions: [{
+      id: "ex-profile-bgp-group-added-mdcli",
+      scope: "profile",
+      enabled: true,
+      createdAt: "2026-05-17T00:00:00.000Z",
+      createdFromIssueId: "fixture-bgp-group",
+      reasonKo: "MD-CLI BGP neighbor group 구조 전환은 현재 프로파일에서 제외",
+      target: {
+        vendorPair: `${VENDOR_IDS.NOKIA_CLASSIC}->${VENDOR_IDS.NOKIA_MD_CLI}`,
+        objectType: "bgp",
+        fieldPath: "group",
+        ruleId: "semantic-compare.important-field-change",
+        issueType: "field-difference",
+        status: "structure-converted",
+        changeType: "structure-converted",
+        newValue: "ACCESS-PEER",
+      },
+      match: {
+        mode: "profile-field-rule",
+        vendorPair: `${VENDOR_IDS.NOKIA_CLASSIC}->${VENDOR_IDS.NOKIA_MD_CLI}`,
+        objectType: "bgp",
+        fieldPath: "group",
+        ruleId: "semantic-compare.important-field-change",
+        issueType: "field-difference",
+        changeTypes: ["added", "structure-converted"],
+        newValuePattern: "*",
+      },
+    }],
+  };
+}
+
+function countActiveFieldIssues(plan = [], field = "") {
+  return plan.filter((item) => {
+    const summary = item.fieldSummary?.[field];
+    if (!summary || summary.ignored || summary.effectiveStatus === "ignored") return false;
+    return ["added", "missing", "changed", "different", "structure-converted"].includes(String(summary.effectiveStatus || summary.status || "").toLowerCase());
+  }).length;
+}
+
+function countSuppressedProfileFieldIssues(plan = [], field = "") {
+  return plan.filter((item) => {
+    const summary = item.fieldSummary?.[field];
+    return summary?.ignored && summary.policyHits?.some((hit) => hit.sourcePolicy === "profile-exception");
+  }).length;
+}
 
 function findExampleDir() {
   return fs.readdirSync(".", { withFileTypes: true })

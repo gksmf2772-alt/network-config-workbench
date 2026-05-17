@@ -8,7 +8,6 @@ import { AppToolbar } from "./ui/AppToolbar.jsx";
 export default function ConfigEditor({ side, title, icon: Icon }) {
   const prefix = side === "old" ? "old" : "new";
   const cap = side === "old" ? "Old" : "New";
-  const fileLabel = "파일 없음";
 
   return (
     <motion.article
@@ -20,14 +19,14 @@ export default function ConfigEditor({ side, title, icon: Icon }) {
       <div className="editor-header">
         <div>
           <h2>{Icon ? <Icon className="h-4 w-4" /> : null}{title}</h2>
-          <span id={`${prefix}Meta`}>{fileLabel}</span>
+          <span id={`${prefix}Meta`}>파일 없음</span>
         </div>
         <AppToolbar className="header-actions">
-          <AppIconButton id={`restore${cap}Btn`} type="button" title="원복"><RotateCcw /></AppIconButton>
-          <AppIconButton id={`move${cap}UpBtn`} type="button" title="위로 이동"><ArrowUp /></AppIconButton>
-          <AppIconButton id={`move${cap}DownBtn`} type="button" title="아래로 이동"><ArrowDown /></AppIconButton>
+          <AppIconButton id={`restore${cap}Btn`} type="button" title="초기 입력 원복"><RotateCcw /></AppIconButton>
+          <AppIconButton id={`move${cap}UpBtn`} type="button" title="선택 블록 위로 이동"><ArrowUp /></AppIconButton>
+          <AppIconButton id={`move${cap}DownBtn`} type="button" title="선택 블록 아래로 이동"><ArrowDown /></AppIconButton>
           <AppIconButton id={`clear${cap}Btn`} type="button" title="비우기"><Eraser /></AppIconButton>
-          <AppIconButton id={`save${cap}Btn`} type="button" title="저장"><Save /></AppIconButton>
+          <AppIconButton id={`save${cap}Btn`} type="button" title="파일 저장"><Save /></AppIconButton>
         </AppToolbar>
       </div>
       <div id={`${prefix}DropZone`} className="drop-zone">파일을 드롭하거나 설정 텍스트를 붙여넣기</div>
@@ -41,6 +40,7 @@ export default function ConfigEditor({ side, title, icon: Icon }) {
           aria-label={`${title} 입력`}
         />
         <div id={`${prefix}DiffPane`} className="embedded-diff" />
+        <div id={`${prefix}DiffObjectToolbar`} className="diff-object-toolbar" hidden />
       </AppCodeEditorFrame>
     </motion.article>
   );

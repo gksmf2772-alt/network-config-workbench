@@ -16,14 +16,16 @@ function escapeHtml(value) {
 function getStatusLabel(status) {
   if (status === "matched") return "매칭";
   if (status === "candidate") return "후보";
-  if (status === "old-only") return "기존만 있음";
-  if (status === "new-only") return "신규만 있음";
+  if (status === "old-only") return "기존 설정에만 있음";
+  if (status === "new-only") return "신규 설정에만 있음";
+  if (status === "excluded") return "비교 제외됨";
   return String(status || "알 수 없음").toUpperCase();
 }
 
 function getFieldDisplayStatus(fieldSummary) {
   if (fieldSummary?.violation) return fieldSummary.violationReason || "정책 위반";
-  if (fieldSummary?.ignored) return "무시";
+  if (Array.isArray(fieldSummary?.policyHits) && fieldSummary.policyHits.some((hit) => hit?.sourcePolicy === "comparison-exclusion")) return "비교 제외됨";
+  if (fieldSummary?.ignored || fieldSummary?.effectiveStatus === "ignored") return "예외 처리됨";
   const status = fieldSummary?.effectiveStatus || fieldSummary?.status || "unknown";
   if (status === "structure-converted") return "구조 전환";
   if (status === "group-inherited") return "그룹 상속";
@@ -50,9 +52,46 @@ function getFieldCompactValue(fieldSummary) {
   return oldText === newText ? oldText : `${oldText} -> ${newText}`;
 }
 
-function renderFieldSummary(fieldSummary = {}) {
-  const fields = Object.values(fieldSummary);
-  if (!fields.length) return `<div class="semantic-empty">비교 가능한 필드 없음</div>`;
+function isFieldExceptionActionable(field = {}) {
+  const status = String(field.effectiveStatus || field.status || "").toLowerCase();
+  return Boolean(field.field) && status && !["equal", "matched", "present", "ignored"].includes(status);
+}
+
+function getFieldAppliedPolicyId(field = {}) {
+  const hit = Array.isArray(field.policyHits) ? field.policyHits.find((item) => item?.policyId) : null;
+  return hit?.policyId || "";
+}
+
+function renderFieldExceptionActions(item = {}, field = {}, options = {}) {
+  const status = String(field.effectiveStatus || field.status || "").toLowerCase();
+  if (field.ignored || status === "ignored") {
+    const policyId = getFieldAppliedPolicyId(field);
+    return `
+      <div class="semantic-field-actions semantic-field-actions-suppressed">
+        <span>예외 처리됨${field.policyReason ? ` · ${escapeHtml(field.policyReason)}` : ""}</span>
+        ${policyId ? `<button type="button" data-remove-exception="${escapeHtml(policyId)}">예외 해제</button>` : ""}
+      </div>
+    `;
+  }
+  if (!isFieldExceptionActionable(field)) return "";
+  const targetId = typeof options.getFieldExceptionTargetId === "function"
+    ? options.getFieldExceptionTargetId(item, field)
+    : "";
+  if (!targetId) return "";
+  return `
+    <div class="semantic-field-actions">
+      <button type="button" data-add-exception="${escapeHtml(targetId)}" data-exception-fixed-scope="object">이 항목만 예외</button>
+      <button type="button" data-add-exception="${escapeHtml(targetId)}" data-exception-fixed-scope="profile">프로파일 예외</button>
+    </div>
+  `;
+}
+
+function renderFieldSummary(fieldSummary = {}, item = {}, options = {}) {
+  const fields = Object.entries(fieldSummary).map(([fieldName, field]) => ({
+    ...(field || {}),
+    field: field?.field || fieldName,
+  }));
+  if (!fields.length) return `<div class="semantic-empty">비교 가능한 설정 항목 없음</div>`;
 
   return `
     <div class="semantic-field-list">
@@ -65,6 +104,7 @@ function renderFieldSummary(fieldSummary = {}) {
           <div class="semantic-field-values compact">${getFieldCompactValue(field)}</div>
           ${renderFieldSourceBadges(field)}
           ${field.violation ? `<div class="semantic-violation">위반: ${escapeHtml(field.violationReason)}</div>` : ""}
+          ${renderFieldExceptionActions(item, field, options)}
         </div>
       `).join("")}
     </div>
@@ -87,8 +127,8 @@ function getLineDisplayStatus(lineMatch) {
     equal: "동일",
     changed: "변경",
     candidate: "후보",
-    "old-only": "기존만",
-    "new-only": "신규만",
+    "old-only": "기존 설정에만 있음",
+    "new-only": "신규 설정에만 있음",
     conflict: "충돌",
     ambiguous: "불명확",
     unknown: "알 수 없음",
@@ -203,12 +243,40 @@ function renderManualMatchActions(item = {}) {
   return `<button type="button" class="semantic-manual-remove-btn" data-old-object-id="${escapeHtml(oldObjectId)}">수동 매핑 삭제</button>`;
 }
 
+function isUnmatchedSettingItem(item = {}) {
+  const status = String(item.status || "").toLowerCase();
+  return status === "old-only" || status === "new-only" || (!item.oldObject || !item.newObject);
+}
+
+function renderSettingExclusionActions(item = {}, options = {}) {
+  if (!isUnmatchedSettingItem(item)) return "";
+  if (item.comparisonExcluded || item.excluded) {
+    const policyId = item.exclusionPolicyId || item.exclusionRule?.id || "";
+    return `
+      <div class="semantic-setting-exclusion-actions semantic-setting-exclusion-actions-applied">
+        <span>비교 제외됨${item.exclusionReason ? ` · ${escapeHtml(item.exclusionReason)}` : ""}</span>
+        ${policyId ? `<button type="button" data-remove-exception="${escapeHtml(policyId)}">비교 제외 해제</button>` : ""}
+      </div>
+    `;
+  }
+  const targetId = typeof options.getSettingExclusionTargetId === "function"
+    ? options.getSettingExclusionTargetId(item)
+    : "";
+  if (!targetId) return "";
+  return `
+    <div class="semantic-setting-exclusion-actions">
+      <button type="button" data-add-exclusion="${escapeHtml(targetId)}" data-exclusion-fixed-scope="setting">이 설정만 비교 제외</button>
+      <button type="button" data-add-exclusion="${escapeHtml(targetId)}" data-exclusion-fixed-scope="profile">현재 프로파일에서 같은 조건 비교 제외</button>
+    </div>
+  `;
+}
+
 function getStateDisplayLabel(state) {
   return ({
     matched: "매칭",
     partial: "부분 일치",
     ambiguous: "불명확",
-    unmatched: "미매칭",
+    unmatched: "연결 안 됨",
     manual: "수동",
   })[state] || state || "-";
 }
@@ -274,7 +342,7 @@ function renderAuditFindingDetails(item = {}) {
           return `
             <article class="semantic-audit-item audit-badge-${escapeHtml(severity)}">
               <strong>${escapeHtml(auditSeverityLabel(severity))} · ${escapeHtml(finding.titleKo || "검토 항목")}</strong>
-              <span>필드: ${escapeHtml(finding.fieldPath || "-")}</span>
+              <span>설정 항목: ${escapeHtml(finding.fieldPath || "-")}</span>
               <span>현재값: ${escapeHtml(finding.actualValue || "-")}</span>
               <span>표준값: ${escapeHtml(finding.expectedValue || "-")}</span>
               <p>${escapeHtml(finding.descriptionKo || "")}</p>
@@ -298,16 +366,20 @@ function fieldChangedCount(fieldSummary = {}) {
 function summarizePlan(plan = []) {
   return plan.reduce((acc, item) => {
     acc.total += 1;
+    if (item.comparisonExcluded || item.excluded) {
+      acc.excluded += 1;
+      return acc;
+    }
     const state = getSemanticStateLabel(item);
     if (state === "matched" || state === "manual") acc.matched += 1;
     else if (state === "ambiguous") acc.ambiguous += 1;
     else acc.unmatched += 1;
     acc.violations += (item.policyViolationCount || 0) + (item.auditFindingCount || 0);
     return acc;
-  }, { total: 0, matched: 0, unmatched: 0, ambiguous: 0, violations: 0 });
+  }, { total: 0, matched: 0, unmatched: 0, ambiguous: 0, violations: 0, excluded: 0 });
 }
 
-export function renderComparisonPlanHtml(plan = []) {
+export function renderComparisonPlanHtml(plan = [], options = {}) {
   if (!Array.isArray(plan) || plan.length === 0) {
     return `<div class="semantic-empty">비교 결과 없음</div>`;
   }
@@ -320,13 +392,14 @@ export function renderComparisonPlanHtml(plan = []) {
         <span class="semantic-status-badge semantic-state-matched">매칭</span>
         <span class="semantic-status-badge semantic-state-partial">부분 일치</span>
         <span class="semantic-status-badge semantic-state-ambiguous">불명확</span>
-        <span class="semantic-status-badge semantic-state-unmatched">미매칭</span>
+        <span class="semantic-status-badge semantic-state-unmatched">연결 안 됨</span>
         <span class="semantic-status-badge semantic-state-manual">수동</span>
       </div>
       <div class="semantic-preview-summary">
-        <div class="semantic-summary-item"><div class="semantic-summary-label">객체</div><div class="semantic-summary-value">${summary.total}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">설정</div><div class="semantic-summary-value">${summary.total}</div></div>
         <div class="semantic-summary-item"><div class="semantic-summary-label">매칭</div><div class="semantic-summary-value">${summary.matched}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">미매칭</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">연결 안 됨</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">비교 제외</div><div class="semantic-summary-value">${summary.excluded}</div></div>
         <div class="semantic-summary-item"><div class="semantic-summary-label">불명확</div><div class="semantic-summary-value">${summary.ambiguous}</div></div>
         <div class="semantic-summary-item"><div class="semantic-summary-label">위반</div><div class="semantic-summary-value">${summary.violations}</div></div>
       </div>
@@ -338,9 +411,10 @@ export function renderComparisonPlanHtml(plan = []) {
         const auditFindings = item.auditFindingCount || 0;
         const relationshipIssues = relationshipIssueCount(item.relationshipSummary || []);
         const changedFields = fieldChangedCount(item.fieldSummary || {});
+        const excludedClass = item.comparisonExcluded || item.excluded ? " semantic-object-excluded" : "";
 
         return `
-          <details class="semantic-object-card ${violations ? "has-violation" : "no-violation"} ${stateClass}">
+          <details class="semantic-object-card ${violations ? "has-violation" : "no-violation"} ${stateClass}${excludedClass}" data-match-status="${escapeHtml(item.status || "")}">
             <summary class="semantic-object-summary-row">
               <span class="semantic-status-badge ${stateClass}">${escapeHtml(getStateDisplayLabel(stateLabel))}</span>
               <span class="semantic-object-title">${escapeHtml(item.objectType)} ${escapeHtml(getCompactObjectName(item))}</span>
@@ -353,7 +427,7 @@ export function renderComparisonPlanHtml(plan = []) {
               <span class="semantic-object-metric">위반 ${violations}</span>
               ${renderAuditBadges(item)}
               <span class="semantic-object-metric">관계 ${relationshipIssues}</span>
-              <span class="semantic-object-metric">필드 ${changedFields}/${item.fieldStats?.totalFields ?? 0}</span>
+              <span class="semantic-object-metric">설정 항목 ${changedFields}/${item.fieldStats?.totalFields ?? 0}</span>
             </summary>
             <div class="semantic-object-details">
               <div class="semantic-object-meta">
@@ -366,10 +440,10 @@ export function renderComparisonPlanHtml(plan = []) {
                 <span>상태: ${escapeHtml(getStatusLabel(item.status))}</span>
                 <span>점수 사유: ${escapeHtml((item.scoreReasons || []).join(", ") || "-")}</span>
               </div>
-              <div class="semantic-object-actions">${renderManualMatchActions(item)}</div>
+              <div class="semantic-object-actions">${renderManualMatchActions(item)}${renderSettingExclusionActions(item, options)}</div>
               ${item.ambiguousAlternatives?.length ? `<details class="semantic-detail-block"><summary>대체 후보 (${item.ambiguousAlternatives.length})</summary>${renderAmbiguousAlternatives(item)}</details>` : ""}
               ${item.manualCandidates?.length ? `<details class="semantic-detail-block" open><summary>수동 매핑 후보 (${item.manualCandidates.length})</summary>${renderManualCandidates(item)}</details>` : ""}
-              <details class="semantic-detail-block"><summary>필드 비교 (${item.fieldStats?.totalFields ?? 0})</summary>${renderFieldSummary(item.fieldSummary)}</details>
+              <details class="semantic-detail-block"><summary>설정 항목 비교 (${item.fieldStats?.totalFields ?? 0})</summary>${renderFieldSummary(item.fieldSummary, item, options)}</details>
               ${auditFindings ? renderAuditFindingDetails(item) : ""}
               ${renderRelationshipSummary(item.relationshipSummary)}
               ${renderLineMatches(item.lineMatches)}

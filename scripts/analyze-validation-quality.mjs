@@ -1947,6 +1947,18 @@ function signed(value) {
 
 function updateFinalValidationReport(quality) {
   const finalJsonPath = `${RESULTS_DIR}/final-validation-report.json`;
+  const profileExceptionPath = `${RESULTS_DIR}/profile-exception-application.json`;
+  const profileExceptionApplication = fs.existsSync(absPath(profileExceptionPath))
+    ? readJson(profileExceptionPath, null)
+    : null;
+  const objectReviewPath = `${RESULTS_DIR}/object-review-grouping.json`;
+  const objectReviewGrouping = fs.existsSync(absPath(objectReviewPath))
+    ? readJson(objectReviewPath, null)
+    : null;
+  const fieldIssueDedupePath = `${RESULTS_DIR}/field-issue-dedupe.json`;
+  const fieldIssueDedupe = fs.existsSync(absPath(fieldIssueDedupePath))
+    ? readJson(fieldIssueDedupePath, null)
+    : null;
   if (fs.existsSync(absPath(finalJsonPath))) {
     const final = readJson(finalJsonPath, {});
     final.qualityAnalysis = {
@@ -1960,7 +1972,13 @@ function updateFinalValidationReport(quality) {
       actualMissing: quality.actualMissing,
       matcherEffectiveness: quality.matcherEffectiveness,
       modeScopeValidation: quality.modeScopeValidation,
+      profileExceptionApplication,
+      objectReviewGrouping,
+      fieldIssueDedupe,
     };
+    final.profileExceptionApplication = profileExceptionApplication;
+    final.objectReviewGrouping = objectReviewGrouping;
+    final.fieldIssueDedupe = fieldIssueDedupe;
     final.remainingLimitations = [
       "Juniper real validation remains blocked until a real source-juniper.conf is added.",
       "Synthetic Juniper smoke is not counted as production migration/comparison validation.",
@@ -1975,7 +1993,7 @@ function updateFinalValidationReport(quality) {
   const existing = fs.existsSync(absPath(finalMdPath)) ? readText(finalMdPath) : "";
   const marker = "\n## 12. Validation Quality Analysis";
   const base = existing.includes(marker) ? existing.slice(0, existing.indexOf(marker)) : existing.trimEnd();
-  writeText(finalMdPath, `${base}\n${renderFinalQualityMarkdown(quality)}\n`);
+  writeText(finalMdPath, `${base}\n${renderFinalQualityMarkdown(quality)}\n${renderProfileExceptionFinalMarkdown(profileExceptionApplication)}\n${renderObjectReviewGroupingFinalMarkdown(objectReviewGrouping)}\n${renderFieldIssueDedupeFinalMarkdown(fieldIssueDedupe)}\n`);
 }
 
 function renderFinalQualityMarkdown(quality) {
@@ -2011,6 +2029,80 @@ function renderFinalQualityMarkdown(quality) {
     `- advanced policy files: ${quality.fixtureCompleteness.summary.advancedPolicyFiles.join(", ") || "none"}`,
     "- high unmatched count is expected from partial feature-split target fixtures, not a parser crash.",
     "- detail reports: validation-results/unmatched-analysis.md, unsupported-line-analysis.md, finding-priority-analysis.md, fixture-completeness-analysis.md, parser-backlog.md, blocks-auto-generation-analysis.md, conversion-policy-required-analysis.md, actual-missing-analysis.md, matcher-effectiveness-analysis.md, mode-scope-validation.md",
+  ].join("\n");
+}
+
+function renderProfileExceptionFinalMarkdown(report) {
+  if (!report) {
+    return [
+      "",
+      "## 13. Profile Exception Application",
+      "- not run",
+    ].join("\n");
+  }
+  const before = report.before?.summary || {};
+  const after = report.after?.summary || {};
+  const invariant = report.invariant || {};
+  return [
+    "",
+    "## 13. Profile Exception Application",
+    `- active profile: ${report.activeProfileName || "-"}`,
+    `- loaded profile exceptions: ${report.loadedProfileExceptionsCount || 0}`,
+    `- matched exception IDs: ${(report.matchedExceptionIds || []).join(", ") || "-"}`,
+    `- active issues: ${before.activeIssueCount || 0} -> ${after.activeIssueCount || 0}`,
+    `- suppressed issues: ${before.suppressedIssueCount || 0} -> ${after.suppressedIssueCount || 0}`,
+    `- BGP group active issues: ${before.activeGroupIssueCount || 0} -> ${after.activeGroupIssueCount || 0}`,
+    `- profile-suppressed BGP group issues: ${before.suppressedProfileGroupIssueCount || 0} -> ${after.suppressedProfileGroupIssueCount || 0}`,
+    `- admin-state active issues kept: ${after.activeAdminStateIssueCount || 0}`,
+    `- invariant profileGroupSuppressed: ${Boolean(invariant.profileGroupSuppressed)}`,
+    `- invariant adminStateStillActive: ${Boolean(invariant.adminStateStillActive)}`,
+    "- detail reports: validation-results/profile-exception-application.md, validation-results/profile-exception-application.json",
+  ].join("\n");
+}
+
+function renderObjectReviewGroupingFinalMarkdown(report) {
+  if (!report) {
+    return [
+      "",
+      "## 14. Object Review Grouping",
+      "- not run",
+    ].join("\n");
+  }
+  return [
+    "",
+    "## 14. Object Review Grouping",
+    `- active profile: ${report.activeProfileName || "-"}`,
+    `- object groups before: ${report.before?.objectReviewGroupCount || 0}`,
+    `- object groups after profile exception: ${report.after?.objectReviewGroupCount || 0}`,
+    `- active issues: ${report.before?.activeIssueCount || 0} -> ${report.after?.activeIssueCount || 0}`,
+    `- suppressed issues: ${report.before?.suppressedIssueCount || 0} -> ${report.after?.suppressedIssueCount || 0}`,
+    `- profile-suppressed issues: ${report.before?.suppressedByProfileExceptionCount || 0} -> ${report.after?.suppressedByProfileExceptionCount || 0}`,
+    `- invariant oneRowPerObjectBefore: ${Boolean(report.invariants?.oneRowPerObjectBefore)}`,
+    `- invariant groupSuppressedAcrossObjects: ${Boolean(report.invariants?.groupSuppressedAcrossObjects)}`,
+    `- invariant stateDescriptionRemainActive: ${Boolean(report.invariants?.stateDescriptionRemainActive)}`,
+    "- detail reports: validation-results/object-review-grouping.md, validation-results/object-review-grouping.json",
+  ].join("\n");
+}
+
+function renderFieldIssueDedupeFinalMarkdown(report) {
+  if (!report) {
+    return [
+      "",
+      "## 15. Field Issue Dedupe",
+      "- not run",
+    ].join("\n");
+  }
+  const description = report.activeFieldRows?.find((row) => row.fieldPath === "description") || {};
+  return [
+    "",
+    "## 15. Field Issue Dedupe",
+    `- status: ${report.status || "-"}`,
+    `- duplicate field rows before: ${report.duplicateFieldRowsBefore ?? 0}`,
+    `- duplicate field rows after: ${report.duplicateFieldRowsAfter ?? 0}`,
+    `- description duplicate count: ${report.descriptionDuplicateCountBefore ?? 0} -> ${report.descriptionDuplicateCountAfter ?? 0}`,
+    `- description row active/suppressed: ${description.activeCount || 0}/${description.suppressedCount || 0}`,
+    `- suppressed-only group excluded from active rows: ${Boolean(report.checks?.suppressedOnlyGroupExcludedFromActiveRows)}`,
+    "- detail reports: validation-results/field-issue-dedupe.md, validation-results/field-issue-dedupe.json",
   ].join("\n");
 }
 

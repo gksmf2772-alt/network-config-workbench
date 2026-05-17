@@ -26,7 +26,7 @@ function SwitchRow({ id, defaultChecked, children }) {
 
 const SETTINGS_MENUS = [
   { id: "compare", label: "비교 옵션" },
-  { id: "scope", label: "객체 범위" },
+  { id: "scope", label: "설정 범위" },
   { id: "view", label: "보기" },
   { id: "status", label: "상태" },
 ];
@@ -89,86 +89,89 @@ export default function ConfigInputPanel() {
             </nav>
 
             <div className="compare-settings-content">
-          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "compare" ? "is-active" : ""}`}>
-            <AppSectionHeader icon={SlidersHorizontal} title="비교 옵션" description="정규화, 정렬, 의미 기반 차이점 필터" />
-            <div className="app-panel__content grid gap-3">
-              <SwitchRow id="normalizeSpacingToggle" defaultChecked>공백 정규화</SwitchRow>
-              <SwitchRow id="sortObjectsToggle">객체 키 정렬</SwitchRow>
-              <SwitchRow id="autoAlignToggle">정규화 객체 자동 정렬</SwitchRow>
-              <SwitchRow id="ignoreCommentsToggle" defaultChecked>주석/빈 줄 무시</SwitchRow>
-              <SwitchRow id="ignoreGeneratedToggle" defaultChecked>생성성 라인 무시</SwitchRow>
-              <SwitchRow id="semanticDebugToggle">의미 키 디버그 표시</SwitchRow>
-            </div>
-          </AppPanel>
+              <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "compare" ? "is-active" : ""}`}>
+                <AppSectionHeader icon={SlidersHorizontal} title="비교 옵션" description="정규화, 정렬, 의미 기반 차이 필터" />
+                <div className="app-panel__content grid gap-3">
+                  <SwitchRow id="normalizeSpacingToggle" defaultChecked>공백 정규화</SwitchRow>
+                  <SwitchRow id="sortObjectsToggle">설정 정렬</SwitchRow>
+                  <SwitchRow id="autoAlignToggle">정규화 설정 자동 정렬</SwitchRow>
+                  <SwitchRow id="ignoreCommentsToggle" defaultChecked>주석/빈 줄 무시</SwitchRow>
+                  <SwitchRow id="ignoreGeneratedToggle" defaultChecked>생성 라인 무시</SwitchRow>
+                  <SwitchRow id="semanticDebugToggle">의미 디버그 표시</SwitchRow>
+                </div>
+              </AppPanel>
 
-          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "scope" ? "is-active" : ""}`}>
-            <AppSectionHeader title="객체 범위" />
-            <div className="app-panel__content">
-              <div id="objectToggles" className="chip-grid" />
-            </div>
-          </AppPanel>
+              <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "scope" ? "is-active" : ""}`}>
+                <AppSectionHeader title="설정 범위" />
+                <div className="app-panel__content">
+                  <div id="objectToggles" className="chip-grid" />
+                </div>
+              </AppPanel>
 
-          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "view" ? "is-active" : ""}`}>
-            <AppSectionHeader title="보기" />
-            <div className="app-panel__content grid gap-3">
-              <label>
-                테마
-                <AppSelect id="themeSelect">
-                  <option value="light">라이트</option>
-                  <option value="dark">다크</option>
-                  <option value="contrast">고대비</option>
-                </AppSelect>
-              </label>
-              <label>
-                에디터 글꼴
-                <AppSelect id="fontSelect">
-                  <option value="Consolas">Consolas</option>
-                  <option value="D2Coding">D2Coding</option>
-                  <option value="Cascadia Mono">Cascadia Mono</option>
-                  <option value="monospace">Monospace</option>
-                </AppSelect>
-              </label>
-              <label>검색<input id="filterInput" placeholder="interface, static-route, 누락" /></label>
-              <SwitchRow id="fieldHighlightToggle" defaultChecked>필드 박스 표시</SwitchRow>
-              <SwitchRow id="objectMappingVisibleToggle" defaultChecked>객체 연결 표시</SwitchRow>
-              <SwitchRow id="mappingDebugToggle">Mapping Debug</SwitchRow>
-              <label>
-                라인 연결 스타일
-                <AppSelect id="lineMappingStyleSelect">
-                  <option value="straight">직선 연결</option>
-                  <option value="chain">체인 연결</option>
-                  <option value="slime">슬라임 연결</option>
-                </AppSelect>
-              </label>
-              <label className="range-control">
-                선 꺾임
-                <input id="lineMappingBendRange" type="range" min="0" max="100" defaultValue="65" />
-              </label>
-              <SwitchRow id="lineMappingVisibleToggle" defaultChecked>라인 연결 표시</SwitchRow>
-              <SwitchRow id="lineMappingAnimationToggle">라인 연결 애니메이션</SwitchRow>
-              <label>
-                결과 필터
-                <AppSelect id="resultFilterSelect">
-                  <option value="all">전체</option>
-                  <option value="changed">변경</option>
-                  <option value="missing">누락</option>
-                  <option value="added">추가</option>
-                  <option value="syntax">문법</option>
-                  <option value="required">필수</option>
-                </AppSelect>
-              </label>
-            </div>
-          </AppPanel>
+              <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "view" ? "is-active" : ""}`}>
+                <AppSectionHeader title="보기" />
+                <div className="app-panel__content grid gap-3">
+                  <label>
+                    테마
+                    <AppSelect id="themeSelect">
+                      <option value="light">라이트</option>
+                      <option value="dark">다크</option>
+                      <option value="contrast">고대비</option>
+                    </AppSelect>
+                  </label>
+                  <label>
+                    에디터 글꼴
+                    <AppSelect id="fontSelect">
+                      <option value="Consolas">Consolas</option>
+                      <option value="D2Coding">D2Coding</option>
+                      <option value="Cascadia Mono">Cascadia Mono</option>
+                      <option value="monospace">Monospace</option>
+                    </AppSelect>
+                  </label>
+                  <label>
+                    검색
+                    <input id="filterInput" placeholder="interface, static-route, 누락" />
+                  </label>
+                  <SwitchRow id="fieldHighlightToggle" defaultChecked>설정 항목 박스 표시</SwitchRow>
+                  <SwitchRow id="objectMappingVisibleToggle" defaultChecked>설정 연결 표시</SwitchRow>
+                  <SwitchRow id="mappingDebugToggle">고급 매핑 진단</SwitchRow>
+                  <label>
+                    라인 연결 스타일
+                    <AppSelect id="lineMappingStyleSelect">
+                      <option value="straight">직선 연결</option>
+                      <option value="chain">체인 연결</option>
+                      <option value="slime">흐름 연결</option>
+                    </AppSelect>
+                  </label>
+                  <label className="range-control">
+                    선 굽힘
+                    <input id="lineMappingBendRange" type="range" min="0" max="100" defaultValue="65" />
+                  </label>
+                  <SwitchRow id="lineMappingVisibleToggle" defaultChecked>라인 연결 표시</SwitchRow>
+                  <SwitchRow id="lineMappingAnimationToggle">라인 연결 애니메이션</SwitchRow>
+                  <label>
+                    결과 필터
+                    <AppSelect id="resultFilterSelect">
+                      <option value="all">전체</option>
+                      <option value="changed">변경</option>
+                      <option value="missing">누락</option>
+                      <option value="added">추가</option>
+                      <option value="syntax">문법</option>
+                      <option value="required">필수</option>
+                    </AppSelect>
+                  </label>
+                </div>
+              </AppPanel>
 
-          <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "status" ? "is-active" : ""}`}>
-            <AppSectionHeader title="상태" />
-            <div className="app-panel__content">
-              <div className="status-card">
-                <strong id="compareStatus">대기</strong>
-                <span id="lastComparedAt">마지막 비교: 없음</span>
-              </div>
-            </div>
-          </AppPanel>
+              <AppPanel className={`ncw-side-card compare-settings-section ${settingsMenu === "status" ? "is-active" : ""}`}>
+                <AppSectionHeader title="상태" />
+                <div className="app-panel__content">
+                  <div className="status-card">
+                    <strong id="compareStatus">대기</strong>
+                    <span id="lastComparedAt">마지막 비교: 없음</span>
+                  </div>
+                </div>
+              </AppPanel>
             </div>
           </div>
         </motion.aside>
@@ -196,7 +199,7 @@ export default function ConfigInputPanel() {
                 <AppButton id="loadProfileBtn" type="button" variant="secondary">적용</AppButton>
               </div>
               <AppButton id="compareBtn" type="button"><GitCompare />비교 실행</AppButton>
-              <AppButton id="alignBtn" type="button" variant="secondary">객체 정렬</AppButton>
+              <AppButton id="alignBtn" type="button" variant="secondary">설정 정렬</AppButton>
               <AppIconButton id="restoreInitialBtn" type="button" title="초기 입력 원복"><RotateCcw /></AppIconButton>
               <AppIconButton id="exportReportBtn" type="button" title="리포트 저장"><Download /></AppIconButton>
               <AppIconButton id="clearAllBtn" type="button" title="전체 비우기"><Eraser /></AppIconButton>

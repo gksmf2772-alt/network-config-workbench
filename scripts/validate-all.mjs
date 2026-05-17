@@ -17,6 +17,9 @@ const commandResults = [
   runCommand("npm.cmd", ["test"]),
   runCommand("npm.cmd", ["run", "build"]),
   runCommand("npm.cmd", ["run", "validate:compare:fixtures"]),
+  runCommand("npm.cmd", ["run", "validate:profile-exceptions"]),
+  runCommand("npm.cmd", ["run", "validate:object-review"]),
+  runCommand("npm.cmd", ["run", "validate:field-dedupe"]),
 ];
 const inventory = writeInventoryReports(discoverInventory());
 const modes = ["compare", "audit", "report", "graph"];

@@ -1,7 +1,7 @@
 {
   "command": "validate:report",
   "mode": "report",
-  "generatedAt": "2026-05-16T17:03:06.622Z",
+  "generatedAt": "2026-05-17T11:00:39.091Z",
   "status": "passed",
   "pass": true,
   "counts": {
@@ -136,6 +136,8 @@
           "matched": 3,
           "oldOnly": 2,
           "newOnly": 0,
+          "excluded": 0,
+          "suppressed": 0,
           "ambiguous": 0,
           "lowConfidence": 0,
           "relationshipDiffs": 0,
@@ -185,7 +187,7 @@
         "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
       },
       "compare": {
-        "htmlLength": 25614,
+        "htmlLength": 26075,
         "hasUndefined": false,
         "hasNaN": false
       },
@@ -201,7 +203,7 @@
         ]
       },
       "notesKo": "Juniper 실제 설정 기반 검증은 수행되지 않았습니다. Synthetic smoke fixture만 사용했습니다.",
-      "signature": "f7a73615182fd6339d6a9cd67a9be7f05c0dadfff8c8f5e0102c3ad8c5494d0d"
+      "signature": "781b8c7807be472a59d8d915fa63daa60c40ace866c2d67170bec2c3b289dd08"
     },
     {
       "id": "nokia-classic15-to-nokia-mdcli-22",
@@ -292,6 +294,8 @@
           "matched": 61,
           "oldOnly": 575,
           "newOnly": 447,
+          "excluded": 0,
+          "suppressed": 0,
           "ambiguous": 5,
           "lowConfidence": 60,
           "relationshipDiffs": 68,
@@ -343,7 +347,7 @@
         "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
       },
       "compare": {
-        "htmlLength": 9519107,
+        "htmlLength": 9637141,
         "hasUndefined": false,
         "hasNaN": false
       },
@@ -393,7 +397,7 @@
         ],
         "newUnparsedSample": []
       },
-      "signature": "72f827229057eddcb6405c86b45530cc79c80d806d6fed5165fbbbd04eaf94f2"
+      "signature": "60b4c657a384883a3f27643fd19522a1be831cbefb739d8f5f2f1cb87ae9ba25"
     }
   ]
 }

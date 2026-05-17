@@ -14,7 +14,7 @@ export default function PolicyViolationPanel() {
         <AlertTriangle className="h-4 w-4 text-amber-600" />
         <div>
           <h2>정책 위반</h2>
-          <p>필수 규칙, 필드 정책, 문법 위험, 마이그레이션 점검 결과를 표시합니다.</p>
+          <p>필수 규칙, 설정 항목 정책, 문법 위험, 마이그레이션 점검 결과를 표시합니다.</p>
         </div>
       </div>
       <div id="reportList" className="report-list grouped-report-list" />

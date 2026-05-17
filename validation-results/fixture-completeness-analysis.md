@@ -1,6 +1,6 @@
 # Fixture Completeness Analysis
 
-Generated: 2026-05-16T17:03:55.396Z
+Generated: 2026-05-17T11:01:25.625Z
 Case: nokia-classic15-to-nokia-mdcli-22
 
 ## Summary

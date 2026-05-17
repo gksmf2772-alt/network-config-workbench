@@ -15,6 +15,11 @@ export function evaluatePolicyContext({
   ruleId = "",
   category = "",
   findingType = "",
+  issueType = "",
+  changeType = "",
+  oldValue = "",
+  newValue = "",
+  vendorPair = "",
   mode = "",
   scope = "",
 } = {}) {
@@ -30,6 +35,11 @@ export function evaluatePolicyContext({
     ruleId,
     category,
     findingType,
+    issueType,
+    changeType,
+    oldValue,
+    newValue,
+    vendorPair,
     mode,
     scope,
   });
@@ -49,6 +59,11 @@ export function evaluatePolicySuppression({
   ruleId = "",
   category = "",
   findingType = "",
+  issueType = "",
+  changeType = "",
+  oldValue = "",
+  newValue = "",
+  vendorPair = "",
   mode = "",
   scope = "",
 } = {}) {
@@ -69,6 +84,11 @@ export function evaluatePolicySuppression({
     ruleId,
     category,
     findingType,
+    issueType,
+    changeType,
+    oldValue,
+    newValue,
+    vendorPair,
     mode,
     scope,
     sourceLineId,
@@ -94,6 +114,11 @@ export function evaluatePolicySuppression({
     ruleId,
     category,
     findingType,
+    issueType,
+    changeType,
+    oldValue,
+    newValue,
+    vendorPair,
     mode,
     scope,
     sourceLineId,
@@ -106,7 +131,7 @@ export function evaluatePolicySuppression({
     return {
       ignored: true,
       suppressed: true,
-      reason: effectiveLineRule.reason || effectiveLineRule.message || "사용자 라인 예외",
+      reason: effectiveLineRule.reason || effectiveLineRule.reasonKo || effectiveLineRule.message || "사용자 라인 예외",
       sourcePolicy: isProfileException ? "profile-exception" : "user-exception",
       source: isProfileException ? "profile-exception" : "line-exception",
       policyId: effectiveLineRule.id || effectiveLineRule.name || effectiveLineRule.policyId || "",
@@ -172,6 +197,11 @@ export function findMatchingProfileException({
   ruleId = "",
   category = "",
   findingType = "",
+  issueType = "",
+  changeType = "",
+  oldValue = "",
+  newValue = "",
+  vendorPair = "",
   mode = "",
   scope = "",
   sourceLineId = "",
@@ -188,11 +218,16 @@ export function findMatchingProfileException({
     ruleId,
     category,
     findingType,
+    issueType,
+    changeType,
+    oldValue,
+    newValue,
+    vendorPair,
     mode,
     scope,
     sourceLineId,
   };
-  const exception = exceptions.find((item) => profileExceptionMatchesContext(item, context));
+  const exception = exceptions.find((item) => !isComparisonExclusionRule(item) && profileExceptionMatchesContext(item, context));
   if (!exception) return null;
   return {
     ...exception,
@@ -203,18 +238,33 @@ export function findMatchingProfileException({
 
 export function profileExceptionMatchesContext(exception = {}, context = {}) {
   if (!exception || exception.enabled === false) return false;
+  if (isComparisonExclusionRule(exception)) return false;
   const exceptionScope = String(exception.scope || "object").toLowerCase();
   const target = exception.target || {};
   const match = exception.match || {};
   const matchMode = String(match.mode || (exceptionScope === "profile" ? "profile-field-rule" : "exact-object"));
-  const exactObjectScope = exceptionScope === "object" || matchMode === "exact-object";
+  const exactObjectScope = exceptionScope !== "profile" && (
+    exceptionScope === "object" ||
+    matchMode === "exact-object" ||
+    matchMode === "exact-object-field-rule"
+  );
+  const profileScope = exceptionScope === "profile";
+  const valueMode = normalizeComparableLine(match.valueMode || exception.valueMode || "");
 
   if (!sideApplies(target.side || match.side || exception.side || "both", context.side || "both")) return false;
   if (!matchesExact(match.objectType || target.objectType || exception.objectType, context.objectType)) return false;
-  if (!matchesContextValue(match.fieldPath || target.fieldPath || exception.fieldPath || exception.field, context.field, exactObjectScope)) return false;
-  if (!matchesContextValue(match.ruleId || target.ruleId || exception.ruleId, context.ruleId, exactObjectScope)) return false;
+  if (!matchesFieldValue(match.fieldPath || target.fieldPath || exception.fieldPath || exception.field, context.field, exactObjectScope)) return false;
+  if (!matchesRuleValue(match.ruleId || target.ruleId || exception.ruleId, context.ruleId, exactObjectScope)) return false;
   if (!matchesContextValue(match.category || target.category || exception.category, context.category, exactObjectScope)) return false;
-  if (!matchesContextValue(match.findingType || target.findingType || exception.findingType, context.findingType, exactObjectScope)) return false;
+  if (!profileScope && !matchesContextValue(match.findingType || target.findingType || exception.findingType, context.findingType, exactObjectScope)) return false;
+  if (!matchesContextValue(match.issueType || target.issueType || exception.issueType, context.issueType, exactObjectScope)) return false;
+  if (!profileScope && !matchesContextValue(match.vendorPair || target.vendorPair || exception.vendorPair, context.vendorPair, true)) return false;
+  if (!matchesChangeType(match.changeType || target.changeType || target.status || exception.changeType, context.changeType)) return false;
+  if (!matchesChangeTypes(match.changeTypes || target.changeTypes || exception.changeTypes, context.changeType)) return false;
+  if (valueMode !== "any") {
+    if (!matchesPattern(match.oldValuePattern || exception.oldValuePattern, context.oldValue)) return false;
+    if (!matchesPattern(match.newValuePattern || exception.newValuePattern, context.newValue)) return false;
+  }
   if (!matchesExact(match.modeScope || exception.mode, context.mode)) return false;
   if (!matchesExact(match.compareScope || exception.compareScope, context.scope)) return false;
 
@@ -232,6 +282,9 @@ export function profileExceptionMatchesContext(exception = {}, context = {}) {
     match.ruleId || target.ruleId || exception.ruleId ||
     match.fieldPath || target.fieldPath || exception.fieldPath || exception.field ||
     match.findingType || target.findingType || exception.findingType ||
+    match.issueType || target.issueType || exception.issueType ||
+    match.changeType || target.changeType || target.status || exception.changeType ||
+    match.changeTypes || target.changeTypes || exception.changeTypes ||
     match.category || target.category || exception.category
   );
   if (!hasNarrowKey) return false;
@@ -242,6 +295,73 @@ export function profileExceptionMatchesContext(exception = {}, context = {}) {
     return haystacks.some((value) => lineRuleMatches(value, valuePattern, match.valueMatchMode || "contains"));
   }
   return true;
+}
+
+export function findMatchingComparisonExclusion({
+  profile = {},
+  side = "both",
+  objectType = "",
+  objectKey = "",
+  settingType = "",
+  settingKey = "",
+  matchStatus = "",
+  ruleId = "",
+  vendorPair = "",
+} = {}) {
+  const exceptions = Array.isArray(profile?.exceptions) ? profile.exceptions : [];
+  const context = {
+    side: normalizeSide(side),
+    objectType: settingType || objectType,
+    objectKey: settingKey || objectKey,
+    matchStatus,
+    ruleId,
+    vendorPair,
+  };
+  const exception = exceptions.find((item) => comparisonExclusionMatchesContext(item, context));
+  if (!exception) return null;
+  return {
+    ...exception,
+    __exceptionSource: "comparison-exclusion",
+    source: exception.target?.side || exception.match?.side || exception.side || context.side || "both",
+  };
+}
+
+export function comparisonExclusionMatchesContext(exception = {}, context = {}) {
+  if (!isComparisonExclusionRule(exception) || exception.enabled === false) return false;
+  const scope = String(exception.scope || "").toLowerCase();
+  const target = exception.target || {};
+  const match = exception.match || {};
+  const mode = String(match.mode || (scope === "profile" ? "profile-setting-status" : "exact-setting")).toLowerCase();
+  const expectedType = match.settingType || match.objectType || target.settingType || target.objectType || exception.settingType || exception.objectType;
+  const expectedKey = match.settingKey || match.objectKey || target.settingKey || target.objectKey || exception.settingKey || exception.objectKey;
+  const expectedStatus = match.matchStatus || target.matchStatus || exception.matchStatus;
+  const expectedRuleId = match.ruleId || target.ruleId || exception.ruleId;
+  const expectedVendorPair = match.vendorPair || target.vendorPair || exception.vendorPair;
+
+  if (!sideApplies(match.side || target.side || exception.side || "both", context.side || "both")) return false;
+  if (!matchesContextValue(expectedVendorPair, context.vendorPair, false)) return false;
+  if (!matchesContextValue(expectedType, context.objectType, false)) return false;
+  if (!matchesContextValue(expectedStatus, context.matchStatus, false)) return false;
+  if (!matchesRuleValue(expectedRuleId, context.ruleId, false)) return false;
+
+  if (mode === "exact-setting" || scope === "setting") {
+    if (!matchesContextValue(expectedKey, context.objectKey, false)) return false;
+    return Boolean(expectedKey && expectedType && expectedStatus);
+  }
+
+  if (mode === "profile-setting-status" || scope === "profile") {
+    return Boolean(expectedType && expectedStatus);
+  }
+
+  return false;
+}
+
+export function isComparisonExclusionRule(exception = {}) {
+  const type = String(exception?.type || "").toLowerCase();
+  const mode = String(exception?.match?.mode || "").toLowerCase();
+  return type === "comparison-exclusion" ||
+    mode === "exact-setting" ||
+    mode === "profile-setting-status";
 }
 
 export function findMatchingLineRule({
@@ -256,6 +376,11 @@ export function findMatchingLineRule({
   ruleId = "",
   category = "",
   findingType = "",
+  issueType = "",
+  changeType = "",
+  oldValue = "",
+  newValue = "",
+  vendorPair = "",
   mode = "",
   scope = "",
   sourceLineId = "",
@@ -271,6 +396,11 @@ export function findMatchingLineRule({
     ruleId,
     category,
     findingType,
+    issueType,
+    changeType,
+    oldValue,
+    newValue,
+    vendorPair,
     mode,
     scope,
     sourceLineId,
@@ -383,6 +513,68 @@ function matchesContextValue(expected = "", actual = "", optionalWhenActualBlank
   const normalizedActual = normalizeComparableLine(actual);
   if (!normalizedActual && optionalWhenActualBlank) return true;
   return normalizedExpected === normalizedActual;
+}
+
+function matchesFieldValue(expected = "", actual = "", optionalWhenActualBlank = false) {
+  const normalizedExpected = canonicalFieldPath(expected);
+  if (!normalizedExpected) return true;
+  const normalizedActual = canonicalFieldPath(actual);
+  if (!normalizedActual && optionalWhenActualBlank) return true;
+  return normalizedExpected === normalizedActual;
+}
+
+function matchesRuleValue(expected = "", actual = "", optionalWhenActualBlank = false) {
+  const normalizedExpected = canonicalRuleId(expected);
+  if (!normalizedExpected) return true;
+  const normalizedActual = canonicalRuleId(actual);
+  if (!normalizedActual && optionalWhenActualBlank) return true;
+  return normalizedExpected === normalizedActual;
+}
+
+function matchesChangeType(expected = "", actual = "") {
+  const normalizedExpected = normalizeComparableLine(expected);
+  if (!normalizedExpected) return true;
+  return changeTypeAliases(actual).includes(normalizedExpected);
+}
+
+function matchesChangeTypes(expected = [], actual = "") {
+  if (!Array.isArray(expected) || !expected.length) return true;
+  const actualAliases = changeTypeAliases(actual);
+  return expected.some((item) => actualAliases.includes(normalizeComparableLine(item)));
+}
+
+function changeTypeAliases(value = "") {
+  const normalized = normalizeComparableLine(value);
+  const aliases = new Set([normalized]);
+  if (normalized === "structure-converted") aliases.add("added");
+  if (normalized === "added") aliases.add("structure-converted");
+  if (normalized === "changed") aliases.add("different");
+  if (normalized === "different") aliases.add("changed");
+  if (normalized === "missing-old") aliases.add("added");
+  if (normalized === "missing-new") aliases.add("missing");
+  return [...aliases].filter(Boolean);
+}
+
+function matchesPattern(pattern = "", value = "") {
+  const rawPattern = String(pattern || "").trim();
+  if (!rawPattern || rawPattern === "*") return true;
+  const rawValue = String(value ?? "");
+  const escaped = rawPattern
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replaceAll("*", ".*");
+  try {
+    return new RegExp(`^${escaped}$`, "i").test(rawValue);
+  } catch {
+    return lineRuleMatches(rawValue, rawPattern, "contains");
+  }
+}
+
+function canonicalFieldPath(value = "") {
+  return normalizeComparableLine(value).replace(/\s+/g, "-");
+}
+
+function canonicalRuleId(value = "") {
+  return normalizeComparableLine(String(value || "").split(/[·|,]/)[0]);
 }
 
 function exceptionPolicyAllowsValue(policyEntry = {}, fieldValue = "") {

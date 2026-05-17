@@ -1,6 +1,6 @@
 # Validation Inventory
 
-Generated: 2026-05-16T17:03:01.876Z
+Generated: 2026-05-17T11:00:33.487Z
 
 ## Searched Paths
 - examples
@@ -97,9 +97,12 @@ Generated: 2026-05-16T17:03:01.876Z
 - validation/profiles/synthetic-juniper-smoke-profile.json
 
 ## Found Presets
+- scripts/validate-object-review-grouping.mjs
+- scripts/validate-profile-exceptions.mjs
 - scripts/validateCompareFixtures.js
 - scripts/validationWorkflow.mjs
 - src/adapters/legacyProfileAdapter.js
+- src/core/comparisonPlan.js
 - src/core/legacyCore.js
 - src/core/profile.js
 - src/core/vendorPresets.js
@@ -133,6 +136,7 @@ Generated: 2026-05-16T17:03:01.876Z
 - validation/fixtures/juniper-to-nokia-mdcli22/README.md
 
 ## Unknown Or Ambiguous Files
+- .agents/skills/network-config-compare/SKILL.md
 - 예제 및 테스트 설정/test 신규 static.txt
 - src/core/profileBackup.js
 - vite.config.js

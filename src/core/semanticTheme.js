@@ -4,6 +4,8 @@ export const SEMANTIC_MATCH_STATES = {
   AMBIGUOUS: "ambiguous",
   UNMATCHED: "unmatched",
   MANUAL: "manual",
+  EXCLUDED: "excluded",
+  SUPPRESSED: "suppressed",
 };
 
 export const SEMANTIC_STATE_CLASS = {
@@ -12,6 +14,8 @@ export const SEMANTIC_STATE_CLASS = {
   [SEMANTIC_MATCH_STATES.AMBIGUOUS]: "semantic-state-ambiguous",
   [SEMANTIC_MATCH_STATES.UNMATCHED]: "semantic-state-unmatched",
   [SEMANTIC_MATCH_STATES.MANUAL]: "semantic-state-manual",
+  [SEMANTIC_MATCH_STATES.EXCLUDED]: "semantic-state-excluded",
+  [SEMANTIC_MATCH_STATES.SUPPRESSED]: "semantic-state-suppressed",
 };
 
 export const SEMANTIC_STATE_LABEL = {
@@ -20,6 +24,8 @@ export const SEMANTIC_STATE_LABEL = {
   [SEMANTIC_MATCH_STATES.AMBIGUOUS]: "ambiguous",
   [SEMANTIC_MATCH_STATES.UNMATCHED]: "unmatched",
   [SEMANTIC_MATCH_STATES.MANUAL]: "manual",
+  [SEMANTIC_MATCH_STATES.EXCLUDED]: "excluded",
+  [SEMANTIC_MATCH_STATES.SUPPRESSED]: "suppressed",
 };
 
 export const SEMANTIC_FIELD_COLOR_CLASS = {
@@ -58,6 +64,49 @@ export function getSemanticMatchState({ status = "", reason = "", score = null }
     return SEMANTIC_MATCH_STATES.MATCHED;
   }
   return SEMANTIC_MATCH_STATES.UNMATCHED;
+}
+
+export function getSemanticDiffBlockState(input = {}) {
+  const normalizedStatus = String(input?.status || "").toLowerCase();
+  const normalizedReason = String(input?.reason || input?.suppressionReason || "").toLowerCase();
+
+  if (
+    input?.comparisonExcluded ||
+    input?.excluded ||
+    normalizedStatus === "excluded" ||
+    normalizedStatus === "comparison-excluded"
+  ) {
+    return SEMANTIC_MATCH_STATES.EXCLUDED;
+  }
+  if (
+    input?.policySuppressed ||
+    input?.suppressed ||
+    normalizedStatus === "suppressed" ||
+    normalizedStatus === "ignored" ||
+    normalizedReason.includes("suppressed") ||
+    normalizedReason.includes("exception")
+  ) {
+    return SEMANTIC_MATCH_STATES.SUPPRESSED;
+  }
+  if (normalizedReason === "manual") return SEMANTIC_MATCH_STATES.MANUAL;
+  if (normalizedStatus === "matched" || normalizedStatus === "candidate") return SEMANTIC_MATCH_STATES.MATCHED;
+  if (normalizedReason.includes("ambiguous")) return SEMANTIC_MATCH_STATES.AMBIGUOUS;
+  if ([
+    "old-only",
+    "new-only",
+    "unmatched",
+    "unmatched-old",
+    "unmatched-new",
+    "unmatched-source",
+    "unmatched-target",
+    "source-only",
+    "target-only",
+    "no-target",
+    "no-source",
+  ].includes(normalizedStatus)) {
+    return SEMANTIC_MATCH_STATES.UNMATCHED;
+  }
+  return SEMANTIC_MATCH_STATES.PARTIAL;
 }
 
 export function getSemanticStateClass(input = {}) {

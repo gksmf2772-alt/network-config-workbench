@@ -259,6 +259,13 @@ function mergeValidationProfile(target = {}, overlay = {}) {
     ];
   }
 
+  if (overlay.exceptions) {
+    target.exceptions = [
+      ...(Array.isArray(target.exceptions) ? target.exceptions : []),
+      ...(Array.isArray(overlay.exceptions) ? overlay.exceptions : []),
+    ];
+  }
+
   if (overlay.fixturePolicy) {
     target.fixturePolicy = {
       ...(target.fixturePolicy || {}),

@@ -172,6 +172,8 @@ test("new-side line exception suppresses audit, summary, graph, and field violat
 
   assert.equal(plan[0].fieldSummary.metric.effectiveStatus, "ignored");
   assert.equal(plan[0].policyViolationCount, 0);
+  assert.equal(dashboard.review.suppressed.length, 1);
+  assert.equal(dashboard.review.suppressed[0].objectType, "static-route");
   assert.equal(audit.summary.active, 0);
   assert.ok(audit.summary.suppressed > 0);
   assert.equal(dashboard.counts.auditActive, 0);

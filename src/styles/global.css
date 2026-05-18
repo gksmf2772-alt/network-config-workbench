@@ -1164,6 +1164,10 @@ label {
   stroke: rgba(202, 138, 4, 0.9);
 }
 
+.line-mapping-connector.field-metric {
+  stroke: rgba(2, 132, 199, 0.88);
+}
+
 .line-mapping-connector.field-state,
 .line-mapping-connector.field-admin-state {
   stroke: rgba(22, 163, 74, 0.86);
@@ -1737,7 +1741,7 @@ textarea::placeholder {
 
 .report-review-field-table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 1280px;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -1868,6 +1872,10 @@ textarea::placeholder {
   color: var(--text);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.report-review-description-cell span {
+  max-width: 280px;
 }
 
 .report-field-cell small {
@@ -2097,6 +2105,19 @@ textarea::placeholder {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.object-item-description {
+  display: -webkit-box;
+  max-width: min(680px, 100%);
+  overflow: hidden;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .summary-grid {
@@ -2611,12 +2632,17 @@ textarea::placeholder {
 }
 
 .diff-token-match.field-tag,
-.diff-token-match.field-metric,
-.semantic-diff-line-field.field-tag,
-.semantic-diff-line-field.field-metric {
+.semantic-diff-line-field.field-tag {
   --token-bg: rgba(202, 138, 4, 0.18);
   --token-border: rgba(202, 138, 4, 0.44);
   --token-text: #92400e;
+}
+
+.diff-token-match.field-metric,
+.semantic-diff-line-field.field-metric {
+  --token-bg: rgba(2, 132, 199, 0.16);
+  --token-border: rgba(2, 132, 199, 0.40);
+  --token-text: #075985;
 }
 
 .diff-token-match.field-state,
@@ -3764,11 +3790,29 @@ textarea::placeholder {
 }
 
 .semantic-object-title {
+  display: grid;
+  gap: 2px;
   overflow: hidden;
   color: #0f172a;
   font-size: 13px;
   font-weight: 700;
   min-width: 0;
+}
+
+.semantic-object-key-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-object-description {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

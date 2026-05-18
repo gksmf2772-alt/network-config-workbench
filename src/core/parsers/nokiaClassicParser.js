@@ -6,6 +6,11 @@ import {
   canonicalStaticRouteIdentity,
   normalizeNokiaSemanticFields,
 } from "../semanticFieldNormalizer.js";
+import {
+  buildStaticRouteNextHopFields,
+  collectStaticRouteNextHopEntriesFromLines,
+  mergeStaticRouteFields,
+} from "../staticRouteFields.js";
 
 function splitLines(configText = "") {
   return String(configText || "")
@@ -87,13 +92,17 @@ function createCurrentObject(type, name, rawLine) {
 function flushCurrent(current, objects) {
   if (!current) return null;
 
+  const fields = current.type === "static-route"
+    ? buildStaticRouteAggregateFields(current)
+    : current.fields;
+
   const normalizedIdentity =
     current.type === "static-route"
-      ? (canonicalStaticRouteIdentity(current.fields) || current.fields.route || current.name)
-      : current.fields.neighbor ||
-        current.fields.interface ||
-        current.fields.lag ||
-        current.fields.port ||
+      ? (canonicalStaticRouteIdentity(fields) || fields.route || current.name)
+      : fields.neighbor ||
+        fields.interface ||
+        fields.lag ||
+        fields.port ||
         current.name;
 
   objects.push(
@@ -102,12 +111,27 @@ function flushCurrent(current, objects) {
       sourceName: current.name,
       normalizedType: current.type,
       normalizedIdentity,
-      fields: current.fields,
+      fields,
       rawLines: current.rawLines,
     })
   );
 
   return null;
+}
+
+function buildStaticRouteAggregateFields(current) {
+  const fields = {
+    route: current.fields.route || current.name,
+    address: current.fields.address || current.fields.route || current.name,
+  };
+  if (current.fields.description) fields.description = current.fields.description;
+
+  return {
+    ...fields,
+    ...buildStaticRouteNextHopFields(
+      collectStaticRouteNextHopEntriesFromLines(current.rawLines)
+    ),
+  };
 }
 
 function makeServiceObject({ type, name, fields, rawLines, index }) {
@@ -346,14 +370,19 @@ function mergeObjectsBySemanticIdentity(objects = []) {
     }
 
     const target = merged.get(key);
-    target.fields = normalizeNokiaSemanticFields({
-      ...(target.fields || {}),
-      ...(object.fields || {}),
-    });
+    target.fields = normalizeNokiaSemanticFields(
+      target.normalizedType === "static-route"
+        ? mergeStaticRouteFields(target.fields, object.fields)
+        : {
+            ...(target.fields || {}),
+            ...(object.fields || {}),
+          }
+    );
     target.rawLines = mergeRawLines(target.rawLines, object.rawLines);
     target.description ||= object.description;
     target.ipAddress ||= object.ipAddress;
     target.prefix ||= object.prefix;
+    target.nextHop = target.fields["next-hop"] || target.nextHop || object.nextHop;
     target.peerIp ||= object.peerIp;
     target.peerAs ||= object.peerAs;
   });

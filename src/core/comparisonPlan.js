@@ -330,6 +330,11 @@ const COMPARE_FIELD_ALIASES = {
 
 function canonicalCompareField(field = "") {
   const key = String(field || "").trim();
+  const scopedNextHopField = key.match(/^next-hop\[[^\]]+\]\.(.+)$/);
+  if (scopedNextHopField) {
+    const scopedField = scopedNextHopField[1];
+    return COMPARE_FIELD_ALIASES[scopedField] || scopedField;
+  }
   return COMPARE_FIELD_ALIASES[key] || key;
 }
 
@@ -578,7 +583,7 @@ function applyPolicySuppressionToLineMatches({
     fieldMatches.forEach((fieldMatch) => {
       const field = fieldMatch.field || "";
       const oldPolicy = fieldMatch.oldLine || fieldMatch.oldValue != null
-        ? evaluatePolicyContext({
+        ? evaluateLineFieldPolicyContext({
           profile,
           rawLine: fieldMatch.oldLine || "",
           side: "old",
@@ -587,10 +592,11 @@ function applyPolicySuppressionToLineMatches({
           field,
           fieldValue: fieldMatch.oldValue,
           findingType,
+          fieldMatch,
         })
         : null;
       const newPolicy = fieldMatch.newLine || fieldMatch.newValue != null
-        ? evaluatePolicyContext({
+        ? evaluateLineFieldPolicyContext({
           profile,
           rawLine: fieldMatch.newLine || "",
           side: "new",
@@ -599,6 +605,7 @@ function applyPolicySuppressionToLineMatches({
           field,
           fieldValue: fieldMatch.newValue,
           findingType,
+          fieldMatch,
         })
         : null;
 
@@ -651,6 +658,81 @@ function applyPolicySuppressionToLineMatches({
   });
 }
 
+function evaluateLineFieldPolicyContext({
+  profile = {},
+  rawLine = "",
+  side = "both",
+  objectType = "",
+  objectKey = "",
+  field = "",
+  fieldValue = "",
+  findingType = "",
+  fieldMatch = {},
+} = {}) {
+  let fallback = null;
+  for (const candidate of policyFieldCandidates(field)) {
+    const fieldContext = buildLineFieldPolicyContext({
+      profile,
+      objectType,
+      field: candidate,
+      fieldMatch,
+      findingType,
+    });
+    const result = evaluatePolicyContext({
+      profile,
+      rawLine,
+      side,
+      objectType,
+      objectKey,
+      field: candidate,
+      fieldValue,
+      ...fieldContext,
+    });
+    if (!fallback) fallback = result;
+    if (result?.suppressed) return result;
+  }
+  return fallback;
+}
+
+function buildLineFieldPolicyContext({
+  profile = {},
+  objectType = "",
+  field = "",
+  fieldMatch = {},
+  findingType = "",
+} = {}) {
+  const changeType = normalizeSemanticChangeType(fieldMatch.status || findingType || "");
+  return {
+    ruleId: semanticFieldRuleId(objectType, field, {
+      status: changeType,
+      effectiveStatus: changeType,
+    }),
+    category: "semantic-compare",
+    issueType: "field-difference",
+    changeType,
+    oldValue: firstSummaryValue([fieldMatch.oldValue ?? fieldMatch.oldRawValue]),
+    newValue: firstSummaryValue([fieldMatch.newValue ?? fieldMatch.newRawValue]),
+    vendorPair: profileVendorPair(profile),
+    findingType: changeType || findingType,
+  };
+}
+
+function policyFieldCandidates(field = "") {
+  const original = String(field || "").trim();
+  const normalized = original.toLowerCase();
+  const candidates = [original];
+  const scopedNextHopField = original.match(/^(next-hop\[[^\]]+\]\.)(.+)$/i);
+  if (scopedNextHopField) {
+    const prefix = scopedNextHopField[1];
+    const scopedField = scopedNextHopField[2];
+    const alias = COMPARE_FIELD_ALIASES[scopedField] || scopedField;
+    candidates.push(scopedField, alias, `${prefix}${alias}`);
+  }
+  if (normalized === "state") candidates.push("admin-state");
+  if (normalized === "admin-state") candidates.push("state");
+  return [...new Set(candidates.filter(Boolean))];
+}
+
 function applyLineExceptionSuppressionToFieldPolicy({
   policyResult = {},
   objectType = "",
@@ -678,7 +760,7 @@ function applyLineExceptionSuppressionToFieldPolicy({
 
     for (const match of matches) {
       const oldPolicy = match.oldLine || match.oldValue != null
-        ? evaluatePolicyContext({
+        ? evaluateSemanticFieldPolicyContext({
           profile,
           rawLine: match.oldLine || "",
           side: "old",
@@ -686,12 +768,13 @@ function applyLineExceptionSuppressionToFieldPolicy({
           objectKey: objectKeyForPolicy(oldObject, objectType),
           field,
           fieldValue: match.oldValue,
-          ...fieldContext,
           findingType,
+          summary,
+          fieldContext,
         })
         : null;
       const newPolicy = match.newLine || match.newValue != null
-        ? evaluatePolicyContext({
+        ? evaluateSemanticFieldPolicyContext({
           profile,
           rawLine: match.newLine || "",
           side: "new",
@@ -699,8 +782,9 @@ function applyLineExceptionSuppressionToFieldPolicy({
           objectKey: objectKeyForPolicy(newObject, objectType),
           field,
           fieldValue: match.newValue,
-          ...fieldContext,
           findingType,
+          summary,
+          fieldContext,
         })
         : null;
 
@@ -728,12 +812,13 @@ function applyLineExceptionSuppressionToFieldPolicy({
       ].filter(Boolean);
 
       for (const sideContext of sides) {
-        const policy = evaluatePolicyContext({
+        const policy = evaluateSemanticFieldPolicyContext({
           profile,
           objectType,
           field,
-          ...fieldContext,
           findingType,
+          summary,
+          fieldContext,
           ...sideContext,
         });
         if (policy.suppressed) policyHits.push(policy);
@@ -763,6 +848,49 @@ function applyLineExceptionSuppressionToFieldPolicy({
     violations: (policyResult.violations || []).filter((violation) => !suppressedFields.has(violation.field)),
     violationCount: (policyResult.violations || []).filter((violation) => !suppressedFields.has(violation.field)).length,
   };
+}
+
+function evaluateSemanticFieldPolicyContext({
+  profile = {},
+  rawLine = "",
+  side = "both",
+  objectType = "",
+  objectKey = "",
+  field = "",
+  fieldValue = "",
+  findingType = "",
+  summary = {},
+  fieldContext = null,
+  ...rest
+} = {}) {
+  let fallback = null;
+  for (const candidate of policyFieldCandidates(field)) {
+    const semanticContext = candidate === field && fieldContext
+      ? fieldContext
+      : buildSemanticFieldPolicyContext({
+        profile,
+        objectType,
+        field: candidate,
+        summary,
+        findingType,
+        vendorPair: fieldContext?.vendorPair,
+      });
+    const result = evaluatePolicyContext({
+      profile,
+      rawLine,
+      side,
+      objectType,
+      objectKey,
+      field: candidate,
+      fieldValue,
+      ...semanticContext,
+      findingType,
+      ...rest,
+    });
+    if (!fallback) fallback = result;
+    if (result?.suppressed) return result;
+  }
+  return fallback;
 }
 
 function applyBgpInheritanceStatusToFieldPolicy({

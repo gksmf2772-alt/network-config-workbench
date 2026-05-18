@@ -234,6 +234,14 @@ test("integrated report uses summary field analysis object", () => {
   assert.equal((source.match(/renderFieldOverlapSummary\(fieldAnalysis\)/g) || []).length >= 2, true);
 });
 
+test("integrated report rebuilds dashboard instead of reusing stale exception cache", () => {
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const body = source.match(/function renderOverviewReport\(report\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(body, /const dashboard = buildCurrentDashboardData\(report\);/);
+  assert.doesNotMatch(body, /lastDashboardData\s*\|\|/);
+});
+
 test("review items expose unmatched, ambiguous, low confidence, and relationship changes", () => {
   const review = buildReviewItems(plan);
 

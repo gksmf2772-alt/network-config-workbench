@@ -1099,8 +1099,12 @@ function maskSensitiveValue(fieldPath, value) {
 }
 
 function isPlausibleNextHop(value) {
+  if (Array.isArray(value)) return value.length > 0 && value.every(isPlausibleNextHop);
   const text = String(value || "").trim();
   if (!text) return false;
+  if (text.includes(",")) {
+    return text.split(",").map((item) => item.trim()).filter(Boolean).every(isPlausibleNextHop);
+  }
   if (/^(black-hole|discard|null0)$/i.test(text)) return true;
   return isPlausiblePrefixOrAddress(text) || /^[a-z][\w./:-]+$/i.test(text);
 }

@@ -43,7 +43,7 @@ test("router log extraction removes prompt command and keeps config with mapping
   assert.ok(result.skipped.some((line) => line.reason === "cli-command-echo"));
 });
 
-test("line exception suppresses new-only object from review counts", () => {
+test("line exception keeps new-only object visible as suppressed review item", () => {
   const profile = {
     rules: {
       ignore: [
@@ -73,12 +73,13 @@ test("line exception suppresses new-only object from review counts", () => {
   });
 
   assert.equal(plan[0].policySuppressed, true);
-  assert.equal(dashboard.counts.newOnly, 0);
+  assert.equal(dashboard.counts.newOnly, 1);
   assert.equal(dashboard.review.unmatchedNew.length, 0);
+  assert.equal(dashboard.review.suppressed.length, 1);
   assert.equal(dashboard.review.abnormal.length, 0);
 });
 
-test("manual added line rule suppresses new-only object from integrated review", () => {
+test("manual added line rule keeps object in integrated report as suppressed", () => {
   const rawLine = '/configure { router "Base" bgp neighbor "210.183.28.161" group "ACCESS-PEER" }';
   const profile = {
     lineRules: {
@@ -115,8 +116,9 @@ test("manual added line rule suppresses new-only object from integrated review",
 
   assert.equal(plan[0].policySuppressed, true);
   assert.equal(plan[0].lineMatches.every((lineMatch) => lineMatch.status === "ignored"), true);
-  assert.equal(dashboard.counts.newOnly, 0);
+  assert.equal(dashboard.counts.newOnly, 1);
   assert.equal(dashboard.review.unmatchedNew.length, 0);
+  assert.equal(dashboard.review.suppressed.length, 1);
 
   const oldLine = "neighbor 203.0.113.10";
   const oldProfile = {
@@ -150,8 +152,93 @@ test("manual added line rule suppresses new-only object from integrated review",
   });
 
   assert.equal(oldPlan[0].policySuppressed, true);
-  assert.equal(oldDashboard.counts.oldOnly, 0);
+  assert.equal(oldDashboard.counts.oldOnly, 1);
   assert.equal(oldDashboard.review.unmatchedOld.length, 0);
+  assert.equal(oldDashboard.review.suppressed.length, 1);
+});
+
+test("profile admin-state exception keeps static route visible as suppressed review row", () => {
+  const profile = {
+    exceptions: [{
+      id: "ex-profile-static-admin-state-changed",
+      scope: "profile",
+      enabled: true,
+      target: {
+        ruleId: "semantic-compare.important-field-change",
+        category: "semantic-compare",
+        objectType: "static-route",
+        fieldPath: "admin-state",
+        side: "both",
+        findingType: "changed",
+        issueType: "field-difference",
+        status: "changed",
+        changeType: "changed",
+      },
+      match: {
+        mode: "profile-field-rule",
+        objectType: "static-route",
+        fieldPath: "admin-state",
+        ruleId: "semantic-compare.important-field-change",
+        category: "semantic-compare",
+        findingType: "changed",
+        issueType: "field-difference",
+        changeType: "changed",
+        changeTypes: ["changed"],
+        valueMode: "any",
+        newValuePattern: "*",
+      },
+    }],
+  };
+  const oldResult = normalizeConfig({
+    vendor: VENDOR_IDS.NOKIA_CLASSIC,
+    side: "old",
+    configText: [
+      "static-route-entry 112.188.30.19/32",
+      "    next-hop 112.188.21.198",
+      "        tag 500",
+      "        no shutdown",
+      "    exit",
+      "exit",
+    ].join("\n"),
+  });
+  const newResult = normalizeConfig({
+    vendor: VENDOR_IDS.NOKIA_MD_CLI,
+    side: "new",
+    configText: [
+      '/configure { router "Base" static-routes route 112.188.30.19/32 route-type unicast next-hop 112.188.21.198 admin-state disable }',
+      '/configure { router "Base" static-routes route 112.188.30.19/32 route-type unicast next-hop 112.188.21.198 tag 500 }',
+    ].join("\n"),
+  });
+  const plan = createComparisonPlan(
+    matchNormalizedObjects({
+      oldObjects: oldResult.objects,
+      newObjects: newResult.objects,
+      manualMap: {},
+      profile,
+    }),
+    profile,
+  );
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan,
+    semanticSummary: {},
+  });
+  const suppressedRow = dashboard.review.suppressed[0];
+  const ignoredFields = plan[0].lineMatches
+    .filter((lineMatch) => lineMatch.status === "ignored")
+    .flatMap((lineMatch) => lineMatch.fieldMatches?.map((fieldMatch) => fieldMatch.field) || []);
+
+  assert.equal(oldResult.objects.length, 1);
+  assert.equal(newResult.objects.length, 1);
+  assert.equal(plan[0].fieldSummary["admin-state"].effectiveStatus, "ignored");
+  assert.ok(ignoredFields.includes("state"));
+  assert.ok(ignoredFields.includes("next-hop[112.188.21.198].state"));
+  assert.equal(dashboard.review.abnormal.length, 0);
+  assert.equal(dashboard.review.suppressed.length, 1);
+  assert.equal(suppressedRow.objectType, "static-route");
+  assert.equal(suppressedRow.objectKey, "static-route:112.188.30.19/32");
+  assert.equal(suppressedRow.policyId, "ex-profile-static-admin-state-changed");
+  assert.ok(suppressedRow.fieldRows.some((row) => row.field === "state" && row.status === "ignored"));
 });
 
 test("advanced ignore policy suppresses ignored field from abnormal list", () => {

@@ -4,8 +4,8 @@ function clean(value = "") {
 
 export function canonicalStaticRouteIdentity(fields = {}) {
   const route = clean(fields.route || fields.prefix || fields.address || "").toLowerCase();
-  const nextHop = clean(fields["next-hop"] || fields.nextHop || "").toLowerCase();
-  return route && nextHop ? `${route}|${nextHop}` : route;
+  const routingContext = clean(fields["routing-context"] || fields.vrf || fields.vprn || "").toLowerCase();
+  return route && routingContext ? `${routingContext}|${route}` : route;
 }
 
 export function canonicalInterfaceName(value = "") {

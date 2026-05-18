@@ -43,7 +43,12 @@ export function buildObjectReviewGroups({
   }
 
   return [...groups.values()]
-    .filter((group) => includeSuppressedOnly || group.activeIssues.length > 0)
+    .filter((group) =>
+      includeSuppressedOnly ||
+      group.activeIssues.length > 0 ||
+      group.suppressedIssues.length > 0 ||
+      group.excludedIssues.length > 0
+    )
     .map(finalizeGroup)
     .sort((left, right) => {
       const bySeverity = right.activeIssueCount - left.activeIssueCount;
@@ -382,18 +387,48 @@ function objectGroupKey(item = {}) {
 
 function buildDisplayName(item = {}) {
   const rows = Array.isArray(item.fieldRows) ? item.fieldRows : [];
-  const descriptionRow = rows.find((row) => normalizeField(row.field) === "description");
-  const description = stringify(descriptionRow?.newValue || descriptionRow?.oldValue).trim();
+  const description = descriptionFromRows(rows) ||
+    descriptionFromPlanObject(item.oldObject) ||
+    descriptionFromPlanObject(item.newObject);
   const label = stringify(item.label || item.objectKey || item.oldKey || item.newKey).trim();
-  if (description && label && !description.includes(label)) return `${description} · ${label}`;
+  if (description && label && !description.includes(label)) return `${description} - ${label}`;
   return description || label || "-";
 }
 
 function displayNameFromPlanObject(object = {}, objectType = "") {
-  const description = stringify(object?.fields?.description || object?.canonicalFields?.description || object?.description).trim();
+  const description = descriptionFromPlanObject(object);
   const label = objectIdentity(object);
-  if (description && label && !description.includes(label)) return `${description} · ${label}`;
+  if (description && label && !description.includes(label)) return `${description} - ${label}`;
   return description || label || objectKey(object, objectType);
+}
+
+function isDescriptionField(field = "") {
+  const normalized = normalizeField(field);
+  return normalized === "description" || normalized.endsWith(".description");
+}
+
+function uniqueDescriptionValues(values = []) {
+  return [...new Set(values.map((value) => stringify(value).trim().replace(/\s+/g, " ")).filter(Boolean))];
+}
+
+function descriptionFromRows(rows = []) {
+  const values = [];
+  rows.forEach((row) => {
+    if (!isDescriptionField(row.field)) return;
+    values.push(row.newValue || row.oldValue || "");
+  });
+  return uniqueDescriptionValues(values).join(" / ");
+}
+
+function descriptionFromPlanObject(object = {}) {
+  const values = [object?.description];
+  [object?.fields, object?.canonicalFields].forEach((fields = {}) => {
+    Object.entries(fields || {}).forEach(([field, value]) => {
+      if (!isDescriptionField(field)) return;
+      values.push(value);
+    });
+  });
+  return uniqueDescriptionValues(values).join(" / ");
 }
 
 function objectIdentity(object = {}) {

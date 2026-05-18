@@ -302,6 +302,69 @@ function getObjectSideLabel(object = null) {
   );
 }
 
+function isDescriptionField(field = "") {
+  const normalized = String(field || "").trim().toLowerCase();
+  return normalized === "description" || normalized.endsWith(".description");
+}
+
+function collectDescriptionValues(fields = {}) {
+  const values = [];
+  Object.entries(fields || {}).forEach(([field, value]) => {
+    if (!isDescriptionField(field)) return;
+    const list = Array.isArray(value) ? value : [value];
+    list.forEach((entry) => {
+      const text = String(entry ?? "").trim().replace(/\s+/g, " ");
+      if (text) values.push(text);
+    });
+  });
+  return values;
+}
+
+function uniqueDescriptionValues(values = []) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function getObjectDescriptionLabel(object = null) {
+  if (!object) return "";
+  const values = uniqueDescriptionValues([
+    object.description,
+    ...collectDescriptionValues(object.fields),
+    ...collectDescriptionValues(object.canonicalFields),
+  ]);
+  return values.join(" / ");
+}
+
+function getFieldSummaryDescriptionLabel(field = null, side = "") {
+  if (!field) return "";
+  const key = side === "old" ? "oldValues" : side === "new" ? "newValues" : "";
+  const values = key ? field[key] : [...(field.oldValues || []), ...(field.newValues || [])];
+  return uniqueDescriptionValues(Array.isArray(values) ? values : [values]).join(" / ");
+}
+
+function getItemDescriptionLabel(item = {}) {
+  const oldDescription = getObjectDescriptionLabel(item.oldObject) ||
+    getFieldSummaryDescriptionLabel(item.fieldSummary?.description, "old");
+  const newDescription = getObjectDescriptionLabel(item.newObject) ||
+    getFieldSummaryDescriptionLabel(item.fieldSummary?.description, "new");
+  if (oldDescription && newDescription && oldDescription !== newDescription) {
+    return `${oldDescription} -> ${newDescription}`;
+  }
+  return oldDescription || newDescription || getFieldSummaryDescriptionLabel(item.fieldSummary?.description);
+}
+
+function renderObjectDescriptionMeta(item = {}) {
+  const oldDescription = getObjectDescriptionLabel(item.oldObject) ||
+    getFieldSummaryDescriptionLabel(item.fieldSummary?.description, "old") ||
+    "-";
+  const newDescription = getObjectDescriptionLabel(item.newObject) ||
+    getFieldSummaryDescriptionLabel(item.fieldSummary?.description, "new") ||
+    "-";
+  return `
+    <span>old description: ${escapeHtml(oldDescription)}</span>
+    <span>new description: ${escapeHtml(newDescription)}</span>
+  `;
+}
+
 function relationshipIssueCount(relationships = []) {
   return relationships.filter((item) => {
     const status = String(item?.status || "").toLowerCase();
@@ -412,12 +475,16 @@ export function renderComparisonPlanHtml(plan = [], options = {}) {
         const relationshipIssues = relationshipIssueCount(item.relationshipSummary || []);
         const changedFields = fieldChangedCount(item.fieldSummary || {});
         const excludedClass = item.comparisonExcluded || item.excluded ? " semantic-object-excluded" : "";
+        const descriptionLabel = getItemDescriptionLabel(item);
 
         return `
           <details class="semantic-object-card ${violations ? "has-violation" : "no-violation"} ${stateClass}${excludedClass}" data-match-status="${escapeHtml(item.status || "")}">
             <summary class="semantic-object-summary-row">
               <span class="semantic-status-badge ${stateClass}">${escapeHtml(getStateDisplayLabel(stateLabel))}</span>
-              <span class="semantic-object-title">${escapeHtml(item.objectType)} ${escapeHtml(getCompactObjectName(item))}</span>
+              <span class="semantic-object-title">
+                <span class="semantic-object-key-label">${escapeHtml(item.objectType)} ${escapeHtml(getCompactObjectName(item))}</span>
+                ${descriptionLabel ? `<span class="semantic-object-description" title="${escapeHtml(descriptionLabel)}">${escapeHtml(descriptionLabel)}</span>` : ""}
+              </span>
               <span class="semantic-object-map">
                 <span class="semantic-object-side old">${escapeHtml(getObjectSideLabel(item.oldObject))}</span>
                 <span class="semantic-object-arrow">↔</span>
@@ -435,6 +502,7 @@ export function renderComparisonPlanHtml(plan = [], options = {}) {
                 <span>신규: ${escapeHtml(item.newObject?.sourceName || item.newObject?.id || "-")}</span>
                 <span>기존 식별값: ${escapeHtml(item.oldObject?.normalizedIdentity || "-")}</span>
                 <span>신규 식별값: ${escapeHtml(item.newObject?.normalizedIdentity || "-")}</span>
+                ${renderObjectDescriptionMeta(item)}
                 <span>매칭 키: ${escapeHtml((item.matchKeyFields || []).join(", ") || "-")}</span>
                 <span>방식: ${escapeHtml(item.reason || "-")}</span>
                 <span>상태: ${escapeHtml(getStatusLabel(item.status))}</span>

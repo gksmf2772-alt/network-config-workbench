@@ -194,7 +194,7 @@ function isExcludedPlanItem(item = {}) {
 }
 
 function isActivePlanItem(item = {}) {
-  return Boolean(item) && !item.policySuppressed && !isExcludedPlanItem(item);
+  return Boolean(item) && !isExcludedPlanItem(item);
 }
 
 function buildExcludedReviewItems(plan = []) {
@@ -409,6 +409,7 @@ export function buildReviewItems(plan = []) {
     unmatchedOld: [],
     unmatchedNew: [],
     excluded: [],
+    suppressed: [],
     abnormal: [],
     ambiguous: [],
     lowConfidence: [],
@@ -421,6 +422,10 @@ export function buildReviewItems(plan = []) {
       if (isExcludedPlanItem(item)) {
         review.excluded.push(buildExcludedReviewItem(item));
       }
+      return;
+    }
+    if (isSuppressedOnlyPlanItem(item)) {
+      review.suppressed.push(buildSuppressedReviewItem(item));
       return;
     }
     const base = buildReviewBase(item);
@@ -500,6 +505,87 @@ export function buildReviewItems(plan = []) {
   ].slice(0, 12);
 
   return review;
+}
+
+function isSuppressedOnlyPlanItem(item = {}) {
+  if (isExcludedPlanItem(item) || !hasSuppressedPolicyEvidence(item)) return false;
+  const lineMatches = Array.isArray(item.lineMatches) ? item.lineMatches : [];
+  const hasLineMatches = lineMatches.length > 0;
+  const allLinesIgnored = hasLineMatches && lineMatches.every((lineMatch) => {
+    const status = String(lineMatch?.status || "").toLowerCase();
+    return lineMatch?.ignored || lineMatch?.suppressed || status === "ignored";
+  });
+  if (allLinesIgnored) return true;
+  const fieldSummaries = Object.values(item.fieldSummary || {});
+  const hasActiveField = fieldSummaries.some((summary) => {
+    const status = String(summary?.effectiveStatus || summary?.status || "").toLowerCase();
+    return status && !summary?.ignored && !summary?.suppressed && !["equal", "same", "present", "ignored"].includes(status);
+  });
+  const hasActiveLine = lineMatches.some((lineMatch) => {
+    const status = String(lineMatch?.status || "").toLowerCase();
+    return status &&
+      !lineMatch?.ignored &&
+      !lineMatch?.suppressed &&
+      !["equal", "matched", "present", "ignored"].includes(status);
+  });
+  const hasActiveReviewSignal = hasActiveField ||
+    hasActiveLine ||
+    Number(item.policyViolationCount || 0) > 0 ||
+    relationshipChanges(item).length > 0 ||
+    (Array.isArray(item.ambiguousAlternatives) && item.ambiguousAlternatives.length > 0) ||
+    (Number(item.score || 0) > 0 && Number(item.score || 0) < 80 && item.oldObject && item.newObject);
+  return !hasActiveReviewSignal;
+}
+
+function hasSuppressedPolicyEvidence(item = {}) {
+  const fieldSummaries = Object.values(item.fieldSummary || {});
+  if (fieldSummaries.some((summary) => {
+    const status = String(summary?.effectiveStatus || summary?.status || "").toLowerCase();
+    return summary?.ignored ||
+      summary?.suppressed ||
+      status === "ignored" ||
+      (Array.isArray(summary?.policyHits) && summary.policyHits.some((hit) => hit?.ignored || hit?.suppressed));
+  })) return true;
+  return (item.lineMatches || []).some((lineMatch) => {
+    const status = String(lineMatch?.status || "").toLowerCase();
+    return lineMatch?.ignored ||
+      lineMatch?.suppressed ||
+      status === "ignored" ||
+      (Array.isArray(lineMatch?.policyHits) && lineMatch.policyHits.some((hit) => hit?.ignored || hit?.suppressed));
+  });
+}
+
+function buildSuppressedReviewItem(item = {}) {
+  const base = buildReviewBase(item, { includeIgnored: true });
+  return {
+    ...base,
+    side: item.newObject && !item.oldObject ? "new" : item.oldObject && !item.newObject ? "old" : "both",
+    reason: item.suppressionReason === "comparison-exclusion"
+      ? "비교 제외 규칙 적용"
+      : "예외 처리된 항목",
+    action: "예외 해제 또는 프로파일 확인",
+    status: "ignored",
+    classification: "예외 처리됨",
+    policyId: firstSuppressedPolicyId(item),
+  };
+}
+
+function firstSuppressedPolicyId(item = {}) {
+  for (const summary of Object.values(item.fieldSummary || {})) {
+    const direct = summary?.policyId || summary?.policy?.id || "";
+    if (direct) return direct;
+    const hit = Array.isArray(summary?.policyHits)
+      ? summary.policyHits.find((entry) => entry?.policyId)
+      : null;
+    if (hit?.policyId) return hit.policyId;
+  }
+  for (const lineMatch of item.lineMatches || []) {
+    const hit = Array.isArray(lineMatch?.policyHits)
+      ? lineMatch.policyHits.find((entry) => entry?.policyId)
+      : null;
+    if (hit?.policyId) return hit.policyId;
+  }
+  return "";
 }
 
 export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
@@ -775,11 +861,11 @@ function summarizeFieldOverlapRows(fieldRows = []) {
   };
 }
 
-function buildReviewBase(item = {}) {
+function buildReviewBase(item = {}, options = {}) {
   const object = item.oldObject || item.newObject || {};
   const objectType = item.objectType || object.normalizedType || object.type || "object";
   const overlap = item.oldObject && item.newObject ? buildFieldOverlapPair(item) : null;
-  const fieldRows = buildReviewTableFieldRows(item, overlap);
+  const fieldRows = buildReviewTableFieldRows(item, overlap, options);
   return {
     planId: item.id || "",
     objectType,
@@ -797,9 +883,10 @@ function buildReviewBase(item = {}) {
   };
 }
 
-function buildReviewTableFieldRows(item = {}, overlap = null) {
+function buildReviewTableFieldRows(item = {}, overlap = null, options = {}) {
+  const includeIgnored = Boolean(options.includeIgnored);
   const summaryRows = Object.entries(item.fieldSummary || {})
-    .filter(([, value]) => !(value?.ignored || value?.effectiveStatus === "ignored"))
+    .filter(([field, value]) => includeIgnored || isDescriptionFieldName(field) || !(value?.ignored || value?.effectiveStatus === "ignored"))
     .map(([field, value]) => ({
       field: normalizeFieldName(field),
       status: String(value?.effectiveStatus || value?.status || "").toLowerCase(),
@@ -835,8 +922,8 @@ function ensureDescriptionReviewFieldRow(rows = [], item = {}) {
   const oldValue = getObjectDescription(item.oldObject);
   const newValue = getObjectDescription(item.newObject);
   const descriptionSummary = item.fieldSummary?.description;
-  if (descriptionSummary && policyAppliedFieldState(descriptionSummary) !== "active") return rows;
-  const existingIndex = rows.findIndex((row) => normalizeFieldName(row.field) === "description");
+  const descriptionSuppressed = descriptionSummary && policyAppliedFieldState(descriptionSummary) !== "active";
+  const existingIndex = rows.findIndex((row) => isDescriptionFieldName(row.field));
 
   if (existingIndex >= 0) {
     return rows.map((row, index) => {
@@ -847,7 +934,7 @@ function ensureDescriptionReviewFieldRow(rows = [], item = {}) {
         ...row,
         oldValue: nextOldValue,
         newValue: nextNewValue,
-        status: descriptionReviewStatus(nextOldValue, nextNewValue, row.status),
+        status: descriptionSuppressed ? "ignored" : descriptionReviewStatus(nextOldValue, nextNewValue, row.status),
       };
     });
   }
@@ -858,7 +945,7 @@ function ensureDescriptionReviewFieldRow(rows = [], item = {}) {
     ...rows,
     {
       field: "description",
-      status: descriptionReviewStatus(oldValue, newValue),
+      status: descriptionSuppressed ? "ignored" : descriptionReviewStatus(oldValue, newValue),
       oldValue,
       newValue,
     },
@@ -866,7 +953,13 @@ function ensureDescriptionReviewFieldRow(rows = [], item = {}) {
 }
 
 function getObjectDescription(object = {}) {
-  return displayFieldValue("description", object?.fields?.description || object?.canonicalFields?.description || object?.description || "");
+  const values = [object?.description];
+  [object?.fields, object?.canonicalFields].forEach((fields = {}) => {
+    Object.entries(fields || {}).forEach(([field, value]) => {
+      if (isDescriptionFieldName(field)) values.push(value);
+    });
+  });
+  return compactFieldValues(values.map((value) => displayFieldValue("description", value)));
 }
 
 function descriptionReviewStatus(oldValue = "", newValue = "", fallback = "same") {
@@ -912,6 +1005,11 @@ function normalizeFieldName(field = "") {
   return FIELD_ALIASES[normalized] || normalized;
 }
 
+function isDescriptionFieldName(field = "") {
+  const normalized = normalizeFieldName(field);
+  return normalized === "description" || normalized.endsWith(".description");
+}
+
 function normalizeFieldValue(value) {
   if (Array.isArray(value)) return value.map(normalizeFieldValue).join(",");
   return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -920,7 +1018,7 @@ function normalizeFieldValue(value) {
 function displayFieldValue(field = "", value = "") {
   if (Array.isArray(value)) return value.map((entry) => displayFieldValue(field, entry)).join(",");
   const text = String(value ?? "").trim().replace(/\s+/g, " ");
-  return normalizeFieldName(field) === "description" ? text : text.toLowerCase();
+  return isDescriptionFieldName(field) ? text : text.toLowerCase();
 }
 
 function objectIdentity(object = {}) {

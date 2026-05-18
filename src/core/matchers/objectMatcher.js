@@ -377,6 +377,14 @@ function getStaticRouteNextHop(object = {}) {
   );
 }
 
+function getStaticRouteRoutingContext(object = {}) {
+  return normalizeIdentityToken(
+    getFieldValue(object, "routing-context") ||
+    getFieldValue(object, "vrf") ||
+    getFieldValue(object, "vprn")
+  );
+}
+
 function getStaticRoutePolicy(profile = {}) {
   return (
     profile.staticRouteConversionPolicy ||
@@ -421,8 +429,15 @@ function scoreStaticRoutePair(oldObject, newObject, profile = {}) {
 
   const oldPrefix = getStaticRoutePrefix(oldObject);
   const newPrefix = getStaticRoutePrefix(newObject);
+  const oldContext = getStaticRouteRoutingContext(oldObject);
+  const newContext = getStaticRouteRoutingContext(newObject);
   const oldNextHop = getStaticRouteNextHop(oldObject);
   const newNextHop = getStaticRouteNextHop(newObject);
+
+  if (oldContext !== newContext) {
+    result.scoreReasons.push("static-route-routing-context-mismatch");
+    return result;
+  }
 
   if (oldPrefix && newPrefix && oldPrefix !== newPrefix) {
     return result;

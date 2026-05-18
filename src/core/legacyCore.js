@@ -55,6 +55,12 @@ import {
   removeManualMapping,
   applyManualSelectionToStorage,
 } from "./comparator.js";
+import {
+  buildStaticRouteNextHopFields,
+  collectStaticRouteNextHopEntriesFromLines,
+  mergeStaticRouteFields,
+  splitStaticRouteNextHopList,
+} from "./staticRouteFields.js";
 
 const objectTypes = [
   "port",
@@ -4710,6 +4716,9 @@ function renderReviewPanel(panelKey, title, items = [], tone = "") {
 function renderReviewItem(panelKey, item = {}) {
   const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
   const exceptionTargetId = registerReviewExceptionTarget(panelKey, item, "summary-review");
+  const exclusionTargetId = isSettingExclusionPanel(panelKey)
+    ? registerReviewSettingExclusionTarget(panelKey, item, "summary-review")
+    : "";
   const fields = [
     item.commonFields ? `공통 ${item.commonFields}` : "",
     item.differentFields ? `다름 ${item.differentFields}` : "",
@@ -4727,10 +4736,14 @@ function renderReviewItem(panelKey, item = {}) {
       </div>
       <div class="summary-review-actions">
         <button type="button" data-object-jump="${escapeHtml(jumpKey)}">이동</button>
-        ${renderExceptionActionControls(exceptionTargetId)}
+        ${exclusionTargetId ? renderSettingExclusionActionControls(exclusionTargetId) : renderExceptionActionControls(exceptionTargetId)}
       </div>
     </article>
   `;
+}
+
+function isSettingExclusionPanel(panelKey = "") {
+  return panelKey === "unmatched-old" || panelKey === "unmatched-new" || panelKey === "excluded";
 }
 
 function preserveSemanticExceptionTargets(targets = new Map()) {
@@ -4806,11 +4819,13 @@ function hydrateSummaryObjectGroup(group = {}) {
     excludedIssues,
   };
   const panelKey = activeIssues[0]?.panelKey || "suppressed";
+  const suppressedOnly = !group.activeIssueCount && group.suppressedIssueCount > 0;
+  const excludedOnly = !group.activeIssueCount && !group.suppressedIssueCount && group.excludedIssueCount > 0;
   state.summaryIssueGroups.set(targetId, hydrated);
   return {
     targetId,
     panelKey,
-    statusLabel: group.activeIssueCount ? "검토 필요" : "예외 처리됨",
+    statusLabel: group.activeIssueCount ? "검토 필요" : excludedOnly ? "비교 제외됨" : "예외 처리됨",
     tone: group.activeIssueCount ? (reviewIssueMeta[panelKey]?.tone || "review") : "suppressed",
     objectType: group.objectType || "-",
     displayName: group.displayName || "-",
@@ -4822,6 +4837,8 @@ function hydrateSummaryObjectGroup(group = {}) {
     activeIssueCount: group.activeIssueCount || 0,
     suppressedIssueCount: group.suppressedIssueCount || 0,
     excludedIssueCount: group.excludedIssueCount || 0,
+    suppressedOnly,
+    excludedOnly,
   };
 }
 
@@ -4856,7 +4873,7 @@ function renderSummaryIssueDetail(targetId = "") {
   return `
     <div class="summary-issue-detail-card" data-summary-issue-detail-id="${escapeHtml(targetId)}">
       <div class="summary-issue-detail-head">
-        <span>${escapeHtml(group.activeIssueCount ? "설정 검토" : "예외 처리됨")}</span>
+        <span>${escapeHtml(group.activeIssueCount ? "설정 검토" : group.excludedIssueCount && !group.suppressedIssueCount ? "비교 제외됨" : "예외 처리됨")}</span>
         <strong>${escapeHtml(group.displayName || group.objectKey || "-")}</strong>
         <small>${escapeHtml(group.objectType || "-")} · ${escapeHtml(group.objectKey || "-")}</small>
       </div>
@@ -5255,6 +5272,49 @@ function registerReviewExceptionTarget(panelKey = "", item = {}, source = "summa
     displayName: buildReviewDisplayName(item),
     oldValue: fieldRow?.oldValue ?? firstFieldValue(item.fieldRows, field, "oldValue"),
     newValue: fieldRow?.newValue ?? firstFieldValue(item.fieldRows, field, "newValue"),
+  });
+  return targetId;
+}
+
+function registerReviewSettingExclusionTarget(panelKey = "", item = {}, source = "summary-review") {
+  const objectType = String(item.objectType || "").trim();
+  const objectKey = String(item.oldKey || item.newKey || item.objectKey || "").trim();
+  if (!objectType || !objectKey) return "";
+  const targetId = createId();
+  const side = panelKey === "unmatched-old" || item.side === "old"
+    ? "old"
+    : panelKey === "unmatched-new" || item.side === "new"
+      ? "new"
+      : "both";
+  const matchStatus = panelKey === "unmatched-old"
+    ? "old-only"
+    : panelKey === "unmatched-new"
+      ? "new-only"
+      : item.status || "";
+  const displayName = buildReviewDisplayName(item);
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source,
+    targetType: "setting-exclusion",
+    issueId: `${item.planId || objectKey}:comparison-exclusion`,
+    panelKey,
+    ruleId: "semantic-compare.unmatched-setting",
+    category: "semantic-compare",
+    objectType,
+    settingType: objectType,
+    objectKey,
+    settingKey: objectKey,
+    oldKey: item.oldKey || "",
+    newKey: item.newKey || "",
+    displayName,
+    description: displayName,
+    field: "",
+    side,
+    status: matchStatus,
+    matchStatus,
+    statusLabel: getSemanticDiffStatusLabel(matchStatus),
+    title: `${displayName} ${getSemanticDiffStatusLabel(matchStatus)}`,
+    planId: item.planId || "",
   });
   return targetId;
 }
@@ -6405,7 +6465,9 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
   };
 
   if (!objectType || objectType === "static-route") {
+    const vprnMatch = normalized.match(/\bservice\s+vprn\s+"?([^"\s{}]+)"?/);
     setField("route", normalized.match(/(?:^|[\s{])(?:static-route-entry|route)\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?/)?.[1]);
+    setField("routing-context", vprnMatch?.[1] ? `vprn:${vprnMatch[1]}` : "");
     setField("next-hop", normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1]);
     setField("tag", normalized.match(/\btag\s+([^"\s{}]+)/)?.[1]);
     setField("metric", normalized.match(/\bmetric\s+([^"\s{}]+)/)?.[1]);
@@ -6596,7 +6658,9 @@ function mergeObjectsByCanonicalKey(objects, options, source) {
     target.lines.push(...safeObject.lines);
     target.rawLines.push(...safeObject.rawLines);
     target.fieldOccurrences.push(...(safeObject.fieldOccurrences || []).map((item) => ({ ...item, rawLineIndex: item.rawLineIndex + lineOffset })));
-    target.canonicalFields = mergeCanonicalFields(target.canonicalFields, safeObject.canonicalFields);
+    target.canonicalFields = target.type === "static-route"
+      ? mergeStaticRouteFields(target.canonicalFields, safeObject.canonicalFields)
+      : mergeCanonicalFields(target.canonicalFields, safeObject.canonicalFields);
     target.fields = target.canonicalFields;
     target.comparableText = semanticObjectToComparableLines({
       type: target.type,
@@ -6928,7 +6992,7 @@ function getDefaultObjectKeyFields(type) {
     port: ["port"],
     lag: ["lag"],
     interface: ["interface"],
-    "static-route": ["route", "next-hop"],
+    "static-route": ["route"],
     pim: ["interface"],
     bgp: ["neighbor"],
   }[type] || ["name"];
@@ -6981,12 +7045,12 @@ function extractFallbackCanonicalFields(object, profile = state.profileDraft) {
   const fields = {};
   if (object.type === "static-route") {
     fields.route = findStaticRoutePrefix(lines) || normalizeSemanticValue(object.name, profile?.normalize);
-    const nextHop = findStaticRouteNextHop(lines);
-    const tag = findStaticRouteTag(lines);
-    const state = findStaticRouteState(lines);
-    if (nextHop) fields["next-hop"] = nextHop;
-    if (tag) fields.tag = tag;
-    if (state) fields.state = state;
+    Object.assign(
+      fields,
+      buildStaticRouteNextHopFields(
+        collectStaticRouteNextHopEntriesFromLines(lines)
+      )
+    );
   }
   return fields;
 }
@@ -7384,19 +7448,29 @@ function buildStaticRouteComparableLines(object, profile = state.profileDraft, s
   const lines = object.lines.map(canonicalizeComparableLine);
   const parserFields = collectParserRuleFields(object, profile);
   const semanticFields = collectSemanticFields(object, profile);
+  const staticRouteFields = mergeStaticRouteFields(
+    extractFallbackCanonicalFields(object, profile),
+    mergeStaticRouteFields(object.canonicalFields || {}, {
+      ...parserFields,
+      ...semanticFields,
+    })
+  );
   const contextLines = applyContextMappingsToLines(object.lines, object.type, source, profile.contextMappings);
   const contextFields = collectContextComparableFields(contextLines);
-  const route = object.canonicalFields?.route || parserFields.route || semanticFields.route || findStaticRoutePrefix(lines) || object.name;
+  const route = staticRouteFields.route || findStaticRoutePrefix(lines) || object.name;
   const result = [`route ${route}`];
-  const nextHop = semanticFields["next-hop"] || parserFields["next-hop"] || parserFields.nextHop || findStaticRouteNextHop(lines);
-  const tag = semanticFields.tag || parserFields.tag || findStaticRouteTag(lines);
-  const metric = semanticFields.metric || parserFields.metric || findStaticRouteMetric(lines);
-  const state = semanticFields.state || parserFields.state || parserFields["admin-state"] || findStaticRouteState(lines);
 
-  if (nextHop) result.push(`next-hop ${nextHop}`);
-  if (tag) result.push(`tag ${tag}`);
-  if (metric) result.push(`metric ${metric}`);
-  if (state) result.push(`state ${state}`);
+  const nextHops = splitStaticRouteNextHopList(staticRouteFields["next-hop"] || staticRouteFields.nextHop);
+  if (nextHops.length) result.push(`next-hop ${nextHops.join(", ")}`);
+  if (nextHops.length <= 1) {
+    if (staticRouteFields.tag) result.push(`tag ${staticRouteFields.tag}`);
+    if (staticRouteFields.metric) result.push(`metric ${staticRouteFields.metric}`);
+    if (staticRouteFields.state) result.push(`state ${staticRouteFields.state}`);
+  }
+  Object.keys(staticRouteFields)
+    .filter((field) => /^next-hop\[.+]\./.test(field))
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+    .forEach((field) => result.push(`${field} ${staticRouteFields[field]}`));
   Object.entries(contextFields).forEach(([field, value]) => {
     if (!["route", "next-hop", "tag", "metric", "state"].includes(field)) result.push(`${field} ${value}`);
   });
@@ -8289,8 +8363,8 @@ function stripConfigureEnvelope(line = "") {
 
 function buildStaticRouteIdentityFromFields(fields = {}, fallback = "") {
   const route = canonicalizeComparableLine(fields.route || fields.prefix || fallback || "");
-  const nextHop = canonicalizeComparableLine(fields["next-hop"] || fields.nextHop || "");
-  return route && nextHop ? `${route}|${nextHop}` : route;
+  const routingContext = canonicalizeComparableLine(fields["routing-context"] || fields.vrf || fields.vprn || "");
+  return route && routingContext ? `${routingContext}|${route}` : route;
 }
 
 function normalizeFieldName(field = "") {
@@ -11682,6 +11756,8 @@ function orderedRelationFields(objectType, oldLinesByField, newLinesByField) {
 
 function normalizeRelationField(field = "") {
   const normalized = String(field || "").trim();
+  const scopedNextHopField = normalized.match(/^next-hop\[[^\]]+\]\.(.+)$/);
+  if (scopedNextHopField) return normalizeRelationField(scopedNextHopField[1]);
   if (normalized === "admin-state") return "state";
   return commonFieldAliases[normalized] || normalized;
 }
@@ -12205,11 +12281,13 @@ function objectMatchesSearch(object, query) {
 
 function renderNavigatorObjectItem(object) {
   const fields = objectFieldEntries(object).slice(0, 8);
+  const description = objectDescriptionForDisplay(object);
   return `
     <div class="object-item" data-object-key="${escapeHtml(object.key)}" data-object-source="${escapeHtml(object.source)}">
       <button type="button" class="object-nav-main" data-object-navigate="${escapeHtml(object.key)}">
         <strong>${escapeHtml(object.type)} ${escapeHtml(object.name)}</strong>
         <span class="small-note">${object.source === "old" ? "기존" : "신규"} | 라인 ${object.startLine}-${object.endLine}</span>
+        ${description ? `<span class="object-item-description" title="${escapeHtml(description)}">${escapeHtml(description)}</span>` : ""}
         ${fields.length ? `<span class="object-field-chips">${fields.map(([field, value]) => `<span>${escapeHtml(field)}=${escapeHtml(formatObjectFieldValue(value))}</span>`).join("")}</span>` : ""}
       </button>
       <button type="button" class="object-delete-btn" data-object-delete="${escapeHtml(object.key)}" data-object-source="${escapeHtml(object.source)}">삭제</button>
@@ -12224,18 +12302,50 @@ function objectFieldEntries(object) {
     .sort(([left], [right]) => compareSemanticFieldName(left, right));
 }
 
+function isDescriptionFieldName(field = "") {
+  const normalized = String(field || "").trim().toLowerCase();
+  return normalized === "description" || normalized.endsWith(".description");
+}
+
+function collectObjectDescriptionValues(object) {
+  const values = [];
+  const add = (value) => {
+    const list = Array.isArray(value) ? value : [value];
+    list.forEach((entry) => {
+      const text = String(entry ?? "").trim().replace(/\s+/g, " ");
+      if (text) values.push(text);
+    });
+  };
+  add(object?.description);
+  [object?.fields, object?.canonicalFields].forEach((fields = {}) => {
+    Object.entries(fields || {}).forEach(([field, value]) => {
+      if (isDescriptionFieldName(field)) add(value);
+    });
+  });
+  return [...new Set(values)];
+}
+
+function objectDescriptionForDisplay(object) {
+  return collectObjectDescriptionValues(object).join(" / ");
+}
+
 function formatObjectFieldValue(value) {
   const text = Array.isArray(value) ? value.join(",") : String(value || "");
   return text.length > 42 ? `${text.slice(0, 39)}...` : text;
 }
 
+function formatObjectSearchFieldValue(value) {
+  return Array.isArray(value) ? value.join(",") : String(value || "");
+}
+
 function objectSearchText(object) {
-  const fieldText = objectFieldEntries(object).map(([field, value]) => `${field} ${formatObjectFieldValue(value)}`).join(" ");
+  const fieldText = objectFieldEntries(object).map(([field, value]) => `${field} ${formatObjectSearchFieldValue(value)}`).join(" ");
   return canonicalizeComparableLine([
     object.source,
     object.type,
     object.name,
     object.key,
+    objectDescriptionForDisplay(object),
     fieldText,
     ...(object.rawLines || []),
   ].join(" "));
@@ -12315,7 +12425,7 @@ function renderOverviewReport(report) {
   if (!selectors.overviewReport) return;
   const objects = [...(report.oldObjects || []), ...(report.newObjects || [])].filter((object) => object.type !== "global");
   const byType = groupBy(objects, (object) => object.type);
-  const dashboard = state.lastDashboardData || buildCurrentDashboardData(report);
+  const dashboard = buildCurrentDashboardData(report);
   const { fieldAnalysis, review, graph, severity, context, lineSummary, audit } = dashboard;
   selectors.overviewReport.innerHTML = `
     <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}">
@@ -12432,6 +12542,7 @@ function renderReportReviewTable(review = {}) {
     ...(review.unmatchedOld || []).map((item) => ({ ...item, group: "기존 설정에서만 있음" })),
     ...(review.unmatchedNew || []).map((item) => ({ ...item, group: "신규 설정에서만 있음" })),
     ...(review.excluded || []).map((item) => ({ ...item, group: "비교 제외됨" })),
+    ...(review.suppressed || []).map((item) => ({ ...item, group: "예외 처리됨" })),
     ...(review.ambiguous || []).map((item) => ({ ...item, group: "매핑 후보 여러 개" })),
     ...(review.lowConfidence || []).map((item) => ({ ...item, group: "낮은 신뢰도" })),
     ...(review.abnormal || []).map((item) => ({ ...item, group: "검토 필요 값" })),
@@ -12454,6 +12565,7 @@ function renderReportReviewTable(review = {}) {
             <th>${renderReportReviewHeaderSelect("구분", "group", filterOptions.groups)}</th>
             <th>${renderReportReviewHeaderSelect("설정 종류", "type", filterOptions.types)}</th>
             <th>${renderReportReviewHeaderSearch("설정 키", "key")}</th>
+            <th>${renderReportReviewHeaderSearch("description", "description")}</th>
             <th>${renderReportReviewHeaderSearch("사유", "reason")}</th>
             ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses)}</th>`).join("")}
             <th>${renderReportReviewHeaderSearch("일치도", "score")}</th>
@@ -12465,12 +12577,14 @@ function renderReportReviewTable(review = {}) {
             const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
             const meta = getReportReviewRowMeta(item);
             const objectKey = item.label || item.objectKey || "-";
+            const description = getReportReviewDescription(item);
             return `
               <tr
                 data-report-review-row
                 data-review-group="${escapeHtml(item.group || "")}"
                 data-review-type="${escapeHtml(item.objectType || "")}"
                 data-review-key="${escapeHtml(objectKey)}"
+                data-review-description="${escapeHtml(description.searchText)}"
                 data-review-reason="${escapeHtml(item.reason || "")}"
                 data-review-score="${escapeHtml(item.score || "")}"
                 data-review-fields="${escapeHtml(meta.fields.join(" "))}"
@@ -12479,6 +12593,7 @@ function renderReportReviewTable(review = {}) {
                 <td>${escapeHtml(item.group)}</td>
                 <td>${escapeHtml(item.objectType || "-")}</td>
                 <td><strong>${escapeHtml(objectKey)}</strong></td>
+                ${renderReportReviewDescriptionCell(description)}
                 <td>${escapeHtml(item.reason || "-")}</td>
                 ${fieldColumns.map((field) => renderReportReviewFieldCell(item, field)).join("")}
                 <td>${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>
@@ -12486,11 +12601,12 @@ function renderReportReviewTable(review = {}) {
                   <div class="report-review-actions">
                     <button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button>
                     ${item.group === "비교 제외됨" && item.policyId ? `<button type="button" data-remove-exception="${escapeHtml(item.policyId)}">비교 제외 해제</button>` : ""}
+                    ${item.group === "예외 처리됨" && item.policyId ? `<button type="button" data-remove-exception="${escapeHtml(item.policyId)}">예외 해제</button>` : ""}
                   </div>
                 </td>
               </tr>
             `;
-          }).join("") : `<tr><td colspan="${fieldColumns.length + 6}" class="report-review-empty">검토 항목 없음</td></tr>`}
+          }).join("") : `<tr><td colspan="${fieldColumns.length + 7}" class="report-review-empty">검토 항목 없음</td></tr>`}
         </tbody>
       </table>
       <div class="report-review-filter-empty" data-report-review-filter-empty hidden>조건에 맞는 검토 항목 없음</div>
@@ -12555,7 +12671,6 @@ function renderReportReviewHeaderBar(title = "") {
 const REPORT_REVIEW_DEFAULT_FIELDS = [
   "neighbor",
   "peerip",
-  "description",
   "group",
   "admin-state",
   "peer-as",
@@ -12568,7 +12683,8 @@ function getReportReviewFieldColumns(rows = []) {
   const present = new Set();
   rows.forEach((item) => {
     (item.fieldRows || []).forEach((row) => {
-      if (row?.field) present.add(String(row.field));
+      const field = normalizeReportReviewFieldName(row?.field);
+      if (field && field !== "description") present.add(field);
     });
   });
   const preferred = REPORT_REVIEW_DEFAULT_FIELDS.filter((field) => present.has(field));
@@ -12588,7 +12704,8 @@ function getReportReviewFilterOptions(rows = [], fieldColumns = []) {
     if (item.group) groups.add(String(item.group));
     if (item.objectType) types.add(String(item.objectType));
     (item.fieldRows || []).forEach((row) => {
-      if (row?.field) fields.add(String(row.field));
+      const field = normalizeReportReviewFieldName(row?.field);
+      if (field) fields.add(field);
       if (row?.status) statuses.add(String(row.status).toLowerCase());
     });
   });
@@ -12607,7 +12724,7 @@ function getReportReviewRowMeta(item = {}) {
   const fieldText = [];
 
   (item.fieldRows || []).forEach((row) => {
-    const field = String(row.field || "").trim();
+    const field = normalizeReportReviewFieldName(row.field);
     const status = String(row.status || "").toLowerCase();
     if (field) fields.push(field);
     if (status) statuses.push(status);
@@ -12629,8 +12746,39 @@ function getReportReviewRowMeta(item = {}) {
   };
 }
 
+function normalizeReportReviewFieldName(field = "") {
+  const normalized = String(field || "").trim().toLowerCase();
+  const scopedNextHopField = normalized.match(/^next-hop\[[^\]]+\]\.(.+)$/);
+  return scopedNextHopField ? scopedNextHopField[1] : normalized;
+}
+
+function findReportReviewFieldRow(item = {}, field = "") {
+  const target = normalizeReportReviewFieldName(field);
+  return (item.fieldRows || []).find((entry) => normalizeReportReviewFieldName(entry.field) === target);
+}
+
+function getReportReviewDescription(item = {}) {
+  const row = findReportReviewFieldRow(item, "description");
+  if (!row) return { value: "", label: "", searchText: "" };
+  const oldValue = maskReportFieldValue("description", row.oldValue);
+  const newValue = maskReportFieldValue("description", row.newValue);
+  const status = String(row.status || "").toLowerCase();
+  const label = reportFieldStatusLabel(status);
+  const value = formatReportFieldValue(status, oldValue, newValue);
+  const searchText = [value, label, oldValue, newValue, status].map((entry) => String(entry || "").toLowerCase()).join(" ");
+  return { value, label, searchText };
+}
+
+function renderReportReviewDescriptionCell(description = {}) {
+  return `
+    <td class="report-field-cell report-review-description-cell" data-report-description-cell data-field-search="${escapeHtml(description.searchText || "")}">
+      <span title="${escapeHtml(description.value || "")}">${escapeHtml(description.value || "-")}</span>
+    </td>
+  `;
+}
+
 function renderReportReviewFieldCell(item = {}, field = "") {
-  const row = (item.fieldRows || []).find((entry) => entry.field === field);
+  const row = findReportReviewFieldRow(item, field);
   if (!row) {
     return `<td class="report-field-empty" data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="">-</td>`;
   }
@@ -12659,6 +12807,7 @@ function reportFieldStatusLabel(status = "") {
   if (["added", "missing-old"].includes(status)) return "신규";
   if (["missing", "missing-new"].includes(status)) return "기존";
   if (["changed", "different"].includes(status)) return "변경";
+  if (status === "ignored") return "예외 처리됨";
   if (status === "structure-converted") return "구조 전환";
   if (status === "inheritance-unresolved") return "상속 확인";
   return status || "-";
@@ -12861,6 +13010,7 @@ function bindReportReviewTableInteractions() {
       const fieldMatch = fieldFilter === "all" || splitReportReviewTokens(row.dataset.reviewFields).includes(fieldFilter);
       const statusMatch = statusFilter === "all" || splitReportReviewTokens(row.dataset.reviewStatuses).includes(statusFilter);
       const keyMatch = !columnQueries.key || String(row.dataset.reviewKey || "").toLowerCase().includes(columnQueries.key);
+      const descriptionMatch = !columnQueries.description || String(row.dataset.reviewDescription || "").toLowerCase().includes(columnQueries.description);
       const reasonMatch = !columnQueries.reason || String(row.dataset.reviewReason || "").toLowerCase().includes(columnQueries.reason);
       const scoreMatch = !columnQueries.score || String(row.dataset.reviewScore || "").toLowerCase().includes(columnQueries.score);
       const fieldQueryMatch = fieldQueries.every(({ field, query: fieldQuery }) => {
@@ -12877,6 +13027,7 @@ function bindReportReviewTableInteractions() {
         fieldMatch &&
         statusMatch &&
         keyMatch &&
+        descriptionMatch &&
         reasonMatch &&
         scoreMatch &&
         fieldQueryMatch &&
@@ -13507,6 +13658,13 @@ function buildForcedSemanticTokens(text, field) {
     const match = normalized.match(/\badmin-state\s+\S+/);
     return [{ token: match[0], field, colorSeed: field, kind: "keyword" }];
   }
+  if (field === "metric" && /\bmetric\s+[^"\s{}]+/.test(normalized)) {
+    const match = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+    return [
+      { token: "metric", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: "number" },
+    ];
+  }
   return [];
 }
 
@@ -13559,6 +13717,8 @@ function extractSemanticVisualTokens(text, objectType) {
     if (nextHop) add("next-hop", stripTrailingSyntax(nextHop[1]), "address");
     const tag = normalized.match(/\btag\s+([^"\s{}]+)/);
     if (tag) add("tag", stripTrailingSyntax(tag[1]), "number");
+    const metric = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+    if (metric) add("metric", stripTrailingSyntax(metric[1]), "number");
     const description = extractDescriptionValue(source);
     if (description) {
       add("description", description, "quoted");
@@ -13629,7 +13789,7 @@ function tokenColorIndex(token) {
     "ip-address": 1,
     description: 4,
     tag: 3,
-    metric: 3,
+    metric: 4,
     state: 2,
     "admin-state": 2,
     group: 8,

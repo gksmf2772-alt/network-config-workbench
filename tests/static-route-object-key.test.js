@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 import {
   createComparisonPlan,
   matchNormalizedObjects,
   normalizeConfig,
+  renderComparisonPlanHtml,
 } from "../src/core/comparator.js";
+import { buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
 import {
   VENDOR_OPTIONS,
   VENDOR_SUPPORT_STATE,
@@ -67,6 +70,129 @@ test("Nokia Classic static route matches MD-CLI one-line route semantically", ()
   assert.equal(result.plan[0].relationshipSummary[0].status, "matched");
 });
 
+test("Nokia Classic static route with multiple next-hop maps as one route object", () => {
+  const oldConfig = [
+    "static-route-entry 125.144.1.98/32",
+    "    next-hop 14.59.5.65",
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.5.69",
+    "        no shutdown",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Base" static-routes route 125.144.1.98/32 route-type unicast next-hop 14.59.5.65 admin-state enable }',
+    '/configure { router "Base" static-routes route 125.144.1.98/32 route-type unicast next-hop 14.59.5.69 admin-state enable }',
+    '/configure { router "Base" static-routes route 125.144.1.98/32 route-type unicast next-hop 14.59.5.97 admin-state enable }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  assert.equal(result.oldResult.objects.length, 1);
+  assert.equal(result.newResult.objects.length, 1);
+  assert.equal(result.oldResult.objects[0].normalizedIdentity, "125.144.1.98/32");
+  assert.equal(result.newResult.objects[0].normalizedIdentity, "125.144.1.98/32");
+  assert.equal(result.oldResult.objects[0].fields["next-hop"], "14.59.5.65, 14.59.5.69");
+  assert.equal(result.newResult.objects[0].fields["next-hop"], "14.59.5.65, 14.59.5.69, 14.59.5.97");
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.matches[0].status, "candidate");
+  assert.equal(result.plan.filter((item) => item.status === "candidate").length, 1);
+});
+
+test("Nokia Classic static route maps repeated MD-CLI settings by route and next-hop", () => {
+  const oldConfig = [
+    "static-route-entry 125.145.147.20/32",
+    "    next-hop 14.59.4.2",
+    "        tag 600",
+    '        description "## To-Dobong-TOU-FK66_LoopBack ##"',
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.4.18",
+    "        tag 600",
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.5.2",
+    "        metric 100",
+    "        tag 600",
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.5.18",
+    "        metric 100",
+    "        tag 600",
+    "        no shutdown",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.2 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.2 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.2 description "## To-Dobong-TOU-FK66_LoopBack ##" }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.18 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.18 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.2 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.2 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.2 metric 100 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.18 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.18 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.18 metric 100 }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  assert.equal(result.oldResult.objects.length, 1);
+  assert.equal(result.newResult.objects.length, 1);
+  assert.equal(result.oldResult.objects[0].normalizedIdentity, "125.145.147.20/32");
+  assert.equal(result.newResult.objects[0].normalizedIdentity, "125.145.147.20/32");
+  assert.equal(result.oldResult.objects[0].fields["next-hop"], "14.59.4.2, 14.59.4.18, 14.59.5.2, 14.59.5.18");
+  assert.equal(result.newResult.objects[0].fields["next-hop"], "14.59.4.2, 14.59.4.18, 14.59.5.2, 14.59.5.18");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.5.2].metric"], "100");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.5.2].metric"], "100");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.5.18].metric"], "100");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.5.18].metric"], "100");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.4.2].description"], "## To-Dobong-TOU-FK66_LoopBack ##");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.4.2].description"], "## To-Dobong-TOU-FK66_LoopBack ##");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.4.2].state"], "enabled");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.4.2].state"], "disabled");
+  assert.equal(result.plan[0].fieldSummary.metric.status, "equal");
+  assert.deepEqual(result.plan[0].fieldSummary.metric.oldValues, ["100"]);
+  assert.deepEqual(result.plan[0].fieldSummary.metric.newValues, ["100"]);
+  assert.equal(result.plan[0].fieldSummary.description.status, "equal");
+  assert.deepEqual(result.plan[0].fieldSummary.description.oldValues, ["## To-Dobong-TOU-FK66_LoopBack ##"]);
+  assert.deepEqual(result.plan[0].fieldSummary.description.newValues, ["## To-Dobong-TOU-FK66_LoopBack ##"]);
+  const unmatchedDashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: createComparisonPlan([{
+      status: "old-only",
+      reason: "unmatched",
+      oldObject: result.oldResult.objects[0],
+      newObject: null,
+    }], {}),
+    semanticSummary: {},
+  });
+  const descriptionRow = unmatchedDashboard.review.unmatchedOld[0].fieldRows.find((row) => row.field.includes("description"));
+  assert.equal(descriptionRow.oldValue, "## To-Dobong-TOU-FK66_LoopBack ##");
+  assert.equal(descriptionRow.newValue, "");
+  assert.match(renderComparisonPlanHtml(result.plan), /semantic-object-description[\s\S]*To-Dobong-TOU-FK66_LoopBack/);
+  assert.equal(result.plan.filter((item) => item.status === "matched").length, 1);
+  assert.equal(result.plan.filter((item) => item.status === "new-only").length, 0);
+});
+
+test("legacy main compare parser keeps static route blocks as route-level objects", () => {
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const styles = fs.readFileSync("src/styles/global.css", "utf8");
+
+  assert.match(source, /objects\.push\(finalizeObject\(current, options, source\)\);/);
+  assert.match(source, /mergeStaticRouteFields\(target\.canonicalFields, safeObject\.canonicalFields\)/);
+  assert.match(source, /function buildStaticRouteIdentityFromFields\(fields = \{\}, fallback = ""\)/);
+  assert.match(source, /add\("metric", stripTrailingSyntax\(metric\[1\]\), "number"\);/);
+  assert.match(source, /object-item-description/);
+  assert.match(source, /data-review-description/);
+  assert.match(source, /renderReportReviewDescriptionCell/);
+  assert.match(source, /normalizeReportReviewFieldName/);
+  assert.match(fs.readFileSync("src/core/compareRenderer.js", "utf8"), /semantic-object-description/);
+  assert.match(styles, /\.line-mapping-connector\.field-metric/);
+  assert.match(styles, /\.report-review-description-cell/);
+});
+
 test("Nokia Classic indirect static route preserves next-hop for audit and migration review", () => {
   const config = [
     "static-route-entry 125.144.253.0/24",
@@ -104,10 +230,35 @@ test("Nokia MD-CLI nested static route preserves route, next-hop, state and tag"
   const result = parse("nokia-md-cli", config, "new");
   assert.equal(result.objects.length, 1);
   assert.equal(result.objects[0].normalizedType, "static-route");
-  assert.equal(result.objects[0].normalizedIdentity, "10.10.20.0/24|192.0.2.2");
+  assert.equal(result.objects[0].normalizedIdentity, "10.10.20.0/24");
   assert.equal(result.objects[0].fields["next-hop"], "192.0.2.2");
   assert.equal(result.objects[0].fields.state, "enabled");
   assert.equal(result.objects[0].fields.tag, "200");
+});
+
+test("Nokia MD-CLI nested static route with multiple next-hop creates one route object", () => {
+  const config = [
+    'router "Base" {',
+    "  static-routes {",
+    "    route 10.10.20.0/24 route-type unicast {",
+    '      next-hop "192.0.2.2" {',
+    "        admin-state enable",
+    "      }",
+    '      next-hop "192.0.2.3" {',
+    "        admin-state enable",
+    "        tag 200",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", config, "new");
+
+  assert.equal(result.objects.length, 1);
+  assert.equal(result.objects[0].normalizedIdentity, "10.10.20.0/24");
+  assert.equal(result.objects[0].fields["next-hop"], "192.0.2.2, 192.0.2.3");
+  assert.equal(result.objects[0].fields["next-hop[192.0.2.3].tag"], "200");
 });
 
 test("Nokia MD-CLI one-line service objects normalize subscriber, SAP, hosts and sub-sla fields", () => {

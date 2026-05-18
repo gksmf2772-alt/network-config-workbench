@@ -43,6 +43,16 @@ function makeLineMatch({
 const CANONICAL_LINE_FIELD_ORDER = {
   "static-route": ["route", "next-hop", "tag", "description", "metric", "state"],
   bgp: ["neighbor", "description", "authentication-key", "group", "state", "peer-as"],
+  lag: [
+    "description",
+    "mode",
+    "state",
+    "member-port",
+    "lacp-mode",
+    "lacp.administrative-key",
+    "lacp-xmit-interval",
+    "access.adapt-qos.mode",
+  ],
   interface: [
     "description",
     "address",
@@ -152,6 +162,10 @@ function compareCanonicalFieldRows(planItem = {}) {
     "service",
     "service-id",
     "prefix-length",
+    "state",
+    "lag",
+    "members",
+    "lacpMode",
   ]);
   const fields = [
     ...ordered,

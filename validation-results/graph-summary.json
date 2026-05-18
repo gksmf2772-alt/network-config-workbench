@@ -1,7 +1,7 @@
 {
   "command": "validate:graph",
   "mode": "graph",
-  "generatedAt": "2026-05-17T11:00:40.829Z",
+  "generatedAt": "2026-05-18T12:20:30.212Z",
   "status": "passed",
   "pass": true,
   "counts": {
@@ -92,7 +92,7 @@
         "unmatchedNew": 0,
         "ambiguous": 0,
         "lowConfidence": 0,
-        "fieldOverlapPercent": 50,
+        "fieldOverlapPercent": 57,
         "coveragePercent": 90,
         "suppressedLines": 0
       },
@@ -187,7 +187,7 @@
         "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
       },
       "compare": {
-        "htmlLength": 26075,
+        "htmlLength": 27885,
         "hasUndefined": false,
         "hasNaN": false
       },
@@ -203,7 +203,7 @@
         ]
       },
       "notesKo": "Juniper 실제 설정 기반 검증은 수행되지 않았습니다. Synthetic smoke fixture만 사용했습니다.",
-      "signature": "781b8c7807be472a59d8d915fa63daa60c40ace866c2d67170bec2c3b289dd08"
+      "signature": "9aae405005bd323c6c9430ff647db18dd702ccd8e5067effeb1fd66f83a8f5a0"
     },
     {
       "id": "nokia-classic15-to-nokia-mdcli-22",
@@ -223,101 +223,95 @@
       "sourceVendor": "nokia-classic",
       "targetVendor": "nokia-md-cli",
       "parser": {
-        "oldObjects": 696,
-        "newObjects": 579,
+        "oldObjects": 549,
+        "newObjects": 349,
         "oldEligibleLines": 9466,
         "newEligibleLines": 2375,
-        "recognizedLines": 11105,
-        "unsupportedLines": 736,
+        "recognizedLines": 11084,
+        "unsupportedLines": 757,
         "routerLogWrapperLines": 123,
         "sourceLineMappingStatus": "ok"
       },
       "semantic": {
-        "planItems": 1143,
-        "matched": 61,
-        "unmatchedOld": 575,
-        "unmatchedNew": 447,
-        "ambiguous": 5,
-        "lowConfidence": 60,
-        "fieldOverlapPercent": 29,
+        "planItems": 705,
+        "matched": 118,
+        "unmatchedOld": 351,
+        "unmatchedNew": 156,
+        "ambiguous": 20,
+        "lowConfidence": 62,
+        "fieldOverlapPercent": 40,
         "coveragePercent": 94,
         "suppressedLines": 62
       },
       "policy": {
-        "ignoredPolicyFields": 148,
-        "suppressedAuditFindings": 59,
-        "activeAuditFindings": 623
+        "ignoredPolicyFields": 288,
+        "suppressedAuditFindings": 60,
+        "activeAuditFindings": 572
       },
       "audit": {
         "summary": {
-          "total": 682,
-          "active": 623,
-          "suppressed": 59,
+          "total": 632,
+          "active": 572,
+          "suppressed": 60,
           "bySeverity": {
-            "warning": 435,
-            "info": 11,
-            "manual-review": 111,
-            "suppressed": 59,
-            "critical": 66
+            "manual-review": 466,
+            "warning": 106,
+            "suppressed": 60
           },
           "byCategory": {
-            "qos": 250,
-            "filter-acl": 45,
+            "qos": 214,
+            "filter-acl": 190,
             "routing-bgp": 224,
-            "subscriber-service": 160,
-            "management-security": 3
+            "management-security": 4
           },
           "byMigrationImpact": {
-            "target-default-risk": 321,
-            "review-before-migration": 132,
-            "conversion-policy-required": 163,
-            "blocks-auto-generation": 66
+            "manual-conversion-required": 396,
+            "target-default-risk": 116,
+            "review-before-migration": 120
           }
         },
         "categories": {
-          "qos": 250,
-          "filter-acl": 45,
+          "qos": 214,
+          "filter-acl": 190,
           "routing-bgp": 224,
-          "subscriber-service": 160,
-          "management-security": 3
+          "management-security": 4
         },
         "migrationImpact": {
-          "target-default-risk": 321,
-          "review-before-migration": 132,
-          "conversion-policy-required": 163,
-          "blocks-auto-generation": 66
+          "manual-conversion-required": 396,
+          "target-default-risk": 116,
+          "review-before-migration": 120
         },
-        "findingCount": 682
+        "findingCount": 632
       },
       "report": {
         "summaryCounts": {
-          "matched": 61,
-          "oldOnly": 575,
-          "newOnly": 447,
+          "matched": 118,
+          "oldOnly": 351,
+          "newOnly": 156,
           "excluded": 0,
           "suppressed": 0,
-          "ambiguous": 5,
-          "lowConfidence": 60,
+          "ambiguous": 20,
+          "lowConfidence": 62,
           "relationshipDiffs": 68,
-          "abnormal": 969,
+          "abnormal": 559,
           "manual": 0,
-          "auditActive": 623,
-          "auditSuppressed": 59,
-          "auditCritical": 66,
-          "auditWarning": 435,
-          "auditManual": 111,
+          "auditActive": 572,
+          "auditSuppressed": 60,
+          "auditCritical": 0,
+          "auditWarning": 106,
+          "auditManual": 466,
           "auditUnsupported": 0,
-          "unmatchedPartialTargetScope": 398,
-          "unmatchedMatcherIssue": 58,
-          "unmatchedParserGap": 68,
-          "unmatchedRealMissingTarget": 51
+          "unmatchedPartialTargetScope": 295,
+          "unmatchedMatcherIssue": 32,
+          "unmatchedParserGap": 24,
+          "unmatchedRealMissingTarget": 0
         },
         "reviewCounts": {
-          "unmatchedOld": 575,
-          "unmatchedNew": 447,
-          "ambiguous": 5,
-          "lowConfidence": 60,
-          "abnormal": 969,
+          "unmatchedOld": 351,
+          "unmatchedNew": 156,
+          "ambiguous": 20,
+          "lowConfidence": 62,
+          "abnormal": 559,
           "relationshipChanges": 68
         },
         "severity": {
@@ -327,27 +321,26 @@
         }
       },
       "graph": {
-        "nodes": 464,
-        "edges": 260,
+        "nodes": 415,
+        "edges": 308,
         "invalidEdges": []
       },
       "migrationReadiness": {
         "generationImplemented": false,
         "generationValidationStatus": "not-applicable",
-        "status": "blocked",
+        "status": "manual-review",
         "impact": {
-          "target-default-risk": 321,
-          "review-before-migration": 132,
-          "conversion-policy-required": 163,
-          "blocks-auto-generation": 66
+          "manual-conversion-required": 396,
+          "target-default-risk": 116,
+          "review-before-migration": 120
         },
         "unsupportedObjects": 0,
-        "manualReviewObjects": 295,
-        "targetDefaultRisk": 321,
+        "manualReviewObjects": 516,
+        "targetDefaultRisk": 116,
         "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
       },
       "compare": {
-        "htmlLength": 9637141,
+        "htmlLength": 8862521,
         "hasUndefined": false,
         "hasNaN": false
       },
@@ -397,7 +390,7 @@
         ],
         "newUnparsedSample": []
       },
-      "signature": "60b4c657a384883a3f27643fd19522a1be831cbefb739d8f5f2f1cb87ae9ba25"
+      "signature": "2f9eae15de300a90ddbe11622e326c243c61d02500d52fa85a6710e4e2f7aef3"
     }
   ]
 }

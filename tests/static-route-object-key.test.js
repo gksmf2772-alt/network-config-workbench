@@ -270,6 +270,8 @@ test("legacy main compare parser keeps static route blocks as route-level object
   assert.match(source, /function extractSubscriberInterfaceCanonicalFieldsFromLines\(lines = \[\], profile = state\.profileDraft\)/);
   assert.match(source, /function collectBuiltinSubscriberInterfaceObjects\(lines = \[\], options = \{\}, source = "old"\)/);
   assert.match(source, /const builtinSubscriber = collectBuiltinSubscriberInterfaceObjects\(lines, options, source\);/);
+  assert.match(source, /const INDENT_TERMINATED_OBJECT_TYPES = new Set\(\["port", "lag", "interface", "static-route", "bgp", "pim"\]\);/);
+  assert.match(source, /function shouldTerminateCurrentObject\(current, rawLine, normalizedLine\)[\s\S]*exitIndent <= startIndent/);
   assert.match(source, /canonicalType === "static-route" \|\| canonicalType === "interface" \|\| canonicalType === "subscriber-interface"/);
   assert.match(source, /function inferSemanticFieldNameForLineContext\(line, context = \{\}\)/);
   assert.match(source, /function getClassicLineScope\(rawLines = \[\], lineIndex = -1\)/);
@@ -294,6 +296,39 @@ test("legacy main compare parser keeps static route blocks as route-level object
   assert.match(fs.readFileSync("src/core/compareRenderer.js", "utf8"), /semantic-object-description/);
   assert.match(styles, /\.line-mapping-connector\.field-metric/);
   assert.match(styles, /\.report-review-description-cell/);
+});
+
+test("Nokia Classic parser closes major objects on same-indent exit", () => {
+  const result = parse("nokia-classic", [
+    "    port 1/1/1",
+    "        description \"port-a\"",
+    "    exit",
+    "    lag 10",
+    "        description \"lag-a\"",
+    "        port 1/1/1",
+    "    exit",
+    "    interface \"if-a\" create",
+    "        address 10.0.0.1/30",
+    "    exit",
+    "    static-route-entry 192.0.2.0/24 create",
+    "        next-hop 10.0.0.2",
+    "    exit",
+    "    neighbor 192.0.2.1",
+    "        peer-as 65000",
+    "    exit",
+    "    pim interface \"if-a\"",
+    "        no shutdown",
+    "    exit",
+  ].join("\n"));
+
+  for (const type of ["port", "lag", "interface", "static-route", "bgp", "pim"]) {
+    const objects = result.objects.filter((object) => object.normalizedType === type);
+    assert.equal(objects.length, 1, type);
+    assert.equal(objects[0].rawLines.at(-1).trim(), "exit", type);
+  }
+
+  const port = result.objects.find((object) => object.normalizedType === "port");
+  assert.equal(port.rawLines.some((line) => line.trim().startsWith("lag ")), false);
 });
 
 test("Nokia Classic indirect static route preserves next-hop for audit and migration review", () => {

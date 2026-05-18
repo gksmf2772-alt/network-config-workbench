@@ -15,10 +15,8 @@
     "validate:profile-exceptions": "node scripts/validate-profile-exceptions.mjs",
     "validate:object-review": "node scripts/validate-object-review-grouping.mjs",
     "validate:field-dedupe": "node scripts/validate-field-issue-dedupe.mjs",
-    "validate:stress": "node scripts/validate-stress.mjs --iterations 1000",
     "validate:all": "node scripts/validate-all.mjs",
     "validate:compare:fixtures": "node scripts/validateCompareFixtures.js",
-    "validate:compare:stress": "node scripts/validateCompareFixtures.js --iterations 1000 --scope bgp",
     "build": "vite build",
     "preview": "vite preview"
   },

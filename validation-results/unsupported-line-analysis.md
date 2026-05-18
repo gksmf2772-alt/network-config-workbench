@@ -1,30 +1,30 @@
 # Unsupported Line Analysis
 
-Generated: 2026-05-17T11:01:25.602Z
+Generated: 2026-05-18T12:21:00.146Z
 Case: nokia-classic15-to-nokia-mdcli-22
 
 ## Summary
-- total unsupported: 736
+- total unsupported: 757
 - eligible lines: 11841
-- recognized/analyzed lines: 11105
-- parser-unmapped lines: 736
+- recognized/analyzed lines: 11084
+- parser-unmapped lines: 757
 - ignored/suppressed lines: 62
-- unsupported syntax lines: 736
+- unsupported syntax lines: 757
 - router-log wrapper lines: 123
-- old/source unsupported: 736
+- old/source unsupported: 757
 - new/target unsupported: 0
 - status: partial-support
-- conclusion: Unsupported lines are parser coverage gaps, mostly Classic source system/router/service/policy detail lines. The previous aggregate was an undercount caused by double-subtracting 62 ignored target lines; corrected parser-unmapped count is 736.
+- conclusion: Unsupported lines are parser coverage gaps, mostly Classic source system/router/service/policy detail lines. The previous aggregate was an undercount caused by double-subtracting 62 ignored target lines; corrected parser-unmapped count is 757.
 
 ## By Section
-- filter: 367
+- filter: 388
 - router: 188
 - system: 179
 - port: 2
 
 ## By Object Type
 - unknown: 301
-- filter: 257
+- filter: 278
 - management-security: 160
 - qos-policy: 7
 - route-policy: 6
@@ -32,7 +32,7 @@ Case: nokia-classic15-to-nokia-mdcli-22
 - port: 1
 
 ## Focus Areas
-- Filter/ACL: 479
+- Filter/ACL: 500
 - Management/Security: 210
 - Parser coverage: 89
 - QoS: 7

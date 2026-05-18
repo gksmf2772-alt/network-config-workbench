@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-17T11:00:32.775Z",
+  "generatedAt": "2026-05-18T12:20:20.158Z",
   "activeProfileName": "profile-exception-application-fixture",
   "loadedProfileExceptionsCount": 1,
   "matchedExceptionIds": [
@@ -328,15 +328,6 @@
       "unmatchedReason": "fieldPath mismatch"
     },
     {
-      "objectKey": "bgp:112.188.30.19",
-      "fieldPath": "peerIp",
-      "ruleId": "semantic-compare.important-field-change",
-      "changeType": "equal",
-      "matched": false,
-      "matchedExceptionId": "",
-      "unmatchedReason": "fieldPath mismatch"
-    },
-    {
       "objectKey": "bgp:112.188.30.64",
       "fieldPath": "neighbor",
       "ruleId": "semantic-compare.important-field-change",
@@ -368,15 +359,6 @@
       "fieldPath": "admin-state",
       "ruleId": "semantic-compare.important-field-change",
       "changeType": "added",
-      "matched": false,
-      "matchedExceptionId": "",
-      "unmatchedReason": "fieldPath mismatch"
-    },
-    {
-      "objectKey": "bgp:112.188.30.64",
-      "fieldPath": "peerIp",
-      "ruleId": "semantic-compare.important-field-change",
-      "changeType": "equal",
       "matched": false,
       "matchedExceptionId": "",
       "unmatchedReason": "fieldPath mismatch"

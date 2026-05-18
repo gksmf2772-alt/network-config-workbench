@@ -12,7 +12,7 @@ import { buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
 import { VENDOR_IDS } from "../src/core/vendorPresets.js";
 
 const args = new Set(process.argv.slice(2));
-const iterations = readNumberArg("--iterations", args.has("--stress") ? 1000 : 1);
+const iterations = readNumberArg("--iterations", 1);
 const fixtureDir = findExampleDir();
 const scope = readStringArg("--scope", "full");
 

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  createComparisonPlan,
   matchNormalizedObjects,
   normalizeConfig,
 } from "../src/core/comparator.js";
@@ -54,6 +55,31 @@ test("LAG with changed member set remains candidate", () => {
 
   assert.equal(match.status, "candidate");
   assert.ok(match.scoreReasons.includes("lag-member-set-changed"));
+});
+
+test("LAG migrated name and member port maps by description endpoint", () => {
+  const oldDescription = "##TO, lag-191(9/2/1), Dobong-TOU-FD07, Po11(Te7/1), STBY, 02018880-9792##";
+  const newDescription = "## TO, lag-B-6202(6/2/c2/1), Dobong-TOU-FD07, Po11(Te7/1), SBY, 02018880-9792, Fiber ##";
+  const match = firstMatch(
+    [
+      object("lag", "191", {
+        lag: "191",
+        description: oldDescription,
+        members: ["9/2/1"],
+      }),
+    ],
+    [
+      object("lag", "lag-B-6202", {
+        lag: "lag-B-6202",
+        description: newDescription,
+        members: ["6/2/c2/1"],
+      }),
+    ]
+  );
+
+  assert.equal(match.status, "matched");
+  assert.ok(match.score >= 85);
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
 });
 
 test("object alias policy forces known mapping", () => {
@@ -196,6 +222,50 @@ test("Classic LAG parser extracts member ports", () => {
   });
 
   assert.deepEqual(result.objects[0].fields.members, ["1/1/1", "1/1/2"]);
+});
+
+test("Classic and MD-CLI migrated LAG maps by peer description and compares LAG fields", () => {
+  const oldConfig = [
+    "lag 191",
+    "    description \"##TO, lag-191(9/2/1), Dobong-TOU-FD07, Po11(Te7/1), STBY, 02018880-9792##\"",
+    "    mode access",
+    "    access",
+    "        adapt-qos link ",
+    "    exit",
+    "    port 9/2/1 ",
+    "    lacp active administrative-key 191 ",
+    "    lacp-xmit-interval slow",
+    "    no shutdown",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { lag "lag-B-6202" admin-state disable }',
+    '/configure { lag "lag-B-6202" description "## TO, lag-B-6202(6/2/c2/1), Dobong-TOU-FD07, Po11(Te7/1), SBY, 02018880-9792, Fiber, JN-HD2U#1-222 ##" }',
+    '/configure { lag "lag-B-6202" mode access }',
+    '/configure { lag "lag-B-6202" lacp-xmit-interval slow }',
+    '/configure { lag "lag-B-6202" lacp mode active }',
+    '/configure { lag "lag-B-6202" lacp administrative-key 6202 }',
+    '/configure { lag "lag-B-6202" access adapt-qos mode link }',
+    '/configure { lag "lag-B-6202" port 6/2/c2/1 }',
+  ].join("\n");
+
+  const oldObjects = normalizeConfig({ vendor: "nokia-classic", side: "old", configText: oldConfig }).objects;
+  const newObjects = normalizeConfig({ vendor: "nokia-md-cli", side: "new", configText: newConfig }).objects;
+  const match = firstMatch(oldObjects, newObjects);
+  const [planItem] = createComparisonPlan([match]);
+
+  assert.equal(match.status, "matched");
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+  assert.equal(match.oldObject.fields.mode, "access");
+  assert.equal(match.oldObject.fields["access.adapt-qos.mode"], "link");
+  assert.equal(match.oldObject.fields["lacp-mode"], "active");
+  assert.equal(match.oldObject.fields["lacp.administrative-key"], "191");
+  assert.equal(match.oldObject.fields["lacp-xmit-interval"], "slow");
+  assert.equal(planItem.fieldSummary.mode.status, "equal");
+  assert.equal(planItem.fieldSummary["access.adapt-qos.mode"].status, "equal");
+  assert.equal(planItem.fieldSummary["lacp-mode"].status, "equal");
+  assert.equal(planItem.fieldSummary["lacp-xmit-interval"].status, "equal");
+  assert.equal(planItem.fieldSummary["member-port"].status, "changed");
 });
 
 test("MD-CLI BGP one-line parser extracts import and export policy references", () => {

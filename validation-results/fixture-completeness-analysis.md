@@ -1,6 +1,6 @@
 # Fixture Completeness Analysis
 
-Generated: 2026-05-17T11:01:25.625Z
+Generated: 2026-05-18T12:21:00.162Z
 Case: nokia-classic15-to-nokia-mdcli-22
 
 ## Summary
@@ -15,23 +15,14 @@ Case: nokia-classic15-to-nokia-mdcli-22
 ## Object Coverage By Type
 - bgp: source 57, target 56, matched 56, candidate 0, status source-heavy-partial-target
 - community: source 9, target 0, matched 0, candidate 0, status target-policy-definition-missing-or-parser-gap
-- cpu-protection: source 0, target 25, matched 0, candidate 0, status target-only-fixture-object
-- default-host: source 25, target 25, matched 0, candidate 0, status key-normalization-or-manual-map-required
-- dhcp: source 0, target 27, matched 0, candidate 0, status target-only-fixture-object
-- filter: source 32, target 5, matched 1, candidate 0, status source-heavy-partial-target
-- group-interface: source 27, target 25, matched 0, candidate 0, status source-heavy-partial-target
-- interface: source 96, target 37, matched 4, candidate 1, status source-heavy-partial-target
-- lag: source 58, target 58, matched 0, candidate 0, status key-normalization-or-manual-map-required
+- interface: source 167, target 36, matched 4, candidate 1, status source-heavy-partial-target
+- lag: source 58, target 58, matched 26, candidate 0, status balanced
 - pim: source 0, target 50, matched 0, candidate 0, status target-only-fixture-object
-- port: source 148, target 63, matched 0, candidate 0, status source-heavy-partial-target
+- port: source 148, target 63, matched 30, candidate 18, status source-heavy-partial-target
 - prefix-list: source 7, target 0, matched 0, candidate 0, status target-policy-definition-missing-or-parser-gap
-- qos-policy: source 13, target 1, matched 0, candidate 0, status source-heavy-partial-target
 - route-policy: source 8, target 0, matched 0, candidate 0, status target-policy-definition-missing-or-parser-gap
-- sap: source 95, target 62, matched 0, candidate 0, status source-heavy-partial-target
-- static-host: source 1, target 25, matched 0, candidate 0, status target-heavy-generated-or-extra
-- static-route: source 68, target 70, matched 0, candidate 59, status target-heavy-generated-or-extra
-- sub-sla-mgmt: source 25, target 25, matched 0, candidate 0, status key-normalization-or-manual-map-required
-- subscriber-interface: source 27, target 25, matched 0, candidate 0, status source-heavy-partial-target
+- static-route: source 68, target 59, matched 0, candidate 59, status source-heavy-partial-target
+- subscriber-interface: source 27, target 27, matched 2, candidate 2, status weak-candidate-needs-review
 
 ## Improvement Targets
 - Port and LAG identity changed between Classic and MD-CLI; manual mapping or hardware rename mapping is required.

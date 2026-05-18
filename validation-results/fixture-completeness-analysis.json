@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-17T11:01:25.625Z",
+  "generatedAt": "2026-05-18T12:21:00.162Z",
   "caseId": "nokia-classic15-to-nokia-mdcli-22",
   "summary": {
     "status": "partial-assembled-target",
@@ -33,8 +33,8 @@
   "evidence": {
     "sourceEligibleLines": 9466,
     "targetEligibleLines": 2375,
-    "sourceObjectCount": 696,
-    "targetObjectCount": 579,
+    "sourceObjectCount": 549,
+    "targetObjectCount": 349,
     "targetBasenames": [
       "New_bgp_1.txt",
       "New_static_1.txt",
@@ -92,74 +92,24 @@
       "status": "target-policy-definition-missing-or-parser-gap"
     },
     {
-      "objectType": "cpu-protection",
-      "sourceCount": 0,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 0,
-      "unmatchedTarget": 25,
-      "status": "target-only-fixture-object"
-    },
-    {
-      "objectType": "default-host",
-      "sourceCount": 25,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 25,
-      "unmatchedTarget": 25,
-      "status": "key-normalization-or-manual-map-required"
-    },
-    {
-      "objectType": "dhcp",
-      "sourceCount": 0,
-      "targetCount": 27,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 0,
-      "unmatchedTarget": 27,
-      "status": "target-only-fixture-object"
-    },
-    {
-      "objectType": "filter",
-      "sourceCount": 32,
-      "targetCount": 5,
-      "matched": 1,
-      "candidate": 0,
-      "unmatchedSource": 31,
-      "unmatchedTarget": 4,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "group-interface",
-      "sourceCount": 27,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 27,
-      "unmatchedTarget": 25,
-      "status": "source-heavy-partial-target"
-    },
-    {
       "objectType": "interface",
-      "sourceCount": 96,
-      "targetCount": 37,
+      "sourceCount": 167,
+      "targetCount": 36,
       "matched": 4,
       "candidate": 1,
-      "unmatchedSource": 91,
-      "unmatchedTarget": 32,
+      "unmatchedSource": 162,
+      "unmatchedTarget": 31,
       "status": "source-heavy-partial-target"
     },
     {
       "objectType": "lag",
       "sourceCount": 58,
       "targetCount": 58,
-      "matched": 0,
+      "matched": 26,
       "candidate": 0,
-      "unmatchedSource": 58,
-      "unmatchedTarget": 58,
-      "status": "key-normalization-or-manual-map-required"
+      "unmatchedSource": 32,
+      "unmatchedTarget": 32,
+      "status": "balanced"
     },
     {
       "objectType": "pim",
@@ -175,10 +125,10 @@
       "objectType": "port",
       "sourceCount": 148,
       "targetCount": 63,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 148,
-      "unmatchedTarget": 63,
+      "matched": 30,
+      "candidate": 18,
+      "unmatchedSource": 100,
+      "unmatchedTarget": 29,
       "status": "source-heavy-partial-target"
     },
     {
@@ -192,16 +142,6 @@
       "status": "target-policy-definition-missing-or-parser-gap"
     },
     {
-      "objectType": "qos-policy",
-      "sourceCount": 13,
-      "targetCount": 1,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 13,
-      "unmatchedTarget": 1,
-      "status": "source-heavy-partial-target"
-    },
-    {
       "objectType": "route-policy",
       "sourceCount": 8,
       "targetCount": 0,
@@ -212,54 +152,24 @@
       "status": "target-policy-definition-missing-or-parser-gap"
     },
     {
-      "objectType": "sap",
-      "sourceCount": 95,
-      "targetCount": 62,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 95,
-      "unmatchedTarget": 62,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "static-host",
-      "sourceCount": 1,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 1,
-      "unmatchedTarget": 25,
-      "status": "target-heavy-generated-or-extra"
-    },
-    {
       "objectType": "static-route",
       "sourceCount": 68,
-      "targetCount": 70,
+      "targetCount": 59,
       "matched": 0,
       "candidate": 59,
       "unmatchedSource": 9,
       "unmatchedTarget": 0,
-      "status": "target-heavy-generated-or-extra"
-    },
-    {
-      "objectType": "sub-sla-mgmt",
-      "sourceCount": 25,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 25,
-      "unmatchedTarget": 25,
-      "status": "key-normalization-or-manual-map-required"
+      "status": "source-heavy-partial-target"
     },
     {
       "objectType": "subscriber-interface",
       "sourceCount": 27,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 27,
-      "unmatchedTarget": 25,
-      "status": "source-heavy-partial-target"
+      "targetCount": 27,
+      "matched": 2,
+      "candidate": 2,
+      "unmatchedSource": 23,
+      "unmatchedTarget": 14,
+      "status": "weak-candidate-needs-review"
     }
   ],
   "missingTargetObjectGroups": [
@@ -284,43 +194,23 @@
       "status": "target-policy-definition-missing-or-parser-gap"
     },
     {
-      "objectType": "filter",
-      "sourceCount": 32,
-      "targetCount": 5,
-      "matched": 1,
-      "candidate": 0,
-      "unmatchedSource": 31,
-      "unmatchedTarget": 4,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "group-interface",
-      "sourceCount": 27,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 27,
-      "unmatchedTarget": 25,
-      "status": "source-heavy-partial-target"
-    },
-    {
       "objectType": "interface",
-      "sourceCount": 96,
-      "targetCount": 37,
+      "sourceCount": 167,
+      "targetCount": 36,
       "matched": 4,
       "candidate": 1,
-      "unmatchedSource": 91,
-      "unmatchedTarget": 32,
+      "unmatchedSource": 162,
+      "unmatchedTarget": 31,
       "status": "source-heavy-partial-target"
     },
     {
       "objectType": "port",
       "sourceCount": 148,
       "targetCount": 63,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 148,
-      "unmatchedTarget": 63,
+      "matched": 30,
+      "candidate": 18,
+      "unmatchedSource": 100,
+      "unmatchedTarget": 29,
       "status": "source-heavy-partial-target"
     },
     {
@@ -334,16 +224,6 @@
       "status": "target-policy-definition-missing-or-parser-gap"
     },
     {
-      "objectType": "qos-policy",
-      "sourceCount": 13,
-      "targetCount": 1,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 13,
-      "unmatchedTarget": 1,
-      "status": "source-heavy-partial-target"
-    },
-    {
       "objectType": "route-policy",
       "sourceCount": 8,
       "targetCount": 0,
@@ -354,47 +234,17 @@
       "status": "target-policy-definition-missing-or-parser-gap"
     },
     {
-      "objectType": "sap",
-      "sourceCount": 95,
-      "targetCount": 62,
+      "objectType": "static-route",
+      "sourceCount": 68,
+      "targetCount": 59,
       "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 95,
-      "unmatchedTarget": 62,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "subscriber-interface",
-      "sourceCount": 27,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 27,
-      "unmatchedTarget": 25,
+      "candidate": 59,
+      "unmatchedSource": 9,
+      "unmatchedTarget": 0,
       "status": "source-heavy-partial-target"
     }
   ],
   "targetOnlyObjectGroups": [
-    {
-      "objectType": "cpu-protection",
-      "sourceCount": 0,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 0,
-      "unmatchedTarget": 25,
-      "status": "target-only-fixture-object"
-    },
-    {
-      "objectType": "dhcp",
-      "sourceCount": 0,
-      "targetCount": 27,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 0,
-      "unmatchedTarget": 27,
-      "status": "target-only-fixture-object"
-    },
     {
       "objectType": "pim",
       "sourceCount": 0,
@@ -408,103 +258,13 @@
   ],
   "weakMatchObjectGroups": [
     {
-      "objectType": "default-host",
-      "sourceCount": 25,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 25,
-      "unmatchedTarget": 25,
-      "status": "key-normalization-or-manual-map-required"
-    },
-    {
-      "objectType": "group-interface",
-      "sourceCount": 27,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 27,
-      "unmatchedTarget": 25,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "lag",
-      "sourceCount": 58,
-      "targetCount": 58,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 58,
-      "unmatchedTarget": 58,
-      "status": "key-normalization-or-manual-map-required"
-    },
-    {
-      "objectType": "port",
-      "sourceCount": 148,
-      "targetCount": 63,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 148,
-      "unmatchedTarget": 63,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "qos-policy",
-      "sourceCount": 13,
-      "targetCount": 1,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 13,
-      "unmatchedTarget": 1,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "sap",
-      "sourceCount": 95,
-      "targetCount": 62,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 95,
-      "unmatchedTarget": 62,
-      "status": "source-heavy-partial-target"
-    },
-    {
-      "objectType": "static-host",
-      "sourceCount": 1,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 1,
-      "unmatchedTarget": 25,
-      "status": "target-heavy-generated-or-extra"
-    },
-    {
       "objectType": "static-route",
       "sourceCount": 68,
-      "targetCount": 70,
+      "targetCount": 59,
       "matched": 0,
       "candidate": 59,
       "unmatchedSource": 9,
       "unmatchedTarget": 0,
-      "status": "target-heavy-generated-or-extra"
-    },
-    {
-      "objectType": "sub-sla-mgmt",
-      "sourceCount": 25,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 25,
-      "unmatchedTarget": 25,
-      "status": "key-normalization-or-manual-map-required"
-    },
-    {
-      "objectType": "subscriber-interface",
-      "sourceCount": 27,
-      "targetCount": 25,
-      "matched": 0,
-      "candidate": 0,
-      "unmatchedSource": 27,
-      "unmatchedTarget": 25,
       "status": "source-heavy-partial-target"
     }
   ],

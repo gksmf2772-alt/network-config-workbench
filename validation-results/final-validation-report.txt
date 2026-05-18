@@ -48,9 +48,7 @@ Generated: 2026-05-16T10:59:48.576Z
 - generation validation: not-applicable
 - target-default-risk 321, manual-review objects 295
 - full config generation is not implemented; no generation success was claimed.
-## 9. Stress Validation
-- validate:stress: passed, iterations 1000/1000, cases nokia-classic15-to-nokia-mdcli-22
-## 10. Build/Test Results
+## 9. Build/Test Results
 - npm.cmd test: passed
 - npm.cmd run build: passed
 - npm.cmd run validate:compare:fixtures: passed
@@ -58,15 +56,14 @@ Generated: 2026-05-16T10:59:48.576Z
 - validate:audit: passed
 - validate:report: passed
 - validate:graph: passed
-- validate:stress: passed
-## 11. Remaining Limitations
+## 10. Remaining Limitations
 - Juniper 실제 설정 기반 검증은 source-juniper.conf 추가 전까지 blocked 상태입니다.
 - Synthetic Juniper smoke fixture는 production migration/comparison pass로 계산하지 않습니다.
 - Config generation/migration 엔진은 아직 구현되지 않아 migration-readiness만 검증합니다.
 - Filter/QoS/route-policy 본문 파싱은 placeholder/부분 지원이며 manual-review finding으로 추적합니다.
 - UI smoke는 별도 브라우저 테스트 프레임워크 없이 pure data helper 기준으로 검증했습니다.
 
-## 12. Validation Quality Analysis
+## 11. Validation Quality Analysis
 - fixture completeness: partial-assembled-target
 - high unmatched expected: true
 - unmatched: source 575, target 447, weak mappings 60

@@ -73,7 +73,6 @@ const VALID_MIGRATION_IMPACTS = new Set([
 export function parseCliArgs(argv = process.argv.slice(2)) {
   const result = {
     strictMissingFixtures: false,
-    iterations: 1000,
     mode: "compare",
     writeReports: true,
   };
@@ -82,10 +81,6 @@ export function parseCliArgs(argv = process.argv.slice(2)) {
     const arg = argv[index];
     if (arg === "--strict-missing-fixtures") result.strictMissingFixtures = true;
     if (arg === "--mode") result.mode = argv[index + 1] || result.mode;
-    if (arg === "--iterations") {
-      const value = Number(argv[index + 1]);
-      if (Number.isFinite(value) && value > 0) result.iterations = Math.floor(value);
-    }
     if (arg === "--no-write") result.writeReports = false;
   }
 
@@ -371,86 +366,6 @@ export function runManifestValidation({
   return summary;
 }
 
-export function runStressValidation({
-  iterations = 1000,
-  strictMissingFixtures = false,
-  writeReports = true,
-} = {}) {
-  const started = Date.now();
-  const manifest = loadManifest();
-  const inventory = discoverInventory();
-  const stressCases = (manifest.cases || []).filter((testCase) =>
-    testCase.enabled && !isBlockedCase(testCase, inventory)
-  );
-  const productionCases = stressCases.filter((testCase) => !testCase.synthetic);
-  const runnableCases = productionCases.length ? productionCases : stressCases;
-  const failures = [];
-  const caseSignatures = new Map();
-  const caseResults = [];
-
-  if (!runnableCases.length) {
-    const summary = {
-      command: "validate:stress",
-      status: strictMissingFixtures ? "failed" : "blocked",
-      iterationsRequested: iterations,
-      iterationsCompleted: 0,
-      casesRun: [],
-      durationMs: Date.now() - started,
-      reason: "no runnable validation case",
-    };
-    if (writeReports) writeStressReports(summary);
-    return summary;
-  }
-
-  for (let index = 0; index < iterations; index += 1) {
-    const testCase = runnableCases[index % runnableCases.length];
-    try {
-      const result = runValidationCase(testCase, {
-        mode: "stress",
-        stress: true,
-        iteration: index + 1,
-      });
-      const signature = result.signature;
-      const previous = caseSignatures.get(testCase.id);
-      if (previous && previous !== signature) {
-        throw new Error(`deterministic signature mismatch for ${testCase.id}`);
-      }
-      caseSignatures.set(testCase.id, signature);
-      if (index < runnableCases.length) caseResults.push(result);
-    } catch (error) {
-      failures.push({
-        caseId: testCase.id,
-        iteration: index + 1,
-        seed: stableSeed(testCase.id, index + 1),
-        reason: error.message,
-        stack: error.stack,
-      });
-      break;
-    }
-  }
-
-  const summary = {
-    command: "validate:stress",
-    status: failures.length ? "failed" : "passed",
-    iterationsRequested: iterations,
-    iterationsCompleted: failures.length ? failures[0].iteration - 1 : iterations,
-    casesRun: runnableCases.map((testCase) => testCase.id),
-    productionCasesRun: runnableCases.filter((testCase) => !testCase.synthetic).map((testCase) => testCase.id),
-    syntheticCasesRun: runnableCases.filter((testCase) => testCase.synthetic).map((testCase) => testCase.id),
-    blockedCases: (manifest.cases || []).filter((testCase) => isBlockedCase(testCase, inventory)).map((testCase) => testCase.id),
-    pass: failures.length === 0,
-    durationMs: Date.now() - started,
-    failingCaseId: failures[0]?.caseId || "",
-    failingIteration: failures[0]?.iteration || null,
-    failingSeed: failures[0]?.seed || "",
-    failures,
-    sampleResults: caseResults,
-  };
-
-  if (writeReports) writeStressReports(summary);
-  return summary;
-}
-
 function loadQualityAnalysisSummary() {
   const paths = {
     unmatched: `${RESULTS_DIR}/unmatched-analysis.json`,
@@ -476,7 +391,6 @@ function loadQualityAnalysisSummary() {
 export function writeFinalReports({
   inventory = discoverInventory(),
   validationSummaries = [],
-  stressSummary = null,
   commandResults = [],
 } = {}) {
   const manifest = loadManifest();
@@ -486,7 +400,6 @@ export function writeFinalReports({
     manifestPath: MANIFEST_PATH,
     cases: manifest.cases || [],
     validationSummaries,
-    stressSummary,
     commandResults,
     qualityAnalysis: loadQualityAnalysisSummary(),
     remainingLimitations: [
@@ -504,13 +417,11 @@ export function writeFinalReports({
 
 export function runValidationCase(testCase, {
   mode = "compare",
-  stress = false,
-  iteration = 1,
 } = {}) {
   const profile = loadValidationProfile(testCase);
 
-  const sourceText = loadCaseSourceText(testCase, { stress, iteration });
-  const targetText = loadCaseTargetText(testCase, { stress, iteration });
+  const sourceText = loadCaseSourceText(testCase);
+  const targetText = loadCaseTargetText(testCase);
 
   assert(sourceText.trim().length > 0, `${testCase.id}: source config empty`);
   assert(targetText.trim().length > 0, `${testCase.id}: target config empty`);
@@ -583,7 +494,7 @@ export function runValidationCase(testCase, {
     productionValidation: testCase.productionValidation !== false && !testCase.synthetic,
     mode,
     sourcePath: testCase.sourceConfigPath,
-    targetPaths: getTargetPaths(testCase, { stress }),
+    targetPaths: getTargetPaths(testCase),
     sourceVendor: testCase.sourceVendor,
     targetVendor: testCase.targetVendor,
     parser: {
@@ -867,34 +778,25 @@ function blockedCaseResult(testCase, strictMissingFixtures) {
   };
 }
 
-function loadCaseSourceText(testCase, options) {
+function loadCaseSourceText(testCase) {
   assert(testCase.sourceConfigPath, `${testCase.id}: sourceConfigPath missing`);
   assert(fs.existsSync(absPath(testCase.sourceConfigPath)), `${testCase.id}: source config missing: ${testCase.sourceConfigPath}`);
-  return applyStressVariation(readText(testCase.sourceConfigPath), options);
+  return readText(testCase.sourceConfigPath);
 }
 
-function loadCaseTargetText(testCase, options) {
-  const paths = getTargetPaths(testCase, options);
+function loadCaseTargetText(testCase) {
+  const paths = getTargetPaths(testCase);
   assert(paths.length > 0, `${testCase.id}: target config path missing`);
   return paths.map((targetPath) => {
     assert(fs.existsSync(absPath(targetPath)), `${testCase.id}: target config missing: ${targetPath}`);
-    return applyStressVariation(readText(targetPath), options);
+    return readText(targetPath);
   }).join("\n");
 }
 
-function getTargetPaths(testCase, { stress = false } = {}) {
-  if (stress && Array.isArray(testCase.stressTargetConfigPaths) && testCase.stressTargetConfigPaths.length) {
-    return testCase.stressTargetConfigPaths;
-  }
+function getTargetPaths(testCase) {
   if (Array.isArray(testCase.targetConfigPaths)) return testCase.targetConfigPaths;
   if (testCase.targetConfigPath) return [testCase.targetConfigPath];
   return [];
-}
-
-function applyStressVariation(text = "", { stress = false, iteration = 1 } = {}) {
-  void stress;
-  void iteration;
-  return text;
 }
 
 function isJuniperSetStyle(text = "") {
@@ -1097,10 +999,6 @@ function buildResultSignature(result) {
   return crypto.createHash("sha256").update(JSON.stringify(stable)).digest("hex");
 }
 
-function stableSeed(caseId, iteration) {
-  return crypto.createHash("sha1").update(`${caseId}:${iteration}`).digest("hex").slice(0, 12);
-}
-
 function summarizeValidationRun({ command, mode, results, inventory }) {
   const failed = results.filter((item) => item.status === "failed");
   return {
@@ -1149,28 +1047,6 @@ function renderValidationMarkdown(summary) {
     ].filter(Boolean).join("\n")),
     "",
   ].join("\n");
-}
-
-function writeStressReports(summary) {
-  writeJson(`${RESULTS_DIR}/stress-summary.json`, summary);
-  writeText(`${RESULTS_DIR}/stress-summary.md`, renderStressMarkdown(summary));
-}
-
-function renderStressMarkdown(summary) {
-  return [
-    "# Stress Validation",
-    "",
-    `Status: ${summary.status}`,
-    `Iterations requested: ${summary.iterationsRequested}`,
-    `Iterations completed: ${summary.iterationsCompleted}`,
-    `Duration ms: ${summary.durationMs}`,
-    `Cases run: ${(summary.casesRun || []).join(", ") || "-"}`,
-    `Blocked cases: ${(summary.blockedCases || []).join(", ") || "-"}`,
-    summary.failingCaseId ? `Failing case: ${summary.failingCaseId}` : "",
-    summary.failingIteration ? `Failing iteration: ${summary.failingIteration}` : "",
-    summary.failingSeed ? `Failing seed: ${summary.failingSeed}` : "",
-    "",
-  ].filter(Boolean).join("\n");
 }
 
 function renderFinalMarkdown(final) {
@@ -1256,18 +1132,13 @@ function renderFinalMarkdown(final) {
     primary?.migrationReadiness ? `- target-default-risk ${primary.migrationReadiness.targetDefaultRisk}, manual-review objects ${primary.migrationReadiness.manualReviewObjects}` : "",
     "- full config generation is not implemented; no generation success was claimed.",
     "",
-    "## 9. Stress Validation",
-    final.stressSummary
-      ? `- ${final.stressSummary.command}: ${final.stressSummary.status}, iterations ${final.stressSummary.iterationsCompleted}/${final.stressSummary.iterationsRequested}, cases ${final.stressSummary.casesRun.join(", ")}`
-      : "- not run",
-    "",
-    "## 10. Build/Test Results",
+    "## 9. Build/Test Results",
     ...(commandLines.length ? commandLines : ["- see command output"]),
     "",
-    "## 11. Remaining Limitations",
+    "## 10. Remaining Limitations",
     ...final.remainingLimitations.map((item) => `- ${item}`),
     "",
-    "## 12. Validation Quality Analysis",
+    "## 11. Validation Quality Analysis",
     hasQuality
       ? `- fixture completeness: ${fixtureCompleteness.status || "not-run"}`
       : "- not run",

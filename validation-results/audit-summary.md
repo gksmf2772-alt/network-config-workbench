@@ -1,7 +1,7 @@
 # Validation audit
 
 Status: passed
-Generated: 2026-05-17T11:00:37.300Z
+Generated: 2026-05-18T12:20:25.876Z
 
 ## Counts
 - passed: 2
@@ -25,7 +25,7 @@ Generated: 2026-05-17T11:00:37.300Z
 ### nokia-classic15-to-nokia-mdcli-22
 - status: passed
 - synthetic: false
-- parsed objects: old 696, new 579
-- semantic: matched 61, old-only 575, new-only 447, coverage 94%
-- audit: active 623, suppressed 59
-- graph: nodes 464, edges 260
+- parsed objects: old 549, new 349
+- semantic: matched 118, old-only 351, new-only 156, coverage 94%
+- audit: active 572, suppressed 60
+- graph: nodes 415, edges 308

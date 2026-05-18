@@ -1,224 +1,21 @@
 {
-  "generatedAt": "2026-05-17T11:01:25.638Z",
+  "generatedAt": "2026-05-18T12:21:00.174Z",
   "caseId": "nokia-classic15-to-nokia-mdcli-22",
   "summary": {
     "groupCount": 7,
-    "unsupportedLineCount": 736,
-    "activeFindingCount": 623,
-    "autoGenerationBlockingGroups": 2,
-    "topPriorityGroup": "qos-policy-body",
+    "unsupportedLineCount": 757,
+    "activeFindingCount": 572,
+    "autoGenerationBlockingGroups": 3,
+    "topPriorityGroup": "filter-acl-body",
     "primaryConclusion": "QoS/filter/route-policy body coverage and subscriber/service policy details are the highest-value parser backlog before automatic generation."
   },
   "groups": [
     {
-      "id": "qos-policy-body",
-      "titleKo": "QoS policy body parsing",
-      "priority": 134,
-      "unsupportedLineCount": 7,
-      "activeFindingCount": 250,
-      "exampleSourceLines": [
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 524,
-          "text": "cpm-queue"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 525,
-          "text": "queue 100 create"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 527,
-          "text": "queue 101 create"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 529,
-          "text": "queue 102 create"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 531,
-          "text": "queue 120 create"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 534,
-          "text": "queue 500 create"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 537,
-          "text": "queue 1000 create"
-        }
-      ],
-      "objectType": "qos-policy",
-      "expectedNormalizedFields": [
-        "policy-id/name",
-        "queue",
-        "scheduler",
-        "policer",
-        "shaper",
-        "cir",
-        "pir",
-        "mbs",
-        "cbs",
-        "remarking"
-      ],
-      "migrationImpact": "target-default-risk",
-      "auditRulesAffected": [
-        {
-          "key": "qos.sap-ingress-required",
-          "count": 149
-        },
-        {
-          "key": "qos.referenced-policy-undefined",
-          "count": 66
-        },
-        {
-          "key": "qos.sap-egress-required",
-          "count": 20
-        },
-        {
-          "key": "qos.defined-policy-unused",
-          "count": 11
-        },
-        {
-          "key": "qos.sap-ingress-egress-asymmetry",
-          "count": 4
-        }
-      ],
-      "impactOnBlocksAutoGeneration": 66,
-      "impactOnConversionPolicyRequired": 4,
-      "impactOnActualMissingPossibility": 0,
-      "impactOnAuditAccuracy": 250,
-      "easeOfImplementation": "medium",
-      "implementationRisk": "medium",
-      "recommendedNextAction": "First add policy definition/reference extraction; defer queue/scheduler body semantics.",
-      "neededForAutoGeneration": true,
-      "parserGapStatus": "parser-gap"
-    },
-    {
-      "id": "subscriber-service-policy",
-      "titleKo": "Subscriber/service policy parsing",
-      "priority": 129,
-      "unsupportedLineCount": 7,
-      "activeFindingCount": 399,
-      "exampleSourceLines": [
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 543,
-          "text": "description \"DHCP Rate Limit\""
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 548,
-          "text": "description \"DHCP_PIM_Limit_400\""
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 814,
-          "text": "event-control \"dhcp\" 2010 suppress"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 815,
-          "text": "event-control \"dhcp\" 2027 suppress"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 1293,
-          "text": "description \"KT_DHCP+CVNET\""
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 1357,
-          "text": "port-list \"DHCP\" create"
-        },
-        {
-          "side": "old",
-          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-          "line": 1358,
-          "text": "description \"DHCP_Server_67_Client_68\""
-        }
-      ],
-      "objectType": "subscriber-service,sap,subscriber-interface,group-interface,dhcp",
-      "expectedNormalizedFields": [
-        "service-id",
-        "sap",
-        "subscriber-interface",
-        "group-interface",
-        "dhcp",
-        "static-host",
-        "default-host",
-        "sub-sla-mgmt",
-        "cpu-protection"
-      ],
-      "migrationImpact": "target-default-risk",
-      "auditRulesAffected": [
-        {
-          "key": "qos.sap-ingress-required",
-          "count": 149
-        },
-        {
-          "key": "service.sap-relationship-incomplete",
-          "count": 107
-        },
-        {
-          "key": "qos.referenced-policy-undefined",
-          "count": 66
-        },
-        {
-          "key": "subscriber.dhcp-group-missing",
-          "count": 27
-        },
-        {
-          "key": "service.group-subscriber-missing",
-          "count": 25
-        },
-        {
-          "key": "qos.sap-egress-required",
-          "count": 20
-        },
-        {
-          "key": "qos.sap-ingress-egress-asymmetry",
-          "count": 4
-        },
-        {
-          "key": "subscriber.static-host-abnormal",
-          "count": 1
-        }
-      ],
-      "impactOnBlocksAutoGeneration": 66,
-      "impactOnConversionPolicyRequired": 163,
-      "impactOnActualMissingPossibility": 27,
-      "impactOnAuditAccuracy": 399,
-      "easeOfImplementation": "medium",
-      "implementationRisk": "medium",
-      "recommendedNextAction": "Backlog only until narrower fixtures and expected normalized fields are available.",
-      "neededForAutoGeneration": true,
-      "parserGapStatus": "parser-gap"
-    },
-    {
       "id": "filter-acl-body",
       "titleKo": "Filter/ACL body parsing",
-      "priority": 111,
-      "unsupportedLineCount": 479,
-      "activeFindingCount": 45,
+      "priority": 118,
+      "unsupportedLineCount": 500,
+      "activeFindingCount": 190,
       "exampleSourceLines": [
         {
           "side": "old",
@@ -303,21 +100,105 @@
         "log",
         "default-action"
       ],
-      "migrationImpact": "conversion-policy-required",
+      "migrationImpact": "manual-conversion-required",
       "auditRulesAffected": [
         {
+          "key": "filter.parser-partial",
+          "count": 182
+        },
+        {
           "key": "filter.default-action-missing",
-          "count": 45
+          "count": 8
         }
       ],
       "impactOnBlocksAutoGeneration": 0,
       "impactOnConversionPolicyRequired": 0,
       "impactOnActualMissingPossibility": 0,
-      "impactOnAuditAccuracy": 45,
+      "impactOnAuditAccuracy": 190,
       "easeOfImplementation": "low",
       "implementationRisk": "high",
       "recommendedNextAction": "Extract filter definitions and default-action first; defer full entry shadow analysis.",
-      "neededForAutoGeneration": false,
+      "neededForAutoGeneration": true,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "qos-policy-body",
+      "titleKo": "QoS policy body parsing",
+      "priority": 102,
+      "unsupportedLineCount": 7,
+      "activeFindingCount": 214,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 524,
+          "text": "cpm-queue"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 525,
+          "text": "queue 100 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 527,
+          "text": "queue 101 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 529,
+          "text": "queue 102 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 531,
+          "text": "queue 120 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 534,
+          "text": "queue 500 create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 537,
+          "text": "queue 1000 create"
+        }
+      ],
+      "objectType": "qos-policy",
+      "expectedNormalizedFields": [
+        "policy-id/name",
+        "queue",
+        "scheduler",
+        "policer",
+        "shaper",
+        "cir",
+        "pir",
+        "mbs",
+        "cbs",
+        "remarking"
+      ],
+      "migrationImpact": "manual-conversion-required",
+      "auditRulesAffected": [
+        {
+          "key": "qos.policy-parser-partial",
+          "count": 214
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 0,
+      "impactOnConversionPolicyRequired": 0,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 214,
+      "easeOfImplementation": "medium",
+      "implementationRisk": "medium",
+      "recommendedNextAction": "Backlog only until narrower fixtures and expected normalized fields are available.",
+      "neededForAutoGeneration": true,
       "parserGapStatus": "parser-gap"
     },
     {
@@ -439,6 +320,89 @@
       "implementationRisk": "low",
       "recommendedNextAction": "Keep reference extraction tests; add max-prefix only if syntax sample is stable.",
       "neededForAutoGeneration": false,
+      "parserGapStatus": "parser-gap"
+    },
+    {
+      "id": "subscriber-service-policy",
+      "titleKo": "Subscriber/service policy parsing",
+      "priority": 88,
+      "unsupportedLineCount": 7,
+      "activeFindingCount": 175,
+      "exampleSourceLines": [
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 543,
+          "text": "description \"DHCP Rate Limit\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 548,
+          "text": "description \"DHCP_PIM_Limit_400\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 814,
+          "text": "event-control \"dhcp\" 2010 suppress"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 815,
+          "text": "event-control \"dhcp\" 2027 suppress"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 1293,
+          "text": "description \"KT_DHCP+CVNET\""
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 1357,
+          "text": "port-list \"DHCP\" create"
+        },
+        {
+          "side": "old",
+          "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+          "line": 1358,
+          "text": "description \"DHCP_Server_67_Client_68\""
+        }
+      ],
+      "objectType": "subscriber-service,sap,subscriber-interface,group-interface,dhcp",
+      "expectedNormalizedFields": [
+        "service-id",
+        "sap",
+        "subscriber-interface",
+        "group-interface",
+        "dhcp",
+        "static-host",
+        "default-host",
+        "sub-sla-mgmt",
+        "cpu-protection"
+      ],
+      "migrationImpact": "manual-conversion-required",
+      "auditRulesAffected": [
+        {
+          "key": "filter.parser-partial",
+          "count": 100
+        },
+        {
+          "key": "qos.policy-parser-partial",
+          "count": 75
+        }
+      ],
+      "impactOnBlocksAutoGeneration": 0,
+      "impactOnConversionPolicyRequired": 0,
+      "impactOnActualMissingPossibility": 0,
+      "impactOnAuditAccuracy": 175,
+      "easeOfImplementation": "medium",
+      "implementationRisk": "medium",
+      "recommendedNextAction": "Backlog only until narrower fixtures and expected normalized fields are available.",
+      "neededForAutoGeneration": true,
       "parserGapStatus": "parser-gap"
     },
     {

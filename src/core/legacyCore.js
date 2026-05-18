@@ -467,7 +467,7 @@ function createDefaultIdentityRules() {
 }
 
 function createDefaultIdentityRuleForType(type) {
-  const rule = { mode: ["port", "lag", "interface"].includes(type) ? "description" : "header", pattern: "" };
+  const rule = { mode: ["port", "interface"].includes(type) ? "description" : "header", pattern: "" };
   return { old: { ...rule }, new: { ...rule } };
 }
 
@@ -3096,6 +3096,10 @@ function inferSemanticFieldNameForLineContext(line, context = {}) {
     ? context.rawLines
     : getSemanticObjectRawLines(context.object);
   const lineIndex = Number.isFinite(context.lineIndex) ? context.lineIndex : -1;
+  if (canonicalizeComparableLine(objectType) === "lag") {
+    return inferLagLineFields(line)[0] || "";
+  }
+
   const scopedField = inferScopedInterfaceLineField(line, {
     objectType,
     rawLines,
@@ -3330,6 +3334,29 @@ function inferSemanticFieldName(line) {
   return extractFieldName(normalized);
 }
 
+function inferLagLineFields(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  const fields = [];
+  const add = (field) => {
+    const normalizedField = normalizeRelationField(field);
+    if (normalizedField && !fields.includes(normalizedField)) fields.push(normalizedField);
+  };
+
+  if (!normalized) return fields;
+
+  if (/\bdescription\b/.test(normalized)) add("description");
+  if (/\bno\s+shutdown\b|\badmin-state\b/.test(normalized) || /^shutdown$/.test(normalized)) add("state");
+  if (/\blacp-xmit-interval\b/.test(normalized)) add("lacp-xmit-interval");
+  if (/\blacp\s+mode\s+[^"\s{}]+/.test(normalized) || /^lacp\s+[^"\s{}]+(?:\s+administrative-key\b|$)/.test(normalized)) add("lacp-mode");
+  if (/\blacp\s+administrative-key\s+[^"\s{}]+/.test(normalized) || /^lacp\s+[^"\s{}]+\s+administrative-key\s+[^"\s{}]+/.test(normalized)) add("lacp.administrative-key");
+  if (/\baccess\s+adapt-qos\s+mode\s+[^"\s{}]+/.test(normalized) || /^adapt-qos\s+[^"\s{}]+/.test(normalized)) add("access.adapt-qos.mode");
+  if (!fields.length && (/\blag\s+"?[^"\s{}]+"?\s+mode\s+[^"\s{}]+/.test(normalized) || /^mode\s+[^"\s{}]+/.test(normalized))) add("mode");
+  if (/\blag\s+"?[^"\s{}]+"?\s+port\s+[^"\s{}]+/.test(normalized) || /^port\s+[^"\s{}]+/.test(normalized)) add("member-port");
+  if (!fields.length && /\blag\s+"?[^"\s{}]+"?/.test(normalized)) add("lag");
+
+  return fields;
+}
+
 function inferOneLineStaticRouteField(normalized = "") {
   if (!/^\/?configure\s*\{.*\bstatic-routes\s+route\b/.test(normalized)) return "";
   if (/\bdescription\b/.test(normalized)) return "description";
@@ -3342,6 +3369,7 @@ function inferOneLineStaticRouteField(normalized = "") {
 
 function inferValueForField(line, field) {
   const normalized = canonicalizeComparableLine(line);
+  const normalizedField = normalizeRelationField(field);
   if (field === "route") return stripTrailingSyntax(normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (field === "next-hop") return stripTrailingSyntax(normalized.match(/\b(?:next-hop|gateway)\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (field === "address") return stripTrailingSyntax(normalized.match(/\b\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?\b/)?.[0] || "");
@@ -3360,6 +3388,42 @@ function inferValueForField(line, field) {
     return stripTrailingSyntax(
       normalized.match(/\bpolicy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
       normalized.match(/\bqos\s+"?([^"\s{}]+)"?/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "member-port") {
+    return stripTrailingSyntax(
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^port\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "lacp-mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "lacp.administrative-key") {
+    return stripTrailingSyntax(
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "lacp-xmit-interval") return stripTrailingSyntax(normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/)?.[1] || "");
+  if (normalizedField === "access.adapt-qos.mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/)?.[1] ||
       ""
     );
   }
@@ -6441,6 +6505,8 @@ function isObjectTerminatorLine(normalizedLine = "") {
   return line === "exit" || line === "}" || line === "!";
 }
 
+const INDENT_TERMINATED_OBJECT_TYPES = new Set(["port", "lag", "interface", "static-route", "bgp", "pim"]);
+
 function isStaticRouteBlockHeaderLine(normalizedLine = "") {
   const line = canonicalizeComparableLine(normalizedLine);
   if (/\bnext-hop\b/.test(line) && !/^static-route-entry\s+\S+\s+create\b/.test(line)) {
@@ -6477,7 +6543,17 @@ function appendLineToParsedObject(current, rawLine, normalizedLine) {
     current.blockDepth -= 1;
   }
 
-  return false;
+  return shouldTerminateCurrentObject(current, rawLine, line);
+}
+
+function shouldTerminateCurrentObject(current, rawLine, normalizedLine) {
+  if (!current || !isObjectTerminatorLine(normalizedLine)) return false;
+  const objectType = canonicalizeComparableLine(current.type || current.sourceType || "");
+  if (!INDENT_TERMINATED_OBJECT_TYPES.has(objectType)) return false;
+
+  const startIndent = lineIndent(current.rawLines?.[0] || "");
+  const exitIndent = lineIndent(rawLine);
+  return exitIndent <= startIndent;
 }
 
 function isInsideConfigBlock(current) {
@@ -6956,6 +7032,35 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
     if (/^shutdown$|\bshutdown\b/.test(normalized)) setField("state", "disabled");
   }
 
+  if (!objectType || objectType === "lag") {
+    setField("lag", extractLagNameFromLine(normalized));
+    setField("description", extractDescriptionValue(line));
+    setField("mode",
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("member-port",
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^port\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("lacp-xmit-interval", normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/)?.[1]);
+    setField("lacp-mode",
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/)?.[1]
+    );
+    setField("lacp.administrative-key",
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("access.adapt-qos.mode",
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/)?.[1]
+    );
+
+    if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
+    if (/^shutdown$|\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
+  }
+
   if (!objectType || objectType === "interface") {
     setField("interface", normalized.match(/\binterface\s+"?([^"\s{}]+)"?/)?.[1]);
     const vprnMatch = normalized.match(/\bservice\s+vprn\s+"?([^"\s{}]+)"?/);
@@ -7162,6 +7267,72 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
       add("state", "disabled", "disable", "terminal");
     }
   }
+  if (!objectType || objectType === "lag") {
+    const lag = extractLagNameFromLine(normalized);
+    if (lag) {
+      add("lag", lag, "lag", "context");
+      add("lag", lag, lag, "context");
+      add("lag", lag, `"${lag}"`, "context");
+    }
+
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "description", "terminal");
+      add("description", description, description, "terminal");
+      add("description", description, `"${description}"`, "terminal");
+    }
+
+    const mode =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^mode\s+([^"\s{}]+)/);
+    if (mode) {
+      add("mode", mode[1], "mode", "terminal");
+      add("mode", mode[1], mode[1], "terminal");
+    }
+
+    const memberPort =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/) ||
+      normalized.match(/^port\s+([^"\s{}]+)/);
+    if (memberPort) {
+      add("member-port", memberPort[1], "port", "terminal");
+      add("member-port", memberPort[1], memberPort[1], "terminal");
+    }
+
+    const xmitInterval = normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/);
+    if (xmitInterval) {
+      add("lacp-xmit-interval", xmitInterval[1], "lacp-xmit-interval", "terminal");
+      add("lacp-xmit-interval", xmitInterval[1], xmitInterval[1], "terminal");
+    }
+
+    const lacpMode =
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/);
+    if (lacpMode) {
+      add("lacp-mode", lacpMode[1], "lacp", "terminal");
+      add("lacp-mode", lacpMode[1], lacpMode[1], "terminal");
+    }
+
+    const lacpKey =
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/);
+    if (lacpKey) {
+      add("lacp.administrative-key", lacpKey[1], "administrative-key", "terminal");
+      add("lacp.administrative-key", lacpKey[1], lacpKey[1], "terminal");
+    }
+
+    const adaptQos =
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/);
+    if (adaptQos) {
+      add("access.adapt-qos.mode", adaptQos[1], "adapt-qos", "terminal");
+      add("access.adapt-qos.mode", adaptQos[1], adaptQos[1], "terminal");
+    }
+
+    if (/\bno\s+shutdown\b/.test(normalized)) add("state", "enabled", "no shutdown", "terminal");
+    if (/\badmin-state\s+enable\b/.test(normalized)) add("state", "enabled", "admin-state", "terminal");
+    if (/\badmin-state\s+disable\b/.test(normalized)) add("state", "disabled", "admin-state", "terminal");
+    if (/^shutdown$|\bshutdown\b/.test(normalized)) add("state", "disabled", "shutdown", "terminal");
+  }
   if (!objectType || objectType === "interface") {
     const interfaceName = normalized.match(/\binterface\s+"?([^"\s{}]+)"?/);
     if (interfaceName) {
@@ -7314,6 +7485,17 @@ function extractDescriptionValue(line) {
   if (quoted) return quoted[1];
   const normalized = canonicalizeComparableLine(source);
   return normalized.match(/\bdescription\s+([^{}\s]+)/)?.[1] || "";
+}
+
+function extractLagNameFromLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return stripTrailingSyntax(
+    normalized.match(/^lag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^\/configure\s*\{\s*lag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^configure\s+lag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/\blag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    ""
+  ).replace(/^"|"$/g, "");
 }
 
 function mergeObjectsByCanonicalKey(objects, options, source) {
@@ -8058,6 +8240,8 @@ function extractSubscriberInterfaceCanonicalFieldsFromLines(lines = [], profile 
 }
 
 function buildProfileObjectIdentity(object, options) {
+  if (object?.type === "lag") return inferObjectIdentityFromLines(object);
+
   const rule = getIdentityRuleForSource(options.profile?.identityRules?.[object.type], object.source || "old", object.type);
   const lines = [...object.lines, ...object.rawLines].map(canonicalizeComparableLine);
 
@@ -8106,10 +8290,7 @@ function inferObjectIdentityFromLines(object) {
     if (!line) continue;
 
     if (type === "lag") {
-      const value =
-        line.match(/^lag\s+([^\s{}]+)/)?.[1] ||
-        line.match(/^\/configure\s*\{\s*lag\s+([^\s{}]+)/)?.[1] ||
-        line.match(/\blag\s+([^\s{}]+)/)?.[1];
+      const value = extractLagNameFromLine(line);
 
       if (value) return canonicalizeIdentity(stripTrailingSyntax(value));
     }
@@ -8759,6 +8940,9 @@ function extractFieldValue(line, field) {
   if (normalizedField === "neighbor") {
     return stripTrailingSyntax(normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/)?.[1] || "");
   }
+  if (["mode", "member-port", "lacp-mode", "lacp.administrative-key", "lacp-xmit-interval", "access.adapt-qos.mode"].includes(normalizedField)) {
+    return inferValueForField(normalized, normalizedField);
+  }
   return stripTrailingSyntax(normalized.slice(String(field || "").length).trim());
 }
 
@@ -8786,6 +8970,7 @@ function sortComparableLines(lines) {
 function compareObjects(oldObjects, newObjects, options) {
   const oldMap = buildObjectMap(oldObjects);
   const newMap = buildObjectMap(newObjects);
+  alignLagObjectMapsByDescription(oldMap, newMap);
   const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])].sort(compareObjectKeys);
   const items = [];
 
@@ -8834,6 +9019,82 @@ function compareObjects(oldObjects, newObjects, options) {
       required: mergedItems.filter((item) => item.type === "required").length,
     },
   };
+}
+
+function alignLagObjectMapsByDescription(oldMap, newMap) {
+  const oldLags = [...oldMap.entries()].filter(([, object]) => isLagObject(object));
+  const newLags = [...newMap.entries()].filter(([, object]) => isLagObject(object));
+  const usedNewKeys = new Set();
+
+  oldLags.forEach(([oldKey, oldObject]) => {
+    if (newMap.has(oldKey)) return;
+
+    const oldEndpoint = lagDescriptionEndpoint(oldObject);
+    if (!oldEndpoint) return;
+
+    const candidates = newLags.filter(([newKey, newObject]) => {
+      if (usedNewKeys.has(newKey)) return false;
+      if (!newMap.has(newKey)) return false;
+      return lagDescriptionEndpoint(newObject) === oldEndpoint;
+    });
+
+    if (candidates.length !== 1) return;
+
+    const [newKey, newObject] = candidates[0];
+    if (newKey === oldKey) return;
+
+    newMap.delete(newKey);
+    newMap.set(oldKey, {
+      ...newObject,
+      key: oldKey,
+      originalKey: newObject.key || newKey,
+      lagDescriptionMappedFrom: newKey,
+    });
+    usedNewKeys.add(newKey);
+  });
+}
+
+function isLagObject(object = {}) {
+  return canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "") === "lag";
+}
+
+function lagDescriptionEndpoint(object = {}) {
+  const description =
+    [...(object.rawLines || []), ...(object.lines || [])]
+      .map(extractDescriptionValue)
+      .find(Boolean) ||
+    object.canonicalFields?.description ||
+    object.fields?.description ||
+    object.description ||
+    "";
+
+  return descriptionEndpointCandidates(description)[0] || "";
+}
+
+function descriptionEndpointCandidates(description = "") {
+  return String(description || "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^#+|#+$/g, "")
+    .split(/[,;]+/)
+    .map((segment) => normalizeDescriptionEndpoint(segment))
+    .filter(isLikelyDescriptionEndpoint);
+}
+
+function normalizeDescriptionEndpoint(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function isLikelyDescriptionEndpoint(value = "") {
+  if (!value) return false;
+  if (!/[a-z]/i.test(value) || !/\d/.test(value)) return false;
+  if (!value.includes("-")) return false;
+  if (/^(lag|port|po|te|gi|ge|xe|et|eth|ethernet|ae)[-_/]?\w*/i.test(value)) return false;
+  if (/^(to|from|via|stby|sby|standby|active|fiber)$/i.test(value)) return false;
+  return true;
 }
 
 function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
@@ -9362,11 +9623,18 @@ function buildDiffRows(oldText, newText, options) {
 }
 
 const semanticFieldOrder = [
+  "lag",
+  "member-port",
   "route",
   "next-hop",
   "tag",
   "description",
   "metric",
+  "mode",
+  "lacp-mode",
+  "lacp.administrative-key",
+  "lacp-xmit-interval",
+  "access.adapt-qos.mode",
   "neighbor",
   "authentication-key",
   "group",
@@ -9420,11 +9688,18 @@ const commonFieldAliases = {
   "vlan": "vlan",
   "sap": "sap",
   "port": "port",
+  "member-port": "member-port",
   "neighbor": "neighbor",
   "interface": "interface",
   "subscriber-interface": "subscriber-interface",
   "group-interface": "group-interface",
   "lag": "lag",
+  "lacp-mode": "lacp-mode",
+  "administrative-key": "lacp.administrative-key",
+  "lacp.administrative-key": "lacp.administrative-key",
+  "lacp-xmit-interval": "lacp-xmit-interval",
+  "adapt-qos": "access.adapt-qos.mode",
+  "access.adapt-qos.mode": "access.adapt-qos.mode",
   "route": "route",
   "static-route-entry": "route",
 };
@@ -11060,11 +11335,7 @@ function inferIdentityForObjectType(type, line = "") {
   }
 
   if (t === "lag") {
-    return cleanObjectIdentity(
-      text.match(/^lag\s+([^\s{}]+)/)?.[1] ||
-      text.match(/^\/configure\s*\{\s*lag\s+([^\s{}]+)/)?.[1] ||
-      ""
-    );
+    return cleanObjectIdentity(extractLagNameFromLine(text));
   }
 
   if (t === "interface") {
@@ -11340,6 +11611,11 @@ function effectiveRowSemanticField(row) {
 
   const text = canonicalizeComparableLine(row.text || "");
   const highlights = Array.isArray(row.highlights) ? row.highlights : [];
+  const objectType = row.objectKey ? splitObjectKey(row.objectKey).type : "";
+  if (objectType === "lag") {
+    const lagField = inferLagLineFields(text)[0];
+    if (lagField) return lagField;
+  }
 
   if (/\bno\s+shutdown\b/.test(text)) return "state";
   if (/\bshutdown\b/.test(text)) return "state";
@@ -11422,7 +11698,7 @@ function effectiveRowSemanticValue(row) {
     return text.match(/\b(?:peer-as|remote-as)\s+([^\s{}]+)/)?.[1] || "";
   }
 
-  return "";
+  return inferValueForField(text, field);
 }
 
 function normalizeSemanticFieldName(field = "") {
@@ -12888,8 +13164,13 @@ function buildFallbackFlatSemanticFieldConnectorPaths({
     const newFields = newPairs.get(pairKey);
     if (!newFields) return;
 
+    const pairObjectType =
+      oldFields.objectType ||
+      newFields.objectType ||
+      splitObjectKey(pairKey).type ||
+      "";
     const fields = orderedRelationFields(
-      "",
+      pairObjectType,
       oldFields,
       newFields
     );
@@ -12944,15 +13225,22 @@ function collectVisibleFlatSemanticLines(pane, paneRect) {
   pane.querySelectorAll(".diff-line[data-semantic-pair-key][data-semantic-field]").forEach((line) => {
     const pairKey = line.dataset.semanticPairKey || "";
     const field = normalizeRelationField(line.dataset.semanticField || "");
-    if (!pairKey || !field || line.classList.contains("semantic-placeholder-line")) return;
+    const relationFields = new Set([
+      field,
+      ...inferRelationFieldsFromRenderedLine(line),
+    ].filter(Boolean));
+    if (!pairKey || !relationFields.size || line.classList.contains("semantic-placeholder-line")) return;
     if (line.classList.contains("placeholder")) return;
     if (isSemanticStructuralLine(line.textContent || "")) return;
     const rect = line.getBoundingClientRect();
     if (rect.bottom < paneRect.top || rect.top > paneRect.bottom) return;
     if (!result.has(pairKey)) result.set(pairKey, new Map());
     const fields = result.get(pairKey);
-    if (!fields.has(field)) fields.set(field, []);
-    fields.get(field).push(line);
+    fields.objectType = fields.objectType || line.dataset.objectType || splitObjectKey(line.dataset.objectKey || pairKey).type || "";
+    relationFields.forEach((relationField) => {
+      if (!fields.has(relationField)) fields.set(relationField, []);
+      fields.get(relationField).push(line);
+    });
   });
 
   return result;
@@ -12991,7 +13279,12 @@ function collectSemanticConfigLinesByField(block) {
 }
 
 function inferRelationFieldsFromRenderedLine(line) {
-  const text = canonicalizeComparableLine(line?.querySelector?.("code")?.textContent || line?.textContent || "");
+  const text = canonicalizeComparableLine(
+    line?.querySelector?.("code")?.textContent ||
+    line?.querySelector?.(".diff-line-text")?.textContent ||
+    line?.textContent ||
+    ""
+  );
   const fields = [];
 
   if (/^\/?configure\s*\{.*\bstatic-routes\s+route\b/.test(text)) {
@@ -13004,6 +13297,15 @@ function inferRelationFieldsFromRenderedLine(line) {
     return fields;
   }
 
+  const objectType =
+    line?.dataset?.objectType ||
+    splitObjectKey(line?.dataset?.objectKey || line?.dataset?.semanticPairKey || "").type ||
+    "";
+  if (objectType === "lag" || /\blag\s+"?[^"\s{}]+/.test(text) || /^lacp\b|^adapt-qos\b|^port\s+[\w./:-]+/.test(text)) {
+    const lagFields = inferLagLineFields(text);
+    if (lagFields.length) return lagFields;
+  }
+
   const field = normalizeRelationField(inferSemanticFieldName(text));
   return field ? [field] : [];
 }
@@ -13011,6 +13313,7 @@ function inferRelationFieldsFromRenderedLine(line) {
 function orderedRelationFields(objectType, oldLinesByField, newLinesByField) {
   const preferred = {
     "static-route": ["description", "next-hop", "tag", "state", "route"],
+    lag: ["description", "mode", "access.adapt-qos.mode", "member-port", "lacp-mode", "lacp.administrative-key", "lacp-xmit-interval", "state", "lag"],
     bgp: ["neighbor", "description", "authentication-key", "group", "state", "peer-as"],
   }[objectType] || [];
   const fields = new Set([...oldLinesByField.keys(), ...newLinesByField.keys()]);
@@ -15121,6 +15424,11 @@ function buildLineSemanticHighlights(text, objectType, canonicalFields = {}, fie
 
 function buildForcedSemanticTokens(text, field) {
   const normalized = canonicalizeComparableLine(text);
+  const normalizedField = normalizeRelationField(field);
+  if (["mode", "member-port", "lacp-mode", "lacp.administrative-key", "lacp-xmit-interval", "access.adapt-qos.mode"].includes(normalizedField)) {
+    const tokens = extractSemanticVisualTokens(text, "lag").filter((item) => normalizeRelationField(item.field) === normalizedField);
+    if (tokens.length) return tokens;
+  }
   if ((field === "ingress-filter" || field === "egress-filter") && /\bfilter\s+ip\s+"?([^"\s{}]+)"?/.test(normalized)) {
     const match = normalized.match(/\bfilter\s+ip\s+"?([^"\s{}]+)"?/);
     return [
@@ -15292,6 +15600,67 @@ function extractSemanticVisualTokens(text, objectType) {
     if (tokens.length) return tokens;
   }
 
+  if (objectType === "lag") {
+    const lagName = extractLagNameFromLine(normalized);
+    if (lagName) add("lag", lagName, "keyword");
+
+    const description = extractDescriptionValue(source);
+    if (description) add("description", description, "quoted");
+
+    const mode =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^mode\s+([^"\s{}]+)/);
+    if (mode && !/\badapt-qos\b|\blacp\b/.test(normalized)) {
+      add("mode", stripTrailingSyntax(mode[1]), "keyword");
+    }
+
+    const memberPort =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/) ||
+      normalized.match(/^port\s+([^"\s{}]+)/);
+    if (memberPort) add("member-port", stripTrailingSyntax(memberPort[1]), "keyword");
+
+    const xmitInterval = normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/);
+    if (xmitInterval) add("lacp-xmit-interval", stripTrailingSyntax(xmitInterval[1]), "keyword");
+
+    const lacpMode =
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/);
+    if (lacpMode) {
+      tokens.push({ token: "lacp", field: "lacp-mode", colorSeed: "lacp-mode", kind: "keyword" });
+      tokens.push({ token: stripTrailingSyntax(lacpMode[1]), field: "lacp-mode", colorSeed: "lacp-mode", kind: "keyword" });
+      if (/\blacp\s+mode\s+/.test(normalized)) tokens.push({ token: "mode", field: "lacp-mode", colorSeed: "lacp-mode", kind: "keyword" });
+    }
+
+    const lacpKey =
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/);
+    if (lacpKey) {
+      tokens.push({ token: "administrative-key", field: "lacp.administrative-key", colorSeed: "lacp.administrative-key", kind: "keyword" });
+      tokens.push({ token: stripTrailingSyntax(lacpKey[1]), field: "lacp.administrative-key", colorSeed: "lacp.administrative-key", kind: "number" });
+    }
+
+    const adaptQos =
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/);
+    if (adaptQos) {
+      tokens.push({ token: "adapt-qos", field: "access.adapt-qos.mode", colorSeed: "access.adapt-qos.mode", kind: "keyword" });
+      tokens.push({ token: stripTrailingSyntax(adaptQos[1]), field: "access.adapt-qos.mode", colorSeed: "access.adapt-qos.mode", kind: "keyword" });
+      if (/\badapt-qos\s+mode\s+/.test(normalized)) tokens.push({ token: "mode", field: "access.adapt-qos.mode", colorSeed: "access.adapt-qos.mode", kind: "keyword" });
+    }
+
+    if (/\bno\s+shutdown\b/.test(normalized)) add("state", "no shutdown", "keyword");
+    if (/\badmin-state\s+enable\b/.test(normalized)) {
+      add("state", "admin-state", "keyword");
+      add("state", "enable", "keyword");
+    }
+    if (/\badmin-state\s+disable\b/.test(normalized)) {
+      add("state", "admin-state", "keyword");
+      add("state", "disable", "keyword");
+    }
+
+    if (tokens.length) return tokens;
+  }
+
   const description = extractDescriptionValue(source);
   if (description) add("description", description, "quoted");
 
@@ -15357,7 +15726,13 @@ function tokenColorIndex(token) {
     "icmp.unreachables": 2,
     sap: 3,
     port: 3,
+    "member-port": 3,
     lag: 3,
+    mode: 4,
+    "lacp-mode": 5,
+    "lacp.administrative-key": 5,
+    "lacp-xmit-interval": 5,
+    "access.adapt-qos.mode": 4,
   }[normalized];
   if (fieldColor) return fieldColor;
   let hash = 0;

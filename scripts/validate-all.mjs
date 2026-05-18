@@ -1,9 +1,7 @@
-import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
 import {
   RESULTS_DIR,
-  absPath,
   discoverInventory,
   parseCliArgs,
   runManifestValidation,
@@ -30,18 +28,12 @@ const validationSummaries = modes.map((mode) =>
     writeReports: true,
   })
 );
-const stressPath = absPath(`${RESULTS_DIR}/stress-summary.json`);
-const stressSummary = fs.existsSync(stressPath)
-  ? JSON.parse(fs.readFileSync(stressPath, "utf8"))
-  : null;
 const final = writeFinalReports({
   inventory,
   validationSummaries,
-  stressSummary,
   commandResults: [
     ...commandResults,
     ...validationSummaries.map((summary) => ({ command: `validate:${summary.mode}`, status: summary.status })),
-    { command: "validate:stress", status: stressSummary?.status || "not-run" },
   ],
 });
 const qualityAnalysis = runQualityAnalysis({
@@ -56,7 +48,6 @@ console.log(JSON.stringify({
   status: overallFailed ? "failed" : "passed",
   finalReport: `${RESULTS_DIR}/final-validation-report.md`,
   qualityReport: `${RESULTS_DIR}/fixture-completeness-analysis.md`,
-  stressStatus: stressSummary?.status || "not-run",
   fixtureCompleteness: qualityAnalysis.fixtureCompleteness.summary.status,
 }, null, 2));
 

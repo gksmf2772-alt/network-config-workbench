@@ -1,46 +1,46 @@
 {
-  "generatedAt": "2026-05-17T11:01:25.602Z",
+  "generatedAt": "2026-05-18T12:21:00.146Z",
   "caseId": "nokia-classic15-to-nokia-mdcli-22",
   "summary": {
-    "totalUnsupported": 736,
-    "legacyDoubleSubtractUnsupported": 674,
+    "totalUnsupported": 757,
+    "legacyDoubleSubtractUnsupported": 695,
     "ignoredLineCount": 62,
     "lineAccounting": {
       "eligibleLines": 11841,
-      "recognizedAnalyzedLines": 11105,
-      "parserUnmappedLines": 736,
+      "recognizedAnalyzedLines": 11084,
+      "parserUnmappedLines": 757,
       "ignoredSuppressedLines": 62,
-      "unsupportedSyntaxLines": 736,
+      "unsupportedSyntaxLines": 757,
       "routerLogWrapperLines": 123
     },
-    "oldUnsupported": 736,
+    "oldUnsupported": 757,
     "newUnsupported": 0,
     "parserCoverageStatus": "partial-support",
-    "primaryConclusion": "Unsupported lines are parser coverage gaps, mostly Classic source system/router/service/policy detail lines. The previous aggregate was an undercount caused by double-subtracting 62 ignored target lines; corrected parser-unmapped count is 736."
+    "primaryConclusion": "Unsupported lines are parser coverage gaps, mostly Classic source system/router/service/policy detail lines. The previous aggregate was an undercount caused by double-subtracting 62 ignored target lines; corrected parser-unmapped count is 757."
   },
   "groups": {
     "bySide": [
       {
         "key": "old",
-        "count": 736
+        "count": 757
       }
     ],
     "byFile": [
       {
         "key": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
-        "count": 736
+        "count": 757
       }
     ],
     "byVendorSyntax": [
       {
         "key": "classic-cli",
-        "count": 736
+        "count": 757
       }
     ],
     "bySection": [
       {
         "key": "filter",
-        "count": 367
+        "count": 388
       },
       {
         "key": "router",
@@ -62,7 +62,7 @@
       },
       {
         "key": "filter",
-        "count": 257
+        "count": 278
       },
       {
         "key": "management-security",
@@ -92,7 +92,7 @@
       },
       {
         "key": "policy body parser partial",
-        "count": 270
+        "count": 291
       },
       {
         "key": "parser coverage gap",
@@ -106,7 +106,7 @@
       },
       {
         "key": "conversion-policy-required",
-        "count": 270
+        "count": 291
       },
       {
         "key": "target-default-risk",
@@ -120,7 +120,7 @@
     "byParserGapStatus": [
       {
         "key": "intentionally-unsupported-review",
-        "count": 430
+        "count": 451
       },
       {
         "key": "parser-gap",
@@ -130,7 +130,7 @@
     "focusAreas": [
       {
         "key": "Filter/ACL",
-        "count": 479
+        "count": 500
       },
       {
         "key": "Management/Security",
@@ -5721,6 +5721,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 590,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 11 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 592,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -5758,6 +5773,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 600,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 12 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -5811,6 +5841,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 610,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 21 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 612,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -5848,6 +5893,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 620,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 22 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -5901,6 +5961,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 630,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 31 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 632,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -5938,6 +6013,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 640,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 32 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -5991,6 +6081,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 650,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 41 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 652,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6028,6 +6133,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 660,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 42 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -6081,6 +6201,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 670,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 51 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 672,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6118,6 +6253,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 680,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 52 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -6171,6 +6321,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 690,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 61 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 692,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6208,6 +6373,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 700,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 62 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -6261,6 +6441,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 710,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 71 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 712,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6298,6 +6493,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 720,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 72 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -6351,6 +6561,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 730,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 81 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 732,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6388,6 +6613,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 740,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 82 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -6441,6 +6681,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 750,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 91 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 752,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6478,6 +6733,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 760,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 92 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]
@@ -6531,6 +6801,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 770,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 101 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 772,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6576,6 +6861,21 @@
       "side": "old",
       "vendorSyntax": "classic-cli",
       "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 780,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 102 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "line": 782,
       "section": "filter",
       "likelyObjectType": "unknown",
@@ -6613,6 +6913,21 @@
       "reason": "parser-unmapped",
       "migrationImpact": "manual-conversion-required",
       "parserGapStatus": "parser-gap",
+      "relatedFocusAreas": [
+        "Filter/ACL"
+      ]
+    },
+    {
+      "side": "old",
+      "vendorSyntax": "classic-cli",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "line": 790,
+      "section": "filter",
+      "likelyObjectType": "filter",
+      "text": "        filter 200 ",
+      "reason": "policy body parser partial",
+      "migrationImpact": "conversion-policy-required",
+      "parserGapStatus": "intentionally-unsupported-review",
       "relatedFocusAreas": [
         "Filter/ACL"
       ]

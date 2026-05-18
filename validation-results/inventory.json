@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-17T11:00:33.487Z",
+  "generatedAt": "2026-05-18T12:20:20.909Z",
   "searchedPaths": [
     "examples",
     "example",
@@ -936,7 +936,7 @@
     {
       "kind": "preset",
       "path": "scripts/validate-object-review-grouping.mjs",
-      "size": 8157,
+      "size": 8378,
       "signals": [
         "vendor-preset"
       ]
@@ -944,7 +944,7 @@
     {
       "kind": "preset",
       "path": "scripts/validate-profile-exceptions.mjs",
-      "size": 11510,
+      "size": 11818,
       "signals": [
         "vendor-preset"
       ]
@@ -960,7 +960,7 @@
     {
       "kind": "preset",
       "path": "scripts/validationWorkflow.mjs",
-      "size": 54646,
+      "size": 55946,
       "signals": [
         "vendor-preset"
       ]
@@ -976,7 +976,7 @@
     {
       "kind": "preset",
       "path": "src/core/comparisonPlan.js",
-      "size": 47834,
+      "size": 60260,
       "signals": [
         "vendor-preset"
       ]
@@ -984,7 +984,7 @@
     {
       "kind": "preset",
       "path": "src/core/legacyCore.js",
-      "size": 613376,
+      "size": 696900,
       "signals": [
         "vendor-preset"
       ]
@@ -1008,7 +1008,7 @@
     {
       "kind": "preset",
       "path": "tests/policy-coverage.test.js",
-      "size": 27832,
+      "size": 39344,
       "signals": [
         "vendor-preset"
       ]
@@ -1016,7 +1016,7 @@
     {
       "kind": "preset",
       "path": "tests/static-route-object-key.test.js",
-      "size": 6258,
+      "size": 31044,
       "signals": [
         "vendor-preset"
       ]
@@ -1054,7 +1054,7 @@
     {
       "kind": "standards-audit-profile",
       "path": "scripts/analyze-validation-quality.mjs",
-      "size": 103022,
+      "size": 105194,
       "signals": [
         "standards-audit"
       ]
@@ -1070,7 +1070,7 @@
     {
       "kind": "standards-audit-profile",
       "path": "src/core/standardsAudit.js",
-      "size": 42204,
+      "size": 43556,
       "signals": [
         "standards-audit"
       ]
@@ -1078,7 +1078,7 @@
     {
       "kind": "standards-audit-profile",
       "path": "src/core/summaryAnalytics.js",
-      "size": 32097,
+      "size": 44272,
       "signals": [
         "standards-audit"
       ]
@@ -1086,7 +1086,7 @@
     {
       "kind": "standards-audit-profile",
       "path": "tests/bgp-effective-neighbor.test.js",
-      "size": 7363,
+      "size": 8518,
       "signals": [
         "standards-audit"
       ]
@@ -1094,7 +1094,7 @@
     {
       "kind": "standards-audit-profile",
       "path": "tests/mode-scope-policy.test.js",
-      "size": 7209,
+      "size": 7551,
       "signals": [
         "standards-audit"
       ]
@@ -1146,7 +1146,7 @@
     {
       "kind": "manual-mapping",
       "path": "src/core/matchers/objectMatcher.js",
-      "size": 33010,
+      "size": 35676,
       "signals": [
         "manual-map"
       ]

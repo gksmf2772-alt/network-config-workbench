@@ -132,6 +132,30 @@ test("diff block status and color tokens target config panes", () => {
   assert.doesNotMatch(css, /summary-issue-row\.summary-issue-old-only[\s\S]{0,160}var\(--status-unmatched-bg\)/);
 });
 
+test("legacy compare aligns only LAG objects by description endpoint before diff rows", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const alignCallIndex = legacy.indexOf("alignLagObjectMapsByDescription(oldMap, newMap);");
+  const keyBuildIndex = legacy.indexOf("const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])]");
+
+  assert.ok(alignCallIndex > 0);
+  assert.ok(keyBuildIndex > alignCallIndex);
+  assert.match(legacy, /function isLagObject\(object = \{\}\)[\s\S]*=== "lag"/);
+  assert.match(legacy, /newMap\.delete\(newKey\);[\s\S]*newMap\.set\(oldKey/);
+  assert.match(legacy, /const rule = \{ mode: \["port", "interface"\]\.includes\(type\) \? "description" : "header"/);
+  assert.match(legacy, /if \(object\?\.type === "lag"\) return inferObjectIdentityFromLines\(object\);/);
+  assert.match(legacy, /function extractLagNameFromLine\(line = ""\)[\s\S]*\^configure\\s\+lag/);
+  assert.match(legacy, /function inferLagLineFields\(line = ""\)[\s\S]*lacp\.administrative-key/);
+  assert.match(legacy, /objectType === "lag"[\s\S]*inferLagLineFields\(text\)/);
+  assert.match(legacy, /collectVisibleFlatSemanticLines[\s\S]*inferRelationFieldsFromRenderedLine\(line\)/);
+  assert.match(legacy, /token: "administrative-key", field: "lacp\.administrative-key"[\s\S]*token: stripTrailingSyntax\(lacpKey\[1\]\), field: "lacp\.administrative-key"/);
+
+  const endpointFunction = legacy.slice(legacy.indexOf("function lagDescriptionEndpoint"));
+  const rawDescriptionIndex = endpointFunction.indexOf("[...(object.rawLines || []), ...(object.lines || [])]");
+  const canonicalDescriptionIndex = endpointFunction.indexOf("object.canonicalFields?.description");
+  assert.ok(rawDescriptionIndex > 0);
+  assert.ok(canonicalDescriptionIndex > rawDescriptionIndex);
+});
+
 test("setting exclusion removes new-only setting from active analysis", () => {
   const profile = {
     exceptions: [exactSettingExclusion({ key: "198.51.100.1", side: "new", status: "new-only" })],

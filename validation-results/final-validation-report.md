@@ -1,5 +1,5 @@
 # Final Validation Report
-Generated: 2026-05-17T11:00:40.831Z
+Generated: 2026-05-18T12:20:30.215Z
 ## 1. Repository Validation Inventory
 - configs found: 31
 - profiles found: 2
@@ -20,37 +20,35 @@ Generated: 2026-05-17T11:00:40.831Z
 ### Nokia Classic CLI 15 → Nokia MD-CLI 22
 - Status: passed
 ## 3. Parser Results
-- Nokia Classic→MD-CLI: old objects 696, new objects 579
-- eligible lines 11841, recognized 11105, unsupported 736
+- Nokia Classic→MD-CLI: old objects 549, new objects 349
+- eligible lines 11841, recognized 11084, unsupported 757
 - router-log wrapper lines 123, source-line mapping ok
 - Synthetic Juniper smoke: old objects 5, new objects 3, unsupported 1
 ## 4. Semantic Comparison Results
-- matched 61, unmatched source 575, unmatched target 447
-- ambiguous 5, low-confidence 60, field overlap 29%
+- matched 118, unmatched source 351, unmatched target 156
+- ambiguous 20, low-confidence 62, field overlap 40%
 - semantic line coverage 94%, suppressed/ignored lines 62
 ## 5. Exception/Policy Validation
-- ignored fields 148
-- active audit findings 623, suppressed audit findings 59
+- ignored fields 288
+- active audit findings 572, suppressed audit findings 60
 - ignored/suppressed items are separated from active risk in Summary/Report/Graph validation.
 ## 6. Standards Audit Results
-- QoS/policy/routing/service/security categories: {"qos":250,"filter-acl":45,"routing-bgp":224,"subscriber-service":160,"management-security":3}
-- migration impacts: {"target-default-risk":321,"review-before-migration":132,"conversion-policy-required":163,"blocks-auto-generation":66}
-- total findings 682, active 623, suppressed 59
+- QoS/policy/routing/service/security categories: {"qos":214,"filter-acl":190,"routing-bgp":224,"management-security":4}
+- migration impacts: {"manual-conversion-required":396,"target-default-risk":116,"review-before-migration":120}
+- total findings 632, active 572, suppressed 60
 ## 7. Summary/Compare/Report/Graph Consistency
 - compare: passed (2 passed, 1 blocked, 0 failed)
 - audit: passed (2 passed, 1 blocked, 0 failed)
 - report: passed (2 passed, 1 blocked, 0 failed)
 - graph: passed (2 passed, 1 blocked, 0 failed)
-- primary graph nodes 464, edges 260, invalid edges 0
-- compare HTML length 9637141, undefined false, NaN false
+- primary graph nodes 415, edges 308, invalid edges 0
+- compare HTML length 8862521, undefined false, NaN false
 ## 8. Migration/Generation Validation
-- migration readiness: blocked
+- migration readiness: manual-review
 - generation validation: not-applicable
-- target-default-risk 321, manual-review objects 295
+- target-default-risk 116, manual-review objects 516
 - full config generation is not implemented; no generation success was claimed.
-## 9. Stress Validation
-- validate:stress: passed, iterations 1000/1000, cases nokia-classic15-to-nokia-mdcli-22
-## 10. Build/Test Results
+## 9. Build/Test Results
 - npm.cmd test: passed
 - npm.cmd run build: passed
 - npm.cmd run validate:compare:fixtures: passed
@@ -61,31 +59,30 @@ Generated: 2026-05-17T11:00:40.831Z
 - validate:audit: passed
 - validate:report: passed
 - validate:graph: passed
-- validate:stress: passed
-## 11. Remaining Limitations
+## 10. Remaining Limitations
 - Juniper 실제 설정 기반 검증은 source-juniper.conf 추가 전까지 blocked 상태입니다.
 - Synthetic Juniper smoke fixture는 production migration/comparison pass로 계산하지 않습니다.
 - Config generation/migration 엔진은 아직 구현되지 않아 migration-readiness만 검증합니다.
 - Filter/QoS/route-policy 본문 파싱은 placeholder/부분 지원이며 manual-review finding으로 추적합니다.
 - UI smoke는 별도 브라우저 테스트 프레임워크 없이 pure data helper 기준으로 검증했습니다.
 
-## 12. Validation Quality Analysis
+## 11. Validation Quality Analysis
 - fixture completeness: partial-assembled-target
 - high unmatched expected: true
-- unmatched: source 575, target 447, weak mappings 60
-- full source objects: 696, target fixture objects: 579
-- Target fixture 범위 밖 미매칭: 389
-- Matcher 개선 필요: 449
-- Parser 미지원 가능성: 73
-- 실제 누락 가능성: 111
-- line accounting: eligible 11841, recognized 11105, parser-unmapped 736, ignored/suppressed 62, wrapper 123
-- active findings: 623, suppressed 59
-- blocks auto-generation: 66
-- conversion policy required: 163
-- blocks drill-down: baseline 71, current 66, resolved 5, parser extension 0, target fixture completion 66, actual config correction 0
-- conversion policy drill-down: total 163, static-route rewrite candidates 59, SAP/service mapping 159, QoS/filter mapping 4, vendor default policy 0
-- actual missing drill-down: total 111, true missing 9, target-only 102, outside scope 0, parser/matcher false negative 9, manual mapping possible 9
-- matcher effectiveness: port/LAG candidates 0, SAP candidates 0, static-route manual-review candidates 59, false exact match prevention 59
+- unmatched: source 351, target 156, weak mappings 80
+- full source objects: 549, target fixture objects: 349
+- Target fixture 범위 밖 미매칭: 272
+- Matcher 개선 필요: 161
+- Parser 미지원 가능성: 24
+- 실제 누락 가능성: 50
+- line accounting: eligible 11841, recognized 11084, parser-unmapped 757, ignored/suppressed 62, wrapper 123
+- active findings: 572, suppressed 60
+- blocks auto-generation: 0
+- conversion policy required: 0
+- blocks drill-down: baseline 71, current 0, resolved 71, parser extension 0, target fixture completion 0, actual config correction 0
+- conversion policy drill-down: total 0, static-route rewrite candidates 59, SAP/service mapping 0, QoS/filter mapping 0, vendor default policy 0
+- actual missing drill-down: total 50, true missing 0, target-only 50, outside scope 0, parser/matcher false negative 0, manual mapping possible 0
+- matcher effectiveness: port/LAG candidates 18, SAP candidates 0, static-route manual-review candidates 59, false exact match prevention 59
 - mode/scope validation: passed, simple compare active 0, BGP-only active 0, standards active 5, migration active 0, suppressed 3
 - matcher status: port/LAG rename, SAP parent relationship, static-route next-hop conversion policy handling added.
 - parser improvement: Classic indirect/tunnel-next-hop static route extraction added; static-route next-hop blockers removed.

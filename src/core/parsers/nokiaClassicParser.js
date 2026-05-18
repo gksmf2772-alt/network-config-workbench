@@ -841,6 +841,17 @@ function indentationOf(raw = "") {
   return String(raw || "").match(/^\s*/)?.[0]?.length || 0;
 }
 
+const INDENT_TERMINATED_OBJECT_TYPES = new Set(["port", "lag", "interface", "static-route", "bgp", "pim"]);
+
+function shouldTerminateCurrentObject(current, line) {
+  if (!current || !/^(exit|})$/i.test(line.text)) return false;
+  if (!INDENT_TERMINATED_OBJECT_TYPES.has(current.type)) return false;
+
+  const startIndent = indentationOf(current.rawLines?.[0] || "");
+  const exitIndent = indentationOf(line.raw);
+  return exitIndent <= startIndent;
+}
+
 function isClassicSemanticBlockStart(text = "") {
   return Boolean(
     parseHeaderLine(text) ||
@@ -919,7 +930,7 @@ function appendLineToCurrentObject(current, line) {
       current.blockDepth -= 1;
     }
 
-    return false;
+    return shouldTerminateCurrentObject(current, line);
   }
 
   return false;
@@ -934,6 +945,32 @@ function applyFieldLine(current, text) {
   match = text.match(/^description\s+(.+)$/i);
   if (match) {
     current.fields.description = stripQuotes(match[1]);
+    return;
+  }
+
+  match = text.match(/^mode\s+(\S+)/i);
+  if (match && current.type === "lag") {
+    current.fields.mode = stripQuotes(match[1]);
+    return;
+  }
+
+  match = text.match(/^adapt-qos\s+(\S+)/i);
+  if (match && current.type === "lag") {
+    current.fields["access.adapt-qos.mode"] = stripQuotes(match[1]);
+    return;
+  }
+
+  match = text.match(/^lacp\s+(\S+)(?:\s+administrative-key\s+(\S+))?/i);
+  if (match && current.type === "lag") {
+    current.fields.lacpMode = stripQuotes(match[1]);
+    current.fields["lacp-mode"] = stripQuotes(match[1]);
+    if (match[2]) current.fields["lacp.administrative-key"] = stripQuotes(match[2]);
+    return;
+  }
+
+  match = text.match(/^lacp-xmit-interval\s+(\S+)/i);
+  if (match && current.type === "lag") {
+    current.fields["lacp-xmit-interval"] = stripQuotes(match[1]);
     return;
   }
 

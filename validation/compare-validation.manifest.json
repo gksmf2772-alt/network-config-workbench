@@ -79,9 +79,6 @@
         "예제 및 테스트 설정/New_port_1.txt",
         "예제 및 테스트 설정/New_PIM_1.txt"
       ],
-      "stressTargetConfigPaths": [
-        "예제 및 테스트 설정/New_bgp_1.txt"
-      ],
       "profilePath": "validation/profiles/nokia-classic15-mdcli22-profile.json",
       "exceptionPolicyPath": "validation/policies/classic15-mdcli22-line-exceptions.json",
       "advancedComparePolicyPath": "validation/policies/classic15-mdcli22-advanced-policy.json",

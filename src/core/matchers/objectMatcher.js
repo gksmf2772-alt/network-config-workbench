@@ -20,6 +20,48 @@ function tokenizeDescription(value) {
     .filter(Boolean);
 }
 
+function normalizeDescriptionEndpoint(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function isLikelyDescriptionEndpoint(segment = "") {
+  const normalized = normalizeDescriptionEndpoint(segment);
+  if (!normalized) return false;
+  if (!/[a-z]/i.test(normalized) || !/\d/.test(normalized)) return false;
+  if (!normalized.includes("-")) return false;
+  if (/^(to|from|via)$/i.test(normalized)) return false;
+  if (/^(lag|port|po|te|gi|ge|xe|et|eth|ethernet|ae)[-_/]?\w*/i.test(normalized)) {
+    return false;
+  }
+  if (/^(stby|sby|standby|active|fiber)$/i.test(normalized)) return false;
+
+  return true;
+}
+
+function descriptionEndpointCandidates(description = "") {
+  const cleanDescription = String(description || "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^#+|#+$/g, "");
+
+  return cleanDescription
+    .split(/[,;]+/)
+    .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
+    .filter(isLikelyDescriptionEndpoint)
+    .map(normalizeDescriptionEndpoint);
+}
+
+function sharedDescriptionEndpoint(oldDescription = "", newDescription = "") {
+  const oldEndpoints = descriptionEndpointCandidates(oldDescription);
+  const newEndpointSet = new Set(descriptionEndpointCandidates(newDescription));
+
+  return oldEndpoints.find((endpoint) => newEndpointSet.has(endpoint)) || null;
+}
+
 function tokenWeight(token) {
   if (!token) return 0;
 
@@ -548,10 +590,15 @@ function scorePortLagPair(oldObject, newObject) {
     addWeightedScore(result, "state", 5, "admin-state");
   }
 
-  const descScore = descriptionSimilarity(
-    oldObject.description || getFieldValue(oldObject, "description"),
-    newObject.description || getFieldValue(newObject, "description")
-  );
+  const oldDescription = oldObject.description || getFieldValue(oldObject, "description");
+  const newDescription = newObject.description || getFieldValue(newObject, "description");
+  const commonEndpoint = sharedDescriptionEndpoint(oldDescription, newDescription);
+
+  if (commonEndpoint) {
+    addWeightedScore(result, "description", 85, "description-endpoint-match");
+  }
+
+  const descScore = descriptionSimilarity(oldDescription, newDescription);
   if (descScore >= 85) {
     addWeightedScore(result, "description", 15, "description-similarity");
   } else if (descScore >= 60) {

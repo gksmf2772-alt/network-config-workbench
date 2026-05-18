@@ -85,6 +85,35 @@ test("BGP admin-state comparison does not duplicate state alias", () => {
   assert.deepEqual(Object.keys(item.fieldSummary).filter((field) => field === "admin-state" || field === "state"), ["admin-state"]);
 });
 
+test("BGP peerIp helper field is folded into neighbor comparison", () => {
+  const result = compare(
+    [
+      "neighbor 112.174.176.32",
+      '    description "## Dekoha-TOD-FT32 ##"',
+      '    authentication-key "KEY" hash2',
+      "exit",
+    ].join("\n"),
+    [
+      'neighbor "112.174.176.32" {',
+      "    admin-state enable",
+      '    description "## Dekoha-TOD-FT32 ##"',
+      '    group "ACCESS-PEER"',
+      '    authentication-key "KEY" hash2',
+      "}",
+    ].join("\n"),
+  );
+
+  const item = result.plan.find((entry) => entry.objectType === "bgp");
+
+  assert.equal(item.status, "matched");
+  assert.equal(item.fieldSummary.neighbor.status, "equal");
+  assert.equal(item.fieldSummary.peerIp, undefined);
+  assert.equal(item.fieldSummary["peer-ip"], undefined);
+  assert.equal(item.policyViolations.some((violation) =>
+    violation.field === "peerIp" || violation.field === "peer-ip"
+  ), false);
+});
+
 test("MD-CLI BGP neighbor missing group definition is inheritance unresolved, not policy violation", () => {
   const result = compare(
     [

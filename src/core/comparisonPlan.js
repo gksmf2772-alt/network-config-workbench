@@ -353,6 +353,8 @@ const VISIBLE_COMPARE_FIELDS = new Set([
 
 const COMPARE_FIELD_ALIASES = {
   state: "admin-state",
+  peerIp: "neighbor",
+  "peer-ip": "neighbor",
 };
 
 function canonicalCompareField(field = "") {

@@ -1062,6 +1062,7 @@ function getProfileMappingSnapshot() {
       kind: "token",
       field: mapping.field || "",
       role: mapping.role || "compare-field",
+      policy: mapping.policy || "compare",
       cardinality: mapping.cardinality || semanticMappingCardinality(oldNodes, newNodes),
       oldLabel: oldNodes.map(formatSemanticNodeLabel).filter(Boolean).join(", ") || "-",
       newLabel: newNodes.map(formatSemanticNodeLabel).filter(Boolean).join(", ") || "-",
@@ -1484,6 +1485,7 @@ function renderSemanticMappingConfirmPopover() {
       <select id="pendingMappingPolicy">
         ${[
           ["compare", "값 동일 비교"],
+          ["changed", "변경"],
           ["presence", "존재 여부"],
           ["required", "신규 필수"],
           ["conditional", "기존 있으면 신규 필수"],
@@ -1524,6 +1526,7 @@ function confirmPendingSemanticMapping() {
   pushProfileUndoSnapshot(`mapping:${field}`);
   const mapping = upsertSemanticMappingGroup(pending.type, field, role, pending.oldNodes || [], pending.newNodes || []);
   mapping.cardinality = cardinality;
+  mapping.policy = normalizeSemanticMappingPolicy(policy);
 
   if (role === "object-key") {
     upsertObjectKeyIdentityRuleFromMapping(pending.type, field, pending.oldNodes || [], pending.newNodes || []);
@@ -1580,6 +1583,7 @@ function cancelPendingSemanticMapping() {
 }
 
 function applyMappingPolicy(type, field, policy) {
+  if (policy === "changed" || policy === "변경") policy = "compare";
   if (!["compare", "presence", "required", "conditional", "ignore", "normalize"].includes(policy)) return;
   const profilePolicy = policy === "normalize" ? "compare" : policy;
   const policies = state.profileDraft.validationPolicies[type] || [];
@@ -15948,11 +15952,20 @@ function normalizeSemanticMappings(value) {
           newNodes,
           cardinality: semanticMappingCardinality(oldNodes, newNodes),
           groupId: item.groupId || item.id || createId(),
+          policy: normalizeSemanticMappingPolicy(item.policy),
         };
       })
       .filter(Boolean);
   });
   return base;
+}
+
+function normalizeSemanticMappingPolicy(policy = "") {
+  const value = canonicalizeComparableLine(policy || "compare");
+  if (value === "변경") return "changed";
+  return ["compare", "changed", "presence", "required", "conditional", "ignore", "normalize"].includes(value)
+    ? value
+    : "compare";
 }
 
 function normalizeSemanticNodes(nodes) {

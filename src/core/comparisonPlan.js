@@ -371,6 +371,195 @@ function isVisibleCompareField(field) {
   return VISIBLE_COMPARE_FIELDS.has(canonicalCompareField(field));
 }
 
+const SEMANTIC_MAPPING_CHANGE_POLICIES = new Set([
+  "changed",
+  "change",
+  "equivalent-change",
+  "mapped-change",
+  "equivalent",
+  "value-equivalence",
+  "value-map",
+  "변경",
+]);
+
+function normalizeSemanticMappingPolicy(policy = "") {
+  return String(policy || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isSemanticMappingChangePolicy(policy = "") {
+  return SEMANTIC_MAPPING_CHANGE_POLICIES.has(normalizeSemanticMappingPolicy(policy));
+}
+
+function getSemanticMappingNodes(mapping = {}, source = "") {
+  if (source === "old") return Array.isArray(mapping.oldNodes) ? mapping.oldNodes : Array.isArray(mapping.oldSelectors) ? mapping.oldSelectors : [];
+  return Array.isArray(mapping.newNodes) ? mapping.newNodes : Array.isArray(mapping.newSelectors) ? mapping.newSelectors : [];
+}
+
+function normalizeSemanticMappingValue(value = "") {
+  return String(value ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^[\[]|[\]]$/g, "")
+    .replace(/[{};,]+$/g, "")
+    .toLowerCase();
+}
+
+function semanticMappingNodeValue(node = {}) {
+  return normalizeSemanticMappingValue(
+    node.value ??
+      node.sample ??
+      node.selectedToken ??
+      node.token ??
+      ""
+  );
+}
+
+function semanticMappingValues(mapping = {}, source = "") {
+  const values = getSemanticMappingNodes(mapping, source)
+    .map(semanticMappingNodeValue)
+    .filter(Boolean);
+  return [...new Set(values)];
+}
+
+function findSemanticEquivalentMapping({
+  objectType = "",
+  field = "",
+  oldValue = null,
+  newValue = null,
+  profile = {},
+} = {}) {
+  if (oldValue == null || newValue == null) return null;
+  const compareField = canonicalCompareField(field);
+  if (!compareField) return null;
+
+  const oldToken = normalizeSemanticMappingValue(oldValue);
+  const newToken = normalizeSemanticMappingValue(newValue);
+  if (!oldToken || !newToken) return null;
+
+  const mappings = profile?.semanticMappings?.[objectType] || [];
+  for (const mapping of mappings) {
+    if (!isSemanticMappingChangePolicy(mapping?.policy)) continue;
+    if (canonicalCompareField(mapping.field || "") !== compareField) continue;
+
+    const oldValues = semanticMappingValues(mapping, "old");
+    const newValues = semanticMappingValues(mapping, "new");
+    if (oldValues.includes(oldToken) && newValues.includes(newToken)) {
+      return mapping;
+    }
+  }
+
+  return null;
+}
+
+function markTokenMatchSemanticEquivalent(tokenMatch = {}, mapping = null) {
+  return {
+    ...tokenMatch,
+    status: "equal",
+    semanticEquivalent: true,
+    equivalenceMappingId: mapping?.id || mapping?.groupId || "",
+    sourceReason: "semantic-mapping-changed-policy",
+  };
+}
+
+function applySemanticMappingEquivalenceToTokenMatches(
+  tokenMatches = [],
+  objectType = "",
+  profile = {}
+) {
+  return tokenMatches.map((tokenMatch) => {
+    if (tokenMatch.status === "equal") return tokenMatch;
+    const mapping = findSemanticEquivalentMapping({
+      objectType,
+      field: tokenMatch.field,
+      oldValue: tokenMatch.oldValue,
+      newValue: tokenMatch.newValue,
+      profile,
+    });
+    return mapping ? markTokenMatchSemanticEquivalent(tokenMatch, mapping) : tokenMatch;
+  });
+}
+
+function applySemanticMappingEquivalenceToLineMatches(
+  lineMatches = [],
+  objectType = "",
+  profile = {}
+) {
+  return lineMatches.map((lineMatch) => {
+    const fieldMatches = Array.isArray(lineMatch.fieldMatches) ? lineMatch.fieldMatches : [];
+    let changed = false;
+
+    const nextFieldMatches = fieldMatches.map((fieldMatch) => {
+      if (fieldMatch.status === "equal") return fieldMatch;
+      const mapping = findSemanticEquivalentMapping({
+        objectType,
+        field: fieldMatch.field,
+        oldValue: fieldMatch.oldValue,
+        newValue: fieldMatch.newValue,
+        profile,
+      });
+      if (!mapping) return fieldMatch;
+      changed = true;
+      return markTokenMatchSemanticEquivalent(fieldMatch, mapping);
+    });
+
+    if (!changed) return lineMatch;
+
+    const allFieldsEqual = nextFieldMatches.length > 0 &&
+      nextFieldMatches.every((fieldMatch) => fieldMatch.status === "equal");
+
+    return {
+      ...lineMatch,
+      fieldMatches: nextFieldMatches,
+      status: allFieldsEqual ? "equal" : lineMatch.status,
+      reason: allFieldsEqual ? "semantic-mapping-changed-policy" : lineMatch.reason,
+      semanticEquivalent: true,
+      score: allFieldsEqual ? 100 : lineMatch.score,
+    };
+  });
+}
+
+function valuesEquivalentBySemanticMapping(oldValues = [], newValues = [], objectType = "", field = "", profile = {}) {
+  const oldList = [...new Set((oldValues || []).map((value) => String(value ?? "")).filter(Boolean))];
+  const newList = [...new Set((newValues || []).map((value) => String(value ?? "")).filter(Boolean))];
+  if (!oldList.length || !newList.length) return false;
+
+  return oldList.every((oldValue) =>
+    newList.some((newValue) =>
+      findSemanticEquivalentMapping({ objectType, field, oldValue, newValue, profile })
+    )
+  ) && newList.every((newValue) =>
+    oldList.some((oldValue) =>
+      findSemanticEquivalentMapping({ objectType, field, oldValue, newValue, profile })
+    )
+  );
+}
+
+function applySemanticMappingEquivalenceToFieldSummary(fieldSummary = {}, objectType = "", profile = {}) {
+  return Object.fromEntries(
+    Object.entries(fieldSummary || {}).map(([field, summary]) => {
+      if (summary.status === "equal") return [field, summary];
+      if (!valuesEquivalentBySemanticMapping(summary.oldValues, summary.newValues, objectType, field, profile)) {
+        return [field, summary];
+      }
+      return [
+        field,
+        {
+          ...summary,
+          status: "equal",
+          effectiveStatus: summary.effectiveStatus === "ignored" ? summary.effectiveStatus : "equal",
+          semanticEquivalent: true,
+          changed: 0,
+          missing: 0,
+          added: 0,
+          equal: Math.max(1, Number(summary.equal || 0)),
+        },
+      ];
+    })
+  );
+}
+
 export function createFieldSummary(tokenMatches = []) {
   const summary = {};
 
@@ -405,6 +594,15 @@ export function createFieldSummary(tokenMatches = []) {
     const item = summary[field];
 
     item.matches.push(normalizedTokenMatch);
+    if (normalizedTokenMatch.semanticEquivalent) {
+      item.semanticEquivalent = true;
+      const mappingId = normalizedTokenMatch.equivalenceMappingId || "";
+      if (mappingId) {
+        item.equivalenceMappingIds = [
+          ...new Set([...(item.equivalenceMappingIds || []), mappingId]),
+        ];
+      }
+    }
 
     if (normalizedTokenMatch.status === "equal") {
       item.equal += 1;
@@ -1460,7 +1658,7 @@ export function createObjectComparePlan(
   const oldLines = getRawLines(match.oldObject);
   const newLines = getRawLines(match.newObject);
 
-  const lineMatches = compareObjectPlanLines(
+  const rawLineMatches = compareObjectPlanLines(
     {
       status: match.status,
       oldLines,
@@ -1473,20 +1671,38 @@ export function createObjectComparePlan(
     profile
   );
 
+  const lineMatches = applySemanticMappingEquivalenceToLineMatches(
+    rawLineMatches,
+    objectType,
+    profile
+  );
+
   const lineTokenMatches = collectTokenMatchesFromLineMatches(lineMatches);
 
-  const objectFieldMatches = collectObjectLevelFieldMatches({
-    oldObject: match.oldObject,
-    newObject: match.newObject,
-    existingTokenMatches: lineTokenMatches,
-  });
+  const objectFieldMatches = applySemanticMappingEquivalenceToTokenMatches(
+    collectObjectLevelFieldMatches({
+      oldObject: match.oldObject,
+      newObject: match.newObject,
+      existingTokenMatches: lineTokenMatches,
+    }),
+    objectType,
+    profile
+  );
 
-  const tokenMatches = [
-    ...lineTokenMatches,
-    ...objectFieldMatches,
-  ];
+  const tokenMatches = applySemanticMappingEquivalenceToTokenMatches(
+    [
+      ...lineTokenMatches,
+      ...objectFieldMatches,
+    ],
+    objectType,
+    profile
+  );
 
-  const rawFieldSummary = createFieldSummary(tokenMatches);
+  const rawFieldSummary = applySemanticMappingEquivalenceToFieldSummary(
+    createFieldSummary(tokenMatches),
+    objectType,
+    profile
+  );
 
   const rawPolicyResult = applyFieldPolicies({
     objectType,

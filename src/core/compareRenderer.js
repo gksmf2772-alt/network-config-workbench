@@ -52,6 +52,25 @@ function getFieldCompactValue(fieldSummary) {
   return oldText === newText ? oldText : `${oldText} -> ${newText}`;
 }
 
+function hasSemanticMappingEquivalence(field = {}) {
+  if (field.semanticEquivalent) return true;
+  return Array.isArray(field.matches) &&
+    field.matches.some((match) =>
+      match?.semanticEquivalent ||
+      match?.sourceReason === "semantic-mapping-changed-policy"
+    );
+}
+
+function renderSemanticMappingEquivalenceBadge(field = {}) {
+  if (!hasSemanticMappingEquivalence(field)) return "";
+  return `<span class="semantic-field-policy-badge" title="수동 토큰 매핑의 변경 정책으로 동일 처리">수동 정책 동일</span>`;
+}
+
+function renderSemanticMappingEquivalenceNote(field = {}) {
+  if (!hasSemanticMappingEquivalence(field)) return "";
+  return `<div class="semantic-field-policy-note">수동 정책: 변경 매핑으로 동일 처리</div>`;
+}
+
 function isFieldExceptionActionable(field = {}) {
   const status = String(field.effectiveStatus || field.status || "").toLowerCase();
   return Boolean(field.field) && status && !["equal", "matched", "present", "ignored"].includes(status);
@@ -99,9 +118,13 @@ function renderFieldSummary(fieldSummary = {}, item = {}, options = {}) {
         <div class="semantic-field semantic-field-${escapeHtml(field.effectiveStatus || field.status)}">
           <div class="semantic-field-head">
             <strong>${escapeHtml(field.field)}</strong>
-            <span class="semantic-field-status">${escapeHtml(getFieldDisplayStatus(field))}</span>
+            <div class="semantic-field-head-meta">
+              ${renderSemanticMappingEquivalenceBadge(field)}
+              <span class="semantic-field-status">${escapeHtml(getFieldDisplayStatus(field))}</span>
+            </div>
           </div>
           <div class="semantic-field-values compact">${getFieldCompactValue(field)}</div>
+          ${renderSemanticMappingEquivalenceNote(field)}
           ${renderFieldSourceBadges(field)}
           ${field.violation ? `<div class="semantic-violation">위반: ${escapeHtml(field.violationReason)}</div>` : ""}
           ${renderFieldExceptionActions(item, field, options)}

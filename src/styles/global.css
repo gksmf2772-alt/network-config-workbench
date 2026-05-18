@@ -3595,6 +3595,33 @@ textarea::placeholder {
   color: #57606a;
 }
 
+.semantic-field-head-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.semantic-field-head-meta .semantic-field-status {
+  margin-left: 0;
+}
+
+.semantic-field-policy-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border: 1px solid #0891b2;
+  border-radius: 999px;
+  background: #ecfeff;
+  color: #0e7490;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .semantic-field-values {
   display: flex;
   flex-direction: column;
@@ -3622,6 +3649,14 @@ textarea::placeholder {
   color: #24292f;
   padding-left: 24px;
   word-break: break-word;
+}
+
+.semantic-field-policy-note {
+  margin-top: 4px;
+  padding-left: 24px;
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .semantic-field-actions {

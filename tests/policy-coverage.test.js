@@ -9,9 +9,13 @@ import {
   normalizeConfig,
   renderComparisonPlanHtml,
 } from "../src/core/comparator.js";
+import { createObjectComparePlan } from "../src/core/comparisonPlan.js";
 import { buildSemanticCoverageDiagnostics } from "../src/core/coverageDiagnostics.js";
 import { buildObjectFieldReviewRows, buildObjectReviewGroups } from "../src/core/objectReviewGroups.js";
-import { evaluatePolicyContext } from "../src/core/policyEvaluator.js";
+import {
+  evaluatePolicyContext,
+  profileExceptionMatchesContext,
+} from "../src/core/policyEvaluator.js";
 import { preprocessConfigInput } from "../src/core/routerLogPreprocessor.js";
 import { buildGraphData, buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
 import { VENDOR_IDS } from "../src/core/vendorPresets.js";
@@ -157,6 +161,152 @@ test("manual added line rule keeps object in integrated report as suppressed", (
   assert.equal(oldDashboard.review.suppressed.length, 1);
 });
 
+test("manual line rule does not apply to other object types", () => {
+  const profile = {
+    exceptions: [],
+    rules: { ignore: [] },
+    lineRules: {
+      interface: [
+        { source: "new", text: "admin-state enable", action: "ignore" },
+      ],
+    },
+  };
+
+  assert.equal(evaluatePolicyContext({
+    profile,
+    rawLine: "admin-state enable",
+    side: "new",
+    objectType: "interface",
+  }).suppressed, true);
+  assert.equal(evaluatePolicyContext({
+    profile,
+    rawLine: "admin-state enable",
+    side: "new",
+    objectType: "bgp",
+  }).suppressed, false);
+  assert.equal(evaluatePolicyContext({
+    profile,
+    rawLine: "admin-state enable",
+    side: "new",
+    objectType: "subscriber-interface",
+  }).suppressed, false);
+});
+
+test("admin-state line token does not suppress BGP normalized state field", () => {
+  const profile = {
+    exceptions: [],
+    rules: { ignore: [] },
+    lineRules: {
+      bgp: [
+        { source: "new", text: "admin-state enable", action: "ignore" },
+      ],
+    },
+  };
+  const oldObject = {
+    id: "old-bgp-admin-state-token",
+    normalizedType: "bgp",
+    normalizedIdentity: "112.174.176.32",
+    fields: {
+      neighbor: "112.174.176.32",
+    },
+    rawLines: [
+      "neighbor 112.174.176.32",
+    ],
+  };
+  const newObject = {
+    id: "new-bgp-admin-state-token",
+    normalizedType: "bgp",
+    normalizedIdentity: "112.174.176.32",
+    fields: {
+      neighbor: "112.174.176.32",
+      state: "enabled",
+      "admin-state": "enabled",
+    },
+    rawLines: [
+      '/configure { router "Base" bgp neighbor "112.174.176.32" admin-state enable }',
+    ],
+  };
+  const item = createObjectComparePlan(
+    { status: "matched", reason: "normalized-identity", oldObject, newObject },
+    0,
+    profile,
+    [oldObject, newObject],
+  );
+
+  assert.equal(evaluatePolicyContext({
+    profile,
+    rawLine: "state enabled",
+    side: "new",
+    objectType: "bgp",
+    field: "admin-state",
+  }).suppressed, false);
+  assert.equal(item.fieldSummary["admin-state"].status, "added");
+  assert.equal(item.fieldSummary["admin-state"].effectiveStatus, "added");
+  assert.equal(item.fieldSummary["admin-state"].ignored, false);
+});
+
+test("foreign line rule does not suppress subscriber-interface admin-state summary", () => {
+  const profile = {
+    exceptions: [],
+    rules: { ignore: [] },
+    lineRules: {
+      interface: [
+        { source: "new", text: "admin-state enable", action: "ignore" },
+      ],
+    },
+  };
+  const oldObject = {
+    id: "old-sub-admin-state",
+    normalizedType: "subscriber-interface",
+    normalizedIdentity: "to-nowon-tou-fn17",
+    fields: {
+      address: "112.188.27.101/30",
+      "dhcp.admin-state": "enabled",
+      "sub-sla-mgmt.admin-state": "enabled",
+    },
+    rawLines: [
+      "address 112.188.27.101/30",
+      "dhcp",
+      "no shutdown",
+      "sub-sla-mgmt",
+      "no shutdown",
+    ],
+  };
+  const newObject = {
+    id: "new-sub-admin-state",
+    normalizedType: "subscriber-interface",
+    normalizedIdentity: "to-nowon-tou-fn17",
+    fields: {
+      address: "112.188.27.101/30",
+      "admin-state": "enabled",
+      "dhcp.admin-state": "enabled",
+      "sub-sla-mgmt.admin-state": "enabled",
+    },
+    rawLines: [
+      '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 admin-state enable }',
+      '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 ipv4 address 112.188.27.101 prefix-length 30 }',
+      '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g ipv4 dhcp admin-state enable }',
+      '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g sap lag-1 sub-sla-mgmt admin-state enable }',
+    ],
+  };
+  const item = createObjectComparePlan(
+    { status: "matched", reason: "normalized-identity", oldObject, newObject },
+    0,
+    profile,
+    [oldObject, newObject],
+  );
+
+  assert.equal(item.fieldSummary["admin-state"].status, "added");
+  assert.equal(item.fieldSummary["admin-state"].effectiveStatus, "added");
+  assert.equal(item.fieldSummary["admin-state"].ignored, false);
+  assert.equal(item.fieldSummary["dhcp.admin-state"].status, "equal");
+  assert.equal(item.fieldSummary["dhcp.admin-state"].effectiveStatus, "equal");
+  assert.equal(item.fieldSummary["dhcp.admin-state"].ignored, false);
+  assert.equal(item.fieldSummary["sub-sla-mgmt.admin-state"].status, "equal");
+  assert.equal(item.fieldSummary["sub-sla-mgmt.admin-state"].effectiveStatus, "equal");
+  assert.equal(item.fieldSummary["sub-sla-mgmt.admin-state"].ignored, false);
+});
+
 test("profile admin-state exception keeps static route visible as suppressed review row", () => {
   const profile = {
     exceptions: [{
@@ -239,6 +389,85 @@ test("profile admin-state exception keeps static route visible as suppressed rev
   assert.equal(suppressedRow.objectKey, "static-route:112.188.30.19/32");
   assert.equal(suppressedRow.policyId, "ex-profile-static-admin-state-changed");
   assert.ok(suppressedRow.fieldRows.some((row) => row.field === "state" && row.status === "ignored"));
+});
+
+test("profile field exception is limited to originating object type", () => {
+  const exception = {
+    id: "ex-profile-bgp-admin-state",
+    scope: "profile",
+    enabled: true,
+    target: {
+      createdFromObjectKey: "bgp:192.0.2.1",
+      fieldPath: "admin-state",
+      ruleId: "semantic-compare.important-field-change",
+      category: "semantic-compare",
+      issueType: "field-difference",
+      changeType: "changed",
+    },
+    match: {
+      mode: "profile-field-rule",
+      fieldPath: "admin-state",
+      ruleId: "semantic-compare.important-field-change",
+      category: "semantic-compare",
+      issueType: "field-difference",
+      changeTypes: ["changed"],
+      valueMode: "any",
+    },
+  };
+
+  const baseContext = {
+    side: "both",
+    field: "admin-state",
+    ruleId: "semantic-compare.important-field-change",
+    category: "semantic-compare",
+    issueType: "field-difference",
+    changeType: "changed",
+  };
+
+  assert.equal(profileExceptionMatchesContext(exception, {
+    ...baseContext,
+    objectType: "bgp",
+    objectKey: "bgp:192.0.2.1",
+  }), true);
+  assert.equal(profileExceptionMatchesContext(exception, {
+    ...baseContext,
+    objectType: "interface",
+    objectKey: "interface:to-core",
+  }), false);
+  assert.equal(evaluatePolicyContext({
+    profile: { exceptions: [exception] },
+    ...baseContext,
+    objectType: "interface",
+    objectKey: "interface:to-core",
+  }).suppressed, false);
+});
+
+test("profile field exception without object type does not become global", () => {
+  const exception = {
+    id: "ex-profile-unscoped-admin-state",
+    scope: "profile",
+    enabled: true,
+    match: {
+      mode: "profile-field-rule",
+      fieldPath: "admin-state",
+      ruleId: "semantic-compare.important-field-change",
+      category: "semantic-compare",
+      issueType: "field-difference",
+      changeTypes: ["changed"],
+      valueMode: "any",
+    },
+  };
+
+  assert.equal(profileExceptionMatchesContext(exception, {
+    side: "both",
+    objectType: "interface",
+    objectKey: "interface:to-core",
+    field: "admin-state",
+    ruleId: "semantic-compare.important-field-change",
+    category: "semantic-compare",
+    issueType: "field-difference",
+    changeType: "changed",
+  }), false);
 });
 
 test("advanced ignore policy suppresses ignored field from abnormal list", () => {
@@ -689,6 +918,10 @@ test("summary and graph use suppressed canonical state for profile exception", (
   assert.equal(countActiveFieldIssues(after.plan, "group"), 0);
   assert.equal(after.dashboard.review.abnormal.every((item) =>
     item.fieldRows.every((row) => row.field !== "group")
+  ), true);
+  assert.equal(after.dashboard.review.suppressed.length, 2);
+  assert.equal(after.dashboard.review.suppressed.every((item) =>
+    item.fieldRows.some((row) => row.field === "group")
   ), true);
   assert.equal(beforeGraph.edges.length, afterGraph.edges.length);
   assert.equal(afterGraph.edges.every((edge) => edge.status !== "profile-exception"), true);

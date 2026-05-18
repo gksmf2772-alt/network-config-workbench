@@ -495,11 +495,68 @@ function createDefaultSemanticObjects() {
       objectKey: ["interface"],
       fields: {
         interface: { patterns: ['interface "{value}"', "interface {value}", 'configure router interface "{value}"', "configure router interface {value}"] },
-        address: { patterns: ["address {value}", "ip address {value}"] },
+        address: { patterns: ["address {value}", "ip address {value}", "ipv4 primary address {value}", "ipv4 address {value}"] },
+        "prefix-length": { patterns: ["prefix-length {value}", "ipv4 primary prefix-length {value}"] },
         description: { patterns: ['description "{value}"', "description {value}"] },
         "admin-state": { patterns: ["no shutdown -> enabled", "shutdown -> disabled", "admin-state enable -> enabled", "admin-state disable -> disabled"] },
+        "icmp.mask-reply": { patterns: ["no mask-reply -> disabled", "mask-reply false -> disabled", "mask-reply true -> enabled"] },
+        "icmp.redirects": { patterns: ["no redirects -> disabled", "redirects admin-state disable -> disabled", "redirects admin-state enable -> enabled"] },
+        "icmp.ttl-expired": { patterns: ["no ttl-expired -> disabled", "ttl-expired admin-state disable -> disabled", "ttl-expired admin-state enable -> enabled"] },
+        "icmp.unreachables": { patterns: ["no unreachables -> disabled", "unreachables admin-state disable -> disabled", "unreachables admin-state enable -> enabled"] },
       },
-      policies: { interface: "presence", address: "compare", description: "compare", "admin-state": "compare" },
+      policies: {
+        interface: "presence",
+        address: "compare",
+        "prefix-length": "ignore",
+        description: "compare",
+        "admin-state": "compare",
+        "icmp.mask-reply": "compare",
+        "icmp.redirects": "compare",
+        "icmp.ttl-expired": "compare",
+        "icmp.unreachables": "compare",
+      },
+    },
+    "subscriber-interface": {
+      objectKey: ["subscriber-interface"],
+      fields: {
+        "subscriber-interface": { patterns: ['subscriber-interface "{value}"', "subscriber-interface {value}"] },
+        "group-interface": { patterns: ['group-interface "{value}"', "group-interface {value}"] },
+        address: { patterns: ["address {value}", "ipv4 address {value}"] },
+        "prefix-length": { patterns: ["prefix-length {value}"] },
+        description: { patterns: ['description "{value}"', "description {value}"] },
+        "admin-state": { patterns: ["no shutdown -> enabled", "shutdown -> disabled", "admin-state enable -> enabled", "admin-state disable -> disabled"] },
+        sap: { patterns: ["sap {value}"] },
+        "ingress-filter": { patterns: ["ingress filter ip {value}", "filter ip {value}"] },
+        "egress-filter": { patterns: ["egress filter ip {value}"] },
+        "ingress-qos": { patterns: ["ingress qos {value}", "qos {value}"] },
+        "egress-qos": { patterns: ["egress qos {value}"] },
+        "auth-policy": { patterns: ['authentication-policy "{value}"', "authentication-policy {value}", 'radius-auth-policy "{value}"', "radius-auth-policy {value}"] },
+        "dhcp.filter": { patterns: ["dhcp filter {value}", "filter {value}"] },
+        "dhcp.server": { patterns: ["dhcp server {value}", "server {value}"] },
+        "dhcp.trusted": { patterns: ["trusted -> true", "dhcp trusted true -> true"] },
+        "default-host": { patterns: ["default-host {value}", "default-host ipv4 {value}"] },
+        "static-host": { patterns: ["static-host ip {value}", "static-host ipv4 {value}", "static-host {value}"] },
+        "sub-sla-mgmt.sub-ident-policy": { patterns: ['sub-ident-policy "{value}"', "sub-ident-policy {value}"] },
+      },
+      policies: {
+        "subscriber-interface": "presence",
+        address: "compare",
+        "prefix-length": "ignore",
+        description: "compare",
+        "admin-state": "compare",
+        "group-interface": "compare",
+        sap: "compare",
+        "ingress-filter": "compare",
+        "egress-filter": "compare",
+        "ingress-qos": "compare",
+        "egress-qos": "compare",
+        "auth-policy": "compare",
+        "dhcp.filter": "compare",
+        "dhcp.server": "compare",
+        "default-host": "compare",
+        "static-host": "compare",
+        "sub-sla-mgmt.sub-ident-policy": "compare",
+      },
     },
     "static-route": {
       objectKey: ["route"],
@@ -560,6 +617,21 @@ function createDefaultValidationPolicies() {
       { field: "address", policy: "compare" },
       { field: "description", policy: "compare" },
       { field: "admin-state", policy: "compare" },
+    ],
+    "subscriber-interface": [
+      { field: "subscriber-interface", policy: "presence" },
+      { field: "address", policy: "compare" },
+      { field: "description", policy: "compare" },
+      { field: "admin-state", policy: "compare" },
+      { field: "group-interface", policy: "compare" },
+      { field: "sap", policy: "compare" },
+      { field: "ingress-filter", policy: "compare" },
+      { field: "egress-filter", policy: "compare" },
+      { field: "ingress-qos", policy: "compare" },
+      { field: "egress-qos", policy: "compare" },
+      { field: "auth-policy", policy: "compare" },
+      { field: "dhcp.filter", policy: "compare" },
+      { field: "dhcp.server", policy: "compare" },
     ],
     "static-route": [
       { field: "route", policy: "compare" },
@@ -1773,6 +1845,7 @@ function defaultSemanticFieldForType(type) {
     "static-route": "route",
     bgp: "neighbor",
     interface: "interface",
+    "subscriber-interface": "subscriber-interface",
     port: "port",
     lag: "lag",
     pim: "interface",
@@ -1795,6 +1868,8 @@ function defaultObjectFieldForType(type) {
     "static-route": "route",
     bgp: "neighbor",
     interface: "interface",
+    "subscriber-interface": "subscriber-interface",
+    "group-interface": "group-interface",
     port: "port",
     lag: "lag",
     pim: "interface",
@@ -3006,12 +3081,239 @@ function inferFieldFromLinkedLines(oldLine, newLine) {
   return oldField || newField || "";
 }
 
+function inferSemanticFieldNameForLineContext(line, context = {}) {
+  const objectType =
+    context.objectType ||
+    context.object?.normalizedType ||
+    context.object?.type ||
+    context.object?.sourceType ||
+    "";
+  const rawLines = Array.isArray(context.rawLines) && context.rawLines.length
+    ? context.rawLines
+    : getSemanticObjectRawLines(context.object);
+  const lineIndex = Number.isFinite(context.lineIndex) ? context.lineIndex : -1;
+  const scopedField = inferScopedInterfaceLineField(line, {
+    objectType,
+    rawLines,
+    lineIndex,
+  });
+
+  return scopedField || inferSemanticFieldName(line);
+}
+
+function inferScopedInterfaceLineField(line, {
+  objectType = "",
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  const type = canonicalizeComparableLine(objectType);
+  if (!["interface", "subscriber-interface"].includes(type)) return "";
+
+  const normalized = canonicalizeComparableLine(line);
+  if (!normalized) return "";
+
+  const mdField = inferMdCliInterfaceLineField(normalized, type);
+  if (mdField) return mdField;
+
+  return inferClassicInterfaceLineField(normalized, {
+    objectType: type,
+    rawLines,
+    lineIndex,
+  });
+}
+
+function inferMdCliInterfaceLineField(normalized = "", objectType = "") {
+  if (!/^\/?configure\b/.test(normalized)) return "";
+
+  if (objectType === "interface") {
+    const icmpField = normalized.match(/\bicmp\s+(mask-reply|redirects|ttl-expired|unreachables)\b/);
+    if (icmpField) return `icmp.${icmpField[1]}`;
+    if (/\b(?:ipv4\s+primary\s+address|ipv4\s+address|address)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
+    if (/\bdescription\b/.test(normalized)) return "description";
+    if (/\bsap\b/.test(normalized)) return "sap";
+    if (/\bingress\s+filter\s+ip\b/.test(normalized)) return "ingress-filter";
+    if (/\bingress\s+qos\b/.test(normalized)) return "ingress-qos";
+    if (/\begress\s+filter\s+ip\b/.test(normalized)) return "egress-filter";
+    if (/\begress\s+qos\b/.test(normalized)) return "egress-qos";
+    if (/\badmin-state\b/.test(normalized)) return "state";
+    return "";
+  }
+
+  if (/\bdhcp\s+admin-state\b/.test(normalized)) return "dhcp.admin-state";
+  if (/\bsub-sla-mgmt\s+admin-state\b/.test(normalized)) return "sub-sla-mgmt.admin-state";
+  if (/\bstatic-host\b.*\badmin-state\b/.test(normalized)) return "static-host.admin-state";
+  if (/\bdhcp\s+filter\b/.test(normalized)) return "dhcp.filter";
+  if (/\bdhcp\s+server\b/.test(normalized)) return "dhcp.server";
+  if (/\bdhcp\s+trusted\b/.test(normalized)) return "dhcp.trusted";
+  if (/\bdhcp\s+lease-populate\s+l2-header\b/.test(normalized)) return "dhcp.lease-populate.l2-header";
+  if (/\bdhcp\s+lease-populate\s+max-leases\b/.test(normalized)) return "dhcp.lease-populate.max-leases";
+  if (/\ballow-unmatching-subnets\b/.test(normalized)) return "dhcp.allow-unmatching-subnets";
+  if (/\bneighbor-discovery\s+populate\b/.test(normalized)) return "neighbor-discovery.populate";
+  if (/\bradius-auth-policy\b/.test(normalized)) return "auth-policy";
+  if (/\bgroup-interface\b/.test(normalized) && !/\bsap\b/.test(normalized)) return "group-interface";
+  if (/\bdefault-host\b.*\bnext-hop\b/.test(normalized)) return "default-host.next-hop";
+  if (/\bdefault-host\b/.test(normalized)) return "default-host";
+  if (/\bstatic-host\b.*\bsub-profile\b/.test(normalized)) return "static-host.sub-profile";
+  if (/\bstatic-host\b.*\bsla-profile\b/.test(normalized)) return "static-host.sla-profile";
+  if (/\bstatic-host\b.*\bint-dest-id\b/.test(normalized)) return "static-host.int-dest-id";
+  if (/\bstatic-host\b.*\bsubscriber-id\b/.test(normalized)) return "static-host.subscriber-id";
+  if (/\bstatic-host\b/.test(normalized)) return "static-host";
+  if (/\bsub-sla-mgmt\b.*\bsub-ident-policy\b/.test(normalized)) return "sub-sla-mgmt.sub-ident-policy";
+  if (/\bsub-sla-mgmt\b.*\bsubscriber-limit\b/.test(normalized)) return "sub-sla-mgmt.subscriber-limit";
+  if (/\bdefaults\s+sub-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sub-profile";
+  if (/\bdefaults\s+sla-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sla-profile";
+  if (/\bdefaults\s+subscriber-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.subscriber-id";
+  if (/\bdefaults\s+int-dest-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.int-dest-id";
+  if (/\bcpu-protection\s+policy-id\b/.test(normalized)) return "cpu-protection.policy-id";
+  if (/\bcpu-protection\s+ip-src-monitoring\b/.test(normalized)) return "cpu-protection.ip-src-monitoring";
+  if (/\bingress\s+filter\s+ip\b/.test(normalized)) return "ingress-filter";
+  if (/\bingress\s+qos\b/.test(normalized)) return "ingress-qos";
+  if (/\begress\s+filter\s+ip\b/.test(normalized)) return "egress-filter";
+  if (/\begress\s+qos\b/.test(normalized)) return "egress-qos";
+  if (/\bsap\b/.test(normalized)) return "sap";
+  if (/\b(?:ipv4\s+address|address)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
+  if (/\bdescription\b/.test(normalized)) return "description";
+  if (/\badmin-state\b/.test(normalized)) return "state";
+  if (/\bsubscriber-interface\b/.test(normalized)) return "subscriber-interface";
+  return "";
+}
+
+function inferClassicInterfaceLineField(normalized = "", {
+  objectType = "",
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  const scope = getClassicLineScope(rawLines, lineIndex);
+  const nearestScope = (...names) => {
+    for (let index = scope.length - 1; index >= 0; index -= 1) {
+      if (names.includes(scope[index].name)) return scope[index].name;
+    }
+    return "";
+  };
+  const currentScope = nearestScope("dhcp", "sub-sla-mgmt", "static-host", "ingress", "egress", "icmp", "sap", "group-interface");
+
+  if (/^(no\s+shutdown|shutdown)$/.test(normalized)) {
+    const stateScope = nearestScope("dhcp", "sub-sla-mgmt", "static-host");
+    if (stateScope === "dhcp") return "dhcp.admin-state";
+    if (stateScope === "sub-sla-mgmt") return "sub-sla-mgmt.admin-state";
+    if (stateScope === "static-host") return "static-host.admin-state";
+    return "state";
+  }
+
+  if (objectType === "interface") {
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) return `icmp.${classicIcmp[1]}`;
+    if (/^description\b/.test(normalized)) return "description";
+    if (/^address\b/.test(normalized)) return "address";
+    if (/^sap\b/.test(normalized)) return "sap";
+    if (currentScope === "ingress" && /^filter\s+ip\b/.test(normalized)) return "ingress-filter";
+    if (currentScope === "ingress" && /^qos\b/.test(normalized)) return "ingress-qos";
+    if (currentScope === "egress" && /^filter\s+ip\b/.test(normalized)) return "egress-filter";
+    if (currentScope === "egress" && /^qos\b/.test(normalized)) return "egress-qos";
+    return "";
+  }
+
+  if (currentScope === "dhcp") {
+    if (/^filter\b/.test(normalized)) return "dhcp.filter";
+    if (/^server\b/.test(normalized)) return "dhcp.server";
+    if (/^trusted$/.test(normalized)) return "dhcp.trusted";
+    if (/^lease-populate\s+l2-header\b/.test(normalized)) return "dhcp.lease-populate.l2-header";
+  }
+
+  if (currentScope === "sub-sla-mgmt") {
+    if (/^def-inter-dest-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.int-dest-id";
+    if (/^def-sub-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.subscriber-id";
+    if (/^def-sub-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sub-profile";
+    if (/^def-sla-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sla-profile";
+    if (/^sub-ident-policy\b/.test(normalized)) return "sub-sla-mgmt.sub-ident-policy";
+    if (/^multi-sub-sap\b/.test(normalized)) return "sub-sla-mgmt.subscriber-limit";
+  }
+
+  if (currentScope === "static-host") {
+    if (/^inter-dest-id\b/.test(normalized)) return "static-host.int-dest-id";
+    if (/^sla-profile\b/.test(normalized)) return "static-host.sla-profile";
+    if (/^sub-profile\b/.test(normalized)) return "static-host.sub-profile";
+    if (/^subscriber-sap-id$/.test(normalized)) return "static-host.subscriber-id";
+  }
+
+  if (currentScope === "ingress" && /^filter\s+ip\b/.test(normalized)) return "ingress-filter";
+  if (currentScope === "ingress" && /^qos\b/.test(normalized)) return "ingress-qos";
+  if (currentScope === "egress" && /^filter\s+ip\b/.test(normalized)) return "egress-filter";
+  if (currentScope === "egress" && /^qos\b/.test(normalized)) return "egress-qos";
+
+  if (/^subscriber-interface\b/.test(normalized)) return "subscriber-interface";
+  if (/^group-interface\b/.test(normalized)) return "group-interface";
+  if (/^sap\b/.test(normalized)) return "sap";
+  if (/^static-host\b/.test(normalized)) return "static-host";
+  if (/^default-host\b.*\bnext-hop\b/.test(normalized)) return "default-host.next-hop";
+  if (/^default-host\b/.test(normalized)) return "default-host";
+  if (/^authentication-policy\b/.test(normalized)) return "auth-policy";
+  if (/^arp-populate$/.test(normalized)) return "neighbor-discovery.populate";
+  if (/^allow-unmatching-subnets$/.test(normalized)) return "dhcp.allow-unmatching-subnets";
+  if (/^cpu-protection\b/.test(normalized)) return "cpu-protection.policy-id";
+  if (/^description\b/.test(normalized)) return "description";
+  if (/^address\b/.test(normalized)) return "address";
+
+  return "";
+}
+
+function getClassicLineScope(rawLines = [], lineIndex = -1) {
+  if (!Array.isArray(rawLines) || lineIndex <= 0) return [];
+  const scope = [];
+
+  for (let index = 0; index < Math.min(lineIndex, rawLines.length); index += 1) {
+    updateClassicLineScope(scope, rawLines[index]);
+  }
+
+  return scope;
+}
+
+function updateClassicLineScope(scope, rawLine = "") {
+  const source = String(rawLine || "");
+  const text = canonicalizeComparableLine(source);
+  if (!text) return;
+
+  const indent = source.match(/^\s*/)?.[0]?.length || 0;
+  if (text === "exit" || text === "}") {
+    while (scope.length > 1 && scope.at(-1).indent > indent) scope.pop();
+    if (scope.length) scope.pop();
+    return;
+  }
+
+  while (scope.length && indent <= scope.at(-1).indent && !isClassicScopeStart(text)) {
+    scope.pop();
+  }
+
+  const name = classicScopeNameForLine(text);
+  if (name) scope.push({ name, indent });
+}
+
+function isClassicScopeStart(text = "") {
+  return Boolean(classicScopeNameForLine(text));
+}
+
+function classicScopeNameForLine(text = "") {
+  if (/^subscriber-interface\b/.test(text)) return "subscriber-interface";
+  if (/^interface\b/.test(text)) return "interface";
+  if (/^group-interface\b/.test(text)) return "group-interface";
+  if (/^sap\b/.test(text)) return "sap";
+  if (/^dhcp$/.test(text)) return "dhcp";
+  if (/^sub-sla-mgmt$/.test(text)) return "sub-sla-mgmt";
+  if (/^static-host\b/.test(text)) return "static-host";
+  if (/^ingress$/.test(text)) return "ingress";
+  if (/^egress$/.test(text)) return "egress";
+  if (/^icmp$/.test(text)) return "icmp";
+  return "";
+}
+
 function inferSemanticFieldName(line) {
   const normalized = canonicalizeComparableLine(line);
   const oneLineStaticRouteField = inferOneLineStaticRouteField(normalized);
   if (oneLineStaticRouteField) return oneLineStaticRouteField;
   if (/(?:^|\s)(?:static-route-entry|route)\s+[\d./]+/.test(normalized)) return "route";
   if (/\b(?:next-hop|gateway)\b/.test(normalized)) return "next-hop";
+  const icmpField = normalized.match(/\b(?:icmp\s+)?(mask-reply|redirects|ttl-expired|unreachables)\b/);
+  if (icmpField) return `icmp.${icmpField[1]}`;
   if (/^(?:ip\s+address|address|ipv4|ipv6)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
   if (/\btag\b/.test(normalized)) return "tag";
   if (/\bno\s+shutdown\b|\badmin-state\b/.test(normalized)) return "state";
@@ -6192,10 +6494,138 @@ function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
   return false;
 }
 
+function lineIndent(rawLine = "") {
+  return String(rawLine || "").match(/^\s*/)?.[0]?.length || 0;
+}
+
+function isClassicSubscriberInterfaceStartLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return /\bsubscriber-interface\s+"?[^"\s{}]+/.test(normalized) &&
+    !/^\/?configure\b/.test(normalized);
+}
+
+function isMdCliSubscriberInterfaceLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return /^\/?configure\b/.test(normalized) &&
+    /\bservice\s+(?:ies|vprn)\b/.test(normalized) &&
+    /\bsubscriber-interface\s+"?[^"\s{}]+/.test(normalized);
+}
+
+function subscriberNameFromLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return stripTrailingSyntax(normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+}
+
+function collectClassicSubscriberBlock(lines = [], startIndex = 0) {
+  const startIndent = lineIndent(lines[startIndex] || "");
+  const block = [];
+  let endIndex = startIndex;
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const normalized = canonicalizeComparableLine(rawLine);
+    const indent = lineIndent(rawLine);
+
+    if (
+      index > startIndex &&
+      normalized &&
+      indent <= startIndent &&
+      isClassicSubscriberInterfaceStartLine(rawLine)
+    ) {
+      break;
+    }
+
+    block.push(rawLine);
+    endIndex = index;
+
+    if (
+      index > startIndex &&
+      normalized === "exit" &&
+      indent <= startIndent
+    ) {
+      break;
+    }
+  }
+
+  return { rawLines: block, endIndex };
+}
+
+function collectBuiltinSubscriberInterfaceObjects(lines = [], options = {}, source = "old") {
+  const objects = [];
+  const consumedLineIndexes = new Set();
+
+  if (source === "new") {
+    const groups = new Map();
+
+    lines.forEach((rawLine, index) => {
+      if (!isMdCliSubscriberInterfaceLine(rawLine)) return;
+      const subscriberName = subscriberNameFromLine(rawLine);
+      if (!subscriberName) return;
+      if (!groups.has(subscriberName)) {
+        groups.set(subscriberName, {
+          name: subscriberName,
+          startLine: index + 1,
+          rawLines: [],
+          lineIndexes: [],
+        });
+      }
+      const group = groups.get(subscriberName);
+      group.rawLines.push(rawLine);
+      group.lineIndexes.push(index);
+      consumedLineIndexes.add(index);
+    });
+
+    groups.forEach((group) => {
+      objects.push(finalizeObject({
+        type: "subscriber-interface",
+        sourceType: "subscriber-interface",
+        name: group.name,
+        key: `subscriber-interface:${group.name}`,
+        startLine: group.startLine,
+        lines: group.rawLines.map((line) => normalizeLine(line, options)),
+        rawLines: group.rawLines,
+        blockDepth: 0,
+      }, options, source));
+    });
+
+    return { objects, consumedLineIndexes };
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    if (!isClassicSubscriberInterfaceStartLine(rawLine)) continue;
+    const subscriberName = subscriberNameFromLine(rawLine);
+    if (!subscriberName) continue;
+
+    const block = collectClassicSubscriberBlock(lines, index);
+    for (let lineIndex = index; lineIndex <= block.endIndex; lineIndex += 1) {
+      consumedLineIndexes.add(lineIndex);
+    }
+
+    objects.push(finalizeObject({
+      type: "subscriber-interface",
+      sourceType: "subscriber-interface",
+      name: subscriberName,
+      key: `subscriber-interface:${subscriberName}`,
+      startLine: index + 1,
+      lines: block.rawLines.map((line) => normalizeLine(line, options)),
+      rawLines: block.rawLines,
+      blockDepth: 0,
+    }, options, source));
+
+    index = block.endIndex;
+  }
+
+  return { objects, consumedLineIndexes };
+}
+
 function parseConfig(text, options, source) {
   try {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const objects = [];
+  const builtinSubscriber = collectBuiltinSubscriberInterfaceObjects(lines, options, source);
+  const consumedSubscriberLines = builtinSubscriber.consumedLineIndexes;
+  objects.push(...builtinSubscriber.objects);
   let current = null;
   const flushCurrent = () => {
     if (!current) return;
@@ -6204,6 +6634,11 @@ function parseConfig(text, options, source) {
   };
 
   lines.forEach((rawLine, index) => {
+    if (consumedSubscriberLines.has(index)) {
+      flushCurrent();
+      return;
+    }
+
     const normalized = normalizeLine(rawLine, options);
 
     // 현재 객체 내부의 하위 설정 라인은 canonical object / detected object로 분리하지 않는다.
@@ -6407,6 +6842,8 @@ function buildCanonicalObject(rawLine, options, source, lineNumber = 1) {
   const objectIdentity =
     canonicalType === "static-route"
       ? buildStaticRouteIdentityFromFields(fields, objectName)
+      : canonicalType === "subscriber-interface"
+        ? buildSubscriberInterfaceIdentityFromFields(fields, objectName)
       : objectName;
 
   const lines = [normalized];
@@ -6437,6 +6874,7 @@ function buildCanonicalObject(rawLine, options, source, lineNumber = 1) {
 function inferCanonicalLineObjectType(normalizedLine, options, source) {
   const line = canonicalizeComparableLine(normalizedLine);
   if (isOneLineStaticRoute(line)) return "static-route";
+  if (isOneLineSubscriberInterface(line, source)) return "subscriber-interface";
 
   for (const type of objectTypes) {
     if (type === "static-route") continue;
@@ -6489,16 +6927,103 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
     if (/^shutdown$|\bshutdown\b/.test(normalized)) setField("state", "disabled");
   }
 
+  if (!objectType || objectType === "interface") {
+    setField("interface", normalized.match(/\binterface\s+"?([^"\s{}]+)"?/)?.[1]);
+    const vprnMatch = normalized.match(/\bservice\s+vprn\s+"?([^"\s{}]+)"?/);
+    setField("routing-context", vprnMatch?.[1] ? `vprn:${vprnMatch[1]}` : "");
+    setField("address", normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/)?.[1]);
+    setField("address", normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/)?.[1]);
+    setField("address", normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1]);
+    setField("prefix-length", normalized.match(/\bprefix-length\s+(\d{1,3})\b/)?.[1]);
+    setField("description", extractDescriptionValue(line));
+
+    if (!isInterfaceIcmpLine(normalized)) {
+      if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
+      if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
+    }
+
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) setField(`icmp.${classicIcmp[1]}`, "disabled");
+
+    const mdIcmpBoolean = normalized.match(/\bicmp\s+(mask-reply)\s+(true|false)\b/);
+    if (mdIcmpBoolean) setField(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2] === "false" ? "disabled" : "enabled");
+
+    const mdIcmpAdminState = normalized.match(/\bicmp\s+(redirects|ttl-expired|unreachables)\s+admin-state\s+(enable|disable)\b/);
+    if (mdIcmpAdminState) setField(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled");
+  }
+
+  if (!objectType || objectType === "subscriber-interface") {
+    setField("subscriber-interface", normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("group-interface", normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("description", extractDescriptionValue(line));
+    setField("address", normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/)?.[1]);
+    setField("address", normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1]);
+    setField("prefix-length", normalized.match(/\bprefix-length\s+(\d{1,3})\b/)?.[1]);
+    setField("sap", normalized.match(/\bsap\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("auth-policy", normalized.match(/\bauthentication-policy\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("auth-policy", normalized.match(/\bradius-auth-policy\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("dhcp.filter", normalized.match(/\bdhcp\s+filter\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("dhcp.server", normalized.match(/\bdhcp\s+server\s+\[?([^"\]\s{}]+)\]?/)?.[1]);
+    setField("dhcp.lease-populate.max-leases", normalized.match(/\bdhcp\s+lease-populate\s+max-leases\s+([^"\s{}]+)/)?.[1]);
+    setField("default-host", normalized.match(/\bdefault-host\s+(?:ipv4\s+)?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)/)?.[1]);
+    setField("default-host.next-hop", normalized.match(/\bdefault-host\b.*\bnext-hop\s+(\d{1,3}(?:\.\d{1,3}){3})/)?.[1]);
+    setField("static-host", normalized.match(/\bstatic-host\s+(?:ip|ipv4)?\s*(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]{11,})/)?.[1]);
+    setField("static-host.sub-profile", normalized.match(/\bstatic-host\b.*\bsub-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("static-host.sla-profile", normalized.match(/\bstatic-host\b.*\bsla-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("static-host.int-dest-id", normalized.match(/\bstatic-host\b.*\bint-dest-id\s+(?:string\s+)?"?([^"\s{}]+)"?/)?.[1]);
+    setField("static-host.subscriber-id", normalized.match(/\bstatic-host\b.*\bsubscriber-id\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.sub-ident-policy", normalized.match(/\bsub-ident-policy\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.subscriber-limit", normalized.match(/\bsubscriber-limit\s+([^"\s{}]+)/)?.[1]);
+    setField("sub-sla-mgmt.defaults.sub-profile", normalized.match(/\bdefaults\s+sub-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.defaults.sla-profile", normalized.match(/\bdefaults\s+sla-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.defaults.subscriber-id", normalized.match(/\bdefaults\s+subscriber-id\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.defaults.int-dest-id", normalized.match(/\bdefaults\s+int-dest-id\s+string\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("cpu-protection.policy-id", normalized.match(/\bcpu-protection\s+policy-id\s+([^"\s{}]+)/)?.[1]);
+    if (/\bipv4\s+allow-unmatching-subnets\s+true\b|\ballow-unmatching-subnets\b/.test(normalized)) setField("dhcp.allow-unmatching-subnets", "true");
+    if (/\bneighbor-discovery\s+populate\s+true\b|\barp-populate\b/.test(normalized)) setField("neighbor-discovery.populate", "true");
+    if (/\bdhcp\s+trusted\s+true\b|\btrusted\b/.test(normalized)) setField("dhcp.trusted", "true");
+    if (/\bdhcp\s+lease-populate\s+l2-header\b|\blease-populate\s+l2-header\b/.test(normalized)) setField("dhcp.lease-populate.l2-header", "true");
+    if (/\bcpu-protection\s+ip-src-monitoring\b|\bip-src-monitoring\b/.test(normalized)) setField("cpu-protection.ip-src-monitoring", "true");
+    if (/\bsubscriber-id\s+use-sap-id\b|\bsubscriber-sap-id\b/.test(normalized)) setField("static-host.subscriber-id", "use-sap-id");
+    if (/\bdhcp\s+admin-state\s+enable\b/.test(normalized)) setField("dhcp.admin-state", "enabled");
+    if (/\bdhcp\s+admin-state\s+disable\b/.test(normalized)) setField("dhcp.admin-state", "disabled");
+    if (/\bsub-sla-mgmt\s+admin-state\s+enable\b/.test(normalized)) setField("sub-sla-mgmt.admin-state", "enabled");
+    if (/\bsub-sla-mgmt\s+admin-state\s+disable\b/.test(normalized)) setField("sub-sla-mgmt.admin-state", "disabled");
+    if (/\bstatic-host\b.*\badmin-state\s+enable\b/.test(normalized)) setField("static-host.admin-state", "enabled");
+    if (/\bstatic-host\b.*\badmin-state\s+disable\b/.test(normalized)) setField("static-host.admin-state", "disabled");
+
+    if (!/\b(?:dhcp|sub-sla-mgmt|static-host|icmp)\b/.test(normalized)) {
+      if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
+      if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
+    }
+
+    const ingressFilter = normalized.match(/\bingress\s+filter\s+ip\s+"?([^"\s{}]+)"?/);
+    if (ingressFilter) setField("ingress-filter", ingressFilter[1]);
+    const egressFilter = normalized.match(/\begress\s+filter\s+ip\s+"?([^"\s{}]+)"?/);
+    if (egressFilter) setField("egress-filter", egressFilter[1]);
+    const ingressQos = normalized.match(/\bingress\s+qos(?:\s+sap-ingress\s+policy-name)?\s+"?([^"\s{}]+)"?/);
+    if (ingressQos) setField("ingress-qos", ingressQos[1]);
+    const egressQos = normalized.match(/\begress\s+qos(?:\s+sap-egress\s+policy-name)?\s+"?([^"\s{}]+)"?/);
+    if (egressQos) setField("egress-qos", egressQos[1]);
+  }
+
   const objectProfile = profile?.objects?.[objectType];
   Object.entries(objectProfile?.fields || {}).forEach(([field, rule]) => {
     if (fields[field] !== undefined) return;
+    const normalizedField = canonicalizeComparableLine(field);
+    if (objectType === "interface" && isInterfaceIcmpLine(normalized) && ["state", "admin-state"].includes(normalizedField)) return;
     const value = extractSemanticFieldFromLine(normalized, rule, field, profile?.normalize);
     if (value) fields[field] = value;
   });
 
   const genericField = extractGenericSemanticField(line);
   if (genericField?.field) {
-    setField(genericField.field, genericField.value || genericField.token);
+    const normalizedField = canonicalizeComparableLine(genericField.field);
+    const skipInterfaceGeneric =
+      objectType === "interface" &&
+      (INTERFACE_CONTEXT_ONLY_FIELDS.has(normalizedField) ||
+        (isInterfaceIcmpLine(normalized) && ["state", "admin-state"].includes(normalizedField)));
+    if (!skipInterfaceGeneric) setField(genericField.field, genericField.value || genericField.token);
   }
 
   return fields;
@@ -6608,6 +7133,138 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
       add("state", "disabled", "disable", "terminal");
     }
   }
+  if (!objectType || objectType === "interface") {
+    const interfaceName = normalized.match(/\binterface\s+"?([^"\s{}]+)"?/);
+    if (interfaceName) {
+      add("interface", interfaceName[1], "interface", "context");
+      add("interface", interfaceName[1], interfaceName[1], "context");
+      add("interface", interfaceName[1], `"${interfaceName[1]}"`, "context");
+    }
+
+    const address =
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/) ||
+      normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/) ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (address) {
+      add("address", address[1], "address", "terminal");
+      add("address", address[1], address[1], "terminal");
+    }
+
+    const prefixLength = normalized.match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (prefixLength) {
+      add("prefix-length", prefixLength[1], "prefix-length", "terminal");
+      add("prefix-length", prefixLength[1], prefixLength[1], "terminal");
+    }
+
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) {
+      add(`icmp.${classicIcmp[1]}`, "disabled", "no", "terminal");
+      add(`icmp.${classicIcmp[1]}`, "disabled", classicIcmp[1], "terminal");
+    }
+
+    const mdIcmpBoolean = normalized.match(/\bicmp\s+(mask-reply)\s+(true|false)\b/);
+    if (mdIcmpBoolean) {
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2] === "false" ? "disabled" : "enabled", mdIcmpBoolean[1], "terminal");
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2] === "false" ? "disabled" : "enabled", mdIcmpBoolean[2], "terminal");
+    }
+
+    const mdIcmpAdminState = normalized.match(/\bicmp\s+(redirects|ttl-expired|unreachables)\s+admin-state\s+(enable|disable)\b/);
+    if (mdIcmpAdminState) {
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled", mdIcmpAdminState[1], "terminal");
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled", "admin-state", "terminal");
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled", mdIcmpAdminState[2], "terminal");
+    }
+  }
+  if (!objectType || objectType === "subscriber-interface") {
+    const subscriber = normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/);
+    if (subscriber) {
+      add("subscriber-interface", subscriber[1], "subscriber-interface", "context");
+      add("subscriber-interface", subscriber[1], subscriber[1], "context");
+      add("subscriber-interface", subscriber[1], `"${subscriber[1]}"`, "context");
+    }
+
+    const group = normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/);
+    if (group) {
+      add("group-interface", group[1], "group-interface", "context");
+      add("group-interface", group[1], group[1], "context");
+      add("group-interface", group[1], `"${group[1]}"`, "context");
+    }
+
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "description", "terminal");
+      add("description", description, description, "terminal");
+      add("description", description, `"${description}"`, "terminal");
+    }
+
+    const address =
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/) ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (address) {
+      add("address", address[1], "address", "terminal");
+      add("address", address[1], address[1], "terminal");
+    }
+
+    const prefixLength = normalized.match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (prefixLength) add("prefix-length", prefixLength[1], "prefix-length", "terminal");
+
+    const sap = normalized.match(/\bsap\s+"?([^"\s{}]+)"?/);
+    if (sap) {
+      add("sap", sap[1], "sap", "context");
+      add("sap", sap[1], sap[1], "context");
+    }
+
+    [
+      ["auth-policy", /\b(?:authentication-policy|radius-auth-policy)\s+"?([^"\s{}]+)"?/],
+      ["dhcp.filter", /\bdhcp\s+filter\s+"?([^"\s{}]+)"?/],
+      ["dhcp.server", /\bdhcp\s+server\s+\[?([^"\]\s{}]+)\]?/],
+      ["dhcp.lease-populate.max-leases", /\bdhcp\s+lease-populate\s+max-leases\s+([^"\s{}]+)/],
+      ["default-host", /\bdefault-host\s+(?:ipv4\s+)?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)/],
+      ["default-host.next-hop", /\bdefault-host\b.*\bnext-hop\s+(\d{1,3}(?:\.\d{1,3}){3})/],
+      ["static-host", /\bstatic-host\s+(?:ip|ipv4)?\s*(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]{11,})/],
+      ["sub-sla-mgmt.sub-ident-policy", /\bsub-ident-policy\s+"?([^"\s{}]+)"?/],
+      ["cpu-protection.policy-id", /\bcpu-protection\s+policy-id\s+([^"\s{}]+)/],
+    ].forEach(([field, pattern]) => {
+      const match = normalized.match(pattern);
+      if (match) add(field, match[1], field, "terminal");
+    });
+
+    [
+      ["dhcp.allow-unmatching-subnets", /\b(?:ipv4\s+)?allow-unmatching-subnets\s+true\b|\ballow-unmatching-subnets\b/],
+      ["neighbor-discovery.populate", /\bneighbor-discovery\s+populate\s+true\b|\barp-populate\b/],
+      ["dhcp.trusted", /\bdhcp\s+trusted\s+true\b|\btrusted\b/],
+      ["dhcp.lease-populate.l2-header", /\bdhcp\s+lease-populate\s+l2-header\b|\blease-populate\s+l2-header\b/],
+      ["cpu-protection.ip-src-monitoring", /\bcpu-protection\s+ip-src-monitoring\b|\bip-src-monitoring\b/],
+    ].forEach(([field, pattern]) => {
+      if (pattern.test(normalized)) add(field, "true", field, "terminal");
+    });
+
+    const stateRules = [
+      ["dhcp.admin-state", /\bdhcp\s+admin-state\s+(enable|disable)\b/],
+      ["sub-sla-mgmt.admin-state", /\bsub-sla-mgmt\s+admin-state\s+(enable|disable)\b/],
+      ["static-host.admin-state", /\bstatic-host\b.*\badmin-state\s+(enable|disable)\b/],
+    ];
+    stateRules.forEach(([field, pattern]) => {
+      const match = normalized.match(pattern);
+      if (match) add(field, match[1] === "disable" ? "disabled" : "enabled", "admin-state", "terminal");
+    });
+
+    if (!/\b(?:dhcp|sub-sla-mgmt|static-host|icmp)\b/.test(normalized)) {
+      if (/\bno\s+shutdown\b/.test(normalized)) add("state", "enabled", "no shutdown", "terminal");
+      if (/\badmin-state\s+enable\b/.test(normalized)) add("state", "enabled", "admin-state", "terminal");
+      if (/\badmin-state\s+disable\b/.test(normalized)) add("state", "disabled", "admin-state", "terminal");
+    }
+
+    [
+      ["ingress-filter", /\bingress\s+filter\s+ip\s+"?([^"\s{}]+)"?/],
+      ["egress-filter", /\begress\s+filter\s+ip\s+"?([^"\s{}]+)"?/],
+      ["ingress-qos", /\bingress\s+qos(?:\s+sap-ingress\s+policy-name)?\s+"?([^"\s{}]+)"?/],
+      ["egress-qos", /\begress\s+qos(?:\s+sap-egress\s+policy-name)?\s+"?([^"\s{}]+)"?/],
+    ].forEach(([field, pattern]) => {
+      const match = normalized.match(pattern);
+      if (match) add(field, match[1], field, "terminal");
+    });
+  }
   const genericField = extractGenericSemanticField(source);
 
   if (genericField?.field) {
@@ -6668,6 +7325,79 @@ function mergeObjectsByCanonicalKey(objects, options, source) {
       fields: target.canonicalFields,
     }, options.profile, source).map(canonicalizeComparableLine).join("\n");
   });
+  return mergeFinalizedObjectsByCanonicalKey(
+    output.map((object) => normalizeMergedObjectIdentity(object, options, source)),
+    options,
+    source
+  );
+}
+
+function normalizeMergedObjectIdentity(object, options, source) {
+  if (!object || !["interface", "subscriber-interface"].includes(object.type)) return object;
+
+  const fields = object.type === "subscriber-interface"
+    ? normalizeSubscriberInterfaceCanonicalFields(object.canonicalFields || object.fields || {})
+    : normalizeInterfaceCanonicalFields(object.canonicalFields || object.fields || {});
+  const identity = object.type === "subscriber-interface"
+    ? buildSubscriberInterfaceIdentityFromFields(fields, object.name, { preferAddress: true })
+    : buildInterfaceIdentityFromFields(fields, object.name, { preferAddress: true });
+  if (!identity || identity === object.name) {
+    return {
+      ...object,
+      canonicalFields: fields,
+      fields,
+    };
+  }
+
+  return {
+    ...object,
+    name: identity,
+    key: `${object.type}:${identity}`,
+    canonicalFields: fields,
+    fields,
+    comparableText: semanticObjectToComparableLines({
+      type: object.type,
+      source,
+      fields,
+    }, options.profile, source).map(canonicalizeComparableLine).join("\n"),
+  };
+}
+
+function mergeFinalizedObjectsByCanonicalKey(objects, options, source) {
+  const merged = new Map();
+  const output = [];
+
+  objects.forEach((object, index) => {
+    const safeObject = ensureObjectShape(object, source, index);
+    if (safeObject.type === "global") {
+      output.push(safeObject);
+      return;
+    }
+
+    if (!merged.has(safeObject.key)) {
+      merged.set(safeObject.key, safeObject);
+      output.push(safeObject);
+      return;
+    }
+
+    const target = merged.get(safeObject.key);
+    const lineOffset = target.lines.length;
+    target.startLine = Math.min(target.startLine, safeObject.startLine);
+    target.endLine = Math.max(target.endLine, safeObject.endLine);
+    target.lines.push(...safeObject.lines);
+    target.rawLines.push(...safeObject.rawLines);
+    target.fieldOccurrences.push(...(safeObject.fieldOccurrences || []).map((item) => ({ ...item, rawLineIndex: item.rawLineIndex + lineOffset })));
+    target.canonicalFields = target.type === "static-route"
+      ? mergeStaticRouteFields(target.canonicalFields, safeObject.canonicalFields)
+      : mergeCanonicalFields(target.canonicalFields, safeObject.canonicalFields);
+    target.fields = target.canonicalFields;
+    target.comparableText = semanticObjectToComparableLines({
+      type: target.type,
+      source,
+      fields: target.canonicalFields,
+    }, options.profile, source).map(canonicalizeComparableLine).join("\n");
+  });
+
   return output;
 }
 
@@ -6696,11 +7426,13 @@ function ensureObjectShape(object, source, index = 0) {
 }
 
 function mergeCanonicalFields(current = {}, incoming = {}) {
-  return Object.entries(incoming || {}).reduce((result, [field, value]) => {
+  const merged = Object.entries(incoming || {}).reduce((result, [field, value]) => {
     if (value === undefined || value === "") return result;
     result[field] = value;
     return result;
   }, { ...(current || {}) });
+
+  return normalizeInterfaceCanonicalFields(merged);
 }
 
 function normalizeLine(line, options) {
@@ -6724,6 +7456,9 @@ function shouldIgnoreLine(normalizedLine, rawLine, options, source) {
 
 function detectObjectStart(line, options, source = "old") {
   const normalized = canonicalizeComparableLine(line);
+  const builtinSubscriber = detectBuiltinSubscriberInterfaceStart(normalized, source);
+  if (builtinSubscriber) return builtinSubscriber;
+
   const profileObjectDetected = detectSemanticProfileObjectStart(normalized, options, source);
   if (profileObjectDetected) return profileObjectDetected;
 
@@ -6742,6 +7477,21 @@ function detectObjectStart(line, options, source = "old") {
     if (match) return { type: rule.type, name: match[1] || normalized };
   }
   return null;
+}
+
+function detectBuiltinSubscriberInterfaceStart(normalizedLine = "", source = "old") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  const match = line.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/);
+  if (!match?.[1]) return null;
+
+  if (source === "new" && /^\/?configure\b/.test(line)) {
+    return null;
+  }
+
+  return {
+    type: "subscriber-interface",
+    name: stripTrailingSyntax(match[1]),
+  };
 }
 
 function detectSemanticProfileObjectStart(normalizedLine, options, source) {
@@ -6871,6 +7621,10 @@ function normalizeParserFieldValue(field, value) {
     if (["enable", "enabled", "no shutdown"].includes(normalized)) return "enabled";
     if (["disable", "disabled", "shutdown"].includes(normalized)) return "disabled";
   }
+  if (field.startsWith("icmp.")) {
+    if (["true", "enable", "enabled"].includes(normalized)) return "enabled";
+    if (["false", "disable", "disabled"].includes(normalized)) return "disabled";
+  }
   return normalized;
 }
 
@@ -6940,7 +7694,7 @@ function finalizeObject(object, options, source) {
   const comparableLines = options.sortObjects ? sortComparableLines(lines) : lines;
   const profileIdentityName = buildProfileObjectIdentity(finalizedObject, options);
   const identityName =
-    canonicalType === "static-route"
+    canonicalType === "static-route" || canonicalType === "interface" || canonicalType === "subscriber-interface"
       ? canonicalIdentity.name
       : profileIdentityName;
   const finalName = identityName || canonicalIdentity.name;
@@ -6964,6 +7718,31 @@ function computeCanonicalObjectIdentity(object, profile, source) {
         name: identity,
         key: `${object.type}:${identity}`,
         fields,
+      };
+    }
+  }
+
+  if (object.type === "interface") {
+    const normalizedFields = normalizeInterfaceCanonicalFields(fields);
+    const preferAddress = !normalizedFields.interface || (object.rawLines?.length || object.lines?.length || 0) > 1;
+    const identity = buildInterfaceIdentityFromFields(normalizedFields, object.name, { preferAddress });
+    if (identity) {
+      return {
+        name: identity,
+        key: `${object.type}:${identity}`,
+        fields: normalizedFields,
+      };
+    }
+  }
+
+  if (object.type === "subscriber-interface") {
+    const normalizedFields = normalizeSubscriberInterfaceCanonicalFields(fields);
+    const identity = buildSubscriberInterfaceIdentityFromFields(normalizedFields, object.name, { preferAddress: true });
+    if (identity) {
+      return {
+        name: identity,
+        key: `${object.type}:${identity}`,
+        fields: normalizedFields,
       };
     }
   }
@@ -6992,6 +7771,8 @@ function getDefaultObjectKeyFields(type) {
     port: ["port"],
     lag: ["lag"],
     interface: ["interface"],
+    "subscriber-interface": ["subscriber-interface"],
+    "group-interface": ["group-interface"],
     "static-route": ["route"],
     pim: ["interface"],
     bgp: ["neighbor"],
@@ -7052,7 +7833,199 @@ function extractFallbackCanonicalFields(object, profile = state.profileDraft) {
       )
     );
   }
+  if (object.type === "interface") {
+    const description = [
+      ...(object.rawLines || []),
+      ...(object.lines || []),
+    ].map(extractDescriptionValue).find(Boolean);
+    const address = findInterfaceAddress(lines);
+    const prefixLength = findInterfacePrefixLength(lines);
+    if (description) fields.description = normalizeSemanticValue(description, profile?.normalize);
+    if (address) fields.address = address;
+    if (prefixLength) fields["prefix-length"] = prefixLength;
+    Object.assign(fields, normalizeInterfaceCanonicalFields(fields));
+  }
+  if (object.type === "subscriber-interface") {
+    Object.assign(
+      fields,
+      extractSubscriberInterfaceCanonicalFieldsFromLines([
+        ...(object.rawLines || []),
+        ...(object.lines || []),
+      ], profile)
+    );
+  }
   return fields;
+}
+
+function extractSubscriberInterfaceCanonicalFieldsFromLines(lines = [], profile = state.profileDraft) {
+  const fields = {};
+  const stack = [];
+  let currentSap = "";
+  let direction = "";
+
+  const setField = (field, value) => {
+    const normalizedField = canonicalizeComparableLine(field);
+    const normalizedValue = normalizeParserFieldValue(normalizedField, stripTrailingSyntax(value || ""));
+    if (!normalizedField || !normalizedValue) return;
+    if (["sap", "ingress-filter", "egress-filter", "ingress-qos", "egress-qos"].includes(normalizedField)) {
+      fields[normalizedField] = mergeCanonicalFieldValue(fields[normalizedField], normalizedValue);
+      return;
+    }
+    if (fields[normalizedField] === undefined) fields[normalizedField] = normalizedValue;
+  };
+
+  const topScope = () => stack.at(-1) || "";
+
+  lines.forEach((line) => {
+    const normalized = canonicalizeComparableLine(line);
+    if (!normalized) return;
+
+    Object.entries(extractFieldsFromLine(line, profile, "subscriber-interface")).forEach(([field, value]) => {
+      setField(field, value);
+    });
+
+    let match = normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/);
+    if (match) {
+      setField("subscriber-interface", match[1]);
+      stack.push("subscriber-interface");
+      return;
+    }
+
+    match = normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/);
+    if (match) {
+      setField("group-interface", match[1]);
+      stack.push("group-interface");
+      return;
+    }
+
+    match = normalized.match(/^sap\s+"?([^"\s{}]+)"?/);
+    if (match) {
+      currentSap = match[1];
+      direction = "";
+      setField("sap", match[1]);
+      stack.push("sap");
+      return;
+    }
+
+    if (normalized === "dhcp") {
+      stack.push("dhcp");
+      return;
+    }
+
+    if (normalized === "sub-sla-mgmt") {
+      stack.push("sub-sla-mgmt");
+      return;
+    }
+
+    match = normalized.match(/^static-host\s+(?:ip\s+)?([^"\s{}]+)/);
+    if (match) {
+      setField("static-host", match[1]);
+      stack.push("static-host");
+      return;
+    }
+
+    match = normalized.match(/^default-host\s+([^"\s{}]+)(?:\s+next-hop\s+([^"\s{}]+))?/);
+    if (match) {
+      setField("default-host", match[1]);
+      setField("default-host.next-hop", match[2]);
+      return;
+    }
+
+    if (normalized === "ingress") {
+      direction = "ingress";
+      stack.push("ingress");
+      return;
+    }
+
+    if (normalized === "egress") {
+      direction = "egress";
+      stack.push("egress");
+      return;
+    }
+
+    if (normalized === "exit" || normalized === "}") {
+      const scope = stack.pop();
+      if (scope === "sap") currentSap = "";
+      if (["ingress", "egress"].includes(scope)) direction = "";
+      return;
+    }
+
+    match = normalized.match(/^filter\s+ip\s+(.+)$/);
+    if (match && currentSap) {
+      setField(direction === "egress" ? "egress-filter" : "ingress-filter", match[1]);
+      return;
+    }
+
+    match = normalized.match(/^qos\s+(.+)$/);
+    if (match && currentSap) {
+      setField(direction === "egress" ? "egress-qos" : "ingress-qos", match[1]);
+      return;
+    }
+
+    if (/^(no\s+shutdown|shutdown)$/.test(normalized)) {
+      const stateValue = normalized === "shutdown" ? "disabled" : "enabled";
+      const scope = topScope();
+      if (scope === "dhcp") setField("dhcp.admin-state", stateValue);
+      else if (scope === "sub-sla-mgmt") setField("sub-sla-mgmt.admin-state", stateValue);
+      else if (scope === "static-host") setField("static-host.admin-state", stateValue);
+      else setField("state", stateValue);
+      return;
+    }
+
+    if (topScope() === "dhcp") {
+      match = normalized.match(/^filter\s+(.+)$/);
+      if (match) {
+        setField("dhcp.filter", match[1]);
+        return;
+      }
+      match = normalized.match(/^server\s+(.+)$/);
+      if (match) {
+        setField("dhcp.server", match[1]);
+        return;
+      }
+      if (normalized === "trusted") {
+        setField("dhcp.trusted", "true");
+        return;
+      }
+      match = normalized.match(/^lease-populate\s+l2-header(?:\s+(.+))?/);
+      if (match) {
+        setField("dhcp.lease-populate.l2-header", "true");
+        setField("dhcp.lease-populate.max-leases", match[1]);
+      }
+    }
+
+    if (topScope() === "sub-sla-mgmt") {
+      [
+        ["sub-sla-mgmt.defaults.int-dest-id", /^def-inter-dest-id\s+string\s+(.+)$/],
+        ["sub-sla-mgmt.defaults.subscriber-id", /^def-sub-id\s+(.+)$/],
+        ["sub-sla-mgmt.defaults.sub-profile", /^def-sub-profile\s+(.+)$/],
+        ["sub-sla-mgmt.defaults.sla-profile", /^def-sla-profile\s+(.+)$/],
+        ["sub-sla-mgmt.sub-ident-policy", /^sub-ident-policy\s+(.+)$/],
+        ["sub-sla-mgmt.subscriber-limit", /^multi-sub-sap\s+(.+)$/],
+      ].some(([field, pattern]) => {
+        const fieldMatch = normalized.match(pattern);
+        if (!fieldMatch) return false;
+        setField(field, fieldMatch[1]);
+        return true;
+      });
+    }
+
+    if (topScope() === "static-host") {
+      [
+        ["static-host.int-dest-id", /^inter-dest-id\s+(.+)$/],
+        ["static-host.sla-profile", /^sla-profile\s+(.+)$/],
+        ["static-host.sub-profile", /^sub-profile\s+(.+)$/],
+      ].some(([field, pattern]) => {
+        const fieldMatch = normalized.match(pattern);
+        if (!fieldMatch) return false;
+        setField(field, fieldMatch[1]);
+        return true;
+      });
+      if (normalized === "subscriber-sap-id") setField("static-host.subscriber-id", "use-sap-id");
+    }
+  });
+
+  return normalizeSubscriberInterfaceCanonicalFields(fields);
 }
 
 function buildProfileObjectIdentity(object, options) {
@@ -7352,13 +8325,45 @@ function extractKnownFieldValue(line, fieldName) {
   if (fieldName === "route") return stripTrailingSyntax(normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?\b/)?.[1] || "");
   if (fieldName === "next-hop") return stripTrailingSyntax(normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (fieldName === "tag") return stripTrailingSyntax(normalized.match(/\btag\s+([^"\s{}]+)/)?.[1] || "");
+  if (fieldName === "interface") return stripTrailingSyntax(normalized.match(/\binterface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "subscriber-interface") return stripTrailingSyntax(normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "group-interface") return stripTrailingSyntax(normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "sap") return stripTrailingSyntax(normalized.match(/\bsap\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "auth-policy") return stripTrailingSyntax(normalized.match(/\b(?:authentication-policy|radius-auth-policy)\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "dhcp.filter") return stripTrailingSyntax(normalized.match(/\bdhcp\s+filter\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "dhcp.server") return stripTrailingSyntax(normalized.match(/\bdhcp\s+server\s+\[?([^"\]\s{}]+)\]?/)?.[1] || "");
   if (fieldName === "description") return stripTrailingSyntax(normalized.match(/\bdescription\s+"([^"]+)"/)?.[1] || normalized.match(/\bdescription\s+([^{}\s]+)/)?.[1] || "");
   if (fieldName === "state" || fieldName === "admin-state") {
+    if (isInterfaceIcmpLine(normalized)) return "";
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
-    if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+    if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (fieldName === "address") {
+    return stripTrailingSyntax(
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1] ||
+      normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/)?.[1] ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "prefix-length") return stripTrailingSyntax(normalized.match(/\bprefix-length\s+(\d{1,3})\b/)?.[1] || "");
+  if (fieldName.startsWith("icmp.")) {
+    const icmpName = fieldName.replace(/^icmp\./, "");
+    if (new RegExp(`^no\\s+${escapeRegExp(icmpName)}$`).test(normalized)) return "disabled";
+    const boolMatch = normalized.match(new RegExp(`\\bicmp\\s+${escapeRegExp(icmpName)}\\s+(true|false)\\b`));
+    if (boolMatch) return boolMatch[1] === "false" ? "disabled" : "enabled";
+    const stateMatch = normalized.match(new RegExp(`\\bicmp\\s+${escapeRegExp(icmpName)}\\s+admin-state\\s+(enable|disable)\\b`));
+    if (stateMatch) return stateMatch[1] === "disable" ? "disabled" : "enabled";
   }
   if (fieldName === "neighbor") return stripTrailingSyntax(normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/)?.[1] || "");
   return "";
+}
+
+function isOneLineSubscriberInterface(line = "", source = "") {
+  const normalized = canonicalizeComparableLine(line);
+  if (!/\bsubscriber-interface\s+"?[^"\s{}]+/.test(normalized)) return false;
+  if (source === "new") return /^\/?configure\b/.test(normalized) || /\bservice\s+(?:ies|vprn)\b/.test(normalized);
+  return /^\/?configure\b/.test(normalized) && /\bservice\s+(?:ies|vprn)\b/.test(normalized);
 }
 
 function extractSemanticPatternValue(line, pattern, normalizeRules) {
@@ -7575,6 +8580,29 @@ function findStaticRouteMetric(lines) {
 function findStaticRouteState(lines) {
   if (lines.some((line) => /\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(line))) return "enabled";
   if (lines.some((line) => /\bshutdown\b|\badmin-state\s+disable\b/.test(line))) return "disabled";
+  return "";
+}
+
+function findInterfaceAddress(lines) {
+  for (const line of lines) {
+    const normalized = canonicalizeComparableLine(line);
+    const classic = normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/);
+    if (classic) return stripTrailingSyntax(classic[1]);
+
+    const mdPrimary = normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/);
+    if (mdPrimary) return stripTrailingSyntax(mdPrimary[1]);
+
+    const mdAddress = normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (mdAddress) return stripTrailingSyntax(mdAddress[1]);
+  }
+  return "";
+}
+
+function findInterfacePrefixLength(lines) {
+  for (const line of lines) {
+    const match = canonicalizeComparableLine(line).match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (match) return stripTrailingSyntax(match[1]);
+  }
   return "";
 }
 
@@ -7831,6 +8859,12 @@ function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines
   const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
   const objectKey = object?.key || `${objectType}:${object?.name || object?.normalizedIdentity || objectIndex}`;
   const lineText = String(line || "");
+  const semanticField = inferSemanticFieldNameForLineContext(lineText, {
+    objectType,
+    object,
+    rawLines: getObjectDisplayLines(object),
+    lineIndex,
+  });
   const identity =
     object?.normalizedIdentity ||
     object?.identity ||
@@ -7852,13 +8886,8 @@ function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines
     semanticObjectStart: lineIndex === 0,
     semanticObjectEnd: lineIndex === maxLines - 1,
     normalized: canonicalizeComparableLine(lineText),
-    semanticField: inferSemanticFieldName(lineText),
-    highlights: buildLineSemanticHighlights(
-      lineText,
-      objectType,
-      object?.canonicalFields || object?.fields || {},
-      []
-    ),
+    semanticField,
+    highlights: buildScopedLineSemanticHighlights(lineText, objectType, object, lineIndex),
     objectMatched,
     semanticCovered: true,
     semanticReason: "paired-object-block-line",
@@ -8316,6 +9345,21 @@ const semanticFieldOrder = [
   "admin-state",
   "peer-as",
   "interface",
+  "subscriber-interface",
+  "group-interface",
+  "address",
+  "sap",
+  "ingress-filter",
+  "ingress-qos",
+  "egress-filter",
+  "egress-qos",
+  "auth-policy",
+  "dhcp.filter",
+  "dhcp.server",
+  "icmp.mask-reply",
+  "icmp.redirects",
+  "icmp.ttl-expired",
+  "icmp.unreachables",
 ];
 
 const commonFieldAliases = {
@@ -8349,10 +9393,28 @@ const commonFieldAliases = {
   "port": "port",
   "neighbor": "neighbor",
   "interface": "interface",
+  "subscriber-interface": "subscriber-interface",
+  "group-interface": "group-interface",
   "lag": "lag",
   "route": "route",
   "static-route-entry": "route",
 };
+
+const INTERFACE_CONTEXT_ONLY_FIELDS = new Set([
+  "configure",
+  "service",
+  "ies",
+  "vprn",
+  "router",
+  "base",
+  "ipv4",
+  "ipv6",
+  "interface",
+]);
+
+function isInterfaceIcmpLine(line = "") {
+  return /\bicmp\s+(?:mask-reply|redirects|ttl-expired|unreachables)\b/.test(canonicalizeComparableLine(line));
+}
 
 function stripConfigureEnvelope(line = "") {
   return String(line)
@@ -8365,6 +9427,82 @@ function buildStaticRouteIdentityFromFields(fields = {}, fallback = "") {
   const route = canonicalizeComparableLine(fields.route || fields.prefix || fallback || "");
   const routingContext = canonicalizeComparableLine(fields["routing-context"] || fields.vrf || fields.vprn || "");
   return route && routingContext ? `${routingContext}|${route}` : route;
+}
+
+function buildInterfaceAddressFromFields(fields = {}) {
+  const address = canonicalizeComparableLine(fields.address || fields.prefix || "");
+  const prefixLength = canonicalizeComparableLine(fields["prefix-length"] || "");
+
+  if (address && prefixLength && !address.includes("/")) {
+    return `${address}/${prefixLength}`;
+  }
+
+  return address;
+}
+
+function mergeCanonicalFieldValue(current = "", incoming = "") {
+  const next = canonicalizeComparableLine(incoming);
+  if (!next) return current;
+  const values = String(current || "")
+    .split(/\s*,\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!values.includes(next)) values.push(next);
+  return values.join(", ");
+}
+
+function normalizeInterfaceCanonicalFields(fields = {}) {
+  const result = { ...(fields || {}) };
+  const address = buildInterfaceAddressFromFields(result);
+
+  if (address) {
+    result.address = address;
+  }
+
+  return result;
+}
+
+function normalizeSubscriberInterfaceCanonicalFields(fields = {}) {
+  const result = normalizeInterfaceCanonicalFields(fields);
+  if (result["subscriber-interface"]) {
+    result["subscriber-interface"] = canonicalizeComparableLine(result["subscriber-interface"]);
+  }
+  if (result["group-interface"]) {
+    result["group-interface"] = canonicalizeComparableLine(result["group-interface"]);
+  }
+  if (result.sap) result.sap = canonicalizeComparableLine(result.sap);
+  if (result["dhcp.server"]) result["dhcp.server"] = canonicalizeComparableLine(result["dhcp.server"]).replace(/^\[|\]$/g, "");
+  if (result["sub-sla-mgmt.defaults.subscriber-id"] === "use-auto-id") {
+    result["sub-sla-mgmt.defaults.subscriber-id"] = "auto-id";
+  }
+  if (result["static-host.subscriber-id"] === "subscriber-sap-id") {
+    result["static-host.subscriber-id"] = "use-sap-id";
+  }
+  return result;
+}
+
+function buildInterfaceIdentityFromFields(fields = {}, fallback = "", { preferAddress = true } = {}) {
+  const address = buildInterfaceAddressFromFields(fields);
+  const routingContext = canonicalizeComparableLine(fields["routing-context"] || fields.vrf || fields.vprn || "");
+  const interfaceName = canonicalizeComparableLine(fields.interface || fallback || "");
+
+  if (preferAddress && address) {
+    return routingContext ? `${routingContext}|${address}` : address;
+  }
+
+  return interfaceName || (routingContext && address ? `${routingContext}|${address}` : address);
+}
+
+function buildSubscriberInterfaceIdentityFromFields(fields = {}, fallback = "", { preferAddress = true } = {}) {
+  const normalizedFields = normalizeSubscriberInterfaceCanonicalFields(fields);
+  const address = buildInterfaceAddressFromFields(normalizedFields);
+  const routingContext = canonicalizeComparableLine(
+    normalizedFields["routing-context"] || normalizedFields.vrf || normalizedFields.vprn || ""
+  );
+  if (preferAddress && address) {
+    return routingContext ? `${routingContext}|${address}` : address;
+  }
+  return canonicalizeComparableLine(normalizedFields["subscriber-interface"] || fallback || "");
 }
 
 function normalizeFieldName(field = "") {
@@ -8754,10 +9892,23 @@ function semanticLineRelationState(lineMatch = {}, field = "") {
   return field ? "candidate" : "changed";
 }
 
-function findSemanticLineRelationForRawLine({ line, objectType, item, matchIndex }) {
+function findSemanticLineRelationForRawLine({
+  line,
+  objectType,
+  item,
+  matchIndex,
+  object = null,
+  rawLines = [],
+  lineIndex = -1,
+}) {
   const normalized = canonicalizeComparableLine(line);
   const exact = matchIndex.get(normalized);
-  const field = exact?.field || inferSemanticFieldName(line) || "";
+  const field = exact?.field || inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines,
+    lineIndex,
+  }) || "";
 
   if (!field || isSemanticStructuralLine(line)) {
     return {
@@ -8861,7 +10012,9 @@ function renderSemanticObjectBlockHtml({
         line,
         index,
         item,
+        object,
         objectType,
+        rawLines,
         fields,
         matchIndex,
         objectStatus,
@@ -8902,7 +10055,9 @@ function renderSemanticObjectConfigLine({
   line,
   index,
   item,
+  object = null,
   objectType,
+  rawLines = [],
   fields,
   matchIndex,
   objectStatus = "",
@@ -8913,9 +10068,17 @@ function renderSemanticObjectConfigLine({
     objectType,
     item,
     matchIndex,
+    object,
+    rawLines,
+    lineIndex: index,
   });
   const relationByField = buildSemanticRelationMapByField(item);
-  const field = matched?.field || inferSemanticFieldName(line) || "";
+  const field = matched?.field || inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines,
+    lineIndex: index,
+  }) || "";
   const depth = semanticLineDepth(line);
   const structural = isSemanticStructuralLine(line);
   const relationKey = matched?.relationKey || "";
@@ -8943,7 +10106,7 @@ function renderSemanticObjectConfigLine({
       data-semantic-pair-key="${escapeHtml(item?.id || "")}"
       style="padding-left:${10 + depth * 16}px">
       <span class="semantic-diff-line-no">${index + 1}</span>
-      <code>${renderSemanticLineTokens(line, objectType, fields, relationByField)}</code>
+      <code>${renderSemanticLineTokens(line, objectType, fields, relationByField, field)}</code>
       ${field && !structural ? `<span class="semantic-diff-line-field field-${cssSafeClassName(normalizeRelationField(field))}">${escapeHtml(field)}</span>` : ""}
     </div>
   `;
@@ -9051,12 +10214,23 @@ function renderHighlightedLine(line = "", highlights = [], relationByField = new
   return html;
 }
 
-function renderSemanticLineTokens(line, objectType, fields, relationByField = new Map()) {
+function renderSemanticLineTokens(line, objectType, fields, relationByField = new Map(), forcedField = "") {
   if (selectors.fieldHighlightToggle?.checked === false) {
     return escapeHtml(line);
   }
 
-  const highlights = buildLineSemanticHighlights(
+  const forcedHighlights = forcedField
+    ? buildForcedSemanticTokens(line, forcedField).map((item) => ({
+      field: item.field,
+      value: item.value || item.token,
+      token: item.token,
+      role: item.role || "terminal",
+      colorGroup: item.colorSeed || item.field,
+      kind: item.kind || tokenHighlightKind(item.token),
+    }))
+    : [];
+
+  const highlights = forcedHighlights.length ? forcedHighlights : buildLineSemanticHighlights(
     line,
     objectType,
     fields || {},
@@ -9068,6 +10242,31 @@ function renderSemanticLineTokens(line, objectType, fields, relationByField = ne
   }
 
   return renderHighlightedLine(line, highlights, relationByField);
+}
+
+function buildScopedLineSemanticHighlights(line, objectType, object = null, lineIndex = -1, fieldOccurrences = []) {
+  const fields = object?.fields || object?.canonicalFields || {};
+  const scopedField = inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines: getSemanticObjectRawLines(object),
+    lineIndex,
+  });
+  const genericField = inferSemanticFieldName(line);
+  const forcedHighlights = scopedField && scopedField !== genericField
+    ? buildForcedSemanticTokens(line, scopedField).map((item) => ({
+      field: item.field,
+      value: item.value || item.token,
+      token: item.token,
+      role: item.role || "terminal",
+      colorGroup: item.colorSeed || item.field,
+      kind: item.kind || tokenHighlightKind(item.token),
+    }))
+    : [];
+
+  return forcedHighlights.length
+    ? forcedHighlights
+    : buildLineSemanticHighlights(line, objectType, fields, fieldOccurrences);
 }
 
 function cssSafeClassName(value = "") {
@@ -9453,6 +10652,13 @@ function buildSemanticLineRow({
   objectStatusOverride = "",
 }) {
   const objectStatus = objectStatusOverride || semanticRenderStatusForSide(item, object, side);
+  const objectType = item.objectType || object?.normalizedType || "";
+  const semanticField = inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines: getSemanticObjectRawLines(object),
+    lineIndex,
+  }) || item.matchKeyFields?.[0] || "";
   return {
     number: "",
     text: line,
@@ -9461,7 +10667,6 @@ function buildSemanticLineRow({
     objectKey: `${item.objectType || object?.normalizedType || "object"}:${object?.sourceName || object?.id || objectIndex}`,
     semanticObjectIndex: objectIndex,
     semanticPairKey: item.id || "",
-    semanticField: item.matchKeyFields?.[0] || "",
     objectStatus,
     objectScore: item.score ?? "",
     objectReason: item.reason || "",
@@ -9472,12 +10677,8 @@ function buildSemanticLineRow({
     semanticLineMappingKey: mappingKey,
     semanticObjectStart: lineIndex === 0,
     semanticObjectEnd: false,
-    highlights: buildLineSemanticHighlights(
-      line,
-      item.objectType || object?.normalizedType || "",
-      object?.fields || object?.canonicalFields || {},
-      []
-    ),
+    semanticField,
+    highlights: buildScopedLineSemanticHighlights(line, objectType, object, lineIndex),
   };
 }
 
@@ -10304,14 +11505,20 @@ function buildObjectVisualRows(object) {
   return object.lines.map((line, index) => {
     const text = object.rawLines[index] || line;
     const occurrences = (object.fieldOccurrences || []).filter((item) => item.rawLineIndex === index);
-    const highlights = buildLineSemanticHighlights(text, object.type, object.canonicalFields || {}, occurrences);
+    const semanticField = inferSemanticFieldNameForLineContext(text, {
+      objectType: object.type,
+      object,
+      rawLines: object.rawLines || object.lines || [],
+      lineIndex: index,
+    });
+    const highlights = buildScopedLineSemanticHighlights(text, object.type, object, index, occurrences);
     return {
       number: object.startLine + index,
       text,
       key: `${object.key}|raw:${index}:${canonicalizeComparableLine(text)}`,
       objectKey: object.key,
       normalized: canonicalizeComparableLine(text),
-      semanticField: highlights[0]?.field || inferSemanticFieldName(text),
+      semanticField: highlights[0]?.field || semanticField,
       highlights,
       objectMatched: true,
       ignoredVisual: isVisualIgnoredLine(line, object.type, object.source),
@@ -10351,7 +11558,15 @@ function mapObjectFieldLines(object) {
   const result = new Map();
   object.lines.forEach((line, index) => {
     const fields = Object.keys(extractFieldsFromLine(line, state.profileDraft, object.type));
-    const lineFields = fields.length ? fields : [inferSemanticFieldName(line)].filter(Boolean);
+    const scopedField = inferSemanticFieldNameForLineContext(object.rawLines[index] || line, {
+      objectType: object.type,
+      object,
+      rawLines: object.rawLines || object.lines || [],
+      lineIndex: index,
+    });
+    const lineFields = scopedField && scopedField !== inferSemanticFieldName(line)
+      ? [scopedField, ...fields.filter((field) => !["state", "admin-state"].includes(field))]
+      : (fields.length ? fields : [scopedField || inferSemanticFieldName(line)].filter(Boolean));
     lineFields.forEach((field) => {
       if (!field || result.has(field)) return;
       result.set(field, {
@@ -10380,13 +11595,20 @@ function buildObjectDiffRow(object, line, field, value, same) {
 function appendUnusedObjectLines(rows, object, usedIndexes, side) {
   object.lines.forEach((line, index) => {
     if (usedIndexes.has(index)) return;
+    const text = object.rawLines[index] || line;
     const diffRow = {
       number: object.startLine + index,
-      text: object.rawLines[index] || line,
+      text,
       key: `${object.key}|__unmatched__:${side}:${index}`,
       objectKey: object.key,
       normalized: canonicalizeComparableLine(line),
-      highlights: buildLineSemanticHighlights(object.rawLines[index] || line, object.type, object.canonicalFields || {}, (object.fieldOccurrences || []).filter((item) => item.rawLineIndex === index)),
+      semanticField: inferSemanticFieldNameForLineContext(text, {
+        objectType: object.type,
+        object,
+        rawLines: object.rawLines || object.lines || [],
+        lineIndex: index,
+      }),
+      highlights: buildScopedLineSemanticHighlights(text, object.type, object, index, (object.fieldOccurrences || []).filter((item) => item.rawLineIndex === index)),
       ignoredVisual: isVisualIgnoredLine(line, object.type, side),
       objectMatched: false,
       objectStatus: side === "old" ? "old-only" : "new-only",
@@ -10450,8 +11672,13 @@ function buildUnmatchedObjectDiffRows(oldObject, newObject) {
       key: `${object.key}|__object_unmatched__:${side}:${index}`,
       objectKey: object.key,
       normalized: canonicalizeComparableLine(line),
-      semanticField: Object.keys(extractFieldsFromLine(line, state.profileDraft, object.type))[0] || inferSemanticFieldName(line),
-      highlights: buildLineSemanticHighlights(object.rawLines[index] || line, object.type, object.canonicalFields || {}, (object.fieldOccurrences || []).filter((occurrence) => occurrence.rawLineIndex === index)),
+      semanticField: inferSemanticFieldNameForLineContext(object.rawLines[index] || line, {
+        objectType: object.type,
+        object,
+        rawLines: object.rawLines || object.lines || [],
+        lineIndex: index,
+      }) || Object.keys(extractFieldsFromLine(line, state.profileDraft, object.type))[0] || inferSemanticFieldName(line),
+      highlights: buildScopedLineSemanticHighlights(object.rawLines[index] || line, object.type, object, index, (object.fieldOccurrences || []).filter((occurrence) => occurrence.rawLineIndex === index)),
       ignoredVisual: isVisualIgnoredLine(line, object.type, side),
     }))
     .map((row) => ({
@@ -12550,6 +13777,7 @@ function renderReportReviewTable(review = {}) {
   ];
   const fieldColumns = getReportReviewFieldColumns(rows);
   const filterOptions = getReportReviewFilterOptions(rows, fieldColumns);
+  const valueOptions = getReportReviewChecklistOptions(rows, fieldColumns);
 
   return `
     <div class="report-review-root" data-report-review-root>
@@ -12562,13 +13790,13 @@ function renderReportReviewTable(review = {}) {
       <table class="report-review-field-table">
         <thead>
           <tr>
-            <th>${renderReportReviewHeaderSelect("구분", "group", filterOptions.groups)}</th>
-            <th>${renderReportReviewHeaderSelect("설정 종류", "type", filterOptions.types)}</th>
-            <th>${renderReportReviewHeaderSearch("설정 키", "key")}</th>
-            <th>${renderReportReviewHeaderSearch("description", "description")}</th>
-            <th>${renderReportReviewHeaderSearch("사유", "reason")}</th>
-            ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses)}</th>`).join("")}
-            <th>${renderReportReviewHeaderSearch("일치도", "score")}</th>
+            <th>${renderReportReviewHeaderSelect("구분", "group", filterOptions.groups, valueOptions.group)}</th>
+            <th>${renderReportReviewHeaderSelect("설정 종류", "type", filterOptions.types, valueOptions.type)}</th>
+            <th>${renderReportReviewHeaderSearch("설정 키", "key", valueOptions.key)}</th>
+            <th>${renderReportReviewHeaderSearch("description", "description", valueOptions.description)}</th>
+            <th>${renderReportReviewHeaderSearch("사유", "reason", valueOptions.reason)}</th>
+            ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses, valueOptions.fields.get(field) || [])}</th>`).join("")}
+            <th>${renderReportReviewHeaderSearch("일치도", "score", valueOptions.score)}</th>
             <th><div class="report-review-th"><div class="report-review-th-bar"><span>동작</span></div></div></th>
           </tr>
         </thead>
@@ -12585,8 +13813,11 @@ function renderReportReviewTable(review = {}) {
                 data-review-type="${escapeHtml(item.objectType || "")}"
                 data-review-key="${escapeHtml(objectKey)}"
                 data-review-description="${escapeHtml(description.searchText)}"
+                data-review-description-option="${escapeHtml(reportReviewOptionValue(description.value))}"
                 data-review-reason="${escapeHtml(item.reason || "")}"
+                data-review-reason-option="${escapeHtml(reportReviewOptionValue(item.reason || ""))}"
                 data-review-score="${escapeHtml(item.score || "")}"
+                data-review-score-option="${escapeHtml(reportReviewOptionValue(item.score || ""))}"
                 data-review-fields="${escapeHtml(meta.fields.join(" "))}"
                 data-review-statuses="${escapeHtml(meta.statuses.join(" "))}"
                 data-review-search="${escapeHtml(meta.searchText)}">
@@ -12615,41 +13846,84 @@ function renderReportReviewTable(review = {}) {
   `;
 }
 
-function renderReportReviewHeaderSearch(title = "", key = "") {
+function renderReportReviewHeaderSearch(title = "", key = "", options = []) {
+  const panelStyle = reportReviewFilterPanelStyle([title, ...options]);
   return `
     <div class="report-review-th">
       ${renderReportReviewHeaderBar(title)}
-      <div class="report-review-filter-panel" data-report-filter-panel hidden>
+      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
         <input type="search" data-report-column-search="${escapeHtml(key)}" placeholder="검색" aria-label="${escapeHtml(title)} 검색" />
+        ${renderReportReviewValueChecklist(title, key, options)}
       </div>
     </div>
   `;
 }
 
-function renderReportReviewHeaderSelect(title = "", key = "", options = []) {
+function renderReportReviewHeaderSelect(title = "", key = "", options = [], valueOptions = options) {
+  const panelStyle = reportReviewFilterPanelStyle([title, ...options, ...valueOptions]);
   return `
     <div class="report-review-th">
       ${renderReportReviewHeaderBar(title)}
-      <div class="report-review-filter-panel" data-report-filter-panel hidden>
+      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
         <select data-report-column-filter="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 필터">
           <option value="all">전체</option>
           ${options.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}
         </select>
+        ${renderReportReviewValueChecklist(title, key, valueOptions)}
       </div>
     </div>
   `;
 }
 
-function renderReportReviewFieldHeader(field = "", statuses = []) {
+function renderReportReviewFieldHeader(field = "", statuses = [], valueOptions = []) {
+  const panelStyle = reportReviewFilterPanelStyle([
+    field,
+    ...statuses.map(reportFieldStatusLabel),
+    ...valueOptions,
+  ]);
   return `
     <div class="report-review-th report-review-field-th">
       ${renderReportReviewHeaderBar(field)}
-      <div class="report-review-filter-panel" data-report-filter-panel hidden>
+      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
         <input type="search" data-report-field-search="${escapeHtml(field)}" placeholder="값 검색" aria-label="${escapeHtml(field)} 값 검색" />
         <select data-report-field-status-filter="${escapeHtml(field)}" aria-label="${escapeHtml(field)} 상태 필터">
           <option value="all">상태 전체</option>
           ${statuses.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(reportFieldStatusLabel(value))}</option>`).join("")}
         </select>
+        ${renderReportReviewValueChecklist(field, `field:${field}`, valueOptions)}
+      </div>
+    </div>
+  `;
+}
+
+function reportReviewFilterPanelStyle(values = []) {
+  const longest = values.reduce((max, value) => {
+    const text = reportReviewOptionLabel(value);
+    return Math.max(max, [...text].length);
+  }, 0);
+  const widthCh = Math.min(58, Math.max(24, longest + 8));
+  return `--report-filter-width: ${widthCh}ch;`;
+}
+
+function renderReportReviewValueChecklist(title = "", key = "", options = []) {
+  if (!options.length) return "";
+  return `
+    <div class="report-review-checklist" data-report-checklist="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 값 필터">
+      <input type="search" data-report-check-search placeholder="항목 검색" aria-label="${escapeHtml(title)} 항목 검색" />
+      <label class="report-review-check-option report-review-check-all">
+        <input type="checkbox" data-report-check-all="${escapeHtml(key)}" checked />
+        <span>(모두 선택)</span>
+      </label>
+      <div class="report-review-check-options">
+        ${options.map((value) => {
+          const optionValue = reportReviewOptionValue(value);
+          return `
+            <label class="report-review-check-option" data-report-check-item data-report-check-label="${escapeHtml(reportReviewOptionLabel(value).toLowerCase())}">
+              <input type="checkbox" data-report-check-value="${escapeHtml(key)}" value="${escapeHtml(optionValue)}" checked />
+              <span title="${escapeHtml(reportReviewOptionLabel(value))}">${escapeHtml(reportReviewOptionLabel(value))}</span>
+            </label>
+          `;
+        }).join("")}
       </div>
     </div>
   `;
@@ -12718,6 +13992,78 @@ function getReportReviewFilterOptions(rows = [], fieldColumns = []) {
   };
 }
 
+const REPORT_REVIEW_EMPTY_OPTION = "__report-review-empty__";
+const REPORT_REVIEW_EMPTY_LABEL = "(필드 값 없음)";
+
+function getReportReviewChecklistOptions(rows = [], fieldColumns = []) {
+  const options = {
+    group: new Set(),
+    type: new Set(),
+    key: new Set(),
+    description: new Set(),
+    reason: new Set(),
+    score: new Set(),
+    fields: new Map(fieldColumns.map((field) => [field, new Set()])),
+  };
+
+  rows.forEach((item) => {
+    const objectKey = item.label || item.objectKey || "-";
+    const description = getReportReviewDescription(item);
+    addReportReviewOption(options.group, item.group || "");
+    addReportReviewOption(options.type, item.objectType || "");
+    addReportReviewOption(options.key, objectKey);
+    addReportReviewOption(options.description, description.value || "");
+    addReportReviewOption(options.reason, item.reason || "");
+    addReportReviewOption(options.score, item.score || "");
+    fieldColumns.forEach((field) => {
+      addReportReviewOption(options.fields.get(field), reportReviewFieldDisplayValue(item, field));
+    });
+  });
+
+  return {
+    group: sortReportReviewOptions(options.group),
+    type: sortReportReviewOptions(options.type),
+    key: sortReportReviewOptions(options.key),
+    description: sortReportReviewOptions(options.description),
+    reason: sortReportReviewOptions(options.reason),
+    score: sortReportReviewOptions(options.score),
+    fields: new Map([...options.fields.entries()].map(([field, values]) => [field, sortReportReviewOptions(values)])),
+  };
+}
+
+function addReportReviewOption(target, value = "") {
+  if (!target) return;
+  target.add(String(value ?? "").trim());
+}
+
+function sortReportReviewOptions(values = new Set()) {
+  return [...values].sort((left, right) => {
+    const leftEmpty = !String(left || "").trim();
+    const rightEmpty = !String(right || "").trim();
+    if (leftEmpty !== rightEmpty) return leftEmpty ? 1 : -1;
+    return String(left).localeCompare(String(right), undefined, { numeric: true });
+  });
+}
+
+function reportReviewOptionValue(value = "") {
+  const text = String(value ?? "").trim();
+  return text ? text : REPORT_REVIEW_EMPTY_OPTION;
+}
+
+function reportReviewOptionLabel(value = "") {
+  const text = String(value ?? "").trim();
+  return text || REPORT_REVIEW_EMPTY_LABEL;
+}
+
+function reportReviewFieldDisplayValue(item = {}, field = "") {
+  const row = findReportReviewFieldRow(item, field);
+  if (!row) return "";
+  const oldValue = maskReportFieldValue(field, row.oldValue);
+  const newValue = maskReportFieldValue(field, row.newValue);
+  const status = String(row.status || "").toLowerCase();
+  return formatReportFieldValue(status, oldValue, newValue);
+}
+
 function getReportReviewRowMeta(item = {}) {
   const fields = [];
   const statuses = [];
@@ -12780,7 +14126,7 @@ function renderReportReviewDescriptionCell(description = {}) {
 function renderReportReviewFieldCell(item = {}, field = "") {
   const row = findReportReviewFieldRow(item, field);
   if (!row) {
-    return `<td class="report-field-empty" data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="">-</td>`;
+    return `<td class="report-field-empty" data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="" data-field-option="${escapeHtml(REPORT_REVIEW_EMPTY_OPTION)}">-</td>`;
   }
 
   const oldValue = maskReportFieldValue(field, row.oldValue);
@@ -12795,7 +14141,8 @@ function renderReportReviewFieldCell(item = {}, field = "") {
       class="report-field-cell report-field-status-${escapeHtml(status || "unknown")}"
       data-report-field-cell="${escapeHtml(field)}"
       data-field-status="${escapeHtml(status)}"
-      data-field-search="${escapeHtml(searchText)}">
+      data-field-search="${escapeHtml(searchText)}"
+      data-field-option="${escapeHtml(reportReviewOptionValue(value))}">
       <span>${escapeHtml(value || "-")}</span>
       <small>${escapeHtml(label)}</small>
     </td>
@@ -12959,8 +14306,15 @@ function bindReportReviewTableInteractions() {
   const columnSearches = [...root.querySelectorAll("[data-report-column-search]")];
   const fieldSearches = [...root.querySelectorAll("[data-report-field-search]")];
   const fieldStatusFilters = [...root.querySelectorAll("[data-report-field-status-filter]")];
+  const checklistInputs = [...root.querySelectorAll("[data-report-check-value]")];
+  const checklistAlls = [...root.querySelectorAll("[data-report-check-all]")];
+  const checklistSearches = [...root.querySelectorAll("[data-report-check-search]")];
   const filterToggles = [...root.querySelectorAll("[data-report-filter-toggle]")];
   const rows = [...root.querySelectorAll("[data-report-review-row]")];
+  const fieldValueFilterFields = [...new Set([...root.querySelectorAll("[data-report-checklist]")]
+    .map((item) => item.dataset.reportChecklist || "")
+    .filter((key) => key.startsWith("field:"))
+    .map((key) => key.slice("field:".length)))];
   root.querySelectorAll("[data-add-exception]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -12998,6 +14352,7 @@ function bindReportReviewTableInteractions() {
       field: filter.dataset.reportFieldStatusFilter || "",
       value: filter.value || "all",
     }));
+    const checklistSelections = getReportReviewChecklistSelections(root);
     let visibleCount = 0;
     const groupFilter = columnValues.group || values.group || "all";
     const typeFilter = columnValues.type || values.type || "all";
@@ -13013,6 +14368,12 @@ function bindReportReviewTableInteractions() {
       const descriptionMatch = !columnQueries.description || String(row.dataset.reviewDescription || "").toLowerCase().includes(columnQueries.description);
       const reasonMatch = !columnQueries.reason || String(row.dataset.reviewReason || "").toLowerCase().includes(columnQueries.reason);
       const scoreMatch = !columnQueries.score || String(row.dataset.reviewScore || "").toLowerCase().includes(columnQueries.score);
+      const groupValueMatch = reportReviewChecklistMatches(checklistSelections, "group", row.dataset.reviewGroup);
+      const typeValueMatch = reportReviewChecklistMatches(checklistSelections, "type", row.dataset.reviewType);
+      const keyValueMatch = reportReviewChecklistMatches(checklistSelections, "key", row.dataset.reviewKey);
+      const descriptionValueMatch = reportReviewChecklistMatches(checklistSelections, "description", row.dataset.reviewDescriptionOption);
+      const reasonValueMatch = reportReviewChecklistMatches(checklistSelections, "reason", row.dataset.reviewReasonOption);
+      const scoreValueMatch = reportReviewChecklistMatches(checklistSelections, "score", row.dataset.reviewScoreOption);
       const fieldQueryMatch = fieldQueries.every(({ field, query: fieldQuery }) => {
         if (!fieldQuery) return true;
         return String(getReportReviewFieldCell(row, field)?.dataset.fieldSearch || "").includes(fieldQuery);
@@ -13020,6 +14381,10 @@ function bindReportReviewTableInteractions() {
       const fieldStatusMatch = fieldStatuses.every(({ field, value }) => {
         if (value === "all") return true;
         return String(getReportReviewFieldCell(row, field)?.dataset.fieldStatus || "") === value;
+      });
+      const fieldValueMatch = fieldValueFilterFields.every((field) => {
+        const cell = getReportReviewFieldCell(row, field);
+        return reportReviewChecklistMatches(checklistSelections, `field:${field}`, cell?.dataset.fieldOption);
       });
       const queryMatch = !query || String(row.dataset.reviewSearch || "").includes(query);
       const visible = groupMatch &&
@@ -13030,8 +14395,15 @@ function bindReportReviewTableInteractions() {
         descriptionMatch &&
         reasonMatch &&
         scoreMatch &&
+        groupValueMatch &&
+        typeValueMatch &&
+        keyValueMatch &&
+        descriptionValueMatch &&
+        reasonValueMatch &&
+        scoreValueMatch &&
         fieldQueryMatch &&
         fieldStatusMatch &&
+        fieldValueMatch &&
         queryMatch;
       row.hidden = !visible;
       if (visible) visibleCount += 1;
@@ -13047,6 +14419,30 @@ function bindReportReviewTableInteractions() {
   columnSearches.forEach((filter) => filter.addEventListener("input", apply));
   fieldSearches.forEach((filter) => filter.addEventListener("input", apply));
   fieldStatusFilters.forEach((filter) => filter.addEventListener("change", apply));
+  checklistInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      updateReportChecklistAllState(input.closest("[data-report-checklist]"));
+      apply();
+    });
+  });
+  checklistAlls.forEach((input) => {
+    input.addEventListener("change", () => {
+      const checklist = input.closest("[data-report-checklist]");
+      checklist?.querySelectorAll("[data-report-check-value]").forEach((item) => {
+        item.checked = input.checked;
+      });
+      updateReportChecklistAllState(checklist);
+      apply();
+    });
+  });
+  checklistSearches.forEach((input) => {
+    input.addEventListener("input", () => {
+      const query = String(input.value || "").trim().toLowerCase();
+      input.closest("[data-report-checklist]")?.querySelectorAll("[data-report-check-item]").forEach((item) => {
+        item.hidden = query && !String(item.dataset.reportCheckLabel || "").includes(query);
+      });
+    });
+  });
   filterToggles.forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -13082,6 +14478,19 @@ function bindReportReviewTableInteractions() {
     [...columnSearches, ...fieldSearches].forEach((filter) => {
       filter.value = "";
     });
+    checklistInputs.forEach((input) => {
+      input.checked = true;
+    });
+    checklistAlls.forEach((input) => {
+      input.checked = true;
+      input.indeterminate = false;
+    });
+    checklistSearches.forEach((input) => {
+      input.value = "";
+    });
+    root.querySelectorAll("[data-report-check-item]").forEach((item) => {
+      item.hidden = false;
+    });
     root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
       item.hidden = true;
     });
@@ -13090,7 +14499,35 @@ function bindReportReviewTableInteractions() {
     });
     apply();
   });
+  root.querySelectorAll("[data-report-checklist]").forEach(updateReportChecklistAllState);
   apply();
+}
+
+function getReportReviewChecklistSelections(root) {
+  const result = new Map();
+  root.querySelectorAll("[data-report-checklist]").forEach((checklist) => {
+    const key = checklist.dataset.reportChecklist || "";
+    const inputs = [...checklist.querySelectorAll("[data-report-check-value]")];
+    if (!key || !inputs.length) return;
+    result.set(key, new Set(inputs.filter((input) => input.checked).map((input) => input.value)));
+  });
+  return result;
+}
+
+function reportReviewChecklistMatches(selections, key = "", value = "") {
+  const selected = selections.get(key);
+  if (!selected) return true;
+  return selected.has(reportReviewOptionValue(value));
+}
+
+function updateReportChecklistAllState(checklist) {
+  if (!checklist) return;
+  const all = checklist.querySelector("[data-report-check-all]");
+  const values = [...checklist.querySelectorAll("[data-report-check-value]")];
+  if (!all || !values.length) return;
+  const checked = values.filter((input) => input.checked).length;
+  all.checked = checked === values.length;
+  all.indeterminate = checked > 0 && checked < values.length;
 }
 
 function splitReportReviewTokens(value = "") {
@@ -13640,6 +15077,27 @@ function buildLineSemanticHighlights(text, objectType, canonicalFields = {}, fie
 
 function buildForcedSemanticTokens(text, field) {
   const normalized = canonicalizeComparableLine(text);
+  if (field && field !== "state" && /\b(?:no\s+shutdown|shutdown|admin-state\s+\S+)\b/.test(normalized)) {
+    const stateToken = normalized.match(/\bno\s+shutdown\b/)?.[0]
+      || normalized.match(/\badmin-state\s+\S+\b/)?.[0]
+      || normalized.match(/^shutdown$/)?.[0]
+      || normalized.match(/\bshutdown\b/)?.[0];
+    if (stateToken) return [{ token: stateToken, field, colorSeed: field, kind: "keyword" }];
+  }
+  if (field === "dhcp.filter" && /^filter\s+(.+)$/.test(normalized)) {
+    const match = normalized.match(/^filter\s+(.+)$/);
+    return [
+      { token: "filter", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: "number" },
+    ];
+  }
+  if (field === "dhcp.server" && /^server\s+(.+)$/.test(normalized)) {
+    const match = normalized.match(/^server\s+(.+)$/);
+    return [
+      { token: "server", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: "address" },
+    ];
+  }
   if (field === "next-hop") {
     const match = normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/);
     if (match) {
@@ -13738,6 +15196,41 @@ function extractSemanticVisualTokens(text, objectType) {
     return tokens;
   }
 
+  if (objectType === "interface") {
+    const interfaceName = normalized.match(/\binterface\s+"?([^"\s{}]+)"?/);
+    if (interfaceName) add("interface", stripTrailingSyntax(interfaceName[1]), "keyword");
+
+    const address =
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/) ||
+      normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/) ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (address) add("address", stripTrailingSyntax(address[1]), "address");
+
+    const prefixLength = normalized.match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (prefixLength) add("prefix-length", stripTrailingSyntax(prefixLength[1]), "number");
+
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) {
+      add(`icmp.${classicIcmp[1]}`, "no", "keyword");
+      add(`icmp.${classicIcmp[1]}`, classicIcmp[1], "keyword");
+    }
+
+    const mdIcmpBoolean = normalized.match(/\bicmp\s+(mask-reply)\s+(true|false)\b/);
+    if (mdIcmpBoolean) {
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[1], "keyword");
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2], "keyword");
+    }
+
+    const mdIcmpAdminState = normalized.match(/\bicmp\s+(redirects|ttl-expired|unreachables)\s+admin-state\s+(enable|disable)\b/);
+    if (mdIcmpAdminState) {
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[1], "keyword");
+      add(`icmp.${mdIcmpAdminState[1]}`, "admin-state", "keyword");
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2], "keyword");
+    }
+
+    if (tokens.length) return tokens;
+  }
+
   const description = extractDescriptionValue(source);
   if (description) add("description", description, "quoted");
 
@@ -13797,6 +15290,10 @@ function tokenColorIndex(token) {
     "authentication-key": 5,
     "peer-as": 5,
     interface: 3,
+    "icmp.mask-reply": 2,
+    "icmp.redirects": 2,
+    "icmp.ttl-expired": 2,
+    "icmp.unreachables": 2,
     sap: 3,
     port: 3,
     lag: 3,

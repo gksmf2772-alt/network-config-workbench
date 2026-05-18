@@ -8,6 +8,25 @@ export function canonicalStaticRouteIdentity(fields = {}) {
   return route && routingContext ? `${routingContext}|${route}` : route;
 }
 
+export function canonicalInterfaceIdentity(fields = {}, fallback = "") {
+  const address = clean(fields.address || fields.prefix || "").toLowerCase();
+  const service = clean(fields.service || "").toLowerCase();
+  const serviceId = clean(fields["service-id"] || fields.serviceId || "").toLowerCase();
+  const routingContext = clean(fields["routing-context"] || fields.vrf || fields.vprn || "").toLowerCase();
+
+  if (address) {
+    if (routingContext) return `${routingContext}|${address}`;
+    if (service === "vprn" && serviceId) return `vprn:${serviceId}|${address}`;
+    return address;
+  }
+
+  const fallbackIdentity = clean(fallback).toLowerCase();
+  const interfaceName = canonicalInterfaceName(fields.interface || "");
+  if (fallbackIdentity && fallbackIdentity !== interfaceName) return fallbackIdentity;
+
+  return canonicalInterfaceName(fields.interface || fallback);
+}
+
 export function canonicalInterfaceName(value = "") {
   return clean(value)
     .replace(/\.0$/i, "")
@@ -22,6 +41,13 @@ export function canonicalBoolean(value) {
   if (value === true || value === "true" || value === "yes" || value === "enable") return "true";
   if (value === false || value === "false" || value === "no" || value === "disable") return "false";
   return clean(value).toLowerCase();
+}
+
+export function canonicalAdminState(value) {
+  const normalized = clean(value).toLowerCase();
+  if (["true", "yes", "enable", "enabled", "no shutdown"].includes(normalized)) return "enabled";
+  if (["false", "no", "disable", "disabled", "shutdown"].includes(normalized)) return "disabled";
+  return normalized;
 }
 
 export function normalizeNokiaSemanticFields(fields = {}) {
@@ -56,12 +82,25 @@ export function normalizeNokiaSemanticFields(fields = {}) {
   if (next["authentication-key"]) next["authentication-key"] = clean(next["authentication-key"]);
   if (next.group) next.group = clean(next.group);
 
+  [
+    "icmp.mask-reply",
+    "icmp.redirects",
+    "icmp.ttl-expired",
+    "icmp.unreachables",
+  ].forEach((field) => {
+    if (next[field] != null) next[field] = canonicalAdminState(next[field]);
+  });
+
   if (next["ingress.filter.ip"] && !next["ingress-filter"]) {
     next["ingress-filter"] = clean(next["ingress.filter.ip"]);
   }
 
   if (next["egress.filter.ip"] && !next["egress-filter"]) {
     next["egress-filter"] = clean(next["egress.filter.ip"]);
+  }
+
+  if (next["ingress.qos"] && !next["ingress-qos"]) {
+    next["ingress-qos"] = clean(next["ingress.qos"]);
   }
 
   if (next["ingress.qos.sap-ingress.policy-name"] && !next["ingress-qos"]) {
@@ -90,6 +129,35 @@ export function normalizeNokiaSemanticFields(fields = {}) {
 
   if (next["dhcp.allow-unmatching-subnets"] != null) {
     next["dhcp.allow-unmatching-subnets"] = canonicalBoolean(next["dhcp.allow-unmatching-subnets"]);
+  }
+
+  [
+    "neighbor-discovery.populate",
+    "dhcp.trusted",
+    "dhcp.lease-populate.l2-header",
+    "cpu-protection.ip-src-monitoring",
+  ].forEach((field) => {
+    if (next[field] != null) next[field] = canonicalBoolean(next[field]);
+  });
+
+  [
+    "dhcp.admin-state",
+    "sub-sla-mgmt.admin-state",
+    "static-host.admin-state",
+  ].forEach((field) => {
+    if (next[field] != null) next[field] = canonicalAdminState(next[field]);
+  });
+
+  if (next["dhcp.server"]) {
+    next["dhcp.server"] = clean(next["dhcp.server"]).replace(/^\[|\]$/g, "").toLowerCase();
+  }
+
+  if (next["sub-sla-mgmt.defaults.subscriber-id"] === "use-auto-id") {
+    next["sub-sla-mgmt.defaults.subscriber-id"] = "auto-id";
+  }
+
+  if (next["static-host.subscriber-id"] === "subscriber-sap-id") {
+    next["static-host.subscriber-id"] = "use-sap-id";
   }
 
   return next;

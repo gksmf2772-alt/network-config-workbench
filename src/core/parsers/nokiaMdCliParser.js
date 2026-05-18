@@ -3,6 +3,8 @@
 import { createNormalizedObject } from "./index.js";
 import {
   buildHierarchyKey,
+  canonicalAdminState,
+  canonicalInterfaceIdentity,
   canonicalInterfaceName,
   canonicalServiceName,
   canonicalStaticRouteIdentity,
@@ -27,6 +29,36 @@ function normalizeState(value = "") {
   if (text === "enable" || text === "enabled" || text === "no shutdown") return "enabled";
   if (text === "disable" || text === "disabled" || text === "shutdown") return "disabled";
   return text;
+}
+
+function normalizeIcmpState(value = "") {
+  return canonicalAdminState(value);
+}
+
+function ipAddressFromPrefix(value = "") {
+  const cleanValue = stripQuotes(value);
+  if (!cleanValue) return null;
+  return cleanValue.includes("/") ? cleanValue.split("/")[0] : cleanValue;
+}
+
+function applyDerivedObjectMetadata(object, { updateIdentity = true } = {}) {
+  const fields = object.fields || {};
+  const prefix = fields.route || fields.prefix || fields.address || object.prefix || null;
+
+  object.description = fields.description || object.description || null;
+  object.prefix = prefix;
+  object.ipAddress = fields.address
+    ? ipAddressFromPrefix(fields.address)
+    : object.ipAddress || ipAddressFromPrefix(prefix);
+  object.nextHop = fields["next-hop"] || object.nextHop || null;
+  object.peerIp = fields.neighbor || fields.peerIp || object.peerIp || null;
+  object.peerAs = fields["peer-as"] || fields.peerAs || object.peerAs || null;
+
+  if (updateIdentity && object.normalizedType === "interface") {
+    object.normalizedIdentity = canonicalInterfaceIdentity(fields, object.sourceName || object.normalizedIdentity);
+  }
+
+  return object;
 }
 
 function tokenizeMdCliLine(line = "") {
@@ -147,14 +179,7 @@ function createMdCliOneLineObject({ type, identity, sourceType, sourceName, fiel
     fields: normalizedFields,
   });
 
-  object.description = normalizedFields.description || null;
-  object.prefix = normalizedFields.route || normalizedFields.prefix || normalizedFields.address || null;
-  object.nextHop = normalizedFields["next-hop"] || null;
-  object.ipAddress = normalizedFields.address?.split("/")?.[0] || null;
-  object.peerIp = normalizedFields.neighbor || normalizedFields.peerIp || null;
-  object.peerAs = normalizedFields["peer-as"] || normalizedFields.peerAs || null;
-
-  return object;
+  return applyDerivedObjectMetadata(object, { updateIdentity: false });
 }
 
 function extractDescription(lines) {
@@ -640,13 +665,17 @@ function parseMdCliBgpGroups(lines) {
 function createMdServiceObject({ type, name, fields, rawLines, index }) {
   const normalizedFields = normalizeNokiaSemanticFields(fields);
   const identity =
-    normalizedFields["default-host"] ||
-    normalizedFields["static-host"] ||
-    normalizedFields.sap ||
-    normalizedFields["group-interface"] ||
-    normalizedFields["subscriber-interface"] ||
-    normalizedFields.interface ||
-    canonicalServiceName(name);
+    type === "interface"
+      ? canonicalInterfaceIdentity(normalizedFields, name || normalizedFields.interface)
+      : type === "subscriber-interface"
+        ? normalizedFields["subscriber-interface"] || canonicalServiceName(name)
+      : normalizedFields["default-host"] ||
+        normalizedFields["static-host"] ||
+        normalizedFields.sap ||
+        normalizedFields["group-interface"] ||
+        normalizedFields["subscriber-interface"] ||
+        normalizedFields.interface ||
+        canonicalServiceName(name);
 
   const object = createNormalizedObject({
     id: `nokia-md-${type}-${index}-${identity}`,
@@ -671,6 +700,7 @@ function parseMdCliServiceObjects(lines) {
   const stack = [];
   let pendingDefaultHost = null;
   let pendingStaticHost = null;
+  const isPlainInterfaceContext = () => Boolean(context.interface && !context.subscriber && !context.group);
 
   lines.forEach((raw, index) => {
     const text = raw.trim();
@@ -755,6 +785,19 @@ function parseMdCliServiceObjects(lines) {
     if (match) {
       context.sap = canonicalServiceName(match[1]);
       stack.push("sap");
+      if (isPlainInterfaceContext()) {
+        objects.push(createMdServiceObject({
+          type: "interface",
+          name: context.interface,
+          fields: {
+            interface: context.interface,
+            sap: context.sap,
+          },
+          rawLines: findMdCliBlockLines(lines, index),
+          index,
+        }));
+        return;
+      }
       objects.push(createMdServiceObject({
         type: "sap",
         name: context.sap,
@@ -772,6 +815,20 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^ip\s+"?([^"\s{]+)"?/i);
     if (match && stack.includes("filter") && stack.includes("ingress") && context.sap) {
+      if (isPlainInterfaceContext()) {
+        objects.push(createMdServiceObject({
+          type: "interface",
+          name: context.interface,
+          fields: {
+            interface: context.interface,
+            sap: context.sap,
+            "ingress.filter.ip": stripQuotes(match[1]),
+          },
+          rawLines: findMdCliBlockLines(lines, index),
+          index,
+        }));
+        return;
+      }
       objects.push(createMdServiceObject({
         type: "sap",
         name: context.sap,
@@ -789,6 +846,20 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^policy-name\s+"?([^"\s{]+)"?/i);
     if (match && stack.includes("sap-egress") && context.sap) {
+      if (isPlainInterfaceContext()) {
+        objects.push(createMdServiceObject({
+          type: "interface",
+          name: context.interface,
+          fields: {
+            interface: context.interface,
+            sap: context.sap,
+            "egress.qos.sap-egress.policy-name": stripQuotes(match[1]),
+          },
+          rawLines: findMdCliBlockLines(lines, index),
+          index,
+        }));
+        return;
+      }
       objects.push(createMdServiceObject({
         type: "sap",
         name: context.sap,
@@ -967,7 +1038,7 @@ const INTERFACE_ONE_LINE_FIELDS = [
   { path: ["address"], field: "address" },
   { path: ["admin-state"], field: "state", normalize: normalizeState },
   { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
-  { path: ["ipv4", "icmp", "mask-reply"], field: "icmp.mask-reply" },
+  { path: ["ipv4", "icmp", "mask-reply"], field: "icmp.mask-reply", normalize: normalizeIcmpState },
   { path: ["ipv4", "icmp", "redirects", "admin-state"], field: "icmp.redirects", normalize: normalizeState },
   { path: ["ipv4", "icmp", "ttl-expired", "admin-state"], field: "icmp.ttl-expired", normalize: normalizeState },
   { path: ["ipv4", "icmp", "unreachables", "admin-state"], field: "icmp.unreachables", normalize: normalizeState },
@@ -988,8 +1059,7 @@ const GROUP_ONE_LINE_FIELDS = [
 ];
 
 const DHCP_ONE_LINE_FIELDS = [
-  { path: ["ipv4", "dhcp", "admin-state"], field: "state", normalize: normalizeState },
-  { path: ["ipv4", "dhcp", "admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["ipv4", "dhcp", "admin-state"], field: "dhcp.admin-state", normalize: normalizeState },
   { path: ["ipv4", "dhcp", "filter"], field: "dhcp.filter" },
   { path: ["ipv4", "dhcp", "server"], field: "dhcp.server" },
   { path: ["ipv4", "dhcp", "trusted"], field: "dhcp.trusted" },
@@ -1008,8 +1078,7 @@ const CPU_PROTECTION_ONE_LINE_FIELDS = [
 ];
 
 const SUB_SLA_MGMT_ONE_LINE_FIELDS = [
-  { path: ["sub-sla-mgmt", "admin-state"], field: "state", normalize: normalizeState },
-  { path: ["sub-sla-mgmt", "admin-state"], field: "admin-state", normalize: normalizeState },
+  { path: ["sub-sla-mgmt", "admin-state"], field: "sub-sla-mgmt.admin-state", normalize: normalizeState },
   { path: ["sub-sla-mgmt", "sub-ident-policy"], field: "sub-sla-mgmt.sub-ident-policy" },
   { path: ["sub-ident-policy"], field: "sub-sla-mgmt.sub-ident-policy" },
   { path: ["sub-sla-mgmt", "subscriber-limit"], field: "sub-sla-mgmt.subscriber-limit" },
@@ -1028,13 +1097,12 @@ const SUB_SLA_MGMT_ONE_LINE_FIELDS = [
 ];
 
 const STATIC_HOST_ONE_LINE_FIELDS = [
-  { path: ["mac"], field: "mac" },
-  { path: ["admin-state"], field: "state", normalize: normalizeState },
-  { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
-  { path: ["sub-profile"], field: "sub-profile" },
-  { path: ["sla-profile"], field: "sla-profile" },
-  { path: ["int-dest-id"], field: "int-dest-id" },
-  { path: ["subscriber-id"], field: "subscriber-id" },
+  { path: ["mac"], field: "static-host.mac" },
+  { path: ["admin-state"], field: "static-host.admin-state", normalize: normalizeState },
+  { path: ["sub-profile"], field: "static-host.sub-profile" },
+  { path: ["sla-profile"], field: "static-host.sla-profile" },
+  { path: ["int-dest-id"], field: "static-host.int-dest-id" },
+  { path: ["subscriber-id"], field: "static-host.subscriber-id" },
 ];
 
 const BGP_ONE_LINE_FIELDS = [
@@ -1135,6 +1203,18 @@ function createMdCliServiceOneLineObject({ type, identityParts, sourceType, sour
   });
 }
 
+function createMdCliSubscriberOneLineObject({ subscriberName, fields, rawLine, index }) {
+  return createMdCliServiceOneLineObject({
+    type: "subscriber-interface",
+    identityParts: [subscriberName],
+    sourceType: "subscriber-interface",
+    sourceName: subscriberName,
+    fields,
+    rawLine,
+    index,
+  });
+}
+
 function parseMdCliOneLineInterfaceService({ tokens, rawLine, index, serviceType, serviceId, interfaceIndex }) {
   const interfaceName = canonicalInterfaceName(tokens[interfaceIndex + 1]);
   const baseFields = {
@@ -1153,10 +1233,10 @@ function parseMdCliOneLineInterfaceService({ tokens, rawLine, index, serviceType
       SAP_ONE_LINE_FIELDS
     );
     return createMdCliServiceOneLineObject({
-      type: "sap",
-      identityParts: [serviceId, interfaceName, sapName],
-      sourceType: "sap",
-      sourceName: sapName,
+      type: "interface",
+      identityParts: [serviceId, interfaceName],
+      sourceType: "interface",
+      sourceName: interfaceName,
       fields,
       rawLine,
       index,
@@ -1186,11 +1266,8 @@ function parseMdCliOneLineSubscriberService({ tokens, rawLine, index, serviceTyp
 
   if (groupIndex < 0 || !tokens[groupIndex + 1]) {
     const fields = withPrefix(mapLeafFields(baseFields, tokens, subscriberIndex + 2, SUBSCRIBER_ONE_LINE_FIELDS));
-    return createMdCliServiceOneLineObject({
-      type: "subscriber-interface",
-      identityParts: [serviceId, subscriberName],
-      sourceType: "subscriber-interface",
-      sourceName: subscriberName,
+    return createMdCliSubscriberOneLineObject({
+      subscriberName,
       fields,
       rawLine,
       index,
@@ -1223,11 +1300,8 @@ function parseMdCliOneLineSubscriberService({ tokens, rawLine, index, serviceTyp
     if (pathExists(tokens, ["ipv4", "dhcp", "lease-populate", "l2-header"], groupIndex + 2)) {
       fields["dhcp.lease-populate.l2-header"] = "true";
     }
-    return createMdCliServiceOneLineObject({
-      type: "dhcp",
-      identityParts: [serviceId, subscriberName, groupName],
-      sourceType: "dhcp",
-      sourceName: groupName,
+    return createMdCliSubscriberOneLineObject({
+      subscriberName,
       fields,
       rawLine,
       index,
@@ -1235,11 +1309,8 @@ function parseMdCliOneLineSubscriberService({ tokens, rawLine, index, serviceTyp
   }
 
   const fields = mapLeafFields(groupFields, tokens, groupIndex + 2, GROUP_ONE_LINE_FIELDS);
-  return createMdCliServiceOneLineObject({
-    type: "group-interface",
-    identityParts: [serviceId, subscriberName, groupName],
-    sourceType: "group-interface",
-    sourceName: groupName,
+  return createMdCliSubscriberOneLineObject({
+    subscriberName,
     fields,
     rawLine,
     index,
@@ -1267,11 +1338,8 @@ function parseMdCliOneLineSubscriberSap({ tokens, rawLine, index, serviceId, sub
       staticHostIndex + 1,
       STATIC_HOST_ONE_LINE_FIELDS
     );
-    return createMdCliServiceOneLineObject({
-      type: "static-host",
-      identityParts: [serviceId, subscriberName, groupName, sapName, hostIp],
-      sourceType: "static-host",
-      sourceName: hostIp,
+    return createMdCliSubscriberOneLineObject({
+      subscriberName,
       fields,
       rawLine,
       index,
@@ -1289,12 +1357,9 @@ function parseMdCliOneLineSubscriberSap({ tokens, rawLine, index, serviceId, sub
       "default-host": host,
       "prefix-length": prefixLength,
     };
-    setField(fields, "next-hop", valueAfterPath(tokens, ["next-hop"], defaultHostIndex + 1));
-    return createMdCliServiceOneLineObject({
-      type: "default-host",
-      identityParts: [serviceId, subscriberName, groupName, sapName, host],
-      sourceType: "default-host",
-      sourceName: host,
+    setField(fields, "default-host.next-hop", valueAfterPath(tokens, ["next-hop"], defaultHostIndex + 1));
+    return createMdCliSubscriberOneLineObject({
+      subscriberName,
       fields,
       rawLine,
       index,
@@ -1308,11 +1373,8 @@ function parseMdCliOneLineSubscriberSap({ tokens, rawLine, index, serviceId, sub
       subSlaIndex,
       SUB_SLA_MGMT_ONE_LINE_FIELDS
     );
-    return createMdCliServiceOneLineObject({
-      type: "sub-sla-mgmt",
-      identityParts: [serviceId, subscriberName, groupName, sapName],
-      sourceType: "sub-sla-mgmt",
-      sourceName: sapName,
+    return createMdCliSubscriberOneLineObject({
+      subscriberName,
       fields,
       rawLine,
       index,
@@ -1329,11 +1391,8 @@ function parseMdCliOneLineSubscriberSap({ tokens, rawLine, index, serviceId, sub
     if (pathExists(tokens, ["cpu-protection", "ip-src-monitoring"], cpuProtectionIndex)) {
       fields["cpu-protection.ip-src-monitoring"] = "true";
     }
-    return createMdCliServiceOneLineObject({
-      type: "cpu-protection",
-      identityParts: [serviceId, subscriberName, groupName, sapName],
-      sourceType: "cpu-protection",
-      sourceName: sapName,
+    return createMdCliSubscriberOneLineObject({
+      subscriberName,
       fields,
       rawLine,
       index,
@@ -1341,11 +1400,8 @@ function parseMdCliOneLineSubscriberSap({ tokens, rawLine, index, serviceId, sub
   }
 
   const fields = mapLeafFields(sapFields, tokens, sapIndex + 2, SAP_ONE_LINE_FIELDS);
-  return createMdCliServiceOneLineObject({
-    type: "sap",
-    identityParts: [serviceId, subscriberName, groupName, sapName],
-    sourceType: "sap",
-    sourceName: sapName,
+  return createMdCliSubscriberOneLineObject({
+    subscriberName,
     fields,
     rawLine,
     index,
@@ -1528,12 +1584,33 @@ function mergeObjectsBySemanticIdentity(objects = []) {
           }
     );
     target.rawLines = mergeRawLines(target.rawLines, object.rawLines);
-    target.description ||= object.description;
-    target.ipAddress ||= object.ipAddress;
-    target.prefix ||= object.prefix;
-    target.nextHop = target.fields["next-hop"] || target.nextHop || object.nextHop;
-    target.peerIp ||= object.peerIp;
-    target.peerAs ||= object.peerAs;
+    applyDerivedObjectMetadata(target);
+  });
+
+  return mergeFinalizedObjectsBySemanticIdentity([...merged.values()].map(applyDerivedObjectMetadata));
+}
+
+function mergeFinalizedObjectsBySemanticIdentity(objects = []) {
+  const merged = new Map();
+
+  objects.forEach((object) => {
+    const key = `${object.normalizedType}:${object.normalizedIdentity}`;
+    if (!merged.has(key)) {
+      merged.set(key, { ...object, fields: { ...(object.fields || {}) }, rawLines: [...(object.rawLines || [])] });
+      return;
+    }
+
+    const target = merged.get(key);
+    target.fields = normalizeNokiaSemanticFields(
+      target.normalizedType === "static-route"
+        ? mergeStaticRouteFields(target.fields, object.fields)
+        : {
+            ...(target.fields || {}),
+            ...(object.fields || {}),
+          }
+    );
+    target.rawLines = mergeRawLines(target.rawLines, object.rawLines);
+    applyDerivedObjectMetadata(target);
   });
 
   return [...merged.values()];

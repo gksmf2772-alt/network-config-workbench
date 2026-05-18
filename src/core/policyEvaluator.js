@@ -250,9 +250,11 @@ export function profileExceptionMatchesContext(exception = {}, context = {}) {
   );
   const profileScope = exceptionScope === "profile";
   const valueMode = normalizeComparableLine(match.valueMode || exception.valueMode || "");
+  const expectedObjectType = resolveExceptionObjectType(exception, target, match);
 
   if (!sideApplies(target.side || match.side || exception.side || "both", context.side || "both")) return false;
-  if (!matchesExact(match.objectType || target.objectType || exception.objectType, context.objectType)) return false;
+  if (profileScope && !expectedObjectType) return false;
+  if (!matchesExact(expectedObjectType, context.objectType)) return false;
   if (!matchesFieldValue(match.fieldPath || target.fieldPath || exception.fieldPath || exception.field, context.field, exactObjectScope)) return false;
   if (!matchesRuleValue(match.ruleId || target.ruleId || exception.ruleId, context.ruleId, exactObjectScope)) return false;
   if (!matchesContextValue(match.category || target.category || exception.category, context.category, exactObjectScope)) return false;
@@ -295,6 +297,36 @@ export function profileExceptionMatchesContext(exception = {}, context = {}) {
     return haystacks.some((value) => lineRuleMatches(value, valuePattern, match.valueMatchMode || "contains"));
   }
   return true;
+}
+
+function resolveExceptionObjectType(exception = {}, target = {}, match = {}) {
+  const direct = [
+    match.objectType,
+    match.settingType,
+    target.objectType,
+    target.settingType,
+    exception.objectType,
+    exception.settingType,
+  ].find((value) => normalizeComparableLine(value));
+  if (direct) return direct;
+
+  return [
+    match.objectKey,
+    match.settingKey,
+    target.objectKey,
+    target.settingKey,
+    target.createdFromObjectKey,
+    target.createdFromSettingKey,
+    exception.objectKey,
+    exception.settingKey,
+    exception.createdFromObjectKey,
+  ].map(inferObjectTypeFromKey).find(Boolean) || "";
+}
+
+function inferObjectTypeFromKey(value = "") {
+  const normalized = normalizeComparableLine(value);
+  const match = normalized.match(/^([a-z0-9_.-]+):/);
+  return match?.[1] || "";
 }
 
 export function findMatchingComparisonExclusion({
@@ -438,10 +470,16 @@ function findMatchingManualLineRule({
   const normalizedRules = normalizedObjectType !== objectType && Array.isArray(lineRules[normalizedObjectType])
     ? lineRules[normalizedObjectType]
     : [];
-  const fallbackRules = Object.values(lineRules).filter(Array.isArray).flat();
+  const globalRules = !normalizedObjectType
+    ? [
+      ...(Array.isArray(lineRules.global) ? lineRules.global : []),
+      ...(Array.isArray(lineRules["*"]) ? lineRules["*"] : []),
+    ]
+    : [];
   const rules = directRules.length || normalizedRules.length
     ? [...directRules, ...normalizedRules]
-    : fallbackRules;
+    : globalRules;
+  if (!rules.length) return null;
   const currentSide = normalizeSide(side);
   const haystacks = [rawLine, normalizedLine].map((value) => String(value || ""));
 
@@ -461,8 +499,7 @@ function findMatchingManualLineRule({
 
     return haystacks.some((value) =>
       lineRuleMatches(value, pattern, "exact") ||
-      lineRuleMatches(value, pattern, "contains") ||
-      lineRuleMatches(pattern, value, "contains")
+      lineRuleMatches(value, pattern, "contains")
     );
   });
 }

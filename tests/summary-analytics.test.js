@@ -242,6 +242,21 @@ test("integrated report rebuilds dashboard instead of reusing stale exception ca
   assert.doesNotMatch(body, /lastDashboardData\s*\|\|/);
 });
 
+test("integrated report table exposes checkbox value filters", () => {
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const styles = fs.readFileSync("src/styles/global.css", "utf8");
+
+  assert.match(source, /data-report-check-value/);
+  assert.match(source, /reportReviewChecklistMatches/);
+  assert.match(source, /data-report-check-all/);
+  assert.match(source, /reportReviewFilterPanelStyle/);
+  assert.match(styles, /\.report-review-checklist/);
+  assert.match(styles, /\.report-review-check-option input\[type="checkbox"\]/);
+  assert.match(styles, /width: clamp\(220px, var\(--report-filter-width, 28ch\), 520px\)/);
+  assert.match(styles, /text-overflow: ellipsis/);
+  assert.match(styles, /\.report-review-checklist \{[\s\S]*?min-width: 0;/);
+});
+
 test("review items expose unmatched, ambiguous, low confidence, and relationship changes", () => {
   const review = buildReviewItems(plan);
 

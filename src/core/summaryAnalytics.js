@@ -29,7 +29,29 @@ const IMPORTANT_FIELDS = new Set([
   "sub-profile",
   "sla-profile",
   "static-host",
+  "static-host.sub-profile",
+  "static-host.sla-profile",
+  "static-host.int-dest-id",
+  "static-host.subscriber-id",
   "default-host",
+  "default-host.next-hop",
+  "group-interface",
+  "auth-policy",
+  "dhcp.filter",
+  "dhcp.server",
+  "dhcp.trusted",
+  "dhcp.lease-populate.l2-header",
+  "dhcp.lease-populate.max-leases",
+  "neighbor-discovery.populate",
+  "cpu-protection.policy-id",
+  "cpu-protection.ip-src-monitoring",
+  "sub-sla-mgmt.admin-state",
+  "sub-sla-mgmt.sub-ident-policy",
+  "sub-sla-mgmt.subscriber-limit",
+  "sub-sla-mgmt.defaults.sub-profile",
+  "sub-sla-mgmt.defaults.sla-profile",
+  "sub-sla-mgmt.defaults.subscriber-id",
+  "sub-sla-mgmt.defaults.int-dest-id",
 ]);
 
 const FIELD_ALIASES = {
@@ -427,6 +449,9 @@ export function buildReviewItems(plan = []) {
     if (isSuppressedOnlyPlanItem(item)) {
       review.suppressed.push(buildSuppressedReviewItem(item));
       return;
+    }
+    if (hasSuppressedPolicyEvidence(item)) {
+      review.suppressed.push(buildSuppressedReviewItem(item));
     }
     const base = buildReviewBase(item);
     if (item.status === "old-only") {

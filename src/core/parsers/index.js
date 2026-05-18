@@ -142,6 +142,7 @@ function extractPolicyPlaceholders(configText = "", vendor = "") {
   lines.forEach((rawLine, index) => {
     const text = rawLine.trim();
     if (!text) return;
+    const inlineServiceReference = isInlineServicePolicyReference(rawLine, text, vendor);
 
     const specs = [
       { type: "qos-policy", match: text.match(/\b(?:qos-policy|sap-ingress|sap-egress)\s+"?([^"\s{]+)"?/i) },
@@ -153,6 +154,7 @@ function extractPolicyPlaceholders(configText = "", vendor = "") {
 
     for (const spec of specs) {
       if (!spec.match?.[1]) continue;
+      if (inlineServiceReference && ["qos-policy", "filter"].includes(spec.type)) continue;
       const name = spec.match[1];
       objects.push(createNormalizedObject({
         id: `${vendor || "vendor"}-${spec.type}-${index}-${name}`,
@@ -169,4 +171,18 @@ function extractPolicyPlaceholders(configText = "", vendor = "") {
   });
 
   return objects;
+}
+
+function isInlineServicePolicyReference(rawLine = "", text = "", vendor = "") {
+  if (vendor === PARSER_IDS.NOKIA_CLASSIC && /^\s+/.test(String(rawLine || ""))) {
+    return true;
+  }
+
+  if (vendor === PARSER_IDS.NOKIA_MD_CLI) {
+    return /^\/?configure\b/i.test(text) &&
+      /\bservice\s+(?:ies|vprn)\b/i.test(text) &&
+      /\b(?:interface|subscriber-interface|group-interface)\b/i.test(text);
+  }
+
+  return false;
 }

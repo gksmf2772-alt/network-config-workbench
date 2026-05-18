@@ -1,6 +1,8 @@
 // src/core/parsers/nokiaClassicParser.js
 import {
   buildHierarchyKey,
+  canonicalAdminState,
+  canonicalInterfaceIdentity,
   canonicalInterfaceName,
   canonicalServiceName,
   canonicalStaticRouteIdentity,
@@ -37,6 +39,32 @@ function normalizeState(value = "") {
   return text;
 }
 
+function ipAddressFromPrefix(value = "") {
+  const cleanValue = stripQuotes(value);
+  if (!cleanValue) return null;
+  return cleanValue.includes("/") ? cleanValue.split("/")[0] : cleanValue;
+}
+
+function applyDerivedObjectMetadata(object) {
+  const fields = object.fields || {};
+  const prefix = fields.route || fields.prefix || fields.address || object.prefix || null;
+
+  object.description = fields.description || object.description || null;
+  object.prefix = prefix;
+  object.ipAddress = fields.address
+    ? ipAddressFromPrefix(fields.address)
+    : object.ipAddress || ipAddressFromPrefix(prefix);
+  object.nextHop = fields["next-hop"] || object.nextHop || null;
+  object.peerIp = fields.neighbor || fields.peerIp || object.peerIp || null;
+  object.peerAs = fields["peer-as"] || fields.peerAs || object.peerAs || null;
+
+  if (object.normalizedType === "interface") {
+    object.normalizedIdentity = canonicalInterfaceIdentity(fields, object.sourceName || object.normalizedIdentity);
+  }
+
+  return object;
+}
+
 function createObject({
   id,
   sourceName,
@@ -45,24 +73,28 @@ function createObject({
   fields = {},
   rawLines = [],
 }) {
-  return {
+  const normalizedFields = normalizeNokiaSemanticFields(fields);
+  return applyDerivedObjectMetadata({
     id,
     vendor: "nokia-classic",
     sourceType: normalizedType,
     sourceName,
     normalizedType,
-    normalizedIdentity,
+    normalizedIdentity:
+      normalizedType === "interface"
+        ? canonicalInterfaceIdentity(normalizedFields, normalizedIdentity)
+        : normalizedIdentity,
 
-    description: fields.description || null,
-    ipAddress: fields.address || null,
-    prefix: fields.route || fields.address || null,
-    peerIp: fields.neighbor || fields.peerIp || null,
-    peerAs: fields["peer-as"] || fields.peerAs || null,
-    nextHop: fields["next-hop"] || fields.nextHop || null,
+    description: null,
+    ipAddress: null,
+    prefix: null,
+    peerIp: null,
+    peerAs: null,
+    nextHop: null,
 
-    fields: normalizeNokiaSemanticFields(fields),
+    fields: normalizedFields,
     rawLines,
-  };
+  });
 }
 
 function createCurrentObject(type, name, rawLine) {
@@ -94,11 +126,18 @@ function flushCurrent(current, objects) {
 
   const fields = current.type === "static-route"
     ? buildStaticRouteAggregateFields(current)
+    : current.type === "interface"
+      ? {
+          ...current.fields,
+          ...collectClassicInterfaceServiceFields(current.rawLines),
+        }
     : current.fields;
 
   const normalizedIdentity =
     current.type === "static-route"
       ? (canonicalStaticRouteIdentity(fields) || fields.route || current.name)
+      : current.type === "interface"
+        ? canonicalInterfaceIdentity(fields, current.name)
       : fields.neighbor ||
         fields.interface ||
         fields.lag ||
@@ -134,16 +173,325 @@ function buildStaticRouteAggregateFields(current) {
   };
 }
 
+function appendCsvField(fields, field, value) {
+  const cleanValue = stripQuotes(value);
+  if (!field || !cleanValue) return;
+  const current = String(fields[field] || "")
+    .split(/\s*,\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!current.includes(cleanValue)) current.push(cleanValue);
+  fields[field] = current.join(", ");
+}
+
+function collectClassicInterfaceServiceFields(rawLines = []) {
+  const fields = {};
+  let currentSap = "";
+  let direction = "";
+
+  rawLines.forEach((rawLine) => {
+    const text = String(rawLine || "").trim();
+    if (!text) return;
+
+    let match = text.match(/^sap\s+(\S+)/i);
+    if (match) {
+      currentSap = canonicalServiceName(match[1]);
+      direction = "";
+      appendCsvField(fields, "sap", currentSap);
+      return;
+    }
+
+    if (!currentSap) return;
+
+    if (/^ingress$/i.test(text)) {
+      direction = "ingress";
+      return;
+    }
+
+    if (/^egress$/i.test(text)) {
+      direction = "egress";
+      return;
+    }
+
+    if (/^exit$/i.test(text)) {
+      direction = "";
+      return;
+    }
+
+    match = text.match(/^filter\s+ip\s+(.+)$/i);
+    if (match) {
+      appendCsvField(fields, `${direction === "egress" ? "egress" : "ingress"}.filter.ip`, match[1]);
+      return;
+    }
+
+    match = text.match(/^qos\s+(.+)$/i);
+    if (match) {
+      appendCsvField(fields, `${direction === "egress" ? "egress" : "ingress"}.qos`, match[1]);
+    }
+  });
+
+  return normalizeNokiaSemanticFields(fields);
+}
+
+function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName = "") {
+  const fields = {
+    "subscriber-interface": subscriberName,
+  };
+  const stack = [];
+  let currentGroup = "";
+  let currentSap = "";
+  let direction = "";
+
+  const topScope = () => stack.at(-1) || "";
+  const setStateForScope = (state) => {
+    const scope = topScope();
+    if (scope === "dhcp") {
+      fields["dhcp.admin-state"] = state;
+      return;
+    }
+    if (scope === "sub-sla-mgmt") {
+      fields["sub-sla-mgmt.admin-state"] = state;
+      return;
+    }
+    if (scope === "static-host") {
+      fields["static-host.admin-state"] = state;
+      return;
+    }
+    fields.state = state;
+    fields["admin-state"] = state;
+  };
+
+  rawLines.forEach((rawLine) => {
+    const text = String(rawLine || "").trim();
+    if (!text) return;
+
+    let match = text.match(/^subscriber-interface\s+"?([^"\s]+)"?/i);
+    if (match) {
+      fields["subscriber-interface"] = canonicalServiceName(match[1]);
+      stack.push("subscriber-interface");
+      return;
+    }
+
+    match = text.match(/^group-interface\s+"?([^"\s]+)"?/i);
+    if (match) {
+      currentGroup = canonicalServiceName(match[1]);
+      currentSap = "";
+      direction = "";
+      fields["group-interface"] = currentGroup;
+      stack.push("group-interface");
+      return;
+    }
+
+    match = text.match(/^sap\s+(\S+)/i);
+    if (match) {
+      currentSap = canonicalServiceName(match[1]);
+      direction = "";
+      appendCsvField(fields, "sap", currentSap);
+      stack.push("sap");
+      return;
+    }
+
+    match = text.match(/^static-host\s+(?:ip\s+)?(\S+)/i);
+    if (match) {
+      const host = stripQuotes(match[1]);
+      fields["static-host"] = host;
+      stack.push("static-host");
+      return;
+    }
+
+    match = text.match(/^default-host\s+(\S+)(?:\s+next-hop\s+(\S+))?/i);
+    if (match) {
+      fields["default-host"] = stripQuotes(match[1]);
+      if (match[2]) fields["default-host.next-hop"] = stripQuotes(match[2]);
+      return;
+    }
+
+    if (/^dhcp$/i.test(text)) {
+      stack.push("dhcp");
+      return;
+    }
+
+    if (/^sub-sla-mgmt$/i.test(text)) {
+      stack.push("sub-sla-mgmt");
+      return;
+    }
+
+    if (/^ingress$/i.test(text)) {
+      direction = "ingress";
+      stack.push("ingress");
+      return;
+    }
+
+    if (/^egress$/i.test(text)) {
+      direction = "egress";
+      stack.push("egress");
+      return;
+    }
+
+    if (/^exit$/i.test(text)) {
+      const scope = stack.pop();
+      if (scope === "sap") currentSap = "";
+      if (scope === "group-interface") currentGroup = "";
+      if (["ingress", "egress"].includes(scope)) direction = "";
+      return;
+    }
+
+    match = text.match(/^description\s+(.+)$/i);
+    if (match) {
+      fields.description = stripQuotes(match[1]);
+      return;
+    }
+
+    match = text.match(/^address\s+(\S+)/i);
+    if (match) {
+      fields.address = stripQuotes(match[1]);
+      fields.prefix = stripQuotes(match[1]);
+      return;
+    }
+
+    if (/^allow-unmatching-subnets$/i.test(text)) {
+      fields["dhcp.allow-unmatching-subnets"] = "true";
+      return;
+    }
+
+    if (/^arp-populate$/i.test(text)) {
+      fields["neighbor-discovery.populate"] = "true";
+      return;
+    }
+
+    match = text.match(/^authentication-policy\s+(.+)$/i);
+    if (match) {
+      fields["authentication-policy"] = stripQuotes(match[1]);
+      return;
+    }
+
+    if (/^(no\s+shutdown|shutdown)$/i.test(text)) {
+      setStateForScope(normalizeState(text));
+      return;
+    }
+
+    match = text.match(/^filter\s+ip\s+(.+)$/i);
+    if (match && currentSap) {
+      appendCsvField(fields, `${direction === "egress" ? "egress" : "ingress"}.filter.ip`, match[1]);
+      return;
+    }
+
+    match = text.match(/^qos\s+(.+)$/i);
+    if (match && currentSap) {
+      appendCsvField(fields, `${direction === "egress" ? "egress" : "ingress"}.qos`, match[1]);
+      return;
+    }
+
+    match = text.match(/^cpu-protection\s+(\S+)(?:\s+ip-src-monitoring)?/i);
+    if (match && currentSap) {
+      fields["cpu-protection.policy-id"] = stripQuotes(match[1]);
+      if (/\bip-src-monitoring\b/i.test(text)) fields["cpu-protection.ip-src-monitoring"] = "true";
+      return;
+    }
+
+    if (topScope() === "dhcp") {
+      match = text.match(/^filter\s+(\S+)/i);
+      if (match) {
+        fields["dhcp.filter"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^server\s+(\S+)/i);
+      if (match) {
+        fields["dhcp.server"] = stripQuotes(match[1]);
+        return;
+      }
+
+      if (/^trusted$/i.test(text)) {
+        fields["dhcp.trusted"] = "true";
+        return;
+      }
+
+      match = text.match(/^lease-populate\s+l2-header(?:\s+(\S+))?/i);
+      if (match) {
+        fields["dhcp.lease-populate.l2-header"] = "true";
+        if (match[1]) fields["dhcp.lease-populate.max-leases"] = stripQuotes(match[1]);
+        return;
+      }
+    }
+
+    if (topScope() === "sub-sla-mgmt") {
+      match = text.match(/^def-inter-dest-id\s+string\s+(.+)$/i);
+      if (match) {
+        fields["sub-sla-mgmt.defaults.int-dest-id"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^def-sub-id\s+(\S+)/i);
+      if (match) {
+        fields["sub-sla-mgmt.defaults.subscriber-id"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^def-sub-profile\s+(.+)$/i);
+      if (match) {
+        fields["sub-sla-mgmt.defaults.sub-profile"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^def-sla-profile\s+(.+)$/i);
+      if (match) {
+        fields["sub-sla-mgmt.defaults.sla-profile"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^sub-ident-policy\s+(.+)$/i);
+      if (match) {
+        fields["sub-sla-mgmt.sub-ident-policy"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^multi-sub-sap\s+(\S+)/i);
+      if (match) {
+        fields["sub-sla-mgmt.subscriber-limit"] = stripQuotes(match[1]);
+        return;
+      }
+    }
+
+    if (topScope() === "static-host") {
+      match = text.match(/^inter-dest-id\s+(.+)$/i);
+      if (match) {
+        fields["static-host.int-dest-id"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^sla-profile\s+(.+)$/i);
+      if (match) {
+        fields["static-host.sla-profile"] = stripQuotes(match[1]);
+        return;
+      }
+
+      match = text.match(/^sub-profile\s+(.+)$/i);
+      if (match) {
+        fields["static-host.sub-profile"] = stripQuotes(match[1]);
+        return;
+      }
+
+      if (/^subscriber-sap-id$/i.test(text)) {
+        fields["static-host.subscriber-id"] = "subscriber-sap-id";
+      }
+    }
+  });
+
+  return normalizeNokiaSemanticFields(fields);
+}
+
 function makeServiceObject({ type, name, fields, rawLines, index }) {
   const normalizedFields = normalizeNokiaSemanticFields(fields);
-  const identity =
-    normalizedFields["default-host"] ||
-    normalizedFields["static-host"] ||
-    normalizedFields.sap ||
-    normalizedFields["group-interface"] ||
-    normalizedFields["subscriber-interface"] ||
-    normalizedFields.interface ||
-    canonicalServiceName(name);
+  const identity = type === "subscriber-interface"
+    ? normalizedFields["subscriber-interface"] || canonicalServiceName(name)
+    : normalizedFields["default-host"] ||
+      normalizedFields["static-host"] ||
+      normalizedFields.sap ||
+      normalizedFields["group-interface"] ||
+      normalizedFields["subscriber-interface"] ||
+      normalizedFields.interface ||
+      canonicalServiceName(name);
 
   return createObject({
     id: `old-${type}-${index}-${identity}`,
@@ -158,8 +506,18 @@ function makeServiceObject({ type, name, fields, rawLines, index }) {
 function parseClassicServiceObjects(lines) {
   const objects = [];
   const context = { interface: "", subscriber: "", group: "", sap: "" };
+  const isPlainInterfaceContext = () => Boolean(context.interface && !context.subscriber && !context.group);
+  let skipSubscriberBlockUntil = -1;
 
   lines.forEach((line, index) => {
+    if (index <= skipSubscriberBlockUntil) return;
+    if (skipSubscriberBlockUntil >= 0 && index > skipSubscriberBlockUntil) {
+      context.subscriber = "";
+      context.group = "";
+      context.sap = "";
+      skipSubscriberBlockUntil = -1;
+    }
+
     const text = line.text;
     if (!text) return;
 
@@ -178,11 +536,16 @@ function parseClassicServiceObjects(lines) {
       context.subscriber = canonicalServiceName(match[1]);
       context.group = "";
       context.sap = "";
+      const rawLines = collectClassicBlockLines(lines, index);
+      skipSubscriberBlockUntil = index + rawLines.length - 1;
       objects.push(makeServiceObject({
         type: "subscriber-interface",
         name: context.subscriber,
-        fields: { interface: context.interface, "subscriber-interface": context.subscriber },
-        rawLines: collectClassicBlockLines(lines, index),
+        fields: {
+          interface: context.interface,
+          ...collectClassicSubscriberInterfaceFields(rawLines, context.subscriber),
+        },
+        rawLines,
         index,
       }));
       return;
@@ -209,6 +572,7 @@ function parseClassicServiceObjects(lines) {
     match = text.match(/^sap\s+(\S+)/i);
     if (match) {
       context.sap = canonicalServiceName(match[1]);
+      if (isPlainInterfaceContext()) return;
       objects.push(makeServiceObject({
         type: "sap",
         name: context.sap,
@@ -226,6 +590,7 @@ function parseClassicServiceObjects(lines) {
 
     match = text.match(/^filter\s+ip\s+(.+)$/i);
     if (match && context.sap) {
+      if (isPlainInterfaceContext()) return;
       objects.push(makeServiceObject({
         type: "sap",
         name: context.sap,
@@ -243,6 +608,7 @@ function parseClassicServiceObjects(lines) {
 
     match = text.match(/^qos\s+(.+)$/i);
     if (match && context.sap) {
+      if (isPlainInterfaceContext()) return;
       objects.push(makeServiceObject({
         type: "sap",
         name: context.sap,
@@ -379,12 +745,33 @@ function mergeObjectsBySemanticIdentity(objects = []) {
           }
     );
     target.rawLines = mergeRawLines(target.rawLines, object.rawLines);
-    target.description ||= object.description;
-    target.ipAddress ||= object.ipAddress;
-    target.prefix ||= object.prefix;
-    target.nextHop = target.fields["next-hop"] || target.nextHop || object.nextHop;
-    target.peerIp ||= object.peerIp;
-    target.peerAs ||= object.peerAs;
+    applyDerivedObjectMetadata(target);
+  });
+
+  return mergeFinalizedObjectsBySemanticIdentity([...merged.values()].map(applyDerivedObjectMetadata));
+}
+
+function mergeFinalizedObjectsBySemanticIdentity(objects = []) {
+  const merged = new Map();
+
+  objects.forEach((object) => {
+    const key = `${object.normalizedType}:${object.normalizedIdentity}`;
+    if (!merged.has(key)) {
+      merged.set(key, { ...object, fields: { ...(object.fields || {}) }, rawLines: [...(object.rawLines || [])] });
+      return;
+    }
+
+    const target = merged.get(key);
+    target.fields = normalizeNokiaSemanticFields(
+      target.normalizedType === "static-route"
+        ? mergeStaticRouteFields(target.fields, object.fields)
+        : {
+            ...(target.fields || {}),
+            ...(object.fields || {}),
+          }
+    );
+    target.rawLines = mergeRawLines(target.rawLines, object.rawLines);
+    applyDerivedObjectMetadata(target);
   });
 
   return [...merged.values()];
@@ -641,6 +1028,17 @@ function applyFieldLine(current, text) {
     const state = normalizeState(text);
     current.fields.state = state;
     current.fields["admin-state"] = state;
+  }
+
+  match = text.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/i);
+  if (match && current.type === "interface") {
+    current.fields[`icmp.${match[1].toLowerCase()}`] = canonicalAdminState("disable");
+    return;
+  }
+
+  match = text.match(/^(mask-reply|redirects|ttl-expired|unreachables)$/i);
+  if (match && current.type === "interface") {
+    current.fields[`icmp.${match[1].toLowerCase()}`] = canonicalAdminState("enable");
   }
 }
 

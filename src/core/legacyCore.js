@@ -5388,7 +5388,7 @@ function renderProfileExceptionManager() {
       </div>
       ${exceptions.length ? `
         <div class="profile-exception-table">
-          <div>범위</div><div>설정</div><div>설정 항목</div><div>규칙/구분</div><div>사유</div><div>동작</div>
+          <div>범위</div><div>설정 종류</div><div>설정</div><div>설정 항목</div><div>규칙/구분</div><div>사유</div><div>동작</div>
           ${exceptions.map((exception) => renderProfileExceptionRow(exception)).join("")}
         </div>
       ` : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외 또는 비교 제외를 추가할 수 있음.</span></div>`}
@@ -5400,10 +5400,12 @@ function renderProfileExceptionRow(exception = {}) {
   const target = exception.target || {};
   const isExclusion = exception.type === "comparison-exclusion";
   const scopeLabel = exception.scope === "profile" ? "현재 프로파일" : isExclusion ? "이 설정" : "이 설정";
+  const settingType = exceptionSettingTypeLabel(exception);
   const objectLabel = target.displayName || [target.settingType || target.objectType, target.settingKey || target.objectKey || target.createdFromObjectKey].filter(Boolean).join(" ") || "-";
   const ruleLabel = [target.ruleId, target.matchStatus || target.category || target.findingType].filter(Boolean).join(" · ") || "-";
   return `
     <div>${escapeHtml(scopeLabel)}</div>
+    <div><strong>${escapeHtml(settingType)}</strong></div>
     <div>
       <strong>${escapeHtml(objectLabel)}</strong>
       <small>${escapeHtml(target.settingType || target.objectType || "-")} · ${escapeHtml(target.settingKey || target.objectKey || target.createdFromObjectKey || "-")}</small>
@@ -5415,6 +5417,18 @@ function renderProfileExceptionRow(exception = {}) {
       <button type="button" data-remove-exception="${escapeHtml(exception.id || "")}">${isExclusion ? "비교 제외 해제" : "예외 해제"}</button>
     </div>
   `;
+}
+
+function exceptionSettingTypeLabel(exception = {}) {
+  const target = exception.target || {};
+  const match = exception.match || {};
+  return target.settingType ||
+    target.objectType ||
+    match.settingType ||
+    match.objectType ||
+    exception.settingType ||
+    exception.objectType ||
+    "-";
 }
 
 function getEnabledProfileExceptions() {

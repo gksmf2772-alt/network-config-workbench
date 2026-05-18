@@ -3134,11 +3134,11 @@ function inferMdCliInterfaceLineField(normalized = "", objectType = "") {
     if (icmpField) return `icmp.${icmpField[1]}`;
     if (/\b(?:ipv4\s+primary\s+address|ipv4\s+address|address)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
     if (/\bdescription\b/.test(normalized)) return "description";
-    if (/\bsap\b/.test(normalized)) return "sap";
     if (/\bingress\s+filter\s+ip\b/.test(normalized)) return "ingress-filter";
     if (/\bingress\s+qos\b/.test(normalized)) return "ingress-qos";
     if (/\begress\s+filter\s+ip\b/.test(normalized)) return "egress-filter";
     if (/\begress\s+qos\b/.test(normalized)) return "egress-qos";
+    if (/\bsap\b/.test(normalized)) return "sap";
     if (/\badmin-state\b/.test(normalized)) return "state";
     return "";
   }
@@ -3351,6 +3351,17 @@ function inferValueForField(line, field) {
   if (field === "state") {
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
     if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (field === "sap") return stripTrailingSyntax(normalized.match(/\bsap\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "ingress-filter" || field === "egress-filter") {
+    return stripTrailingSyntax(normalized.match(/\bfilter\s+ip\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  }
+  if (field === "ingress-qos" || field === "egress-qos") {
+    return stripTrailingSyntax(
+      normalized.match(/\bpolicy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/\bqos\s+"?([^"\s{}]+)"?/)?.[1] ||
+      ""
+    );
   }
   return field ? extractFieldValue(normalized, field) : "";
 }
@@ -10453,6 +10464,8 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
   function pushRow({
     oldLine = "",
     newLine = "",
+    oldRawIndex = -1,
+    newRawIndex = -1,
     lineMatch = null,
     visualLineIndex = rows.length,
     reason = "object-raw-line-covered",
@@ -10476,7 +10489,7 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
           object: oldObject,
           item,
           objectIndex,
-          lineIndex: visualLineIndex,
+          lineIndex: oldRawIndex >= 0 ? oldRawIndex : visualLineIndex,
           objectStatusOverride: rowObjectStatus,
           lineMatch: {
             status: oldMatched ? "equal" : "covered",
@@ -10501,7 +10514,7 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
           object: newObject,
           item,
           objectIndex,
-          lineIndex: visualLineIndex,
+          lineIndex: newRawIndex >= 0 ? newRawIndex : visualLineIndex,
           objectStatusOverride: rowObjectStatus,
           lineMatch: {
             status: newMatched ? "equal" : "covered",
@@ -10547,6 +10560,8 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
       pushRow({
         oldLine: oldRawLines[oldIndex],
         newLine,
+        oldRawIndex: oldIndex,
+        newRawIndex: newIndex,
         lineMatch,
         reason: "semantic-line-match",
       });
@@ -10564,6 +10579,8 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
       pushRow({
         oldLine: oldRawLines[nextOldClosingIndex],
         newLine,
+        oldRawIndex: nextOldClosingIndex,
+        newRawIndex: newIndex,
         lineMatch: null,
         reason: "structural-closing-line-covered",
       });
@@ -10575,6 +10592,7 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
     pushRow({
       oldLine: "",
       newLine,
+      newRawIndex: newIndex,
       lineMatch: null,
       reason: "target-only-object-raw-line-covered",
     });
@@ -10595,6 +10613,8 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
       pushRow({
         oldLine,
         newLine: newRawLines[newIndex],
+        oldRawIndex: oldIndex,
+        newRawIndex: newIndex,
         lineMatch,
         reason: "semantic-line-match",
       });
@@ -10606,6 +10626,7 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
     pushRow({
       oldLine,
       newLine: "",
+      oldRawIndex: oldIndex,
       lineMatch: null,
       reason: "source-only-object-raw-line-covered",
     });
@@ -13358,15 +13379,20 @@ function diffLineTextAnchor(line, paneRect, preferredEdge) {
 
 function getVisibleSemanticTokenRect(line, paneRect, preferredEdge = "right") {
   const tokens = [...line.querySelectorAll(".diff-token-match[data-semantic-field]:not([data-semantic-field=''])")];
+  const preferredField = normalizeRelationField(line?.dataset?.semanticField || "");
   const visible = tokens
     .map((token) => ({ token, rect: token.getBoundingClientRect() }))
     .filter((item) => item.rect.right > paneRect.left && item.rect.left < paneRect.right);
   if (!visible.length) return null;
 
+  const fieldMatched = preferredField
+    ? visible.filter((item) => normalizeRelationField(item.token.dataset.semanticField || "") === preferredField)
+    : [];
+  const visiblePool = fieldMatched.length ? fieldMatched : visible;
   const candidates = preferredEdge === "right"
-    ? visible.filter((item) => item.token.dataset.tokenKind === "keyword")
-    : visible;
-  const pool = candidates.length ? candidates : visible;
+    ? visiblePool.filter((item) => item.token.dataset.tokenKind === "keyword")
+    : visiblePool;
+  const pool = candidates.length ? candidates : visiblePool;
   const item = preferredEdge === "left"
     ? pool.reduce((best, candidate) => (candidate.rect.left < best.rect.left ? candidate : best), pool[0])
     : pool.reduce((best, candidate) => (candidate.rect.right > best.rect.right ? candidate : best), pool[0]);
@@ -15095,6 +15121,23 @@ function buildLineSemanticHighlights(text, objectType, canonicalFields = {}, fie
 
 function buildForcedSemanticTokens(text, field) {
   const normalized = canonicalizeComparableLine(text);
+  if ((field === "ingress-filter" || field === "egress-filter") && /\bfilter\s+ip\s+"?([^"\s{}]+)"?/.test(normalized)) {
+    const match = normalized.match(/\bfilter\s+ip\s+"?([^"\s{}]+)"?/);
+    return [
+      { token: "filter", field, colorSeed: field, kind: "keyword" },
+      { token: "ip", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: tokenHighlightKind(match?.[1] || "") },
+    ];
+  }
+  if ((field === "ingress-qos" || field === "egress-qos") && /\bqos\b/.test(normalized)) {
+    const policy = normalized.match(/\bpolicy-name\s+"?([^"\s{}]+)"?/);
+    const classic = normalized.match(/^qos\s+"?([^"\s{}]+)"?/);
+    const value = stripTrailingSyntax(policy?.[1] || classic?.[1] || "");
+    return [
+      { token: "qos", field, colorSeed: field, kind: "keyword" },
+      ...(value ? [{ token: value, field, colorSeed: field, kind: tokenHighlightKind(value) }] : []),
+    ];
+  }
   if (field && field !== "state" && /\b(?:no\s+shutdown|shutdown|admin-state\s+\S+)\b/.test(normalized)) {
     const stateToken = normalized.match(/\bno\s+shutdown\b/)?.[0]
       || normalized.match(/\badmin-state\s+\S+\b/)?.[0]

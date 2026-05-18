@@ -275,6 +275,17 @@ test("legacy main compare parser keeps static route blocks as route-level object
   assert.match(source, /function getClassicLineScope\(rawLines = \[\], lineIndex = -1\)/);
   assert.match(source, /stateScope === "dhcp"\) return "dhcp\.admin-state"/);
   assert.match(source, /renderSemanticLineTokens\(line, objectType, fields, relationByField, field\)/);
+  assert.match(source, /lineIndex: oldRawIndex >= 0 \? oldRawIndex : visualLineIndex/);
+  assert.match(source, /lineIndex: newRawIndex >= 0 \? newRawIndex : visualLineIndex/);
+  assert.match(source, /preferredField = normalizeRelationField\(line\?\.dataset\?\.semanticField \|\| ""\)/);
+  assert.match(source, /field === "ingress-filter" \|\| field === "egress-filter"/);
+  const mdInterfaceFieldBody = source.slice(
+    source.indexOf("function inferMdCliInterfaceLineField"),
+    source.indexOf("function inferClassicInterfaceLineField")
+  );
+  const ingressFilterOrder = mdInterfaceFieldBody.indexOf("ingress\\s+filter\\s+ip");
+  const sapOrder = mdInterfaceFieldBody.indexOf("\\bsap\\b");
+  assert.ok(ingressFilterOrder >= 0 && sapOrder >= 0 && ingressFilterOrder < sapOrder);
   assert.match(source, /add\("metric", stripTrailingSyntax\(metric\[1\]\), "number"\);/);
   assert.match(source, /object-item-description/);
   assert.match(source, /data-review-description/);

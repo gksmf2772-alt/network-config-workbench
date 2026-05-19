@@ -12945,6 +12945,8 @@ function objectConnectorState(oldGroup = {}, newGroup = {}) {
   const score = Number(oldGroup.score || newGroup.score || 0);
 
   if (reason === "manual") return "manual";
+  if (status === "partial" || status === "changed") return "partial";
+  if (status === "ambiguous") return "candidate";
   if (status === "candidate") return "candidate";
   if (status === "old-only" || status === "new-only" || status === "unmatched") return "unmatched";
   if (oldGroup.state !== "equal" || newGroup.state !== "equal") return "changed";

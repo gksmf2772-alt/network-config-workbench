@@ -988,6 +988,28 @@ label {
   stroke: rgba(8, 145, 178, 0.44);
 }
 
+.diff-object-flow.matched {
+  fill: rgba(34, 197, 94, 0.08);
+}
+
+.diff-object-flow-glow.matched {
+  fill: rgba(34, 197, 94, 0.08);
+}
+
+.diff-object-flow.changed,
+.diff-object-flow.partial,
+.diff-object-flow.ambiguous,
+.diff-object-flow.candidate {
+  fill: rgba(245, 158, 11, 0.14);
+}
+
+.diff-object-flow-glow.changed,
+.diff-object-flow-glow.partial,
+.diff-object-flow-glow.ambiguous,
+.diff-object-flow-glow.candidate {
+  fill: rgba(245, 158, 11, 0.14);
+}
+
 .diff-object-flow.semantic-pair-hover,
 .diff-object-flow.semantic-pair-selected {
   opacity: 1;
@@ -6412,6 +6434,7 @@ textarea[id$="ConfigInput"],
 }
 
 .editor-grid.diff-connectors-active {
+  --status-review-bg: rgba(245, 158, 11, 0.14);
   gap: 0;
   grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
 }
@@ -6419,6 +6442,7 @@ textarea[id$="ConfigInput"],
 .editor-grid.diff-connectors-active .diff-gutter {
   display: block;
   min-width: 64px;
+  background: #f7fbff !important;
 }
 
 .editor-grid.diff-connectors-active .ncw-editor-card:first-child {
@@ -6446,7 +6470,7 @@ textarea[id$="ConfigInput"],
 }
 
 .semantic-object-block-wrapper.object-status-candidate {
-  background: rgba(249, 115, 22, 0.045) !important;
+  background: rgba(245, 158, 11, 0.14) !important;
   border-radius: 0 !important;
 }
 
@@ -6864,6 +6888,11 @@ body[data-field-highlight="off"] .semantic-diff-config-line {
 .diff-line.object-type-port.object-matched,
 .diff-line.object-type-lag.object-matched {
   background: rgba(8, 145, 178, 0.085) !important;
+}
+
+.semantic-object-block-wrapper.object-matched:not(.object-status-changed):not(.object-status-partial):not(.object-status-candidate):not(.object-status-ambiguous),
+.diff-line.object-matched:not(.object-status-changed):not(.object-status-partial):not(.object-status-candidate):not(.object-status-ambiguous) {
+  background: rgba(34, 197, 94, 0.08) !important;
 }
 
 .semantic-object-block-wrapper.object-status-changed,
@@ -7622,9 +7651,11 @@ body[data-field-highlight="off"] .semantic-diff-config-line {
 
 #compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-candidate,
 #compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-ambiguous,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-changed,
 #compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-partial,
 #compareTab.active .embedded-diff .diff-line.object-status-candidate,
 #compareTab.active .embedded-diff .diff-line.object-status-ambiguous,
+#compareTab.active .embedded-diff .diff-line.object-status-changed,
 #compareTab.active .embedded-diff .diff-line.object-status-partial {
   background: var(--status-review-bg) !important;
 }

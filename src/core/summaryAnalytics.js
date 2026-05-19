@@ -582,17 +582,52 @@ function hasSuppressedPolicyEvidence(item = {}) {
 
 function buildSuppressedReviewItem(item = {}) {
   const base = buildReviewBase(item, { includeIgnored: true });
+  const suppressionSources = suppressedPolicySources(item);
+  const exceptionSuppressed = suppressionSources.some((source) =>
+    ["profile-exception", "user-exception", "line-exception", "field-exception"].includes(source)
+  );
   return {
     ...base,
     side: item.newObject && !item.oldObject ? "new" : item.oldObject && !item.newObject ? "old" : "both",
     reason: item.suppressionReason === "comparison-exclusion"
       ? "비교 제외 규칙 적용"
-      : "예외 처리된 항목",
-    action: "예외 해제 또는 프로파일 확인",
+      : exceptionSuppressed ? "예외 처리된 항목" : "프로파일 정책으로 제외된 항목",
+    action: exceptionSuppressed ? "예외 해제 또는 프로파일 확인" : "프로파일 정책 확인",
     status: "ignored",
-    classification: "예외 처리됨",
+    classification: exceptionSuppressed ? "예외 처리됨" : "정책 제외됨",
     policyId: firstSuppressedPolicyId(item),
+    suppressionSources,
   };
+}
+
+function suppressedPolicySources(item = {}) {
+  const sources = new Set();
+  const addSource = (source) => {
+    const normalized = String(source || "").trim();
+    if (normalized) sources.add(normalized);
+  };
+
+  for (const summary of Object.values(item.fieldSummary || {})) {
+    if (summary?.ignored || summary?.suppressed || String(summary?.effectiveStatus || "").toLowerCase() === "ignored") {
+      addSource(summary.sourcePolicy || summary.policySource);
+      for (const hit of summary.policyHits || []) {
+        addSource(hit?.sourcePolicy || hit?.policySource || hit?.source);
+      }
+      if (!sources.size) addSource("field-policy");
+    }
+  }
+
+  for (const lineMatch of item.lineMatches || []) {
+    if (lineMatch?.ignored || lineMatch?.suppressed || String(lineMatch?.status || "").toLowerCase() === "ignored") {
+      addSource(lineMatch.sourcePolicy || lineMatch.policySource);
+      for (const hit of lineMatch.policyHits || []) {
+        addSource(hit?.sourcePolicy || hit?.policySource || hit?.source);
+      }
+      if (!sources.size) addSource("line-policy");
+    }
+  }
+
+  return [...sources];
 }
 
 function firstSuppressedPolicyId(item = {}) {

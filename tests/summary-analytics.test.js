@@ -204,6 +204,43 @@ test("profile exception changes common field analysis and type breakdown", () =>
   );
 });
 
+test("profile policy ignored field is not labelled as user exception", () => {
+  const review = buildReviewItems([{
+    id: "bgp-policy-ignore",
+    status: "matched",
+    objectType: "bgp",
+    score: 100,
+    oldObject: {
+      normalizedType: "bgp",
+      normalizedIdentity: "192.0.2.1",
+      fields: { neighbor: "192.0.2.1", "admin-state": "disable", "authentication-key": "old-secret" },
+    },
+    newObject: {
+      normalizedType: "bgp",
+      normalizedIdentity: "192.0.2.1",
+      fields: { neighbor: "192.0.2.1", "admin-state": "enable", "authentication-key": "new-secret" },
+    },
+    fieldSummary: {
+      neighbor: { field: "neighbor", status: "equal", oldValues: ["192.0.2.1"], newValues: ["192.0.2.1"] },
+      "admin-state": { field: "admin-state", status: "changed", oldValues: ["disable"], newValues: ["enable"] },
+      "authentication-key": {
+        field: "authentication-key",
+        status: "changed",
+        effectiveStatus: "ignored",
+        ignored: true,
+        oldValues: ["old-secret"],
+        newValues: ["new-secret"],
+      },
+    },
+  }]);
+
+  assert.equal(review.suppressed.length, 1);
+  assert.equal(review.abnormal.length, 1);
+  assert.equal(review.suppressed[0].reason, "프로파일 정책으로 제외된 항목");
+  assert.equal(review.suppressed[0].classification, "정책 제외됨");
+  assert.deepEqual(review.suppressed[0].suppressionSources, ["field-policy"]);
+});
+
 test("integrated report uses summary field analysis object", () => {
   const dashboard = buildSummaryDashboardData({
     report: { summary: {}, diffRows: [] },
@@ -240,6 +277,15 @@ test("integrated report rebuilds dashboard instead of reusing stale exception ca
 
   assert.match(body, /const dashboard = buildCurrentDashboardData\(report\);/);
   assert.doesNotMatch(body, /lastDashboardData\s*\|\|/);
+});
+
+test("integrated report table hides suppressed duplicate rows for active review objects", () => {
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(source, /const rows = buildReportReviewRows\(review\);/);
+  assert.match(source, /function buildReportReviewRows\(review = \{\}\)/);
+  assert.match(source, /const activeKeys = new Set\(/);
+  assert.match(source, /filter\(\(item\) => !activeKeys\.has\(reportReviewObjectDedupKey\(item\)\)\)/);
 });
 
 test("integrated report table exposes checkbox value filters", () => {

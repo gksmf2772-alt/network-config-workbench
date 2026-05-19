@@ -14112,16 +14112,7 @@ function renderCoverageDiagnostics(diagnostics = null) {
 }
 
 function renderReportReviewTable(review = {}) {
-  const rows = [
-    ...(review.unmatchedOld || []).map((item) => ({ ...item, group: "기존 설정에서만 있음" })),
-    ...(review.unmatchedNew || []).map((item) => ({ ...item, group: "신규 설정에서만 있음" })),
-    ...(review.excluded || []).map((item) => ({ ...item, group: "비교 제외됨" })),
-    ...(review.suppressed || []).map((item) => ({ ...item, group: "예외 처리됨" })),
-    ...(review.ambiguous || []).map((item) => ({ ...item, group: "매핑 후보 여러 개" })),
-    ...(review.lowConfidence || []).map((item) => ({ ...item, group: "낮은 신뢰도" })),
-    ...(review.abnormal || []).map((item) => ({ ...item, group: "검토 필요 값" })),
-    ...(review.relationshipChanges || []).map((item) => ({ ...item, group: "연결/참조 관계" })),
-  ];
+  const rows = buildReportReviewRows(review);
   const fieldColumns = getReportReviewFieldColumns(rows);
   const filterOptions = getReportReviewFilterOptions(rows, fieldColumns);
   const valueOptions = getReportReviewChecklistOptions(rows, fieldColumns);
@@ -14191,6 +14182,55 @@ function renderReportReviewTable(review = {}) {
       </div>
     </div>
   `;
+}
+
+function buildReportReviewRows(review = {}) {
+  const unmatchedOld = (review.unmatchedOld || []).map((item) => ({ ...item, group: "기존 설정에서만 있음" }));
+  const unmatchedNew = (review.unmatchedNew || []).map((item) => ({ ...item, group: "신규 설정에서만 있음" }));
+  const excluded = (review.excluded || []).map((item) => ({ ...item, group: "비교 제외됨" }));
+  const ambiguous = (review.ambiguous || []).map((item) => ({ ...item, group: "매핑 후보 여러 개" }));
+  const lowConfidence = (review.lowConfidence || []).map((item) => ({ ...item, group: "낮은 신뢰도" }));
+  const abnormal = (review.abnormal || []).map((item) => ({ ...item, group: "검토 필요 값" }));
+  const relationshipChanges = (review.relationshipChanges || []).map((item) => ({ ...item, group: "연결/참조 관계" }));
+  const activeKeys = new Set([
+    ...unmatchedOld,
+    ...unmatchedNew,
+    ...excluded,
+    ...ambiguous,
+    ...lowConfidence,
+    ...abnormal,
+    ...relationshipChanges,
+  ].map(reportReviewObjectDedupKey).filter(Boolean));
+  const suppressed = (review.suppressed || [])
+    .map((item) => ({ ...item, group: reportReviewSuppressedGroup(item) }))
+    .filter((item) => !activeKeys.has(reportReviewObjectDedupKey(item)));
+
+  return [
+    ...unmatchedOld,
+    ...unmatchedNew,
+    ...excluded,
+    ...suppressed,
+    ...ambiguous,
+    ...lowConfidence,
+    ...abnormal,
+    ...relationshipChanges,
+  ];
+}
+
+function reportReviewSuppressedGroup(item = {}) {
+  const sources = Array.isArray(item.suppressionSources) ? item.suppressionSources : [];
+  return sources.some((source) => ["profile-exception", "user-exception", "line-exception", "field-exception"].includes(source))
+    ? "예외 처리됨"
+    : "정책 제외됨";
+}
+
+function reportReviewObjectDedupKey(item = {}) {
+  const objectType = item.objectType || "";
+  const oldKey = item.oldKey || "";
+  const newKey = item.newKey || "";
+  const objectKey = item.objectKey || item.label || "";
+  if (!objectType && !oldKey && !newKey && !objectKey) return "";
+  return [objectType, oldKey, newKey, objectKey].join("|");
 }
 
 function renderReportReviewHeaderSearch(title = "", key = "", options = []) {

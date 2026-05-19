@@ -3106,7 +3106,12 @@ function inferSemanticFieldNameForLineContext(line, context = {}) {
     lineIndex,
   });
 
-  return scopedField || inferSemanticFieldName(line);
+  if (scopedField) return scopedField;
+  if (["interface", "subscriber-interface"].includes(canonicalizeComparableLine(objectType)) && isInterfaceScopeOnlyLine(line)) {
+    return "";
+  }
+
+  return inferSemanticFieldName(line);
 }
 
 function inferScopedInterfaceLineField(line, {
@@ -3120,7 +3125,10 @@ function inferScopedInterfaceLineField(line, {
   const normalized = canonicalizeComparableLine(line);
   if (!normalized) return "";
 
-  const mdField = inferMdCliInterfaceLineField(normalized, type);
+  const mdField = inferMdCliInterfaceLineField(normalized, type, {
+    rawLines,
+    lineIndex,
+  });
   if (mdField) return mdField;
 
   return inferClassicInterfaceLineField(normalized, {
@@ -3130,22 +3138,43 @@ function inferScopedInterfaceLineField(line, {
   });
 }
 
-function inferMdCliInterfaceLineField(normalized = "", objectType = "") {
-  if (!/^\/?configure\b/.test(normalized)) return "";
+function inferMdCliInterfaceLineField(normalized = "", objectType = "", {
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  const isConfigureLine = /^\/?configure\b/.test(normalized);
 
   if (objectType === "interface") {
-    const icmpField = normalized.match(/\bicmp\s+(mask-reply|redirects|ttl-expired|unreachables)\b/);
+    const scope = getMdCliBraceLineScope(rawLines, lineIndex);
+    const nearestScope = (...names) => {
+      for (let index = scope.length - 1; index >= 0; index -= 1) {
+        if (names.includes(scope[index])) return scope[index];
+      }
+      return "";
+    };
+    const currentIcmpScope = nearestScope("mask-reply", "redirects", "ttl-expired", "unreachables");
+    const icmpField =
+      normalized.match(/\bicmp\s+(mask-reply|redirects|ttl-expired|unreachables)\b/) ||
+      normalized.match(/^(mask-reply|redirects|ttl-expired|unreachables)\b/);
     if (icmpField) return `icmp.${icmpField[1]}`;
-    if (/\b(?:ipv4\s+primary\s+address|ipv4\s+address|address)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
+    if (/^admin-state\b/.test(normalized) && currentIcmpScope) return `icmp.${currentIcmpScope}`;
+    if (/\b(?:ipv4\s+primary\s+address|ipv4\s+address)\b/.test(normalized) || /^(?:address|prefix-length)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
     if (/\bdescription\b/.test(normalized)) return "description";
+    if (nearestScope("ingress") && (/\bfilter\s+ip\b/.test(normalized) || /^ip\b/.test(normalized))) return "ingress-filter";
+    if (nearestScope("egress") && (/\bfilter\s+ip\b/.test(normalized) || /^ip\b/.test(normalized))) return "egress-filter";
+    if (nearestScope("ingress") && (/\bpolicy-name\b/.test(normalized) || /\bingress\s+qos\b/.test(normalized))) return "ingress-qos";
+    if (nearestScope("egress") && (/\bpolicy-name\b/.test(normalized) || /\begress\s+qos\b/.test(normalized))) return "egress-qos";
     if (/\bingress\s+filter\s+ip\b/.test(normalized)) return "ingress-filter";
     if (/\bingress\s+qos\b/.test(normalized)) return "ingress-qos";
     if (/\begress\s+filter\s+ip\b/.test(normalized)) return "egress-filter";
     if (/\begress\s+qos\b/.test(normalized)) return "egress-qos";
     if (/\bsap\b/.test(normalized)) return "sap";
     if (/\badmin-state\b/.test(normalized)) return "state";
+    if (!isConfigureLine) return "";
     return "";
   }
+
+  if (!isConfigureLine) return "";
 
   if (/\bdhcp\s+admin-state\b/.test(normalized)) return "dhcp.admin-state";
   if (/\bsub-sla-mgmt\s+admin-state\b/.test(normalized)) return "sub-sla-mgmt.admin-state";
@@ -3184,6 +3213,39 @@ function inferMdCliInterfaceLineField(normalized = "", objectType = "") {
   if (/\badmin-state\b/.test(normalized)) return "state";
   if (/\bsubscriber-interface\b/.test(normalized)) return "subscriber-interface";
   return "";
+}
+
+function getMdCliBraceLineScope(rawLines = [], lineIndex = -1) {
+  if (!Array.isArray(rawLines) || lineIndex <= 0) return [];
+  const scope = [];
+
+  for (let index = 0; index < Math.min(lineIndex, rawLines.length); index += 1) {
+    updateMdCliBraceLineScope(scope, rawLines[index]);
+  }
+
+  return scope;
+}
+
+function updateMdCliBraceLineScope(scope, rawLine = "") {
+  const text = canonicalizeComparableLine(rawLine);
+  if (!text) return;
+
+  const openCount = (text.match(/\{/g) || []).length;
+  if (openCount) {
+    const match = text.match(/^([a-z0-9-]+)(?:\s+[^{}]+)?\s*\{/);
+    const name = match?.[1] || "";
+    if (name) scope.push(name);
+  }
+
+  const closeCount = (text.match(/\}/g) || []).length;
+  for (let count = 0; count < closeCount; count += 1) {
+    scope.pop();
+  }
+}
+
+function isInterfaceScopeOnlyLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return /^(?:ipv4|ipv6|icmp|primary|ingress|egress|filter|qos|sap-egress|sap-ingress)\s*\{?$/.test(normalized);
 }
 
 function inferClassicInterfaceLineField(normalized = "", {
@@ -3322,7 +3384,7 @@ function inferSemanticFieldName(line) {
   if (/\b(?:next-hop|gateway)\b/.test(normalized)) return "next-hop";
   const icmpField = normalized.match(/\b(?:icmp\s+)?(mask-reply|redirects|ttl-expired|unreachables)\b/);
   if (icmpField) return `icmp.${icmpField[1]}`;
-  if (/^(?:ip\s+address|address|ipv4|ipv6)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
+  if (/^(?:ip\s+address|address)\b/.test(normalized) || /^ipv[46]\s+(?:primary\s+)?address\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
   if (/\btag\b/.test(normalized)) return "tag";
   if (/\bno\s+shutdown\b|\badmin-state\b/.test(normalized)) return "state";
   if (/\bdescription\b/.test(normalized)) return "description";
@@ -4232,6 +4294,8 @@ function runCompare() {
     }
 
     selectors.compareStatus.textContent = "비교 중";
+    state.lastSemanticPlan = [];
+    state.lastSemanticSummary = null;
 
     const options = getOptions();
 
@@ -4550,6 +4614,7 @@ function renderSemanticPreview() {
   if (state.lastReport) {
     renderSummaryCards(state.lastReport, state.lastSemanticSummary);
     renderOverviewReport(state.lastReport);
+    renderReportPolicyList(state.lastReport);
   } else {
     state.exceptionTargets = new Map();
   }
@@ -8035,6 +8100,14 @@ function extractValueByTokenSelector(line, field, selector) {
 function extractFallbackCanonicalFields(object, profile = state.profileDraft) {
   const lines = object.lines.map((line) => prepareSemanticSourceLine(line, profile?.normalize)).filter(Boolean);
   const fields = {};
+  if (["port", "lag", "bgp", "pim"].includes(object.type)) {
+    [...(object.rawLines || []), ...(object.lines || [])].forEach((line) => {
+      Object.entries(extractFieldsFromLine(line, profile, object.type)).forEach(([field, value]) => {
+        if (fields[field] !== undefined) return;
+        if (value !== undefined && value !== "") fields[field] = value;
+      });
+    });
+  }
   if (object.type === "static-route") {
     fields.route = findStaticRoutePrefix(lines) || normalizeSemanticValue(object.name, profile?.normalize);
     Object.assign(
@@ -8970,7 +9043,7 @@ function sortComparableLines(lines) {
 function compareObjects(oldObjects, newObjects, options) {
   const oldMap = buildObjectMap(oldObjects);
   const newMap = buildObjectMap(newObjects);
-  alignLagObjectMapsByDescription(oldMap, newMap);
+  alignObjectMapsByDescriptionEndpoint(oldMap, newMap, ["lag", "port", "interface"]);
   const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])].sort(compareObjectKeys);
   const items = [];
 
@@ -9021,21 +9094,25 @@ function compareObjects(oldObjects, newObjects, options) {
   };
 }
 
-function alignLagObjectMapsByDescription(oldMap, newMap) {
-  const oldLags = [...oldMap.entries()].filter(([, object]) => isLagObject(object));
-  const newLags = [...newMap.entries()].filter(([, object]) => isLagObject(object));
+function alignObjectMapsByDescriptionEndpoint(oldMap, newMap, objectTypes = []) {
+  const targetTypes = new Set(objectTypes.map(canonicalizeComparableLine).filter(Boolean));
+  const oldObjects = [...oldMap.entries()].filter(([, object]) => isEndpointAlignedObject(object, targetTypes));
+  const newObjects = [...newMap.entries()].filter(([, object]) => isEndpointAlignedObject(object, targetTypes));
   const usedNewKeys = new Set();
 
-  oldLags.forEach(([oldKey, oldObject]) => {
+  oldObjects.forEach(([oldKey, oldObject]) => {
     if (newMap.has(oldKey)) return;
 
-    const oldEndpoint = lagDescriptionEndpoint(oldObject);
-    if (!oldEndpoint) return;
+    const objectType = canonicalizeComparableLine(oldObject.type || oldObject.normalizedType || oldObject.sourceType || "");
+    const oldEndpoints = new Set(objectDescriptionEndpoints(oldObject));
+    if (!oldEndpoints.size) return;
 
-    const candidates = newLags.filter(([newKey, newObject]) => {
+    const candidates = newObjects.filter(([newKey, newObject]) => {
       if (usedNewKeys.has(newKey)) return false;
       if (!newMap.has(newKey)) return false;
-      return lagDescriptionEndpoint(newObject) === oldEndpoint;
+      const newType = canonicalizeComparableLine(newObject.type || newObject.normalizedType || newObject.sourceType || "");
+      if (newType !== objectType) return false;
+      return objectDescriptionEndpoints(newObject).some((endpoint) => oldEndpoints.has(endpoint));
     });
 
     if (candidates.length !== 1) return;
@@ -9048,17 +9125,18 @@ function alignLagObjectMapsByDescription(oldMap, newMap) {
       ...newObject,
       key: oldKey,
       originalKey: newObject.key || newKey,
-      lagDescriptionMappedFrom: newKey,
+      descriptionEndpointMappedFrom: newKey,
     });
     usedNewKeys.add(newKey);
   });
 }
 
-function isLagObject(object = {}) {
-  return canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "") === "lag";
+function isEndpointAlignedObject(object = {}, targetTypes = new Set()) {
+  const objectType = canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "");
+  return targetTypes.has(objectType);
 }
 
-function lagDescriptionEndpoint(object = {}) {
+function objectDescriptionEndpoints(object = {}) {
   const description =
     [...(object.rawLines || []), ...(object.lines || [])]
       .map(extractDescriptionValue)
@@ -9068,16 +9146,25 @@ function lagDescriptionEndpoint(object = {}) {
     object.description ||
     "";
 
-  return descriptionEndpointCandidates(description)[0] || "";
+  return descriptionEndpointCandidates(description);
 }
 
 function descriptionEndpointCandidates(description = "") {
-  return String(description || "")
+  const segments = String(description || "")
     .replace(/^["']|["']$/g, "")
     .replace(/^#+|#+$/g, "")
     .split(/[,;]+/)
+    .flatMap((segment) => {
+      const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
+      return [
+        cleanSegment,
+        ...cleanSegment.split(/\s+/),
+      ];
+    });
+
+  return [...new Set(segments
     .map((segment) => normalizeDescriptionEndpoint(segment))
-    .filter(isLikelyDescriptionEndpoint);
+    .filter(isLikelyDescriptionEndpoint))];
 }
 
 function normalizeDescriptionEndpoint(value = "") {
@@ -9103,9 +9190,7 @@ function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
   keys.forEach((key, objectIndex) => {
     const oldObject = oldMap.get(key) || null;
     const newObject = newMap.get(key) || null;
-    const objectStatus = oldObject && newObject
-      ? "matched"
-      : (oldObject ? "old-only" : "new-only");
+    const objectStatus = pairedObjectStatus(oldObject, newObject);
     const objectMatched = Boolean(oldObject && newObject);
 
     const oldLines = getObjectDisplayLines(oldObject);
@@ -9136,6 +9221,22 @@ function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
   });
 
   return rows;
+}
+
+function pairedObjectStatus(oldObject = null, newObject = null) {
+  if (oldObject && newObject) {
+    return hasPairedObjectDifference(oldObject, newObject) ? "changed" : "matched";
+  }
+  return oldObject ? "old-only" : "new-only";
+}
+
+function hasPairedObjectDifference(oldObject = null, newObject = null) {
+  if (!oldObject || !newObject) return false;
+  if (compareCanonicalObjects(oldObject, newObject, state.profileDraft || {}).length) return true;
+  if (!hasCanonicalCompareSurface(oldObject, newObject)) {
+    return hasUnexplainedObjectDifference(oldObject, newObject, []);
+  }
+  return false;
 }
 
 function getObjectDisplayLines(object) {
@@ -10133,6 +10234,8 @@ function semanticRenderStatusForSide(item = {}, object = null, side = "") {
     if (side === "new" && item.oldObject) return "old-only";
     return item.status || "unmatched";
   }
+  const visualStatus = getSemanticDiffBlockState(item);
+  if (["partial", "ambiguous", "manual"].includes(visualStatus)) return visualStatus;
   return item.status || "";
 }
 
@@ -10141,6 +10244,8 @@ function isSemanticItemFullyMatched(item = {}) {
 }
 
 function semanticBlockState(item = {}, side = "") {
+  const visualStatus = getSemanticDiffBlockState(item);
+  if (visualStatus === "partial" || visualStatus === "ambiguous") return "changed";
   if (item.status === "matched" || item.status === "candidate") return "equal";
   if (item.status === "old-only") return side === "old" ? "missing" : "placeholder";
   if (item.status === "new-only") return side === "new" ? "added" : "placeholder";
@@ -10466,7 +10571,7 @@ function semanticLineDepth(line = "") {
 
 function isSemanticStructuralLine(line = "") {
   const text = String(line || "").trim();
-  return text === "exit" || text === "}" || text === "{";
+  return text === "exit" || text === "}" || text === "{" || isInterfaceScopeOnlyLine(text);
 }
 
 function renderHighlightedLine(line = "", highlights = [], relationByField = new Map()) {
@@ -13301,6 +13406,14 @@ function inferRelationFieldsFromRenderedLine(line) {
     line?.dataset?.objectType ||
     splitObjectKey(line?.dataset?.objectKey || line?.dataset?.semanticPairKey || "").type ||
     "";
+  if (objectType === "interface") {
+    if (isInterfaceScopeOnlyLine(text)) return [];
+    const datasetField = normalizeRelationField(line?.dataset?.semanticField || "");
+    const interfaceField = normalizeRelationField(inferScopedInterfaceLineField(text, { objectType }));
+    if (interfaceField) return [interfaceField];
+    if (datasetField) return [datasetField];
+    return [];
+  }
   if (objectType === "lag" || /\blag\s+"?[^"\s{}]+/.test(text) || /^lacp\b|^adapt-qos\b|^port\s+[\w./:-]+/.test(text)) {
     const lagFields = inferLagLineFields(text);
     if (lagFields.length) return lagFields;
@@ -13761,11 +13874,88 @@ function findLastNonWhitespaceTextNode(element) {
 function renderReportV2(report) {
   renderSummaryCards(report);
 
-  selectors.reportList.innerHTML = renderGroupedReportItems(report.visibleItems);
+  renderReportPolicyList(report);
 
   renderObjectNavigator(false);
   renderOverviewReport(report);
   bindDiffObjectNavigation();
+}
+
+function renderReportPolicyList(report) {
+  if (!selectors.reportList || !report) return;
+  const semanticItems = filterItems(
+    buildSemanticPolicyReportItems(state.lastSemanticPlan || []),
+    getOptions()
+  );
+  const legacyItems = filterLegacyPolicyReportItems(report.visibleItems || [], semanticItems);
+  selectors.reportList.innerHTML = renderGroupedReportItems([
+    ...legacyItems,
+    ...semanticItems,
+  ]);
+}
+
+function filterLegacyPolicyReportItems(legacyItems = [], semanticItems = []) {
+  if (!semanticItems.length) return legacyItems;
+  const semanticKeys = new Set(semanticItems.map((item) => item.objectKey).filter(Boolean));
+  const semanticLabels = new Set(semanticItems.map((item) => `${item.objectType}:${item.objectName}`).filter(Boolean));
+  return legacyItems.filter((item) => {
+    if (item.type !== "changed") return true;
+    const itemKey = item.objectKey || `${item.objectType}:${item.objectName}`;
+    const itemLabel = `${item.objectType}:${item.objectName}`;
+    return !semanticKeys.has(itemKey) && !semanticLabels.has(itemLabel);
+  });
+}
+
+function buildSemanticPolicyReportItems(plan = []) {
+  return (plan || [])
+    .filter((item) => !item.comparisonExcluded && !item.policySuppressed && Number(item.policyViolationCount || 0) > 0)
+    .map((item) => {
+      const object = item.oldObject || item.newObject || {};
+      const objectType = item.objectType || object.normalizedType || object.type || "object";
+      const oldIdentity = semanticObjectIdentity(item.oldObject);
+      const newIdentity = semanticObjectIdentity(item.newObject);
+      const objectName = oldIdentity && newIdentity && oldIdentity !== newIdentity
+        ? `${oldIdentity} -> ${newIdentity}`
+        : (oldIdentity || newIdentity || "-");
+      const objectKey = item.oldObject
+        ? `${objectType}:${oldIdentity || objectName}`
+        : `${objectType}:${newIdentity || objectName}`;
+      const violations = Array.isArray(item.policyViolations) ? item.policyViolations : [];
+
+      return {
+        type: "changed",
+        key: `semantic-policy:${item.id || objectKey}`,
+        objectKey,
+        objectType,
+        objectName,
+        oldLine: semanticObjectLineRange(item.oldObject),
+        newLine: semanticObjectLineRange(item.newObject),
+        message: `의미 기반 비교 위반 ${violations.length}건`,
+        details: violations.map((violation) => ({
+          kind: "field-changed",
+          field: violation.field || "-",
+          rule: violation.reason || "field-changed",
+          oldText: semanticPolicyValueText(violation.field, violation.oldValues),
+          newText: semanticPolicyValueText(violation.field, violation.newValues),
+        })),
+      };
+    });
+}
+
+function semanticObjectIdentity(object = null) {
+  if (!object) return "";
+  return String(object.normalizedIdentity || object.identity || object.sourceName || object.name || object.id || "").trim();
+}
+
+function semanticObjectLineRange(object = null) {
+  const rawLines = Array.isArray(object?.rawLines) ? object.rawLines : [];
+  return rawLines.length ? `1-${rawLines.length}` : "-";
+}
+
+function semanticPolicyValueText(field = "", values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  const value = list.map((entry) => String(entry ?? "").trim()).filter(Boolean).join(", ");
+  return value ? `${field || "-"} ${value}` : "-";
 }
 
 function renderGroupedReportItems(items = []) {
@@ -15202,8 +15392,9 @@ function renderDiffLine(row, state, counterpart, pairIndex, side) {
     classes.push(
       "object-matched",
       getSemanticStateClass({
-        status: "matched",
+        status: row?.objectStatus || "matched",
         reason: row.semanticReason || "",
+        score: row?.objectScore || null,
       })
     );
   }

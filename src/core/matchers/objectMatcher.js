@@ -48,11 +48,20 @@ function descriptionEndpointCandidates(description = "") {
     .replace(/^["']|["']$/g, "")
     .replace(/^#+|#+$/g, "");
 
-  return cleanDescription
+  const segments = cleanDescription
     .split(/[,;]+/)
+    .flatMap((segment) => {
+      const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
+      return [
+        cleanSegment,
+        ...cleanSegment.split(/\s+/),
+      ];
+    });
+
+  return [...new Set(segments
     .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
     .filter(isLikelyDescriptionEndpoint)
-    .map(normalizeDescriptionEndpoint);
+    .map(normalizeDescriptionEndpoint))];
 }
 
 function sharedDescriptionEndpoint(oldDescription = "", newDescription = "") {

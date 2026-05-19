@@ -237,6 +237,101 @@ function extractAddress(lines) {
   };
 }
 
+function latestScope(stack = [], names = []) {
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    if (names.includes(stack[index])) return stack[index];
+  }
+  return "";
+}
+
+function updateMdCliInterfaceBlockScope(stack, text = "") {
+  const openCount = (text.match(/\{/g) || []).length;
+  if (openCount) {
+    const match = text.match(/^([a-z0-9-]+)(?:\s+"?[^"\s{}]+"?)?\s*\{/i);
+    const scope = match?.[1]?.toLowerCase() || "";
+    if (scope) stack.push(scope);
+  }
+
+  const closeCount = (text.match(/\}/g) || []).length;
+  for (let count = 0; count < closeCount; count += 1) {
+    stack.pop();
+  }
+}
+
+function extractMdCliInterfaceBlockFields(lines = [], interfaceName = "") {
+  const fields = { interface: interfaceName };
+  const description = extractDescription(lines);
+  const addressInfo = extractAddress(lines);
+  const stack = [];
+
+  if (description) fields.description = description;
+
+  if (addressInfo?.prefix) {
+    fields.address = addressInfo.prefix;
+    fields.ipAddress = addressInfo.ipAddress;
+    fields.prefix = addressInfo.prefix;
+  }
+
+  lines.forEach((line) => {
+    const text = line.trim();
+    if (!text) return;
+
+    const nestedIcmp = text.match(/^(redirects|ttl-expired|unreachables)\s*\{\s*admin-state\s+(enable|disable|enabled|disabled|true|false)/i);
+    if (nestedIcmp) {
+      fields[`icmp.${nestedIcmp[1].toLowerCase()}`] = normalizeIcmpState(nestedIcmp[2]);
+      updateMdCliInterfaceBlockScope(stack, text);
+      return;
+    }
+
+    const sap = text.match(/^sap\s+"?([^"\s{]+)"?\s*\{/i);
+    if (sap) {
+      setField(fields, "sap", sap[1]);
+      updateMdCliInterfaceBlockScope(stack, text);
+      return;
+    }
+
+    const adminState = text.match(/^admin-state\s+(enable|disable|enabled|disabled)$/i);
+    if (adminState) {
+      const icmpOption = latestScope(stack, ["redirects", "ttl-expired", "unreachables"]);
+      if (icmpOption) {
+        fields[`icmp.${icmpOption}`] = normalizeIcmpState(adminState[1]);
+      } else {
+        fields.state = normalizeState(adminState[1]);
+        fields["admin-state"] = normalizeState(adminState[1]);
+      }
+      updateMdCliInterfaceBlockScope(stack, text);
+      return;
+    }
+
+    const maskReply = text.match(/^mask-reply\s+(true|false|enable|disable|enabled|disabled)$/i);
+    if (maskReply) {
+      fields["icmp.mask-reply"] = normalizeIcmpState(maskReply[1]);
+      updateMdCliInterfaceBlockScope(stack, text);
+      return;
+    }
+
+    const filterIp = text.match(/^ip\s+"?([^"\s{}]+)"?/i) || text.match(/^filter\s+ip\s+"?([^"\s{}]+)"?/i);
+    if (filterIp && stack.includes("sap") && stack.includes("filter")) {
+      if (stack.includes("ingress")) setField(fields, "ingress.filter.ip", filterIp[1]);
+      if (stack.includes("egress")) setField(fields, "egress.filter.ip", filterIp[1]);
+      updateMdCliInterfaceBlockScope(stack, text);
+      return;
+    }
+
+    const policyName = text.match(/^policy-name\s+"?([^"\s{}]+)"?/i);
+    if (policyName && stack.includes("sap")) {
+      if (stack.includes("ingress")) setField(fields, "ingress.qos.sap-ingress.policy-name", policyName[1]);
+      if (stack.includes("egress")) setField(fields, "egress.qos.sap-egress.policy-name", policyName[1]);
+      updateMdCliInterfaceBlockScope(stack, text);
+      return;
+    }
+
+    updateMdCliInterfaceBlockScope(stack, text);
+  });
+
+  return normalizeNokiaSemanticFields(fields);
+}
+
 function isTopLevelMdLine(line) {
   const trimmed = line.trim();
   if (!trimmed) return false;
@@ -248,7 +343,8 @@ function collectBraceBlocks(lines, startRegex) {
   let current = null;
   let depth = 0;
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const trimmed = line.trim();
 
     if (!current && startRegex.test(trimmed)) {
@@ -257,6 +353,8 @@ function collectBraceBlocks(lines, startRegex) {
       current = {
         name: stripQuotes(match?.[1] || ""),
         lines: [line],
+        startIndex: index,
+        startIndent: line.match(/^\s*/)?.[0]?.length || 0,
       };
 
       depth += (line.match(/\{/g) || []).length;
@@ -290,6 +388,34 @@ function collectBraceBlocks(lines, startRegex) {
   return blocks;
 }
 
+function updateMdCliBraceScope(stack, rawLine = "") {
+  const text = String(rawLine || "").trim();
+  if (!text) return;
+
+  const openCount = (text.match(/\{/g) || []).length;
+  if (openCount) {
+    const match = text.match(/^([a-z0-9-]+)(?:\s+"?[^"\s{}]+"?)?\s*\{/i);
+    const scope = match?.[1]?.toLowerCase() || "";
+    if (scope) stack.push(scope);
+  }
+
+  const closeCount = (text.match(/\}/g) || []).length;
+  for (let count = 0; count < closeCount; count += 1) {
+    stack.pop();
+  }
+}
+
+function isMdCliLineInsideScope(lines = [], lineIndex = -1, scopeName = "") {
+  const stack = [];
+  const targetScope = String(scopeName || "").toLowerCase();
+
+  for (let index = 0; index < lineIndex; index += 1) {
+    updateMdCliBraceScope(stack, lines[index]);
+  }
+
+  return stack.includes(targetScope);
+}
+
 function findMdCliBlockLines(lines = [], startIndex = 0) {
   const first = lines[startIndex];
   if (first == null) return [];
@@ -314,7 +440,8 @@ function findMdCliBlockLines(lines = [], startIndex = 0) {
 }
 
 function parseMdCliPorts(lines) {
-  const blocks = collectBraceBlocks(lines, /^port\s+"?([^"\s{]+)"?\s*\{/i);
+  const blocks = collectBraceBlocks(lines, /^port\s+"?([^"\s{]+)"?\s*\{/i)
+    .filter((block) => !isMdCliLineInsideScope(lines, block.startIndex, "lag"));
 
   return blocks.map((block, index) => {
     const description = extractDescription(block.lines);
@@ -340,18 +467,79 @@ function parseMdCliPorts(lines) {
   });
 }
 
+function extractMdCliLagBlockFields(lines = [], lagName = "") {
+  const fields = { lag: lagName };
+  const description = extractDescription(lines);
+  const members = [];
+  const stack = [];
+
+  if (description) fields.description = description;
+
+  lines.forEach((line) => {
+    const text = line.trim();
+    if (!text) return;
+
+    let match = text.match(/^admin-state\s+(enable|disable|enabled|disabled)$/i);
+    if (match) {
+      fields.state = normalizeState(match[1]);
+      fields["admin-state"] = normalizeState(match[1]);
+      updateMdCliBraceScope(stack, text);
+      return;
+    }
+
+    match = text.match(/^port\s+"?([^"\s{]+)"?/i);
+    if (match) {
+      const member = stripQuotes(match[1]);
+      if (member && !members.includes(member)) members.push(member);
+      updateMdCliBraceScope(stack, text);
+      return;
+    }
+
+    match = text.match(/^lacp-xmit-interval\s+(\S+)/i);
+    if (match) {
+      fields["lacp-xmit-interval"] = stripQuotes(match[1]);
+      updateMdCliBraceScope(stack, text);
+      return;
+    }
+
+    match = text.match(/^administrative-key\s+(\S+)/i);
+    if (match && stack.includes("lacp")) {
+      fields["lacp.administrative-key"] = stripQuotes(match[1]);
+      updateMdCliBraceScope(stack, text);
+      return;
+    }
+
+    match = text.match(/^mode\s+(\S+)/i);
+    if (match) {
+      const value = stripQuotes(match[1]);
+      if (stack.includes("adapt-qos")) {
+        fields["access.adapt-qos.mode"] = value;
+      } else if (stack.includes("lacp")) {
+        fields.lacpMode = value;
+        fields["lacp-mode"] = value;
+      } else {
+        fields.mode = value;
+      }
+      updateMdCliBraceScope(stack, text);
+      return;
+    }
+
+    updateMdCliBraceScope(stack, text);
+  });
+
+  if (members.length) {
+    fields.members = members;
+    fields["member-port"] = members.join(", ");
+  }
+
+  return normalizeNokiaSemanticFields(fields);
+}
+
 function parseMdCliLags(lines) {
   const blocks = collectBraceBlocks(lines, /^lag\s+"?([^"\s{]+)"?\s*\{/i);
 
   return blocks.map((block, index) => {
-    const description = extractDescription(block.lines);
-    const members = block.lines
-      .map((line) => line.trim())
-      .map((line) =>
-        line.match(/^port\s+"?([^"\s]+)"?/i)
-      )
-      .filter(Boolean)
-      .map((match) => match[1]);
+    const fields = extractMdCliLagBlockFields(block.lines, block.name);
 
     const identity = block.name;
 
@@ -363,14 +551,10 @@ function parseMdCliLags(lines) {
       normalizedType: "lag",
       normalizedIdentity: identity,
       rawLines: block.lines,
-      fields: {
-        lag: block.name,
-        description,
-        members,
-      },
+      fields,
     });
 
-    object.description = description;
+    object.description = fields.description || null;
 
     return object;
   });
@@ -387,16 +571,15 @@ function parseMdCliInterfaces(lines) {
 
   return blocks
     .map((block, index) => {
-      const description = extractDescription(block.lines);
-      const addressInfo = extractAddress(block.lines);
+      const fields = extractMdCliInterfaceBlockFields(block.lines, block.name);
 
       // L3 address가 없는 interface wrapper는 semantic interface 객체로 만들지 않는다.
       // 예: interface "ge-0/0/0" { ... } 는 port/physical wrapper 성격이므로 제외
-      if (!addressInfo?.prefix) {
+      if (!fields.address) {
         return null;
       }
 
-      const identity = addressInfo.prefix;
+      const identity = fields.address;
 
       const object = createNormalizedObject({
         id: `nokia-md-interface-${index}-${block.name}`,
@@ -406,18 +589,12 @@ function parseMdCliInterfaces(lines) {
         normalizedType: "interface",
         normalizedIdentity: identity,
         rawLines: block.lines,
-        fields: {
-          interface: block.name,
-          description,
-          address: addressInfo.prefix,
-          ipAddress: addressInfo.ipAddress,
-          prefix: addressInfo.prefix,
-        },
+        fields,
       });
 
-      object.description = description;
-      object.ipAddress = addressInfo.ipAddress;
-      object.prefix = addressInfo.prefix;
+      object.description = fields.description || null;
+      object.ipAddress = fields.ipAddress || ipAddressFromPrefix(fields.address);
+      object.prefix = fields.prefix || fields.address;
 
       return object;
     })
@@ -696,11 +873,16 @@ function createMdServiceObject({ type, name, fields, rawLines, index }) {
 
 function parseMdCliServiceObjects(lines) {
   const objects = [];
-  const context = { interface: "", subscriber: "", group: "", sap: "" };
+  const context = { interface: "", subscriber: "", group: "", sap: "", interfaceAddressBlock: false };
   const stack = [];
   let pendingDefaultHost = null;
   let pendingStaticHost = null;
-  const isPlainInterfaceContext = () => Boolean(context.interface && !context.subscriber && !context.group);
+  const isPlainInterfaceContext = () => Boolean(
+    context.interface &&
+    !context.subscriber &&
+    !context.group &&
+    !context.interfaceAddressBlock
+  );
 
   lines.forEach((raw, index) => {
     const text = raw.trim();
@@ -725,6 +907,7 @@ function parseMdCliServiceObjects(lines) {
           context.subscriber = "";
           context.group = "";
           context.sap = "";
+          context.interfaceAddressBlock = false;
         }
         if (scope === "default-host") pendingDefaultHost = null;
         if (scope === "static-host") pendingStaticHost = null;
@@ -734,13 +917,16 @@ function parseMdCliServiceObjects(lines) {
 
     let match = text.match(/^interface\s+"?([^"\s{]+)"?\s*\{/i);
     if (match) {
+      const rawLines = findMdCliBlockLines(lines, index);
       context.interface = canonicalInterfaceName(match[1]);
+      context.interfaceAddressBlock = Boolean(extractAddress(rawLines)?.prefix);
       stack.push("interface");
+      if (context.interfaceAddressBlock) return;
       objects.push(createMdServiceObject({
         type: "interface",
         name: context.interface,
         fields: { interface: context.interface },
-        rawLines: findMdCliBlockLines(lines, index),
+        rawLines,
         index,
       }));
       return;
@@ -785,6 +971,7 @@ function parseMdCliServiceObjects(lines) {
     if (match) {
       context.sap = canonicalServiceName(match[1]);
       stack.push("sap");
+      if (context.interfaceAddressBlock && !context.subscriber && !context.group) return;
       if (isPlainInterfaceContext()) {
         objects.push(createMdServiceObject({
           type: "interface",
@@ -815,6 +1002,7 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^ip\s+"?([^"\s{]+)"?/i);
     if (match && stack.includes("filter") && stack.includes("ingress") && context.sap) {
+      if (context.interfaceAddressBlock && !context.subscriber && !context.group) return;
       if (isPlainInterfaceContext()) {
         objects.push(createMdServiceObject({
           type: "interface",
@@ -846,6 +1034,7 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^policy-name\s+"?([^"\s{]+)"?/i);
     if (match && stack.includes("sap-egress") && context.sap) {
+      if (context.interfaceAddressBlock && !context.subscriber && !context.group) return;
       if (isPlainInterfaceContext()) {
         objects.push(createMdServiceObject({
           type: "interface",

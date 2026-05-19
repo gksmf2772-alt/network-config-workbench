@@ -84,6 +84,9 @@ export function getSemanticMatchState({ status = "", reason = "", score = null }
   const normalizedReason = String(reason || "").toLowerCase();
 
   if (normalizedReason === "manual") return SEMANTIC_MATCH_STATES.MANUAL;
+  if (normalizedStatus === "partial" || normalizedStatus === "changed") {
+    return SEMANTIC_MATCH_STATES.PARTIAL;
+  }
   if (normalizedStatus === "candidate" || normalizedReason.includes("ambiguous")) {
     return SEMANTIC_MATCH_STATES.AMBIGUOUS;
   }
@@ -117,7 +120,14 @@ export function getSemanticDiffBlockState(input = {}) {
     return SEMANTIC_MATCH_STATES.SUPPRESSED;
   }
   if (normalizedReason === "manual") return SEMANTIC_MATCH_STATES.MANUAL;
-  if (normalizedStatus === "matched" || normalizedStatus === "candidate") return SEMANTIC_MATCH_STATES.MATCHED;
+  if (normalizedStatus === "partial" || normalizedStatus === "changed") {
+    return SEMANTIC_MATCH_STATES.PARTIAL;
+  }
+  if (normalizedStatus === "matched" || normalizedStatus === "candidate") {
+    return hasActiveSemanticDifference(input)
+      ? SEMANTIC_MATCH_STATES.PARTIAL
+      : SEMANTIC_MATCH_STATES.MATCHED;
+  }
   if (normalizedReason.includes("ambiguous")) return SEMANTIC_MATCH_STATES.AMBIGUOUS;
   if ([
     "old-only",
@@ -135,6 +145,34 @@ export function getSemanticDiffBlockState(input = {}) {
     return SEMANTIC_MATCH_STATES.UNMATCHED;
   }
   return SEMANTIC_MATCH_STATES.PARTIAL;
+}
+
+function hasActiveSemanticDifference(input = {}) {
+  const policyViolations = Array.isArray(input?.policyViolations)
+    ? input.policyViolations.filter((violation) => !violation?.ignored && !violation?.suppressed)
+    : [];
+  const policyViolationCount = Array.isArray(input?.policyViolations)
+    ? policyViolations.length
+    : Number(input?.policyViolationCount || 0);
+  if (policyViolationCount > 0) return true;
+
+  const fields = Object.values(input?.fieldSummary || {});
+  if (fields.length) {
+    return fields.some((field) => isActiveChangedField(field));
+  }
+
+  const fieldStats = input?.fieldStats || {};
+  return (
+    Number(fieldStats.changedFields || 0) > 0 ||
+    Number(fieldStats.missingFields || 0) > 0 ||
+    Number(fieldStats.addedFields || 0) > 0
+  );
+}
+
+function isActiveChangedField(field = {}) {
+  if (field?.ignored || field?.comparisonExcluded) return false;
+  const status = String(field?.effectiveStatus || field?.status || "").toLowerCase();
+  return ["changed", "missing", "added"].includes(status);
 }
 
 export function getSemanticStateClass(input = {}) {

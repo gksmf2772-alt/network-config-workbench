@@ -120,26 +120,50 @@ test("diff block status and color tokens target config panes", () => {
   assert.equal(getSemanticDiffBlockState({ status: "old-only" }), "unmatched");
   assert.equal(getSemanticDiffBlockState({ status: "new-only" }), "unmatched");
   assert.equal(getSemanticDiffBlockState({ status: "matched" }), "matched");
+  assert.equal(getSemanticDiffBlockState({ status: "matched", fieldStats: { changedFields: 1 } }), "partial");
+  assert.equal(getSemanticDiffBlockState({
+    status: "matched",
+    fieldStats: { changedFields: 1 },
+    fieldSummary: {
+      description: {
+        status: "changed",
+        effectiveStatus: "ignored",
+        ignored: true,
+      },
+    },
+  }), "matched");
+  assert.equal(getSemanticDiffBlockState({ status: "matched", policyViolationCount: 1 }), "partial");
+  assert.equal(getSemanticDiffBlockState({ status: "matched", score: 85 }), "matched");
   assert.equal(getSemanticDiffBlockState({ status: "old-only", comparisonExcluded: true }), "excluded");
+  assert.equal(getSemanticStateClass({ status: "partial" }), "semantic-state-partial");
 
-  assert.match(legacy, /const objectStatus = oldObject && newObject/);
+  assert.match(legacy, /const objectStatus = pairedObjectStatus\(oldObject, newObject\);/);
+  assert.match(legacy, /function hasPairedObjectDifference\(oldObject = null, newObject = null\)/);
+  assert.match(legacy, /const visualStatus = getSemanticDiffBlockState\(item\);/);
+  assert.match(legacy, /score:\s*row\?\.objectScore/);
+  assert.match(legacy, /score > 0 && score < 100/);
+  assert.match(legacy, /\["port", "lag", "bgp", "pim"\]\.includes\(object\.type\)/);
+  assert.match(legacy, /Object\.entries\(extractFieldsFromLine\(line, profile, object\.type\)\)/);
   assert.match(legacy, /oldObject \? "old-only" : "new-only"/);
   assert.match(legacy, /buildPairedObjectLineRow\(oldObject[\s\S]*objectStatus[\s\S]*objectMatched/);
   assert.match(css, /--diff-unmatched-bg:\s*#fff7ed/);
+  assert.match(css, /object-status-changed[\s\S]*rgba\(245, 158, 11, 0\.14\)/);
+  assert.match(css, /object-status-partial[\s\S]*var\(--status-review-bg\)/);
   assert.match(css, /\.embedded-diff [\s\S]*semantic-object-block-wrapper\.object-status-old-only[\s\S]*var\(--diff-unmatched-bg\)/);
   assert.match(css, /semantic-diff-object-excluded/);
   assert.doesNotMatch(css, /summary-issue-row\.summary-issue-old-only[\s\S]{0,160}var\(--diff-unmatched-bg\)/);
   assert.doesNotMatch(css, /summary-issue-row\.summary-issue-old-only[\s\S]{0,160}var\(--status-unmatched-bg\)/);
 });
 
-test("legacy compare aligns only LAG objects by description endpoint before diff rows", () => {
+test("legacy compare aligns migrated objects by description endpoint before diff rows", () => {
   const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
-  const alignCallIndex = legacy.indexOf("alignLagObjectMapsByDescription(oldMap, newMap);");
+  const alignCallIndex = legacy.indexOf('alignObjectMapsByDescriptionEndpoint(oldMap, newMap, ["lag", "port", "interface"]);');
   const keyBuildIndex = legacy.indexOf("const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])]");
 
   assert.ok(alignCallIndex > 0);
   assert.ok(keyBuildIndex > alignCallIndex);
-  assert.match(legacy, /function isLagObject\(object = \{\}\)[\s\S]*=== "lag"/);
+  assert.match(legacy, /function isEndpointAlignedObject\(object = \{\}, targetTypes = new Set\(\)\)/);
+  assert.match(legacy, /targetTypes\.has\(objectType\)/);
   assert.match(legacy, /newMap\.delete\(newKey\);[\s\S]*newMap\.set\(oldKey/);
   assert.match(legacy, /const rule = \{ mode: \["port", "interface"\]\.includes\(type\) \? "description" : "header"/);
   assert.match(legacy, /if \(object\?\.type === "lag"\) return inferObjectIdentityFromLines\(object\);/);
@@ -148,8 +172,13 @@ test("legacy compare aligns only LAG objects by description endpoint before diff
   assert.match(legacy, /objectType === "lag"[\s\S]*inferLagLineFields\(text\)/);
   assert.match(legacy, /collectVisibleFlatSemanticLines[\s\S]*inferRelationFieldsFromRenderedLine\(line\)/);
   assert.match(legacy, /token: "administrative-key", field: "lacp\.administrative-key"[\s\S]*token: stripTrailingSyntax\(lacpKey\[1\]\), field: "lacp\.administrative-key"/);
+  assert.match(legacy, /function descriptionEndpointCandidates\(description = ""\)[\s\S]*flatMap\(\(segment\)/);
+  assert.match(legacy, /cleanSegment\.split\(\/\\s\+\/\)/);
 
-  const endpointFunction = legacy.slice(legacy.indexOf("function lagDescriptionEndpoint"));
+  assert.match(legacy, /const oldEndpoints = new Set\(objectDescriptionEndpoints\(oldObject\)\);/);
+  assert.match(legacy, /objectDescriptionEndpoints\(newObject\)\.some\(\(endpoint\) => oldEndpoints\.has\(endpoint\)\)/);
+
+  const endpointFunction = legacy.slice(legacy.indexOf("function objectDescriptionEndpoints"));
   const rawDescriptionIndex = endpointFunction.indexOf("[...(object.rawLines || []), ...(object.lines || [])]");
   const canonicalDescriptionIndex = endpointFunction.indexOf("object.canonicalFields?.description");
   assert.ok(rawDescriptionIndex > 0);

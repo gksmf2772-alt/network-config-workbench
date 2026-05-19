@@ -268,6 +268,61 @@ test("Classic and MD-CLI migrated LAG maps by peer description and compares LAG 
   assert.equal(planItem.fieldSummary["member-port"].status, "changed");
 });
 
+test("Classic LAG maps MD-CLI block LAG by description endpoint as one object", () => {
+  const oldConfig = [
+    "lag 111",
+    "    description \"## Ulsan-TOD-F063 xe-14/1(SBY),02600009-0822 ##\"",
+    "    mode access",
+    "    access",
+    "        adapt-qos link",
+    "    exit",
+    "    port 10/2/1",
+    "    lacp active administrative-key 111",
+    "    lacp-xmit-interval slow",
+    "    no shutdown",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    'lag "lag-B-7216" {',
+    "    admin-state enable",
+    '    description "## TO, lag-B-7216(7/2/c16/1), Ulsan-TOD-F063, Po11(xe14/1), SBY, Direct ##"',
+    "    mode access",
+    "    lacp-xmit-interval slow",
+    "    lacp {",
+    "        mode active",
+    "        administrative-key 7216",
+    "    }",
+    "    access {",
+    "        adapt-qos {",
+    "            mode link",
+    "        }",
+    "    }",
+    "    port 7/2/c16/1 {",
+    "    }",
+    "}",
+  ].join("\n");
+
+  const oldObjects = normalizeConfig({ vendor: "nokia-classic", side: "old", configText: oldConfig }).objects;
+  const newObjects = normalizeConfig({ vendor: "nokia-md-cli", side: "new", configText: newConfig }).objects;
+  const matches = matchNormalizedObjects({ oldObjects, newObjects });
+  const [planItem] = createComparisonPlan(matches);
+
+  assert.equal(oldObjects.filter((object) => object.normalizedType === "lag").length, 1);
+  assert.equal(newObjects.filter((object) => object.normalizedType === "lag").length, 1);
+  assert.equal(newObjects.filter((object) => object.normalizedType === "port").length, 0);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].status, "matched");
+  assert.ok(matches[0].scoreReasons.includes("description-endpoint-match"));
+  assert.equal(planItem.objectType, "lag");
+  assert.equal(planItem.fieldSummary.mode.status, "equal");
+  assert.equal(planItem.fieldSummary["access.adapt-qos.mode"].status, "equal");
+  assert.equal(planItem.fieldSummary["lacp-mode"].status, "equal");
+  assert.equal(planItem.fieldSummary["lacp-xmit-interval"].status, "equal");
+  assert.equal(planItem.fieldSummary["admin-state"].status, "equal");
+  assert.equal(planItem.fieldSummary["member-port"].status, "changed");
+  assert.equal(planItem.fieldSummary["lacp.administrative-key"].status, "changed");
+});
+
 test("MD-CLI BGP one-line parser extracts import and export policy references", () => {
   const result = normalizeConfig({
     vendor: "nokia-md-cli",

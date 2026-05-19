@@ -926,13 +926,15 @@ function buildReviewBase(item = {}, options = {}) {
   const objectType = item.objectType || object.normalizedType || object.type || "object";
   const overlap = item.oldObject && item.newObject ? buildFieldOverlapPair(item) : null;
   const fieldRows = buildReviewTableFieldRows(item, overlap, options);
+  const oldKey = item.oldObject ? objectKey(item.oldObject, objectType) : "";
+  const newKey = item.newObject ? objectKey(item.newObject, objectType) : "";
   return {
     planId: item.id || "",
     objectType,
     objectKey: objectKey(object, objectType),
-    oldKey: item.oldObject ? objectKey(item.oldObject, objectType) : "",
-    newKey: item.newObject ? objectKey(item.newObject, objectType) : "",
-    label: objectIdentity(object),
+    oldKey,
+    newKey,
+    label: reviewObjectLabel(item, object),
     status: item.status || "",
     score: toScore(item.score),
     commonFields: overlap?.sameFields || 0,
@@ -941,6 +943,15 @@ function buildReviewBase(item = {}, options = {}) {
     missingNewFields: overlap?.missingNewFields || 0,
     fieldRows,
   };
+}
+
+function reviewObjectLabel(item = {}, fallbackObject = {}) {
+  if (item.oldObject && item.newObject) {
+    const oldIdentity = objectIdentity(item.oldObject);
+    const newIdentity = objectIdentity(item.newObject);
+    if (oldIdentity && newIdentity && oldIdentity !== newIdentity) return `${oldIdentity} -> ${newIdentity}`;
+  }
+  return objectIdentity(fallbackObject);
 }
 
 function buildReviewTableFieldRows(item = {}, overlap = null, options = {}) {

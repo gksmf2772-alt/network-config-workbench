@@ -251,6 +251,105 @@ test("Nokia Classic interface maps MD-CLI IES interface by address and normalize
   assert.equal(interfacePlan.fieldSummary.description.status, "changed");
 });
 
+test("Nokia Classic interface maps MD-CLI block interface as one object", () => {
+  const oldConfig = [
+    'interface "to-Ulsan-TOD-F063 ge14/1(SBY)" create',
+    '    description "## Ulsan-TOD-F063 xe-14/1(SBY),02600009-0822 ##"',
+    "    address 112.174.180.61/30",
+    "    icmp",
+    "        no mask-reply",
+    "        no redirects",
+    "        no ttl-expired",
+    "        no unreachables",
+    "    exit",
+    "    sap lag-111 create",
+    "        ingress",
+    "            qos 20",
+    "            filter ip 10",
+    "        exit",
+    "        egress",
+    "            qos 20",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    'interface "Ulsan-TOD-F063_B" {',
+    "    admin-state enable",
+    '    description "## to-Ulsan-TOD-F063, Po11(xe14/1), SBY ##"',
+    "    sap lag-B-7216 {",
+    "        ingress {",
+    "            filter {",
+    '                ip "prtsr-backup"',
+    "            }",
+    "        }",
+    "        egress {",
+    "            qos {",
+    "                sap-egress {",
+    '                    policy-name "SEA_ACCESS_OUT"',
+    "                }",
+    "            }",
+    "        }",
+    "    }",
+    "    ipv4 {",
+    "        icmp {",
+    "            mask-reply false",
+    "            redirects {",
+    "                admin-state disable",
+    "            }",
+    "            ttl-expired {",
+    "                admin-state disable",
+    "            }",
+    "            unreachables {",
+    "                admin-state disable",
+    "            }",
+    "        }",
+    "        primary {",
+    "            address 112.174.180.61",
+    "            prefix-length 30",
+    "        }",
+    "    }",
+    "}",
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const oldInterfaces = result.oldResult.objects.filter((object) => object.normalizedType === "interface");
+  const newInterfaces = result.newResult.objects.filter((object) => object.normalizedType === "interface");
+  const interfacePlan = result.plan.find((item) => item.objectType === "interface");
+
+  assert.equal(oldInterfaces.length, 1);
+  assert.equal(newInterfaces.length, 1);
+  assert.equal(newInterfaces[0].normalizedIdentity, "112.174.180.61/30");
+  assert.equal(newInterfaces[0].fields.address, "112.174.180.61/30");
+  assert.equal(newInterfaces[0].fields.sap, "lag-b-7216");
+  assert.equal(newInterfaces[0].fields["ingress-filter"], "prtsr-backup");
+  assert.equal(newInterfaces[0].fields["egress-qos"], "SEA_ACCESS_OUT");
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.matches[0].status, "matched");
+  assert.equal(result.plan.length, 1);
+  assert.equal(interfacePlan.fieldSummary.address.status, "equal");
+  assert.equal(interfacePlan.fieldSummary.sap.status, "changed");
+  assert.equal(interfacePlan.fieldSummary["ingress-filter"].status, "changed");
+  assert.equal(interfacePlan.fieldSummary["ingress-qos"].status, "missing");
+  assert.equal(interfacePlan.fieldSummary["egress-qos"].status, "changed");
+
+  const lineMatchField = (lineMatch) => lineMatch.fieldMatches?.[0]?.field || "";
+  const ingressQosLineMatch = interfacePlan.lineMatches.find((lineMatch) => lineMatchField(lineMatch) === "ingress-qos");
+  const egressQosLineMatch = interfacePlan.lineMatches.find((lineMatch) => lineMatchField(lineMatch) === "egress-qos");
+
+  assert.equal(ingressQosLineMatch.status, "missing");
+  assert.deepEqual(ingressQosLineMatch.oldLines, ["ingress-qos 20"]);
+  assert.deepEqual(ingressQosLineMatch.newLines, []);
+  assert.equal(egressQosLineMatch.status, "changed");
+  assert.deepEqual(egressQosLineMatch.oldLines, ["egress-qos 20"]);
+  assert.deepEqual(egressQosLineMatch.newLines, ["egress-qos SEA_ACCESS_OUT"]);
+
+  for (const field of ["icmp.mask-reply", "icmp.redirects", "icmp.ttl-expired", "icmp.unreachables"]) {
+    assert.equal(newInterfaces[0].fields[field], "disabled");
+    assert.equal(interfacePlan.fieldSummary[field].status, "equal");
+  }
+});
+
 test("legacy main compare parser keeps static route blocks as route-level objects", () => {
   const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
   const styles = fs.readFileSync("src/styles/global.css", "utf8");
@@ -281,6 +380,13 @@ test("legacy main compare parser keeps static route blocks as route-level object
   assert.match(source, /lineIndex: newRawIndex >= 0 \? newRawIndex : visualLineIndex/);
   assert.match(source, /preferredField = normalizeRelationField\(line\?\.dataset\?\.semanticField \|\| ""\)/);
   assert.match(source, /field === "ingress-filter" \|\| field === "egress-filter"/);
+  assert.match(source, /function getMdCliBraceLineScope\(rawLines = \[\], lineIndex = -1\)/);
+  assert.match(source, /function isInterfaceScopeOnlyLine\(line = ""\)/);
+  assert.match(source, /inferMdCliInterfaceLineField\(normalized, type, \{\s*rawLines,\s*lineIndex,/);
+  assert.match(source, /\^\(\?:address\|prefix-length\)\\b/);
+  assert.match(source, /isInterfaceScopeOnlyLine\(text\)\) return \[\]/);
+  assert.match(source, /datasetField = normalizeRelationField\(line\?\.dataset\?\.semanticField \|\| ""\)/);
+  assert.match(source, /objectType === "interface"[\s\S]*inferScopedInterfaceLineField\(text, \{ objectType \}\)/);
   const mdInterfaceFieldBody = source.slice(
     source.indexOf("function inferMdCliInterfaceLineField"),
     source.indexOf("function inferClassicInterfaceLineField")

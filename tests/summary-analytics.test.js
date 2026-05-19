@@ -271,6 +271,24 @@ test("integrated report uses summary field analysis object", () => {
   assert.equal((source.match(/renderFieldOverlapSummary\(fieldAnalysis\)/g) || []).length >= 2, true);
 });
 
+test("review table label shows both identities for migrated matched objects", () => {
+  const review = buildReviewItems([{
+    id: "lag-rename",
+    status: "matched",
+    objectType: "lag",
+    score: 85,
+    oldObject: { normalizedType: "lag", normalizedIdentity: "111", fields: { lag: "111" } },
+    newObject: { normalizedType: "lag", normalizedIdentity: "lag-B-7216", fields: { lag: "lag-B-7216" } },
+    fieldSummary: {
+      lag: { field: "lag", status: "changed", oldValues: ["111"], newValues: ["lag-B-7216"] },
+    },
+  }]);
+
+  assert.equal(review.abnormal[0].label, "111 -> lag-B-7216");
+  assert.equal(review.abnormal[0].oldKey, "lag:111");
+  assert.equal(review.abnormal[0].newKey, "lag:lag-B-7216");
+});
+
 test("integrated report rebuilds dashboard instead of reusing stale exception cache", () => {
   const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
   const body = source.match(/function renderOverviewReport\(report\) \{([\s\S]*?)\n\}/)?.[1] || "";
@@ -286,6 +304,19 @@ test("integrated report table hides suppressed duplicate rows for active review 
   assert.match(source, /function buildReportReviewRows\(review = \{\}\)/);
   assert.match(source, /const activeKeys = new Set\(/);
   assert.match(source, /filter\(\(item\) => !activeKeys\.has\(reportReviewObjectDedupKey\(item\)\)\)/);
+});
+
+test("policy violation panel includes semantic field policy violations", () => {
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(source, /function renderReportPolicyList\(report\)/);
+  assert.match(source, /filterItems\(\s*buildSemanticPolicyReportItems\(state\.lastSemanticPlan \|\| \[\]\),\s*getOptions\(\)\s*\)/);
+  assert.match(source, /filterLegacyPolicyReportItems\(report\.visibleItems \|\| \[\], semanticItems\)/);
+  assert.match(source, /buildSemanticPolicyReportItems\(state\.lastSemanticPlan \|\| \[\]\)/);
+  assert.match(source, /Number\(item\.policyViolationCount \|\| 0\) > 0/);
+  assert.match(source, /if \(item\.type !== "changed"\) return true;/);
+  assert.match(source, /message: `의미 기반 비교 위반 \$\{violations\.length\}건`/);
+  assert.match(source, /renderReportPolicyList\(state\.lastReport\);/);
 });
 
 test("integrated report table exposes checkbox value filters", () => {

@@ -14512,7 +14512,7 @@ function renderReportReviewHeaderBar(title = "") {
   return `
     <div class="report-review-th-bar">
       <span>${escapeHtml(title)}</span>
-      <button type="button" class="report-review-filter-toggle" data-report-filter-toggle aria-expanded="false" aria-label="${escapeHtml(title)} 필터 열기">
+      <button type="button" class="report-review-filter-toggle" data-report-filter-toggle data-report-filter-title="${escapeHtml(title)}" aria-expanded="false" aria-label="${escapeHtml(title)} 필터 열기">
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <path d="M2 3h12L9.5 8.2v3.6l-3 1.7V8.2L2 3z" fill="currentColor" />
         </svg>
@@ -14872,9 +14872,14 @@ function bindReportGraphInteractions() {
   });
 }
 
+let reportReviewFilterAbortController = null;
+
 function bindReportReviewTableInteractions() {
   const root = selectors.overviewReport?.querySelector("[data-report-review-root]");
   if (!root) return;
+  reportReviewFilterAbortController?.abort();
+  reportReviewFilterAbortController = new AbortController();
+  const filterListenerOptions = { signal: reportReviewFilterAbortController.signal };
 
   const search = root.querySelector("[data-report-review-search]");
   const clear = root.querySelector("[data-report-review-clear]");
@@ -14890,6 +14895,7 @@ function bindReportReviewTableInteractions() {
   const checklistSearches = [...root.querySelectorAll("[data-report-check-search]")];
   const filterToggles = [...root.querySelectorAll("[data-report-filter-toggle]")];
   const rows = [...root.querySelectorAll("[data-report-review-row]")];
+  const tableWrap = root.querySelector(".report-review-table-wrap");
   const fieldValueFilterFields = [...new Set([...root.querySelectorAll("[data-report-checklist]")]
     .map((item) => item.dataset.reportChecklist || "")
     .filter((key) => key.startsWith("field:"))
@@ -14990,6 +14996,8 @@ function bindReportReviewTableInteractions() {
 
     if (count) count.textContent = `${visibleCount}/${rows.length}`;
     if (empty) empty.hidden = visibleCount > 0 || rows.length === 0;
+    updateReportReviewFilterIndicators(root);
+    positionOpenReportReviewFilter(root);
   };
 
   search?.addEventListener("input", apply);
@@ -15027,27 +15035,21 @@ function bindReportReviewTableInteractions() {
       event.stopPropagation();
       const panel = button.closest(".report-review-th")?.querySelector("[data-report-filter-panel]");
       const willOpen = panel?.hidden;
-      root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
-        item.hidden = true;
-      });
-      root.querySelectorAll("[data-report-filter-toggle]").forEach((item) => {
-        item.setAttribute("aria-expanded", "false");
-      });
+      closeReportReviewFilterPanels(root);
       if (panel && willOpen) {
         panel.hidden = false;
         button.setAttribute("aria-expanded", "true");
+        positionReportReviewFilterPanel(button, panel);
         panel.querySelector("input, select")?.focus();
       }
     });
   });
+  tableWrap?.addEventListener("scroll", () => positionOpenReportReviewFilter(root), filterListenerOptions);
+  window.addEventListener("scroll", () => positionOpenReportReviewFilter(root), { ...filterListenerOptions, capture: true });
+  window.addEventListener("resize", () => positionOpenReportReviewFilter(root), filterListenerOptions);
   root.addEventListener("click", (event) => {
     if (event.target.closest(".report-review-th")) return;
-    root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
-      item.hidden = true;
-    });
-    root.querySelectorAll("[data-report-filter-toggle]").forEach((item) => {
-      item.setAttribute("aria-expanded", "false");
-    });
+    closeReportReviewFilterPanels(root);
   });
   clear?.addEventListener("click", () => {
     if (search) search.value = "";
@@ -15070,16 +15072,79 @@ function bindReportReviewTableInteractions() {
     root.querySelectorAll("[data-report-check-item]").forEach((item) => {
       item.hidden = false;
     });
-    root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
-      item.hidden = true;
-    });
-    filterToggles.forEach((button) => {
-      button.setAttribute("aria-expanded", "false");
-    });
+    closeReportReviewFilterPanels(root);
     apply();
   });
   root.querySelectorAll("[data-report-checklist]").forEach(updateReportChecklistAllState);
   apply();
+}
+
+function closeReportReviewFilterPanels(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
+    item.hidden = true;
+  });
+  root.querySelectorAll("[data-report-filter-toggle]").forEach((item) => {
+    item.setAttribute("aria-expanded", "false");
+  });
+}
+
+function positionOpenReportReviewFilter(root) {
+  if (!root) return;
+  const button = root.querySelector("[data-report-filter-toggle][aria-expanded='true']");
+  const panel = button?.closest(".report-review-th")?.querySelector("[data-report-filter-panel]");
+  if (button && panel && !panel.hidden) positionReportReviewFilterPanel(button, panel);
+}
+
+function positionReportReviewFilterPanel(button, panel) {
+  if (!button || !panel || panel.hidden) return;
+  const gap = 6;
+  const margin = 8;
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
+  const viewportHeight = document.documentElement.clientHeight || window.innerHeight || 0;
+  const buttonRect = button.getBoundingClientRect();
+  panel.style.maxHeight = `${Math.max(160, viewportHeight - margin * 2)}px`;
+
+  const panelWidth = panel.offsetWidth || 240;
+  const panelHeight = Math.min(panel.offsetHeight || 240, Math.max(160, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  let left = Math.min(Math.max(margin, buttonRect.left), maxLeft);
+  let top = buttonRect.bottom + gap;
+
+  if (top + panelHeight + margin > viewportHeight) {
+    top = Math.max(margin, buttonRect.top - panelHeight - gap);
+  }
+
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+  panel.style.maxHeight = `${Math.max(160, viewportHeight - top - margin)}px`;
+}
+
+function updateReportReviewFilterIndicators(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-report-filter-toggle]").forEach((button) => {
+    const header = button.closest(".report-review-th");
+    const panel = header?.querySelector("[data-report-filter-panel]");
+    const active = isReportReviewFilterPanelActive(panel);
+    const title = button.dataset.reportFilterTitle || "열";
+    button.toggleAttribute("data-filter-active", active);
+    button.setAttribute("aria-label", active ? `${title} 필터 적용됨` : `${title} 필터 열기`);
+  });
+}
+
+function isReportReviewFilterPanelActive(panel) {
+  if (!panel) return false;
+  const hasSearch = [...panel.querySelectorAll("[data-report-column-search], [data-report-field-search]")]
+    .some((input) => String(input.value || "").trim());
+  if (hasSearch) return true;
+  const hasSelectFilter = [...panel.querySelectorAll("select")]
+    .some((select) => (select.value || "all") !== "all");
+  if (hasSelectFilter) return true;
+  return [...panel.querySelectorAll("[data-report-checklist]")].some((checklist) => {
+    const values = [...checklist.querySelectorAll("[data-report-check-value]")];
+    if (!values.length) return false;
+    return values.some((input) => !input.checked);
+  });
 }
 
 function getReportReviewChecklistSelections(root) {

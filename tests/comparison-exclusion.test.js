@@ -139,7 +139,29 @@ test("diff block status and color tokens target config panes", () => {
 
   assert.match(legacy, /const objectStatus = pairedObjectStatus\(oldObject, newObject\);/);
   assert.match(legacy, /function hasPairedObjectDifference\(oldObject = null, newObject = null\)/);
+  assert.match(legacy, /const semanticRuntime = safeStep\("의미 기반 비교 상태 계산"/);
+  assert.match(legacy, /report\.diffRows = applySemanticPlanVisualStatusToDiffRows\(report\.diffRows \|\| \[\], semanticRuntime\.plan\)/);
+  assert.match(legacy, /renderSemanticPreview\(semanticRuntime\)/);
+  assert.match(legacy, /function applySemanticPlanVisualStatusToDiffRows\(diffRows = \[\], plan = \[\]\)/);
+  assert.match(legacy, /function applySemanticPlanVisualStatusToDiffRow\(row = null, semanticPlanByKey = new Map\(\)\)/);
+  assert.match(legacy, /if \(!planItem \|\| !shouldRenderSemanticCleanMatch\(planItem\)\) return row;/);
   assert.match(legacy, /const visualStatus = getSemanticDiffBlockState\(item\);/);
+  assert.match(legacy, /function shouldRenderSemanticCleanMatch\(item = \{\}\)/);
+  assert.match(legacy, /String\(item\.status \|\| ""\)\.toLowerCase\(\) !== "matched"/);
+  assert.match(legacy, /activeSemanticPolicyViolations\(item\)\.length > 0/);
+  assert.doesNotMatch(
+    legacy.match(/function hasActiveSemanticDisplayViolation\(item = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "",
+    /fieldSummary/
+  );
+  assert.match(legacy, /function semanticLineRelationState\(lineMatch = \{\}, field = "", item = \{\}\)/);
+  assert.match(legacy, /shouldRenderSemanticCleanMatch\(item\)\) return "equal"/);
+  assert.match(legacy, /function isCleanMatchedSemanticRelationElement\(element\)/);
+  assert.match(legacy, /status === "matched"/);
+  assert.match(legacy, /data-object-status="\$\{escapeHtml\(normalizedObjectStatus\)\}"/);
+  assert.match(legacy, /const cleanMatchedClass = isCleanMatchedSemanticRelationElement\(oldElement\) && isCleanMatchedSemanticRelationElement\(newElement\)/);
+  assert.match(css, /\.line-mapping-connector\.clean-matched/);
+  assert.match(css, /\.line-mapping-shine\.clean-matched/);
+  assert.match(legacy, /oldStatus === "matched" && newStatus === "matched"/);
   assert.match(legacy, /score:\s*row\?\.objectScore/);
   assert.match(legacy, /score > 0 && score < 100/);
   assert.match(legacy, /\["port", "lag", "bgp", "pim"\]\.includes\(object\.type\)/);

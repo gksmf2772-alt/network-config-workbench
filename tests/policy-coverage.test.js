@@ -627,6 +627,46 @@ test("policy evaluator reports audit metadata", () => {
   assert.equal(result.appliesTo, "new");
 });
 
+test("profile exception field aliases match state and admin-state", () => {
+  const exception = {
+    id: "admin-state-exception",
+    scope: "object",
+    enabled: true,
+    target: {
+      objectType: "bgp",
+      objectKey: "bgp:112.174.176.128",
+      fieldPath: "admin-state",
+      ruleId: "semantic-compare.important-field-change",
+      category: "semantic-compare",
+      findingType: "added",
+      issueType: "field-difference",
+      changeType: "added",
+    },
+    match: {
+      mode: "exact-object-field-rule",
+      objectType: "bgp",
+      objectKey: "bgp:112.174.176.128",
+      fieldPath: "admin-state",
+      ruleId: "semantic-compare.important-field-change",
+      category: "semantic-compare",
+      findingType: "added",
+      issueType: "field-difference",
+      changeTypes: ["added"],
+    },
+  };
+
+  assert.equal(profileExceptionMatchesContext(exception, {
+    objectType: "bgp",
+    objectKey: "bgp:112.174.176.128",
+    field: "state",
+    ruleId: "semantic-compare.important-field-change",
+    category: "semantic-compare",
+    findingType: "added",
+    issueType: "field-difference",
+    changeType: "added",
+  }), true);
+});
+
 test("object scoped exception matches only the selected object key", () => {
   const profile = {
     rules: {

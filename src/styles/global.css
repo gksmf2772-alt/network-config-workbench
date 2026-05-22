@@ -1217,6 +1217,14 @@ label {
   stroke: rgba(8, 145, 178, 0.86);
 }
 
+.line-mapping-connector.clean-matched {
+  stroke: rgba(22, 101, 52, 0.62);
+}
+
+.line-mapping-rail.clean-matched {
+  stroke: rgba(22, 101, 52, 0.12);
+}
+
 .line-mapping-connector.style-straight {
   stroke-width: 3.4;
 }
@@ -1266,6 +1274,12 @@ label {
   filter:
     drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
     drop-shadow(0 0 5px rgba(202, 138, 4, 0.10));
+}
+
+.line-mapping-shine.clean-matched {
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(22, 163, 74, 0.10));
 }
 
 .line-mapping-connector.line-relation-hover,

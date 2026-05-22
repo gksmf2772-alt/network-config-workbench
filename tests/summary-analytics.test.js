@@ -311,10 +311,10 @@ test("policy violation panel includes semantic field policy violations", () => {
 
   assert.match(source, /function renderReportPolicyList\(report\)/);
   assert.match(source, /filterItems\(\s*buildSemanticPolicyReportItems\(state\.lastSemanticPlan \|\| \[\]\),\s*getOptions\(\)\s*\)/);
-  assert.match(source, /filterLegacyPolicyReportItems\(report\.visibleItems \|\| \[\], semanticItems\)/);
+  assert.match(source, /filterLegacyPolicyReportItems\(report\.visibleItems \|\| \[\], semanticItems, state\.lastSemanticPlan \|\| \[\]\)/);
   assert.match(source, /buildSemanticPolicyReportItems\(state\.lastSemanticPlan \|\| \[\]\)/);
-  assert.match(source, /Number\(item\.policyViolationCount \|\| 0\) > 0/);
-  assert.match(source, /if \(item\.type !== "changed"\) return true;/);
+  assert.match(source, /activeSemanticPolicyViolations\(item\)\.length > 0/);
+  assert.match(source, /if \(!\["changed", "required"\]\.includes\(item\.type\)\) return true;/);
   assert.match(source, /message: `의미 기반 비교 위반 \$\{violations\.length\}건`/);
   assert.match(source, /renderReportPolicyList\(state\.lastReport\);/);
 });

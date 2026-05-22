@@ -553,11 +553,11 @@ function matchesContextValue(expected = "", actual = "", optionalWhenActualBlank
 }
 
 function matchesFieldValue(expected = "", actual = "", optionalWhenActualBlank = false) {
-  const normalizedExpected = canonicalFieldPath(expected);
-  if (!normalizedExpected) return true;
-  const normalizedActual = canonicalFieldPath(actual);
-  if (!normalizedActual && optionalWhenActualBlank) return true;
-  return normalizedExpected === normalizedActual;
+  const expectedAliases = canonicalFieldAliases(expected);
+  if (!expectedAliases.length) return true;
+  const actualAliases = canonicalFieldAliases(actual);
+  if (!actualAliases.length && optionalWhenActualBlank) return true;
+  return actualAliases.some((field) => expectedAliases.includes(field));
 }
 
 function matchesRuleValue(expected = "", actual = "", optionalWhenActualBlank = false) {
@@ -608,6 +608,15 @@ function matchesPattern(pattern = "", value = "") {
 
 function canonicalFieldPath(value = "") {
   return normalizeComparableLine(value).replace(/\s+/g, "-");
+}
+
+function canonicalFieldAliases(value = "") {
+  const field = canonicalFieldPath(value);
+  if (!field) return [];
+  const aliases = new Set([field]);
+  if (field === "state") aliases.add("admin-state");
+  if (field === "admin-state") aliases.add("state");
+  return [...aliases];
 }
 
 function canonicalRuleId(value = "") {

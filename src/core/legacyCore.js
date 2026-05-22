@@ -4311,6 +4311,18 @@ function runCompare() {
       compareObjects(oldObjects, newObjects, options)
     );
 
+    const semanticRuntime = safeStep("의미 기반 비교 상태 계산", () =>
+      buildSemanticRuntime({
+        oldText: selectors.oldInput.value,
+        newText: selectors.newInput.value,
+        options,
+        includeManualCandidates: true,
+      })
+    );
+    if (semanticRuntime?.plan?.length) {
+      report.diffRows = applySemanticPlanVisualStatusToDiffRows(report.diffRows || [], semanticRuntime.plan);
+    }
+
     if (options.semanticDebug) {
       logStaticRouteCoverageSummary(oldObjects, newObjects, report);
     }
@@ -4323,7 +4335,7 @@ function runCompare() {
     showDiffMode();
 
     safeStep("semantic preview 렌더링", () => {
-      renderSemanticPreview();
+      renderSemanticPreview(semanticRuntime);
     });
 
     state.compareDirty = false;
@@ -4553,10 +4565,10 @@ function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = [
   });
 }
 
-function renderSemanticPreview() {
+function renderSemanticPreview(precomputedRuntime = null) {
   const container = ensureSemanticPreviewContainer();
 
-  const runtime = buildSemanticRuntime({
+  const runtime = precomputedRuntime || buildSemanticRuntime({
     oldText: selectors.oldInput.value,
     newText: selectors.newInput.value,
     options: getOptions(),
@@ -10038,6 +10050,49 @@ function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
   );
 }
 
+function applySemanticPlanVisualStatusToDiffRows(diffRows = [], plan = []) {
+  if (!Array.isArray(diffRows) || !Array.isArray(plan) || !plan.length) return diffRows;
+  const lookup = buildSemanticPlanLookup(plan);
+  if (!lookup.size) return diffRows;
+
+  return diffRows.map((row) => row ? ({
+    ...row,
+    oldRow: applySemanticPlanVisualStatusToDiffRow(row.oldRow, lookup),
+    newRow: applySemanticPlanVisualStatusToDiffRow(row.newRow, lookup),
+  }) : row);
+}
+
+function applySemanticPlanVisualStatusToDiffRow(row = null, semanticPlanByKey = new Map()) {
+  if (!row) return row;
+  const planItem = findSemanticPlanItemForDiffRow(row, semanticPlanByKey);
+  if (!planItem || !shouldRenderSemanticCleanMatch(planItem)) return row;
+  return {
+    ...row,
+    objectStatus: "matched",
+    objectMatched: true,
+    objectScore: planItem.score ?? row.objectScore ?? "",
+    objectReason: planItem.reason || row.objectReason || "",
+    semanticPairKey: planItem.id || row.semanticPairKey || "",
+  };
+}
+
+function findSemanticPlanItemForDiffRow(row = {}, semanticPlanByKey = new Map()) {
+  for (const key of diffRowSemanticLookupKeys(row)) {
+    const item = semanticPlanByKey.get(canonicalizeComparableLine(key));
+    if (item) return item;
+  }
+  return null;
+}
+
+function diffRowSemanticLookupKeys(row = {}) {
+  const objectType = row.objectKey ? splitObjectKey(row.objectKey).type : "";
+  return [
+    row.objectKey,
+    row.semanticPairKey,
+    objectType && row.objectIdentity ? `${objectType}:${row.objectIdentity}` : "",
+  ].filter(Boolean);
+}
+
 function semanticPlanSortKey(item = {}) {
   const object = item.oldObject || item.newObject || {};
   const type = item.objectType || object.normalizedType || object.type || object.sourceType || "unknown";
@@ -10235,6 +10290,7 @@ function semanticRenderStatusForSide(item = {}, object = null, side = "") {
     return item.status || "unmatched";
   }
   const visualStatus = getSemanticDiffBlockState(item);
+  if (visualStatus === "partial" && shouldRenderSemanticCleanMatch(item)) return "matched";
   if (["partial", "ambiguous", "manual"].includes(visualStatus)) return visualStatus;
   return item.status || "";
 }
@@ -10243,8 +10299,22 @@ function isSemanticItemFullyMatched(item = {}) {
   return item.status === "matched" && Boolean(item.oldObject && item.newObject);
 }
 
+function shouldRenderSemanticCleanMatch(item = {}) {
+  if (String(item.status || "").toLowerCase() !== "matched") return false;
+  if (!item.oldObject || !item.newObject) return false;
+  if (item.comparisonExcluded || item.excluded || item.policySuppressed || item.suppressed) return false;
+  return !hasActiveSemanticDisplayViolation(item);
+}
+
+function hasActiveSemanticDisplayViolation(item = {}) {
+  if (activeSemanticPolicyViolations(item).length > 0) return true;
+  if (!Array.isArray(item.policyViolations) && Number(item.policyViolationCount || 0) > 0) return true;
+  return false;
+}
+
 function semanticBlockState(item = {}, side = "") {
   const visualStatus = getSemanticDiffBlockState(item);
+  if (visualStatus === "partial" && shouldRenderSemanticCleanMatch(item)) return "equal";
   if (visualStatus === "partial" || visualStatus === "ambiguous") return "changed";
   if (item.status === "matched" || item.status === "candidate") return "equal";
   if (item.status === "old-only") return side === "old" ? "missing" : "placeholder";
@@ -10271,7 +10341,7 @@ function buildSemanticLineMatchIndex(lineMatches = [], side = "", item = {}) {
         status: lineMatch.status || "equal",
         reason: lineMatch.reason || "semantic-line-match",
         relationKey,
-        relationState: semanticLineRelationState(lineMatch, field),
+        relationState: semanticLineRelationState(lineMatch, field, item),
       });
     });
   });
@@ -10290,10 +10360,11 @@ function buildLineRelationKeyFromMatch(lineMatch = {}, matchIndex = 0) {
   return `${cssSafeClassName(field)}:${matchIndex}:${canonicalizeComparableLine(oldValue)}:${canonicalizeComparableLine(newValue)}`;
 }
 
-function semanticLineRelationState(lineMatch = {}, field = "") {
+function semanticLineRelationState(lineMatch = {}, field = "", item = {}) {
   const status = String(lineMatch.status || "").toLowerCase();
   const reason = String(lineMatch.reason || "").toLowerCase();
   if (reason.includes("ambiguous") || reason.includes("conflict")) return "conflict";
+  if (shouldRenderSemanticCleanMatch(item)) return "equal";
   if (status === "equal") return "equal";
   if (status === "changed") return "changed";
   if (status === "candidate") return "candidate";
@@ -10363,7 +10434,7 @@ function findSemanticLineRelationForRawLine({
     status: best.lineMatch.status || "equal",
     reason: best.lineMatch.reason || "semantic-field-relation",
     relationKey: `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(best.lineMatch, best.index)}`,
-    relationState: semanticLineRelationState(best.lineMatch, field),
+    relationState: semanticLineRelationState(best.lineMatch, field, item),
   };
 }
 
@@ -10436,6 +10507,7 @@ function renderSemanticObjectBlockHtml({
 
 function semanticObjectVisualState(item = {}) {
   const state = getSemanticDiffBlockState(item);
+  if (state === "partial" && shouldRenderSemanticCleanMatch(item)) return "matched";
   if (state === "manual") return "manual";
   if (state === "matched") return "matched";
   if (state === "excluded") return "excluded";
@@ -10513,6 +10585,7 @@ function renderSemanticObjectConfigLine({
       data-line-relation-state="${escapeHtml(relationState)}"
       data-line-relation-reason="${escapeHtml(matched?.reason || "")}"
       data-semantic-pair-key="${escapeHtml(item?.id || "")}"
+      data-object-status="${escapeHtml(normalizedObjectStatus)}"
       style="padding-left:${10 + depth * 16}px">
       <span class="semantic-diff-line-no">${index + 1}</span>
       <code>${renderSemanticLineTokens(line, objectType, fields, relationByField, field)}</code>
@@ -10556,7 +10629,7 @@ function buildSemanticRelationMapByField(item = {}) {
     if (map.has(field)) return;
     map.set(field, {
       key: `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(lineMatch, index)}`,
-      state: semanticLineRelationState(lineMatch, field),
+      state: semanticLineRelationState(lineMatch, field, item),
       reason: lineMatch.reason || "semantic-field-relation",
     });
   });
@@ -12940,7 +13013,9 @@ function objectConnectorTypeClass(oldGroup = {}, newGroup = {}) {
 }
 
 function objectConnectorState(oldGroup = {}, newGroup = {}) {
-  const status = String(oldGroup.status || newGroup.status || "").toLowerCase();
+  const oldStatus = String(oldGroup.status || "").toLowerCase();
+  const newStatus = String(newGroup.status || "").toLowerCase();
+  const status = oldStatus || newStatus;
   const reason = String(oldGroup.reason || newGroup.reason || "").toLowerCase();
   const score = Number(oldGroup.score || newGroup.score || 0);
 
@@ -12949,6 +13024,7 @@ function objectConnectorState(oldGroup = {}, newGroup = {}) {
   if (status === "ambiguous") return "candidate";
   if (status === "candidate") return "candidate";
   if (status === "old-only" || status === "new-only" || status === "unmatched") return "unmatched";
+  if (oldStatus === "matched" && newStatus === "matched") return "matched";
   if (oldGroup.state !== "equal" || newGroup.state !== "equal") return "changed";
   if (Number.isFinite(score) && score > 0 && score < 100) return "changed";
   return "matched";
@@ -13456,6 +13532,9 @@ function applyFallbackLineRelation(line, relationKey, relationState, field) {
 }
 
 function semanticFieldRelationStateFromLines(oldLine, newLine, field) {
+  if (isCleanMatchedSemanticRelationElement(oldLine) && isCleanMatchedSemanticRelationElement(newLine)) {
+    return "equal";
+  }
   const oldText = oldLine.querySelector?.("code")?.textContent || oldLine.textContent || "";
   const newText = newLine.querySelector?.("code")?.textContent || newLine.textContent || "";
   const oldValue = inferValueForField(oldText, field);
@@ -13483,6 +13562,9 @@ function collectSemanticRelationElements(pane) {
 }
 
 function lineRelationStateFromElements(oldElement, newElement) {
+  if (isCleanMatchedSemanticRelationElement(oldElement) && isCleanMatchedSemanticRelationElement(newElement)) {
+    return "equal";
+  }
   const stateValue =
     oldElement?.dataset?.lineRelationState ||
     newElement?.dataset?.lineRelationState ||
@@ -13494,6 +13576,17 @@ function lineRelationStateFromElements(oldElement, newElement) {
   if (oldElement?.classList?.contains("added") || newElement?.classList?.contains("added")) return "candidate";
   if (oldElement?.classList?.contains("missing") || newElement?.classList?.contains("missing")) return "candidate";
   return "equal";
+}
+
+function isCleanMatchedSemanticRelationElement(element) {
+  const line = element?.closest?.(".semantic-diff-config-line, .diff-line") || element;
+  const wrapper = element?.closest?.(".semantic-object-block-wrapper");
+  const status = String(
+    line?.dataset?.objectStatus ||
+    wrapper?.dataset?.objectStatus ||
+    ""
+  ).toLowerCase();
+  return status === "matched";
 }
 
 function currentLineMappingStyle() {
@@ -13530,13 +13623,16 @@ function buildLineMappingConnectorPath({
   const active = relationKey && relationKey === state.activeLineRelationKey ? "line-relation-selected" : "";
   const animated = selectors.lineMappingAnimationToggle?.checked ? "is-animated" : "";
   const fieldClass = lineRelationFieldClass(oldElement, newElement, relationKey);
+  const cleanMatchedClass = isCleanMatchedSemanticRelationElement(oldElement) && isCleanMatchedSemanticRelationElement(newElement)
+    ? "clean-matched"
+    : "";
   const laneBounds = getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 });
   const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds });
   const railMarkup = style === "slime"
-    ? buildLineMappingRailPath({ relationKey, relationState, fieldClass, active, path })
+    ? buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass, active, path })
     : "";
   const shineMarkup = style === "slime" && animated && !prefersReducedMotion()
-    ? buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path, x1, y1, x2, y2 })
+    ? buildSlimeLineShinePath({ relationKey, relationState, fieldClass, cleanMatchedClass, active, path, x1, y1, x2, y2 })
     : "";
   const debugMarkup = isMappingDebugVisible()
     ? [
@@ -13557,18 +13653,18 @@ function buildLineMappingConnectorPath({
     });
   }
 
-  return `${railMarkup}<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${active} ${animated}"
+  return `${railMarkup}<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} ${animated}"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />${shineMarkup}${debugMarkup}`;
 }
 
-function buildLineMappingRailPath({ relationKey, relationState, fieldClass, active, path }) {
-  return `<path class="line-mapping-rail ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active}"
+function buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path }) {
+  return `<path class="line-mapping-rail ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active}"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />`;
 }
 
-function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, active, path, x1, y1, x2, y2 }) {
+function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path, x1, y1, x2, y2 }) {
   const glossId = `lineMappingGloss-${cssSafeClassName(relationKey || `${x1}-${y1}-${x2}-${y2}`)}`;
   const sweep = Math.max(72, Math.min(180, Math.abs(x2 - x1) * 0.22));
   const startX = Math.min(x1, x2) - sweep;
@@ -13585,7 +13681,7 @@ function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, activ
         <animate attributeName="x2" values="${startX + sweep};${endX + sweep}" dur="3.2s" repeatCount="indefinite" />
       </linearGradient>
     </defs>
-    <path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${active} is-animated"
+    <path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} is-animated"
     style="stroke: url(#${escapeHtml(glossId)})"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />`;
@@ -13889,28 +13985,32 @@ function renderReportPolicyList(report) {
     buildSemanticPolicyReportItems(state.lastSemanticPlan || []),
     getOptions()
   );
-  const legacyItems = filterLegacyPolicyReportItems(report.visibleItems || [], semanticItems);
+  const legacyItems = filterLegacyPolicyReportItems(report.visibleItems || [], semanticItems, state.lastSemanticPlan || []);
   selectors.reportList.innerHTML = renderGroupedReportItems([
     ...legacyItems,
     ...semanticItems,
   ]);
 }
 
-function filterLegacyPolicyReportItems(legacyItems = [], semanticItems = []) {
-  if (!semanticItems.length) return legacyItems;
+function filterLegacyPolicyReportItems(legacyItems = [], semanticItems = [], semanticPlan = []) {
   const semanticKeys = new Set(semanticItems.map((item) => item.objectKey).filter(Boolean));
   const semanticLabels = new Set(semanticItems.map((item) => `${item.objectType}:${item.objectName}`).filter(Boolean));
+  const semanticPlanByKey = buildSemanticPlanLookup(semanticPlan);
   return legacyItems.filter((item) => {
-    if (item.type !== "changed") return true;
+    if (!["changed", "required"].includes(item.type)) return true;
     const itemKey = item.objectKey || `${item.objectType}:${item.objectName}`;
     const itemLabel = `${item.objectType}:${item.objectName}`;
-    return !semanticKeys.has(itemKey) && !semanticLabels.has(itemLabel);
+    if (semanticKeys.has(itemKey) || semanticLabels.has(itemLabel)) return false;
+    const planItem = semanticPlanByKey.get(canonicalizeComparableLine(itemKey)) ||
+      semanticPlanByKey.get(canonicalizeComparableLine(itemLabel));
+    if (!planItem) return true;
+    return hasLegacyReportActiveSemanticIssue(item, planItem);
   });
 }
 
 function buildSemanticPolicyReportItems(plan = []) {
   return (plan || [])
-    .filter((item) => !item.comparisonExcluded && !item.policySuppressed && Number(item.policyViolationCount || 0) > 0)
+    .filter((item) => !item.comparisonExcluded && !item.policySuppressed && activeSemanticPolicyViolations(item).length > 0)
     .map((item) => {
       const object = item.oldObject || item.newObject || {};
       const objectType = item.objectType || object.normalizedType || object.type || "object";
@@ -13922,7 +14022,7 @@ function buildSemanticPolicyReportItems(plan = []) {
       const objectKey = item.oldObject
         ? `${objectType}:${oldIdentity || objectName}`
         : `${objectType}:${newIdentity || objectName}`;
-      const violations = Array.isArray(item.policyViolations) ? item.policyViolations : [];
+      const violations = activeSemanticPolicyViolations(item);
 
       return {
         type: "changed",
@@ -13942,6 +14042,90 @@ function buildSemanticPolicyReportItems(plan = []) {
         })),
       };
     });
+}
+
+function buildSemanticPlanLookup(plan = []) {
+  const lookup = new Map();
+  (plan || []).forEach((item) => {
+    semanticPlanLookupKeys(item).forEach((key) => {
+      lookup.set(canonicalizeComparableLine(key), item);
+    });
+  });
+  return lookup;
+}
+
+function semanticPlanLookupKeys(item = {}) {
+  const object = item.oldObject || item.newObject || {};
+  const objectType = item.objectType || object.normalizedType || object.type || "object";
+  const oldIdentity = semanticObjectIdentity(item.oldObject);
+  const newIdentity = semanticObjectIdentity(item.newObject);
+  const keys = [
+    item.oldObject?.key,
+    item.newObject?.key,
+    oldIdentity ? `${objectType}:${oldIdentity}` : "",
+    newIdentity ? `${objectType}:${newIdentity}` : "",
+    item.objectKey,
+  ];
+  return [...new Set(keys.filter(Boolean))];
+}
+
+function hasLegacyReportActiveSemanticIssue(legacyItem = {}, semanticItem = {}) {
+  const activeViolations = activeSemanticPolicyViolations(semanticItem);
+  if (activeViolations.length) {
+    const legacyFields = legacyReportItemFields(legacyItem);
+    if (!legacyFields.length) return true;
+    return legacyFields.some((field) =>
+      activeViolations.some((violation) => semanticFieldsEquivalent(field, violation.field))
+    );
+  }
+  return false;
+}
+
+function activeSemanticPolicyViolations(item = {}) {
+  const violations = Array.isArray(item.policyViolations) ? item.policyViolations : [];
+  return violations.filter((violation) => {
+    if (violation?.ignored || violation?.suppressed) return false;
+    const summary = findSemanticFieldSummary(item.fieldSummary, violation.field);
+    if (!summary) return true;
+    return isActiveSemanticViolationSummary(summary);
+  });
+}
+
+function findSemanticFieldSummary(fieldSummary = {}, field = "") {
+  const aliases = semanticFieldAliases(field);
+  for (const alias of aliases) {
+    if (fieldSummary?.[alias]) return fieldSummary[alias];
+  }
+  return null;
+}
+
+function isActiveSemanticViolationSummary(summary = {}) {
+  if (summary.ignored || summary.suppressed || summary.comparisonExcluded) return false;
+  const status = String(summary.effectiveStatus || summary.status || "").toLowerCase();
+  if (["ignored", "inheritance-unresolved", "structure-converted", "comparison-excluded"].includes(status)) return false;
+  return Boolean(summary.violation);
+}
+
+function legacyReportItemFields(item = {}) {
+  const fields = [
+    item.field,
+    ...(Array.isArray(item.details) ? item.details.map((detail) => detail?.field) : []),
+  ];
+  return [...new Set(fields.map((field) => String(field || "").trim()).filter(Boolean))];
+}
+
+function semanticFieldsEquivalent(left = "", right = "") {
+  const rightAliases = semanticFieldAliases(right);
+  return semanticFieldAliases(left).some((field) => rightAliases.includes(field));
+}
+
+function semanticFieldAliases(field = "") {
+  const normalized = canonicalizeComparableLine(field).replace(/\s+/g, "-");
+  if (!normalized) return [];
+  const aliases = new Set([normalized]);
+  if (normalized === "state") aliases.add("admin-state");
+  if (normalized === "admin-state") aliases.add("state");
+  return [...aliases];
 }
 
 function semanticObjectIdentity(object = null) {

@@ -74,6 +74,37 @@ import {
   readRecords,
   saveRecord,
 } from "./storage.js";
+import { createLegacySelectors } from "./legacySelectors.js";
+import { createLegacyState } from "./legacyState.js";
+import {
+  buildLineMappingPathD,
+  buildLineMappingRailPath,
+  buildSlimeLineShinePath,
+  connectorLabelText,
+  objectConnectorState,
+  objectConnectorTypeClass,
+  renderDiffConnectorLayers,
+} from "./diffRenderer.js";
+import {
+  defaultObjectFieldForType,
+  defaultSemanticFieldForType,
+  formatNormalizeSummary,
+  formatSemanticNodeLabel,
+  getSemanticMappingNodes,
+  inferValueTokenIndex,
+  mergeSemanticNodes,
+  parseNormalizeMap,
+  renderProfileExceptionEditorTable,
+  renderSemanticMappingRow,
+  semanticMappingCardinality,
+} from "./profileEditor.js";
+import {
+  buildOperatorAlerts,
+  renderFieldHotList,
+  renderHiddenDiagnosticsLinks,
+  renderMetricCard,
+} from "./summaryRenderer.js";
+import { syncPairedPaneScroll } from "./diffScrollSync.js";
 
 const objectTypes = [
   "port",
@@ -100,122 +131,7 @@ const objectTypes = [
 ];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
 
-const selectors = {
-  compareTabBtn: document.querySelector("#compareTabBtn"),
-  profilesTabBtn: document.querySelector("#profilesTabBtn"),
-  summaryPageTabBtn: document.querySelector("#summaryPageTabBtn"),
-  compareTab: document.querySelector("#compareTab"),
-  profilesTab: document.querySelector("#profilesTab"),
-  summaryTab: document.querySelector("#summaryTab"),
-  historySelect: document.querySelector("#historySelect"),
-  loadHistoryBtn: document.querySelector("#loadHistoryBtn"),
-  saveSessionBtn: document.querySelector("#saveSessionBtn"),
-  deleteSessionBtn: document.querySelector("#deleteSessionBtn"),
-  profileSelect: document.querySelector("#profileSelect"),
-  loadProfileBtn: document.querySelector("#loadProfileBtn"),
-  normalizeSpacingToggle: document.querySelector("#normalizeSpacingToggle"),
-  sortObjectsToggle: document.querySelector("#sortObjectsToggle"),
-  autoAlignToggle: document.querySelector("#autoAlignToggle"),
-  ignoreCommentsToggle: document.querySelector("#ignoreCommentsToggle"),
-  ignoreGeneratedToggle: document.querySelector("#ignoreGeneratedToggle"),
-  semanticDebugToggle: document.querySelector("#semanticDebugToggle"),
-  fieldHighlightToggle: document.querySelector("#fieldHighlightToggle"),
-  objectMappingVisibleToggle: document.querySelector("#objectMappingVisibleToggle"),
-  mappingDebugToggle: document.querySelector("#mappingDebugToggle"),
-  lineMappingStyleSelect: document.querySelector("#lineMappingStyleSelect"),
-  lineMappingBendRange: document.querySelector("#lineMappingBendRange"),
-  lineMappingVisibleToggle: document.querySelector("#lineMappingVisibleToggle"),
-  lineMappingAnimationToggle: document.querySelector("#lineMappingAnimationToggle"),
-  objectToggles: document.querySelector("#objectToggles"),
-  themeSelect: document.querySelector("#themeSelect"),
-  fontSelect: document.querySelector("#fontSelect"),
-  filterInput: document.querySelector("#filterInput"),
-  resultFilterSelect: document.querySelector("#resultFilterSelect"),
-  compareStatus: document.querySelector("#compareStatus"),
-  lastComparedAt: document.querySelector("#lastComparedAt"),
-  oldMeta: document.querySelector("#oldMeta"),
-  newMeta: document.querySelector("#newMeta"),
-  oldDropZone: document.querySelector("#oldConfigInput")?.closest(".code-frame") || document.querySelector("#oldDropZone"),
-  newDropZone: document.querySelector("#newConfigInput")?.closest(".code-frame") || document.querySelector("#newDropZone"),
-  oldInput: document.querySelector("#oldConfigInput"),
-  newInput: document.querySelector("#newConfigInput"),
-  oldLineNumbers: document.querySelector("#oldLineNumbers"),
-  newLineNumbers: document.querySelector("#newLineNumbers"),
-  moveOldUpBtn: document.querySelector("#moveOldUpBtn"),
-  moveOldDownBtn: document.querySelector("#moveOldDownBtn"),
-  moveNewUpBtn: document.querySelector("#moveNewUpBtn"),
-  moveNewDownBtn: document.querySelector("#moveNewDownBtn"),
-  restoreOldBtn: document.querySelector("#restoreOldBtn"),
-  restoreNewBtn: document.querySelector("#restoreNewBtn"),
-  clearOldBtn: document.querySelector("#clearOldBtn"),
-  clearNewBtn: document.querySelector("#clearNewBtn"),
-  clearAllBtn: document.querySelector("#clearAllBtn"),
-  saveOldBtn: document.querySelector("#saveOldBtn"),
-  saveNewBtn: document.querySelector("#saveNewBtn"),
-  toggleControlsBtn: document.querySelector("#toggleControlsBtn"),
-  compareBtn: document.querySelector("#compareBtn"),
-  alignBtn: document.querySelector("#alignBtn"),
-  exportReportBtn: document.querySelector("#exportReportBtn"),
-  summaryTabBtn: document.querySelector("#summaryTabBtn"),
-  objectsTabBtn: document.querySelector("#objectsTabBtn"),
-  overviewTabBtn: document.querySelector("#overviewTabBtn"),
-  summaryResultPanel: document.querySelector("#summaryResultPanel"),
-  objectsResultPanel: document.querySelector("#objectsResultPanel"),
-  overviewResultPanel: document.querySelector("#overviewResultPanel"),
-  overviewReport: document.querySelector("#overviewReport"),
-  objectSearchInput: document.querySelector("#objectSearchInput"),
-  objectSortSelect: document.querySelector("#objectSortSelect"),
-  restoreInitialBtn: document.querySelector("#restoreInitialBtn"),
-  summaryCards: document.querySelector("#summaryCards"),
-  reportList: document.querySelector("#reportList"),
-  objectList: document.querySelector("#objectList"),
-  oldDiffPane: document.querySelector("#oldDiffPane"),
-  newDiffPane: document.querySelector("#newDiffPane"),
-  oldDiffObjectToolbar: document.querySelector("#oldDiffObjectToolbar"),
-  newDiffObjectToolbar: document.querySelector("#newDiffObjectToolbar"),
-  diffConnectorSvg: document.querySelector("#diffConnectorSvg"),
-  profileNameInput: document.querySelector("#profileNameInput"),
-  vendorSelect: document.querySelector("#vendorSelect"),
-  oldVendorSelect: document.querySelector("#oldVendorSelect"),
-  newVendorSelect: document.querySelector("#newVendorSelect"),
-  vendorSupportNotice: document.querySelector("#vendorSupportNotice"),
-  newProfileBtn: document.querySelector("#newProfileBtn"),
-  saveProfileBtn: document.querySelector("#saveProfileBtn"),
-  saveProfileAsBtn: document.querySelector("#saveProfileAsBtn"),
-  mappingEditor: document.querySelector("#mappingEditor"),
-  identityRuleEditor: document.querySelector("#identityRuleEditor"),
-  policyEditor: document.querySelector("#policyEditor"),
-  normalizeEditor: document.querySelector("#normalizeEditor"),
-  semanticRuleEditor: document.querySelector("#semanticRuleEditor"),
-  parserRuleEditor: document.querySelector("#parserRuleEditor"),
-  profileObjectTypeSelect: document.querySelector("#profileObjectTypeSelect"),
-  profileOldExampleInput: document.querySelector("#profileOldExampleInput"),
-  profileNewExampleInput: document.querySelector("#profileNewExampleInput"),
-  profileOldPreview: document.querySelector("#profileOldPreview"),
-  profileNewPreview: document.querySelector("#profileNewPreview"),
-  profileExampleConnectorSvg: document.querySelector("#profileExampleConnectorSvg"),
-  profileRulePopover: document.querySelector("#profileRulePopover"),
-  profileMappingReactRoot: document.querySelector("#profileMappingReactRoot"),
-  profileMappingRows: document.querySelector("#profileMappingRows"),
-  profileContextMappingRows: document.querySelector("#profileContextMappingRows"),
-  profileFieldMappingRows: document.querySelector("#profileFieldMappingRows"),
-  profileRuleRows: document.querySelector("#profileRuleRows"),
-  profileStatus: document.querySelector("#profileStatus"),
-  profileSelectionGuide: document.querySelector("#profileSelectionGuide"),
-  profileChangesList: document.querySelector("#profileChangesList"),
-  undoProfileBtn: document.querySelector("#undoProfileBtn"),
-  rollbackProfileBtn: document.querySelector("#rollbackProfileBtn"),
-  savedProfilesList: document.querySelector("#savedProfilesList"),
-  deleteProfileBtn: document.querySelector("#deleteProfileBtn"),
-  autoLearnRulesBtn: document.querySelector("#autoLearnRulesBtn"),
-  addLineMappingBtn: document.querySelector("#addLineMappingBtn"),
-  addContextMappingBtn: document.querySelector("#addContextMappingBtn"),
-  addFieldMappingBtn: document.querySelector("#addFieldMappingBtn"),
-  createTokenGroupBtn: document.querySelector("#createTokenGroupBtn"),
-  createLineGroupBtn: document.querySelector("#createLineGroupBtn"),
-  addOldLineRuleBtn: document.querySelector("#addOldLineRuleBtn"),
-  addNewLineRuleBtn: document.querySelector("#addNewLineRuleBtn"),
-};
+const selectors = createLegacySelectors();
 
 const vendorRules = {
   nokia: [
@@ -247,56 +163,7 @@ const vendorRules = {
   ],
 };
 
-const state = {
-  activeProfileId: null,
-  selectedProfileObjectType: "static-route",
-  lastReport: null,
-  initialConfigSnapshot: null,
-  syncingEditorScroll: false,
-  syncingDiffScroll: false,
-  connectorFrame: null,
-  semanticObjectAlignFrame: null,
-  semanticObjectWidthFrame: null,
-  draggingProfileLine: null,
-  selectedProfileLineLink: null,
-  pendingProfileLineRef: null,
-  lastProfileExampleSource: "",
-  selectedProfileLibraryId: null,
-  compareDirty: false,
-  profileChanges: [],
-  profileSavedSnapshot: null,
-  profileUndoStack: [],
-  selectedSemanticTokens: { old: [], new: [] },
-  activeSemanticSelectionSource: "",
-  draggingProfileToken: null,
-  suppressNextPreviewTokenClick: false,
-  pendingSemanticMapping: null,
-  activeDiffObjectKey: "",
-  activeSemanticPairKey: "",
-  activeLineRelationKey: "",
-  lastSemanticSummary: null,
-  lastSemanticPlan: [],
-  lastManualMap: {},
-  lastDashboardData: null,
-  lastCoverageDiagnostics: null,
-  lastStandardsAudit: null,
-  lastStandardsAuditRaw: null,
-  lastAnalysisContext: null,
-  exceptionTargets: new Map(),
-  summaryIssueGroups: new Map(),
-  activeIssueContext: null,
-  lastSessionName: "",
-  semanticPairKeyboardBound: false,
-  lineRelationDelegationBound: false,
-  connectorSvgDelegationBound: false,
-  diffResizeObserver: null,
-  diffMutationObserver: null,
-  connectorSettleTimer: null,
-  mappingDebugSignature: "",
-  lineMappingDebugSignature: "",
-  mappingDebugAnchorCount: 0,
-  profileDraft: createDefaultProfile(),
-};
+const state = createLegacyState(createDefaultProfile);
 
 const defaultSamples = {
   oldConfig: [
@@ -1304,12 +1171,6 @@ function renderParserRuleEditor() {
   });
 }
 
-function formatNormalizeSummary(normalizeRules = {}) {
-  const remove = (normalizeRules.remove || []).join(", ");
-  const mapped = Object.entries(normalizeRules.map || {}).map(([from, to]) => `${from} -> ${to}`).join(" | ");
-  return [`remove: ${remove || "-"}`, `map: ${mapped || "-"}`].join("; ");
-}
-
 function renderSemanticRuleEditor() {
   const type = state.selectedProfileObjectType;
   const rules = state.profileDraft.semanticRules?.[type] || [];
@@ -1354,30 +1215,6 @@ function renderSemanticRuleEditor() {
     row.addEventListener("mouseenter", () => setProfilePreviewHoverState(row.dataset.groupId || ""));
     row.addEventListener("mouseleave", clearProfilePreviewHoverState);
   });
-}
-
-function renderSemanticMappingRow(row, index) {
-  const oldNodes = getSemanticMappingNodes(row, "old");
-  const newNodes = getSemanticMappingNodes(row, "new");
-  return `
-    <div class="semantic-rule-row semantic-mapping-row">
-      <div class="profile-rule-line">${escapeHtml(row.field || "")}</div>
-      <div class="small-note">${escapeHtml(row.role || "compare-field")} / ${escapeHtml(row.cardinality || "1:1")}</div>
-      <div class="small-note">기존 ${oldNodes.length}개 ↔ 신규 ${newNodes.length}개</div>
-      <div class="profile-rule-line">${escapeHtml(oldNodes.map(formatSemanticNodeLabel).join(", "))} → ${escapeHtml(newNodes.map(formatSemanticNodeLabel).join(", "))}</div>
-      <button type="button" data-semantic-map-remove="${index}">삭제</button>
-    </div>
-  `;
-}
-
-function getSemanticMappingNodes(mapping, source) {
-  if (!mapping) return [];
-  if (source === "old") return mapping.oldNodes || mapping.oldSelectors || [];
-  return mapping.newNodes || mapping.newSelectors || [];
-}
-
-function formatSemanticNodeLabel(node) {
-  return node.value || node.selectedToken || node.token || "";
 }
 
 function addSemanticMappingFromPreviewTokens() {
@@ -1440,35 +1277,6 @@ function findCompatibleSemanticMapping(mappings, field, role, oldNodes, newNodes
     const existingNew = getSemanticMappingNodes(mapping, "new").map((node) => canonicalizeComparableLine(node.value || node.selectedToken || node.token));
     return existingOld.some((value) => oldValues.has(value)) || existingNew.some((value) => newValues.has(value));
   });
-}
-
-function mergeSemanticNodes(current, incoming) {
-  const result = [...current];
-  const seen = new Set(result.map(semanticNodeKey));
-  incoming.forEach((node) => {
-    const key = semanticNodeKey(node);
-    if (seen.has(key)) return;
-    seen.add(key);
-    result.push(node);
-  });
-  return result;
-}
-
-function semanticNodeKey(node) {
-  return [
-    node.lineIndex,
-    node.tokenIndex,
-    node.valueTokenIndex,
-    canonicalizeComparableLine(node.selectedToken || node.token || ""),
-    canonicalizeComparableLine(node.value || ""),
-  ].join(":");
-}
-
-function semanticMappingCardinality(oldNodes, newNodes) {
-  if (oldNodes.length === 1 && newNodes.length > 1) return "1:N";
-  if (oldNodes.length > 1 && newNodes.length === 1) return "N:1";
-  if (oldNodes.length === 1 && newNodes.length === 1) return "1:1";
-  return "N:N";
 }
 
 function showSemanticMappingConfirm(mapping) {
@@ -1759,15 +1567,6 @@ function inferGroupedValue(text, field) {
   return extractFieldValue(normalized, field) || normalized;
 }
 
-function inferValueTokenIndex(tokens, tokenIndex, field) {
-  if (field === "state" || field === "admin-state") return tokenIndex;
-  const selected = canonicalizeComparableLine(tokens[tokenIndex] || "");
-  if (selected === field || ["route", "static-route-entry", "next-hop", "tag", "description", "neighbor"].includes(selected)) {
-    return Math.min(tokens.length - 1, tokenIndex + 1);
-  }
-  return tokenIndex;
-}
-
 function renderSemanticRuleRow(row, index) {
   return `
     <div class="semantic-rule-row">
@@ -1857,18 +1656,6 @@ function buildSemanticRuleFromTextarea(source, textarea) {
   };
 }
 
-function defaultSemanticFieldForType(type) {
-  return {
-    "static-route": "route",
-    bgp: "neighbor",
-    interface: "interface",
-    "subscriber-interface": "subscriber-interface",
-    port: "port",
-    lag: "lag",
-    pim: "interface",
-  }[type] || "field";
-}
-
 function renderParserRuleRow(row, index) {
   return `
     <div class="parser-rule-row">
@@ -1878,19 +1665,6 @@ function renderParserRuleRow(row, index) {
       <button type="button" data-parser-remove="${index}">삭제</button>
     </div>
   `;
-}
-
-function defaultObjectFieldForType(type) {
-  return {
-    "static-route": "route",
-    bgp: "neighbor",
-    interface: "interface",
-    "subscriber-interface": "subscriber-interface",
-    "group-interface": "group-interface",
-    port: "port",
-    lag: "lag",
-    pim: "interface",
-  }[type] || "name";
 }
 
 function renderPolicyEditor() {
@@ -1904,7 +1678,7 @@ function renderPolicyEditor() {
     <div class="policy-rows">
       ${policies.length ? policies.map(renderPolicyRow).join("") : `<div class="small-note">정책이 없습니다. 필드 정책을 추가하세요.</div>`}
     </div>
-    ${renderProfileExceptionEditorTable(type)}
+    ${renderProfileExceptionEditorTable({ exceptions: state.profileDraft.exceptions || [], objectType: type })}
   `;
 
   selectors.policyEditor.querySelector("#addPolicyRowBtn").addEventListener("click", () => {
@@ -1998,17 +1772,6 @@ function renderNormalizeEditor() {
     markProfileDirty("Normalize", "수정", "map");
     markCompareStale();
   });
-}
-
-function parseNormalizeMap(text) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.split(/\s*=>\s*/))
-    .filter((parts) => parts.length === 2 && parts[0].trim() && parts[1].trim())
-    .reduce((map, [from, to]) => {
-      map[canonicalizeComparableLine(from)] = canonicalizeComparableLine(to);
-      return map;
-    }, {});
 }
 
 function renderIdentityRuleEditor() {
@@ -3973,37 +3736,6 @@ function bindDropZone(zone, input, meta) {
   });
 }
 
-function renderProfileExceptionEditorTable(objectType = "") {
-  const exceptions = (state.profileDraft.exceptions || [])
-    .filter((item) => item.enabled !== false)
-    .filter((item) => !objectType || item.target?.objectType === objectType || item.match?.objectType === objectType);
-  return `
-    <div class="profile-exception-editor">
-      <div class="policy-toolbar">
-        <strong>프로파일 예외</strong>
-        <span class="small-note">${escapeHtml(objectType)} 기준 ${escapeHtml(exceptions.length)}개</span>
-      </div>
-      ${exceptions.length ? `
-        <div class="profile-exception-table compact">
-          <div>범위</div><div>필드</div><div>규칙</div><div>상태</div><div>사유</div><div>동작</div>
-          ${exceptions.map((exception) => {
-            const target = exception.target || {};
-            const match = exception.match || {};
-            return `
-              <div>${escapeHtml(exception.scope === "profile" ? "프로파일" : "객체")}</div>
-              <div>${escapeHtml(target.fieldPath || match.fieldPath || "-")}</div>
-              <div>${escapeHtml(target.ruleId || match.ruleId || "-")}</div>
-              <div>${escapeHtml(target.changeType || match.changeType || target.status || "-")}</div>
-              <div>${escapeHtml(exception.reasonKo || "-")}</div>
-              <div><button type="button" data-profile-exception-remove="${escapeHtml(exception.id || "")}">삭제</button></div>
-            `;
-          }).join("")}
-        </div>
-      ` : `<div class="small-note">이 객체 타입의 프로파일 예외 없음.</div>`}
-    </div>
-  `;
-}
-
 function captureInitialConfigSnapshot(force = false) {
   const oldValue = selectors.oldInput?.value || "";
   const newValue = selectors.newInput?.value || "";
@@ -4246,13 +3978,21 @@ function syncEditorScroll(event) {
 function syncDiffScroll(event) {
   if (state.syncingDiffScroll) return;
   const sourcePane = event.target;
-  const targetPane = sourcePane === selectors.oldDiffPane ? selectors.newDiffPane : selectors.oldDiffPane;
+  const sourceKey = sourcePane === selectors.oldDiffPane ? "old" : "new";
+  const targetKey = sourceKey === "old" ? "new" : "old";
+  const targetPane = sourceKey === "old" ? selectors.newDiffPane : selectors.oldDiffPane;
 
   state.syncingDiffScroll = true;
-  targetPane.scrollTop = sourcePane.scrollTop;
-  targetPane.scrollLeft = sourcePane.scrollLeft;
+  const result = syncPairedPaneScroll({
+    sourcePane,
+    targetPane,
+    lastSource: state.diffScrollPositions[sourceKey],
+    lastTarget: state.diffScrollPositions[targetKey],
+  });
+  state.diffScrollPositions[sourceKey] = result.source;
+  state.diffScrollPositions[targetKey] = result.target;
   state.syncingDiffScroll = false;
-  scheduleDiffConnectorRender();
+  if (result.changed) scheduleDiffConnectorRender();
 }
 
 function clearSelectedDiffTokens() {
@@ -4888,20 +4628,6 @@ function buildCurrentDashboardData(report, semantic = state.lastSemanticSummary)
   return dashboard;
 }
 
-function renderMetricCard({ label, value, detail = "", state = "", action = "", help = "" }) {
-  const tag = action ? "button" : "div";
-  const attrs = action
-    ? ` type="button" data-summary-filter="${escapeHtml(action)}" title="${escapeHtml(help || detail || label)}"`
-    : "";
-  return `
-    <${tag}${attrs} class="summary-card summary-metric ${action ? "summary-metric-action" : ""} ${state ? `summary-metric-${escapeHtml(state)}` : ""}">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
-      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
-    </${tag}>
-  `;
-}
-
 function renderStandardsAuditSummary(audit = {}) {
   const summary = audit.summary || {};
   const bySeverity = summary.bySeverity || {};
@@ -4945,24 +4671,6 @@ function renderAuditFindingCompact(finding = {}) {
         ${renderExceptionActionControls(exceptionTargetId)}
       </div>
     </article>
-  `;
-}
-
-function renderHiddenDiagnosticsLinks(context = {}, counts = {}) {
-  if (context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible) return "";
-  return `
-    <section class="summary-section summary-hidden-diagnostics">
-      <div class="summary-section-head">
-        <h3>고급 결과</h3>
-      </div>
-      <div class="summary-action-grid">
-        <button type="button" data-summary-filter="standards-audit">표준 점검 결과 보기</button>
-        <button type="button" data-summary-filter="audit-migration">전환 준비도 보기</button>
-        <button type="button" data-summary-filter="coverage">고급 진단 보기</button>
-        <button type="button" data-summary-filter="audit-suppressed">예외/숨김 처리된 항목</button>
-      </div>
-      <p class="small-note">현재 모드에서는 표준 점검, 전환 준비도, 고급 진단을 활성 이슈로 표시하지 않음. 예외/숨김 항목 ${escapeHtml(counts.auditSuppressed || 0)}개.</p>
-    </section>
   `;
 }
 
@@ -5085,21 +4793,6 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
   bindSummaryActions();
 }
 
-function buildOperatorAlerts({ dashboard, semanticSummary, report }) {
-  const { review, counts, context } = dashboard;
-  return [
-    counts.oldOnly ? `기존 설정에만 있는 항목 ${counts.oldOnly}개` : "",
-    counts.newOnly ? `신규 설정에만 있는 항목 ${counts.newOnly}개` : "",
-    counts.ambiguous ? `매핑 후보 여러 개 ${counts.ambiguous}개` : "",
-    counts.lowConfidence ? `낮은 신뢰도 설정 ${counts.lowConfidence}개` : "",
-    review.relationshipChanges.length ? `연결/참조 관계 변경 ${review.relationshipChanges.length}개` : "",
-    review.abnormal.length ? `비정상/검토 필요 값 ${review.abnormal.length}개` : "",
-    Number(semanticSummary.coveragePercent || 0) < 60 ? `분석된 라인 비율 ${semanticSummary.coveragePercent || 0}%` : "",
-    report.summary?.required ? `필수 규칙 위반 ${report.summary.required}건` : "",
-    context.support?.state === VENDOR_SUPPORT_STATE.PARTIAL ? "부분 지원 벤더 포함" : "",
-  ].filter(Boolean);
-}
-
 function renderCoverageWarning(semanticSummary = {}, support = {}, diagnostics = null) {
   const sideSummary = diagnostics
     ? `미분석 ${diagnostics.unparsedLineCount ?? 0} · wrapper ${diagnostics.wrapperLineCount ?? 0} · 라인매핑 없음 ${diagnostics.linesWithoutSourceMapping ?? 0}`
@@ -5153,19 +4846,6 @@ function renderFieldOverlapSummary(fieldAnalysis = {}) {
       `).join("") : `<div class="summary-table-empty">연결된 설정의 설정 항목 분석 결과가 없습니다.</div>`}
     </div>
     ${renderFieldHotList(fieldAnalysis.byField || [])}
-  `;
-}
-
-function renderFieldHotList(fields = []) {
-  if (!fields.length) return "";
-  return `
-    <div class="summary-field-hotlist">
-      ${fields.slice(0, 10).map((field) => `
-        <span title="다른 값 ${escapeHtml(field.different)} / 기존 누락 ${escapeHtml(field.missingOld)} / 신규 누락 ${escapeHtml(field.missingNew)}">
-          ${escapeHtml(field.field)} <strong>${escapeHtml(field.different + field.missingOld + field.missingNew)}</strong>
-        </span>
-      `).join("")}
-    </div>
   `;
 }
 
@@ -12704,21 +12384,6 @@ function renderDiffConnectors() {
   }
 }
 
-function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], debugPaths = [] } = {}) {
-  return `
-    ${renderDiffConnectorDefs()}
-    <g class="object-mapping-overlay" data-overlay-layer="object">
-      ${objectPaths.filter(Boolean).join("")}
-    </g>
-    <g class="semantic-line-overlay" data-overlay-layer="line">
-      ${fieldPaths.filter(Boolean).join("")}
-    </g>
-    <g class="mapping-debug-overlay" data-overlay-layer="debug">
-      ${debugPaths.filter(Boolean).join("")}
-    </g>
-  `;
-}
-
 function ensureConnectorSvgDelegation() {
   const svg = selectors.diffConnectorSvg;
   if (!svg || state.connectorSvgDelegationBound) return;
@@ -12760,29 +12425,6 @@ function ensureConnectorSvgDelegation() {
       setSemanticPairSelected(pairTarget.dataset.semanticPairKey);
     }
   });
-}
-
-function renderDiffConnectorDefs() {
-  return `
-    <defs>
-      <linearGradient id="lineMappingGloss" x1="-120%" y1="0%" x2="-20%" y2="0%">
-        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
-        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
-        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.58" />
-        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
-        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-        <animate attributeName="x1" values="-120%;100%" dur="3.2s" repeatCount="indefinite" />
-        <animate attributeName="x2" values="-20%;200%" dur="3.2s" repeatCount="indefinite" />
-      </linearGradient>
-      <filter id="objectFlowGlow" x="-20%" y="-40%" width="140%" height="180%">
-        <feGaussianBlur stdDeviation="7" result="blur" />
-        <feMerge>
-          <feMergeNode in="blur" />
-          <feMergeNode in="SourceGraphic" />
-        </feMerge>
-      </filter>
-    </defs>
-  `;
 }
 
 function collectVisibleDiffObjectGroups(pane, paneRect) {
@@ -12939,36 +12581,6 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
   `,
     debugMarkup,
   };
-}
-
-function objectConnectorTypeClass(oldGroup = {}, newGroup = {}) {
-  return `type-${cssSafeClassName(oldGroup.type || newGroup.type || "object")}`;
-}
-
-function objectConnectorState(oldGroup = {}, newGroup = {}) {
-  const oldStatus = String(oldGroup.status || "").toLowerCase();
-  const newStatus = String(newGroup.status || "").toLowerCase();
-  const status = oldStatus || newStatus;
-  const reason = String(oldGroup.reason || newGroup.reason || "").toLowerCase();
-  const score = Number(oldGroup.score || newGroup.score || 0);
-
-  if (reason === "manual") return "manual";
-  if (status === "partial" || status === "changed") return "partial";
-  if (status === "ambiguous") return "candidate";
-  if (status === "candidate") return "candidate";
-  if (status === "old-only" || status === "new-only" || status === "unmatched") return "unmatched";
-  if (oldStatus === "matched" && newStatus === "matched") return "matched";
-  if (oldGroup.state !== "equal" || newGroup.state !== "equal") return "changed";
-  if (Number.isFinite(score) && score > 0 && score < 100) return "changed";
-  return "matched";
-}
-
-function connectorLabelText(oldGroup = {}, newGroup = {}) {
-  const type = oldGroup.type || newGroup.type || "object";
-  const identity = oldGroup.identity || newGroup.identity || "";
-  const compactIdentity = String(identity).length > 14 ? `${String(identity).slice(0, 13)}...` : identity;
-  const label = compactIdentity ? `${type} ${compactIdentity}` : type;
-  return label.length > 24 ? `${label.slice(0, 23)}...` : label;
 }
 
 function buildMappingDebugAnchor(x, y, kind, key, side = "") {
@@ -13560,7 +13172,7 @@ function buildLineMappingConnectorPath({
     ? "clean-matched"
     : "";
   const laneBounds = getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 });
-  const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds });
+  const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds, bend: currentLineMappingBend() });
   const railMarkup = style === "slime"
     ? buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass, active, path })
     : "";
@@ -13589,35 +13201,6 @@ function buildLineMappingConnectorPath({
   return `${railMarkup}<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} ${animated}"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />${shineMarkup}${debugMarkup}`;
-}
-
-function buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path }) {
-  return `<path class="line-mapping-rail ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active}"
-    data-line-relation-key="${escapeHtml(relationKey)}"
-    d="${path}" />`;
-}
-
-function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path, x1, y1, x2, y2 }) {
-  const glossId = `lineMappingGloss-${cssSafeClassName(relationKey || `${x1}-${y1}-${x2}-${y2}`)}`;
-  const sweep = Math.max(72, Math.min(180, Math.abs(x2 - x1) * 0.22));
-  const startX = Math.min(x1, x2) - sweep;
-  const endX = Math.max(x1, x2) + sweep;
-  const midY = (y1 + y2) / 2;
-  return `<defs>
-      <linearGradient id="${escapeHtml(glossId)}" gradientUnits="userSpaceOnUse" x1="${startX}" y1="${midY}" x2="${startX + sweep}" y2="${midY}">
-        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
-        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
-        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.62" />
-        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
-        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-        <animate attributeName="x1" values="${startX};${endX}" dur="3.2s" repeatCount="indefinite" />
-        <animate attributeName="x2" values="${startX + sweep};${endX + sweep}" dur="3.2s" repeatCount="indefinite" />
-      </linearGradient>
-    </defs>
-    <path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} is-animated"
-    style="stroke: url(#${escapeHtml(glossId)})"
-    data-line-relation-key="${escapeHtml(relationKey)}"
-    d="${path}" />`;
 }
 
 function lineRelationFieldClass(oldElement, newElement, relationKey = "") {
@@ -13672,120 +13255,6 @@ function getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 }) {
     rightX: centerX + halfWidth,
     centerX,
   };
-}
-
-function buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass = "", laneBounds = null }) {
-  const bend = currentLineMappingBend();
-  if (style === "straight" || style === "chain") {
-    return buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass, bend, laneBounds });
-  }
-
-  return buildSlimeTubePath({ x1, y1, x2, y2, bend, laneBounds });
-}
-
-function buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
-  if (bend <= 0.02) return `M ${x1} ${y1} L ${x2} ${y2}`;
-  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
-  return `M ${x1} ${y1} L ${lane.leftX} ${y1} L ${lane.x} ${lane.y} L ${lane.rightX} ${y2} L ${x2} ${y2}`;
-}
-
-function buildFieldLaneCurvePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
-  const distance = Math.abs(x2 - x1);
-  if (bend <= 0.02) {
-    const tension = Math.max(64, Math.min(220, distance * 0.46));
-    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
-  }
-
-  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
-  const middleTension = Math.max(12, Math.min(42, distance * 0.045));
-  return [
-    `M ${x1} ${y1}`,
-    `L ${lane.leftX} ${y1}`,
-    `C ${lane.leftX + middleTension} ${y1}, ${lane.x - middleTension} ${lane.y}, ${lane.x} ${lane.y}`,
-    `C ${lane.x + middleTension} ${lane.y}, ${lane.rightX - middleTension} ${y2}, ${lane.rightX} ${y2}`,
-    `L ${x2} ${y2}`,
-  ].join(" ");
-}
-
-function buildSlimeTubePath({ x1, y1, x2, y2, bend = 0.65, laneBounds = null }) {
-  const distance = Math.abs(x2 - x1);
-  const verticalDistance = Math.abs(y2 - y1);
-  if (distance < 24 || verticalDistance < 3) {
-    const tension = Math.max(36, Math.min(180, distance * (0.28 + bend * 0.22)));
-    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
-  }
-
-  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, "", bend, laneBounds);
-  const laneWidth = Math.max(40, lane.rightX - lane.leftX);
-  const tension = Math.max(28, Math.min(82, laneWidth * 0.36));
-
-  return [
-    `M ${x1} ${y1}`,
-    `L ${lane.leftX} ${y1}`,
-    `C ${lane.leftX + tension} ${y1}, ${lane.rightX - tension} ${y2}, ${lane.rightX} ${y2}`,
-    `L ${x2} ${y2}`,
-  ].join(" ");
-}
-
-function lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null) {
-  const distance = Math.abs(x2 - x1);
-  const leftX = Number.isFinite(laneBounds?.leftX) ? laneBounds.leftX : null;
-  const rightX = Number.isFinite(laneBounds?.rightX) ? laneBounds.rightX : null;
-  const directX = Number.isFinite(laneBounds?.centerX) ? laneBounds.centerX : (x1 + x2) / 2;
-  const directY = (y1 + y2) / 2;
-  const laneHalfWidth = Math.max(18, Math.min(46, distance * 0.075));
-  const verticalDistance = Math.abs(y2 - y1);
-  const laneY = verticalDistance < 4
-    ? directY
-    : directY;
-  return {
-    x: directX,
-    leftX: Number.isFinite(leftX) ? leftX : directX - laneHalfWidth,
-    rightX: Number.isFinite(rightX) ? rightX : directX + laneHalfWidth,
-    y: laneY,
-  };
-}
-
-function clampLineLaneY(value, y1, y2) {
-  const minY = Math.min(y1, y2);
-  const maxY = Math.max(y1, y2);
-  const span = maxY - minY;
-  if (span < 4) return (y1 + y2) / 2;
-
-  const inset = Math.min(6, span * 0.18);
-  return Math.max(minY + inset, Math.min(maxY - inset, value));
-}
-
-function lineRelationFieldLaneYOffset(fieldClass = "") {
-  const offsetByField = {
-    "field-route": -22,
-    "field-neighbor": -22,
-    "field-address": -15,
-    "field-ip-address": -15,
-    "field-next-hop": -11,
-    "field-gateway": -11,
-    "field-state": 9,
-    "field-admin-state": 9,
-    "field-description": 18,
-    "field-tag": 28,
-    "field-interface": 14,
-    "field-sap": 14,
-    "field-port": 14,
-    "field-lag": 14,
-    "field-group": 38,
-    "field-peer-group": 38,
-    "field-authentication-key": 48,
-    "field-peer-as": 48,
-  };
-  return offsetByField[fieldClass] ?? 0;
-}
-
-function buildSmoothLineMappingPath({ x1, y1, x2, y2 }) {
-  const distance = Math.abs(x2 - x1);
-  const tension = Math.max(64, Math.min(220, distance * 0.46));
-  const dy = y2 - y1;
-  const curveY = Math.abs(dy) < 6 ? 0 : dy * 0.18;
-  return `M ${x1} ${y1} C ${x1 + tension} ${y1 + curveY}, ${x2 - tension} ${y2 - curveY}, ${x2} ${y2}`;
 }
 
 function semanticConfigLineAnchor(line, paneRect, preferredEdge) {

@@ -1,0 +1,1059 @@
+/* Semantic Object Block Diff View - FINAL OVERRIDE */
+
+.embedded-diff {
+  background: #f8fbff;
+}
+
+.semantic-object-block-wrapper {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.semantic-diff-object-block {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-left: 4px solid #22c55e;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+}
+
+.semantic-diff-object-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.semantic-diff-object-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.semantic-diff-object-type {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.semantic-diff-object-title strong {
+  max-width: min(52vw, 620px);
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-diff-object-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.semantic-diff-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.semantic-diff-badge.muted {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.semantic-diff-object-meta {
+  display: flex;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.semantic-diff-object-body {
+  display: block;
+  padding: 8px 0;
+  background: #fbfdff;
+}
+
+.semantic-diff-config-line {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 10px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.semantic-diff-config-line:hover {
+  background: rgba(14, 116, 144, 0.06);
+}
+
+.semantic-diff-config-line.is-matched {
+  background: rgba(14, 165, 233, 0.06);
+}
+
+.semantic-diff-config-line.is-covered {
+  color: #334155;
+}
+
+.semantic-diff-config-line.is-structural {
+  color: #94a3b8;
+}
+
+.semantic-diff-line-no {
+  color: #94a3b8;
+  font-size: 10px;
+  text-align: right;
+  user-select: none;
+}
+
+.semantic-diff-config-line code {
+  color: #0f172a;
+  white-space: pre;
+}
+
+.semantic-diff-line-field {
+  padding: 1px 6px;
+  border: 1px solid var(--token-border, #dbe3ef);
+  border-radius: 5px;
+  background: var(--token-bg, #eef2f7);
+  color: var(--token-text, #64748b);
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.semantic-diff-object-matched {
+  border-left-color: #22c55e;
+}
+
+.semantic-diff-object-partial {
+  border-left-color: #0ea5e9;
+}
+
+.semantic-diff-object-ambiguous {
+  border-left-color: #f59e0b;
+}
+
+.semantic-diff-object-unmatched {
+  border-left-color: #f43f5e;
+}
+
+.semantic-diff-object-manual {
+  border-left-color: #8b5cf6;
+}
+
+/* FINAL semantic object block view */
+
+.semantic-object-block-wrapper {
+  display: block !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  padding: 12px 14px !important;
+  background: transparent !important;
+  font-family: "Segoe UI", Arial, sans-serif !important;
+}
+
+.semantic-diff-object-block {
+  display: block !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  overflow: visible !important;
+  border: 1px solid #dbe3ef !important;
+  border-left: 4px solid #22c55e !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
+}
+
+.semantic-diff-object-head {
+  display: flex !important;
+  min-width: max-content !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 10px 12px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+}
+
+.semantic-diff-object-title {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+.semantic-diff-object-type {
+  color: #64748b !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+}
+
+.semantic-diff-object-title strong {
+  color: #0f172a !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+}
+
+.semantic-diff-object-badges {
+  display: flex !important;
+  gap: 6px !important;
+}
+
+.semantic-diff-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 22px !important;
+  padding: 0 8px !important;
+  border-radius: 999px !important;
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+.semantic-diff-badge.muted {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+.semantic-diff-object-meta {
+  display: flex !important;
+  gap: 10px !important;
+  padding: 7px 12px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #64748b !important;
+  font-size: 12px !important;
+}
+
+.semantic-diff-object-body {
+  display: block !important;
+  min-width: max-content !important;
+  padding: 8px 0 !important;
+  background: #fbfdff !important;
+}
+
+.semantic-diff-config-line {
+  display: grid !important;
+  grid-template-columns: 34px max-content !important;
+  gap: 8px !important;
+  align-items: center !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  min-height: 24px !important;
+  padding: 2px 12px !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-family: Consolas, monospace !important;
+  font-size: 12px !important;
+  line-height: 18px !important;
+}
+
+.semantic-diff-config-line:hover {
+  background: rgba(14, 116, 144, 0.06) !important;
+}
+
+.semantic-diff-config-line.is-matched {
+  background: rgba(14, 165, 233, 0.06) !important;
+}
+
+.semantic-diff-config-line.is-structural {
+  color: #94a3b8 !important;
+}
+
+.semantic-diff-line-no {
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+  text-align: right !important;
+  user-select: none !important;
+}
+
+.semantic-diff-config-line code {
+  display: block !important;
+  color: #0f172a !important;
+  white-space: pre !important;
+  min-width: max-content !important;
+}
+
+/* Commercial semantic diff surface */
+
+.compare-area .editor-grid {
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+}
+
+.compare-area .diff-gutter {
+  display: block;
+  min-width: 64px;
+}
+
+.editor-grid.diff-connectors-active {
+  --status-review-bg: rgba(245, 158, 11, 0.14);
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+}
+
+.editor-grid.diff-connectors-active .diff-gutter {
+  display: block;
+  min-width: 64px;
+  background: #f7fbff !important;
+}
+
+.editor-grid.diff-connectors-active .ncw-editor-card:first-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.editor-grid.diff-connectors-active .ncw-editor-card:nth-child(3) {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.editor-grid.diff-connectors-active .embedded-diff {
+  background: #f7fbff !important;
+}
+
+.semantic-object-block-wrapper {
+  padding: 7px 10px !important;
+  margin: 0 0 12px !important;
+}
+
+.semantic-object-block-wrapper.object-matched {
+  background: rgba(34, 197, 94, 0.045) !important;
+  border-radius: 0 !important;
+}
+
+.semantic-object-block-wrapper.object-status-candidate {
+  background: rgba(245, 158, 11, 0.14) !important;
+  border-radius: 0 !important;
+}
+
+.semantic-object-block-wrapper.object-status-candidate .semantic-diff-object-block {
+  border-left-color: #f97316 !important;
+  background: linear-gradient(90deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.74)) !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.22), 0 8px 18px rgba(15, 23, 42, 0.045) !important;
+}
+
+.semantic-object-block-wrapper.object-reason-manual .semantic-diff-object-block {
+  border-left-color: #8b5cf6 !important;
+  background: rgba(245, 243, 255, 0.96) !important;
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.22), 0 8px 18px rgba(15, 23, 42, 0.045) !important;
+}
+
+.semantic-object-block-wrapper.semantic-pair-hover,
+.diff-line.semantic-pair-hover {
+  background: rgba(20, 184, 166, 0.12) !important;
+}
+
+.semantic-object-block-wrapper.semantic-pair-hover .semantic-diff-object-block,
+.semantic-object-block-wrapper.semantic-pair-selected .semantic-diff-object-block {
+  box-shadow:
+    inset 0 0 0 1px rgba(20, 184, 166, 0.42),
+    0 0 0 2px rgba(20, 184, 166, 0.14),
+    0 12px 24px rgba(15, 23, 42, 0.08) !important;
+}
+
+.semantic-object-block-wrapper.semantic-pair-selected .semantic-diff-object-block,
+.diff-line.semantic-pair-selected {
+  outline: 2px solid rgba(20, 184, 166, 0.32);
+  outline-offset: 2px;
+}
+
+.semantic-diff-object-block {
+  border: 0 !important;
+  border-left: 4px solid #16a34a !important;
+  border-radius: 0 !important;
+  background: rgba(240, 253, 244, 0.96) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(34, 197, 94, 0.20),
+    0 8px 18px rgba(15, 23, 42, 0.045) !important;
+}
+
+.semantic-object-block-wrapper + .semantic-object-block-wrapper {
+  margin-top: 6px !important;
+}
+
+.semantic-diff-object-head {
+  min-height: 30px !important;
+  padding: 6px 10px !important;
+  border-bottom: 0 !important;
+  background: rgba(220, 252, 231, 0.72) !important;
+}
+
+.semantic-diff-object-title {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.semantic-diff-object-type {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 20px !important;
+  padding: 0 7px !important;
+  border-radius: 6px !important;
+  background: rgba(34, 197, 94, 0.16) !important;
+  color: #166534 !important;
+  font-size: 10px !important;
+}
+
+.semantic-diff-object-title strong {
+  font-size: 13px !important;
+}
+
+.semantic-diff-object-badges {
+  align-items: center !important;
+}
+
+.semantic-diff-badge {
+  height: 19px !important;
+  padding: 0 7px !important;
+  background: rgba(34, 197, 94, 0.16) !important;
+  color: #15803d !important;
+  font-size: 10px !important;
+}
+
+.semantic-diff-badge.muted {
+  background: rgba(148, 163, 184, 0.16) !important;
+}
+
+.semantic-diff-object-meta {
+  display: none !important;
+}
+
+.semantic-diff-object-body {
+  padding: 5px 0 7px !important;
+  background: transparent !important;
+}
+
+.semantic-diff-config-line {
+  min-height: 22px !important;
+  grid-template-columns: 34px max-content !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.semantic-diff-config-line.is-matched {
+  background: rgba(45, 212, 191, 0.14) !important;
+}
+
+.semantic-diff-config-line.is-covered {
+  background: rgba(14, 165, 233, 0.045) !important;
+}
+
+.semantic-diff-config-line.is-structural {
+  background: transparent !important;
+  opacity: 0.72;
+}
+
+.semantic-diff-object-unmatched {
+  border-left-color: #f43f5e !important;
+  background: rgba(255, 241, 242, 0.82) !important;
+  box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.22), 0 8px 18px rgba(15, 23, 42, 0.045) !important;
+}
+
+.semantic-diff-object-ambiguous {
+  border-left-color: #f97316 !important;
+  background: rgba(255, 247, 237, 0.96) !important;
+}
+
+.semantic-diff-object-partial {
+  border-left-color: #eab308 !important;
+  background: rgba(254, 252, 232, 0.96) !important;
+}
+
+.semantic-diff-object-manual {
+  border-left-color: #8b5cf6 !important;
+  background: rgba(245, 243, 255, 0.84) !important;
+}
+
+.diff-object-band.matched {
+  fill: url("#objectBridgeMatched");
+  stroke: rgba(22, 163, 74, 0.38);
+}
+
+.diff-object-band.changed,
+.diff-object-band.partial {
+  fill: url("#objectBridgeChanged");
+  stroke: rgba(202, 138, 4, 0.34);
+}
+
+.diff-object-band.candidate {
+  fill: url("#objectBridgeCandidate");
+  stroke: rgba(234, 88, 12, 0.32);
+}
+
+.diff-object-band.manual {
+  fill: url("#objectBridgeManual");
+  stroke: rgba(124, 58, 237, 0.32);
+}
+
+.diff-object-band.semantic-pair-hover,
+.diff-object-band.semantic-pair-selected,
+.diff-object-bridge-spine.semantic-pair-hover,
+.diff-object-bridge-spine.semantic-pair-selected {
+  opacity: 1;
+  filter: drop-shadow(0 10px 18px rgba(20, 184, 166, 0.18));
+}
+
+.diff-object-band-label.semantic-pair-hover,
+.diff-object-band-label.semantic-pair-selected {
+  opacity: 1;
+  filter: drop-shadow(0 8px 14px rgba(20, 184, 166, 0.18));
+}
+
+@media (max-width: 1100px) {
+  .editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diff-gutter,
+  .diff-connector-overlay {
+    display: none !important;
+  }
+}
+
+/* Unified SaaS tone override */
+
+.app-shell,
+.workspace,
+.compare-area {
+  background: #f6f9fc;
+}
+
+.header-bar,
+.ncw-side-card,
+.ncw-editor-card,
+.result-panel,
+.profile-card,
+.manual-match-drawer {
+  border-color: #dbe6f2 !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06) !important;
+}
+
+.top-result-tabs,
+.result-tabs,
+.ncw-action-bar {
+  border-color: #dbe6f2 !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045) !important;
+}
+
+.result-tab,
+.app-button,
+.app-icon-button,
+.app-select,
+.app-checkbox {
+  --control-border: #cbd5e1;
+  border-color: var(--control-border) !important;
+}
+
+.result-tab.active,
+.app-button[data-variant="primary"],
+.app-button.primary,
+.app-button.is-primary {
+  border-color: rgba(8, 145, 178, 0.42) !important;
+  background: linear-gradient(180deg, #ecfeff, #cffafe) !important;
+  color: #0f766e !important;
+}
+
+.app-icon-button:hover,
+.app-button:hover,
+.result-tab:hover {
+  border-color: rgba(8, 145, 178, 0.45) !important;
+  background: #ecfeff !important;
+}
+
+.summary-card,
+.overview-card,
+.semantic-summary-item,
+.semantic-object-card {
+  border-color: #dbe6f2 !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.045) !important;
+}
+
+.semantic-compare-result {
+  max-width: 1080px;
+}
+
+.semantic-object-card {
+  margin-bottom: 8px;
+}
+
+/* Engineer-focused compare readability */
+
+.diff-line.semantic-gap.semantic-placeholder-line {
+  min-height: 56px !important;
+  height: 56px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.semantic-object-block-wrapper {
+  margin-bottom: 44px !important;
+}
+
+.diff-line.semantic-object-start:not(:first-child) {
+  margin-top: 42px !important;
+}
+
+.diff-line.semantic-object-end {
+  margin-bottom: 24px !important;
+}
+
+.diff-line.semantic-object-start::before {
+  content: "";
+  position: absolute;
+  left: 58px;
+  right: 0;
+  top: -22px;
+  height: 18px;
+  border-top: 1px solid rgba(100, 116, 139, 0.18);
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0), rgba(248, 251, 255, 0.88));
+}
+
+.semantic-height-aligned {
+  box-sizing: border-box !important;
+}
+
+.semantic-object-block-wrapper[data-side="old"] .semantic-diff-object-block {
+  border-right: 2px solid rgba(22, 163, 74, 0.24) !important;
+}
+
+.semantic-object-block-wrapper[data-side="new"] .semantic-diff-object-block {
+  border-left-width: 5px !important;
+}
+
+.semantic-diff-object-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.semantic-diff-badge.side {
+  border: 1px solid rgba(8, 145, 178, 0.18) !important;
+  background: rgba(236, 254, 255, 0.9) !important;
+  color: #0e7490 !important;
+}
+
+.semantic-diff-config-line {
+  grid-template-columns: 34px minmax(0, 1fr) auto !important;
+}
+
+.semantic-diff-line-field {
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.72;
+}
+
+.semantic-diff-config-line:hover .semantic-diff-line-field {
+  opacity: 1;
+}
+
+.editor-grid.semantic-pair-focus-active .semantic-object-block-wrapper[data-semantic-pair-key]:not(.semantic-pair-selected) {
+  opacity: 0.42;
+  filter: saturate(0.75);
+}
+
+.editor-grid.semantic-pair-focus-active .diff-object-flow:not(.semantic-pair-selected),
+.editor-grid.semantic-pair-focus-active .diff-object-flow-glow:not(.semantic-pair-selected),
+.editor-grid.semantic-pair-focus-active .diff-object-flow-spine:not(.semantic-pair-selected),
+.editor-grid.semantic-pair-focus-active .diff-object-band:not(.semantic-pair-selected),
+.editor-grid.semantic-pair-focus-active .diff-object-band-label:not(.semantic-pair-selected) {
+  opacity: 0.1;
+}
+
+.semantic-object-block-wrapper.semantic-pair-selected {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.semantic-object-block-wrapper.semantic-pair-selected .semantic-diff-object-head {
+  background: rgba(153, 246, 228, 0.72) !important;
+}
+
+.diff-object-band-label.semantic-pair-selected rect {
+  fill: #ecfeff;
+  stroke: rgba(13, 148, 136, 0.62);
+}
+
+.diff-object-band-label.semantic-pair-selected text {
+  fill: #115e59;
+  font-weight: 900;
+}
+
+body[data-field-highlight="off"] .semantic-diff-line-field {
+  display: none;
+}
+
+body[data-field-highlight="off"] .semantic-diff-config-line {
+  grid-template-columns: 34px minmax(0, 1fr) !important;
+}
+
+.semantic-object-block-wrapper.object-type-bgp.object-matched,
+.diff-line.object-type-bgp.object-matched {
+  background: rgba(22, 163, 74, 0.09) !important;
+}
+
+.semantic-object-block-wrapper.object-type-bgp .semantic-diff-object-block {
+  border-left-color: #16a34a !important;
+  background: linear-gradient(90deg, rgba(240, 253, 244, 0.96), rgba(220, 252, 231, 0.70)) !important;
+}
+
+.semantic-object-block-wrapper.object-type-static-route.object-matched,
+.diff-line.object-type-static-route.object-matched {
+  background: rgba(2, 132, 199, 0.09) !important;
+}
+
+.semantic-object-block-wrapper.object-type-static-route .semantic-diff-object-block {
+  border-left-color: #0284c7 !important;
+  background: linear-gradient(90deg, rgba(240, 249, 255, 0.96), rgba(224, 242, 254, 0.74)) !important;
+}
+
+.semantic-object-block-wrapper.object-type-interface.object-matched,
+.semantic-object-block-wrapper.object-type-subscriber-interface.object-matched,
+.semantic-object-block-wrapper.object-type-group-interface.object-matched,
+.semantic-object-block-wrapper.object-type-sap.object-matched,
+.diff-line.object-type-interface.object-matched,
+.diff-line.object-type-subscriber-interface.object-matched,
+.diff-line.object-type-group-interface.object-matched,
+.diff-line.object-type-sap.object-matched {
+  background: rgba(234, 88, 12, 0.085) !important;
+}
+
+.semantic-object-block-wrapper.object-type-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-subscriber-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-group-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-sap .semantic-diff-object-block {
+  border-left-color: #ea580c !important;
+  background: linear-gradient(90deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.72)) !important;
+}
+
+.semantic-object-block-wrapper.object-type-port.object-matched,
+.semantic-object-block-wrapper.object-type-lag.object-matched,
+.diff-line.object-type-port.object-matched,
+.diff-line.object-type-lag.object-matched {
+  background: rgba(8, 145, 178, 0.085) !important;
+}
+
+.semantic-object-block-wrapper.object-matched:not(.object-status-changed):not(.object-status-partial):not(.object-status-candidate):not(.object-status-ambiguous),
+.diff-line.object-matched:not(.object-status-changed):not(.object-status-partial):not(.object-status-candidate):not(.object-status-ambiguous) {
+  background: rgba(34, 197, 94, 0.08) !important;
+}
+
+.semantic-object-block-wrapper.object-status-changed,
+.semantic-object-block-wrapper.object-status-partial,
+.diff-line.object-status-changed,
+.diff-line.object-status-partial {
+  background: rgba(245, 158, 11, 0.14) !important;
+}
+
+.semantic-object-block-wrapper.object-status-changed .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-partial .semantic-diff-object-block {
+  border-left-color: #f59e0b !important;
+  background: rgba(255, 247, 237, 0.98) !important;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.24) !important;
+}
+
+.semantic-object-block-wrapper.object-status-changed .semantic-diff-object-head,
+.semantic-object-block-wrapper.object-status-partial .semantic-diff-object-head {
+  background: rgba(254, 243, 199, 0.92) !important;
+}
+
+.semantic-object-block-wrapper.object-status-old-only,
+.semantic-object-block-wrapper.object-status-new-only {
+  background: var(--status-unmatched-bg) !important;
+  border-radius: 10px !important;
+}
+
+.semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+.semantic-object-block-wrapper .semantic-diff-object-unmatched {
+  border-left-color: var(--status-unmatched-accent) !important;
+  background: var(--status-unmatched-bg) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(249, 115, 22, 0.24),
+    0 8px 18px rgba(127, 29, 29, 0.055) !important;
+}
+
+.semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-head,
+.semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-head {
+  background: var(--status-unmatched-bg-strong) !important;
+  color: var(--status-unmatched-text) !important;
+}
+
+.diff-line.object-type-bgp.semantic-object-start {
+  box-shadow: inset 4px 0 0 #16a34a;
+}
+
+.diff-line.object-type-static-route.semantic-object-start {
+  box-shadow: inset 4px 0 0 #0284c7;
+}
+
+.semantic-object-block-wrapper .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-candidate .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-reason-manual .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-bgp .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-static-route .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-subscriber-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-group-interface .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-type-sap .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+.semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+.semantic-object-block-wrapper .semantic-diff-object-unmatched,
+.semantic-object-block-wrapper[data-side="new"] .semantic-diff-object-block {
+  border-left: 1px solid #dbe3ef !important;
+}
+
+/* Keep horizontally scrolled semantic lines inside their object card. */
+.embedded-diff .semantic-object-block-wrapper {
+  display: block !important;
+  box-sizing: border-box !important;
+  min-width: 100% !important;
+  width: max-content !important;
+}
+
+.embedded-diff .semantic-diff-object-block {
+  display: inline-block !important;
+  box-sizing: border-box !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  overflow: visible !important;
+}
+
+.embedded-diff .semantic-diff-object-head,
+.embedded-diff .semantic-diff-object-body {
+  box-sizing: border-box !important;
+  min-width: 100% !important;
+  width: max-content !important;
+}
+
+.embedded-diff .semantic-diff-config-line {
+  box-sizing: border-box !important;
+  grid-template-columns: 34px max-content auto !important;
+  min-width: 100% !important;
+  width: max-content !important;
+}
+
+.embedded-diff .semantic-diff-config-line code {
+  display: block !important;
+  min-width: max-content !important;
+  width: max-content !important;
+}
+
+.diff-line.object-type-interface.semantic-object-start,
+.diff-line.object-type-subscriber-interface.semantic-object-start,
+.diff-line.object-type-group-interface.semantic-object-start,
+.diff-line.object-type-sap.semantic-object-start {
+  box-shadow: inset 4px 0 0 #ea580c;
+}
+
+.diff-line.semantic-object-start,
+.diff-line.object-type-bgp.semantic-object-start,
+.diff-line.object-type-static-route.semantic-object-start,
+.diff-line.object-type-interface.semantic-object-start,
+.diff-line.object-type-subscriber-interface.semantic-object-start,
+.diff-line.object-type-group-interface.semantic-object-start,
+.diff-line.object-type-sap.semantic-object-start {
+  box-shadow: none !important;
+}
+
+/* Final object diff box shape: square line-group object borders. */
+.embedded-diff .diff-line.semantic-object-start,
+.embedded-diff .diff-line.semantic-object-end,
+.embedded-diff .diff-line[data-semantic-pair-key],
+.embedded-diff .diff-line.object-matched,
+.embedded-diff .diff-line.semantic-state-matched,
+.embedded-diff .diff-line.semantic-state-manual,
+.embedded-diff .diff-line.semantic-state-partial,
+.embedded-diff .diff-line.semantic-state-ambiguous,
+.embedded-diff .diff-line.semantic-state-unmatched,
+.embedded-diff .semantic-object-block-wrapper,
+.embedded-diff .semantic-diff-object-block {
+  border-radius: 0 !important;
+}
+
+.embedded-diff .diff-line.semantic-object-start {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+.embedded-diff .diff-line.semantic-object-end {
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.embedded-diff .diff-line.semantic-object-start .diff-line-number,
+.embedded-diff .diff-line.semantic-object-end .diff-line-number,
+.embedded-diff .diff-line.semantic-object-start .diff-line-text,
+.embedded-diff .diff-line.semantic-object-end .diff-line-text {
+  border-radius: 0 !important;
+}
+
+.audit-metric-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.audit-finding-list,
+.semantic-audit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.audit-finding-item,
+.semantic-audit-item,
+.audit-detail {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.audit-finding-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 10px 12px;
+}
+
+.audit-finding-item p,
+.semantic-audit-item p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.audit-finding-item span,
+.audit-detail-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.audit-finding-item button {
+  align-self: center;
+}
+
+.audit-report-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.audit-report-section h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.audit-detail {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.audit-detail summary {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) minmax(140px, 0.6fr);
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px 12px;
+}
+
+.audit-detail summary em {
+  color: var(--muted);
+  font-style: normal;
+  text-align: right;
+}
+
+.audit-detail-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.audit-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.audit-detail-grid div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.audit-source-lines,
+.semantic-audit-item pre {
+  display: grid;
+  gap: 4px;
+  overflow: auto;
+}
+
+.audit-source-lines code,
+.semantic-audit-item pre {
+  font-size: 12px;
+}
+
+.semantic-audit-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.audit-badge-critical,
+.audit-severity-critical {
+  border-color: #dc2626;
+}
+
+.audit-badge-warning,
+.audit-severity-warning {
+  border-color: #d97706;
+}
+
+.audit-badge-manual-review,
+.audit-severity-manual-review,
+.audit-badge-unsupported,
+.audit-severity-unsupported {
+  border-color: #7c3aed;
+}
+
+.audit-badge-suppressed,
+.audit-severity-suppressed {
+  border-color: #64748b;
+  opacity: 0.82;
+}
+

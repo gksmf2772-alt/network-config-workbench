@@ -34,6 +34,13 @@ function compare(oldConfig, newConfig) {
   };
 }
 
+function readGlobalStyles() {
+  const entry = fs.readFileSync("src/styles/global.css", "utf8");
+  return entry.replace(/^@import "\.\/(.+)";$/gm, (_, file) =>
+    fs.readFileSync(`src/styles/${file}`, "utf8")
+  );
+}
+
 test("vendor support state marks placeholder vendors as non-runnable", () => {
   const arista = VENDOR_OPTIONS.find((vendor) => vendor.id === "arista-eos");
   assert.equal(arista.supportState, VENDOR_SUPPORT_STATE.PLANNED);
@@ -352,7 +359,7 @@ test("Nokia Classic interface maps MD-CLI block interface as one object", () => 
 
 test("legacy main compare parser keeps static route blocks as route-level objects", () => {
   const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
-  const styles = fs.readFileSync("src/styles/global.css", "utf8");
+  const styles = readGlobalStyles();
 
   assert.match(source, /objects\.push\(finalizeObject\(current, options, source\)\);/);
   assert.match(source, /mergeStaticRouteFields\(target\.canonicalFields, safeObject\.canonicalFields\)/);

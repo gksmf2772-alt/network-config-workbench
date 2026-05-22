@@ -100,6 +100,13 @@ function dashboard(plan) {
   });
 }
 
+function readGlobalStyles() {
+  const entry = fs.readFileSync("src/styles/global.css", "utf8");
+  return entry.replace(/^@import "\.\/(.+)";$/gm, (_, file) =>
+    fs.readFileSync(`src/styles/${file}`, "utf8")
+  );
+}
+
 test("unmatched setting visual status uses unmatched class and color token", () => {
   assert.equal(getSemanticStateClass({ status: "old-only" }), "semantic-state-unmatched");
   assert.equal(getSemanticStateClass({ status: "new-only" }), "semantic-state-unmatched");
@@ -111,7 +118,7 @@ test("unmatched setting visual status uses unmatched class and color token", () 
     { status: "new-only", reason: "unmatched", oldObject: null, newObject: setting({ side: "new", key: "192.0.2.2" }) },
   ]);
   const html = renderComparisonPlanHtml(plan);
-  const css = fs.readFileSync("src/styles/global.css", "utf8");
+  const css = readGlobalStyles();
 
   assert.match(html, /semantic-state-unmatched/);
   assert.match(html, /data-match-status="old-only"/);
@@ -121,7 +128,7 @@ test("unmatched setting visual status uses unmatched class and color token", () 
 });
 
 test("diff block status and color tokens target config panes", () => {
-  const css = fs.readFileSync("src/styles/global.css", "utf8");
+  const css = readGlobalStyles();
 
   assert.equal(getSemanticDiffBlockState({ status: "old-only" }), "unmatched");
   assert.equal(getSemanticDiffBlockState({ status: "new-only" }), "unmatched");

@@ -1,0 +1,747 @@
+/* Keep compare editors inside the viewport so horizontal scrollbars stay visible. */
+#compareTab.active .workspace {
+  align-items: stretch;
+  height: calc(100vh - 76px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+#compareTab.active .control-panel {
+  max-height: 100%;
+  overflow: auto;
+}
+
+#compareTab.active .compare-area {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#compareTab.active .editor-grid {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#compareTab.active .ncw-editor-card {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+}
+
+#compareTab.active .code-frame,
+#compareTab.active .app-code-editor-frame {
+  height: 100%;
+  min-height: 0;
+}
+
+#compareTab.active textarea,
+#compareTab.active .embedded-diff {
+  min-height: 0;
+}
+
+/* Compare tab settings: compact trigger, menu-driven popover. */
+#compareTab.active .workspace,
+#compareTab.active .workspace.controls-hidden {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+}
+
+#compareTab.active .compare-area {
+  grid-row: 1;
+}
+
+#compareTab.active .compare-settings-trigger {
+  gap: 7px;
+}
+
+#compareTab.active .compare-settings-trigger svg {
+  width: 16px;
+  height: 16px;
+}
+
+#compareTab.active .compare-profile-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+#compareTab.active .compare-profile-inline span {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+#compareTab.active .compare-profile-inline select {
+  width: min(300px, 28vw);
+  min-width: 180px;
+  min-height: 32px;
+}
+
+#compareTab.active .compare-profile-inline button {
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+#compareTab.active .compare-settings-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  border: 0;
+  background: rgba(15, 23, 42, 0.18);
+}
+
+#compareTab.active .control-panel.compare-settings-panel,
+#compareTab.active .workspace.controls-hidden .control-panel.compare-settings-panel,
+#compareTab.active .ncw-control-panel.compare-settings-panel {
+  position: fixed;
+  top: 78px;
+  right: 18px;
+  bottom: 18px;
+  left: auto;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(840px, calc(100vw - 36px)) !important;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+  transform: none;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#compareTab.active .control-panel.compare-settings-panel.is-open {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+#compareTab.active .control-collapse-btn {
+  display: none;
+}
+
+.compare-settings-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.compare-settings-panel__header strong,
+.compare-settings-panel__header span {
+  display: block;
+}
+
+.compare-settings-panel__header strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.compare-settings-panel__header span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.compare-settings-panel__body {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.compare-settings-menu {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 12px;
+  border-right: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.compare-settings-menu button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-weight: 800;
+  text-align: left;
+}
+
+.compare-settings-menu button:hover,
+.compare-settings-menu button.is-active {
+  border-color: rgba(8, 145, 178, 0.26);
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.compare-settings-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+#compareTab.active .workspace.controls-hidden .compare-settings-panel section,
+#compareTab.active .compare-settings-section {
+  display: none;
+}
+
+#compareTab.active .workspace.controls-hidden .compare-settings-panel .compare-settings-section.is-active,
+#compareTab.active .compare-settings-section.is-active {
+  display: grid;
+}
+
+#compareTab.active .compare-settings-section {
+  min-width: 0;
+  overflow: hidden;
+}
+
+#compareTab.active .compare-settings-section .app-panel__content {
+  display: grid;
+  gap: 10px;
+}
+
+#compareTab.active .compare-settings-section .ncw-switch-row {
+  min-height: 34px;
+}
+
+#compareTab.active .compare-settings-section label {
+  min-width: 0;
+}
+
+#compareTab.active #objectToggles.chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 8px;
+  width: 100%;
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+#compareTab.active #objectToggles .object-scope-chip {
+  min-width: 0;
+  min-height: 34px;
+}
+
+/* Compare tab final alignment polish. */
+#compareTab.active .ncw-action-bar {
+  justify-content: flex-start;
+  padding: 8px 10px;
+}
+
+#compareTab.active .ncw-action-bar .app-toolbar {
+  width: 100%;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+#compareTab.active .compare-area {
+  padding: 6px;
+}
+
+#compareTab.active .code-frame,
+#compareTab.active .app-code-editor-frame {
+  grid-template-columns: 42px minmax(0, 1fr);
+  margin: 0 8px 8px;
+  background: #fbfdff;
+}
+
+#compareTab.active .line-numbers {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+#compareTab.active textarea {
+  background: #fbfdff;
+}
+
+#compareTab.active .embedded-diff .diff-line {
+  grid-template-columns: 28px max-content !important;
+}
+
+#compareTab.active .embedded-diff .diff-line-number {
+  padding: 1px 4px !important;
+}
+
+#compareTab.active .embedded-diff .diff-line-text {
+  padding: 1px 6px !important;
+}
+
+#compareTab.active .embedded-diff .semantic-diff-config-line {
+  grid-template-columns: 28px max-content auto !important;
+  padding-left: 4px !important;
+}
+
+#compareTab.active .embedded-diff .diff-line.object-status-old-only,
+#compareTab.active .embedded-diff .diff-line.object-status-new-only,
+#compareTab.active .embedded-diff .diff-line.object-status-unmatched,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched {
+  background: rgba(245, 158, 11, 0.16) !important;
+  border-radius: 0 !important;
+}
+
+#compareTab.active .embedded-diff .diff-line.object-status-candidate,
+#compareTab.active .embedded-diff .diff-line.object-status-ambiguous,
+#compareTab.active .embedded-diff .diff-line.object-status-changed,
+#compareTab.active .embedded-diff .diff-line.object-status-partial,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-candidate,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-ambiguous,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-changed,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-partial {
+  background: rgba(251, 191, 36, 0.18) !important;
+  border-radius: 0 !important;
+}
+
+#compareTab.active .embedded-diff .diff-line.object-status-old-only.semantic-object-start,
+#compareTab.active .embedded-diff .diff-line.object-status-new-only.semantic-object-start,
+#compareTab.active .embedded-diff .diff-line.object-status-unmatched.semantic-object-start {
+  box-shadow: inset 4px 0 0 #f59e0b !important;
+}
+
+#compareTab.active .embedded-diff .diff-line.object-status-candidate.semantic-object-start,
+#compareTab.active .embedded-diff .diff-line.object-status-ambiguous.semantic-object-start,
+#compareTab.active .embedded-diff .diff-line.object-status-changed.semantic-object-start,
+#compareTab.active .embedded-diff .diff-line.object-status-partial.semantic-object-start {
+  box-shadow: inset 4px 0 0 #fbbf24 !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-diff-object-block.semantic-diff-object-unmatched {
+  border-left-color: #f59e0b !important;
+  background: rgba(255, 247, 237, 0.98) !important;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.26) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-candidate .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-ambiguous .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-changed .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-partial .semantic-diff-object-block {
+  border-left-color: #fbbf24 !important;
+  background: rgba(254, 252, 232, 0.98) !important;
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.28) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-head {
+  background: rgba(254, 243, 199, 0.92) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-candidate .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-ambiguous .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-changed .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-partial .semantic-diff-object-head {
+  background: rgba(254, 249, 195, 0.92) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-diff-config-line.is-unmatched {
+  background: rgba(255, 251, 235, 0.98) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-diff-config-line.is-unmatched.is-structural {
+  background: rgba(255, 251, 235, 0.98) !important;
+  opacity: 1 !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-placeholder-line.object-status-old-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-placeholder-line.object-status-new-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-placeholder-line.object-status-unmatched {
+  display: flex !important;
+  align-items: center;
+  min-height: 96px !important;
+  background: rgba(255, 251, 235, 0.92) !important;
+  border-left: 4px solid #f59e0b !important;
+  opacity: 1 !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-placeholder-line.object-status-old-only[data-side="new"]::after,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-placeholder-line.object-status-unmatched[data-side="new"]::after {
+  content: "신규 매칭 없음";
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-placeholder-line.object-status-new-only[data-side="old"]::after {
+  content: "기존 매칭 없음";
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"],
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"],
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"],
+#compareTab.active .embedded-diff .semantic-diff-object-block.semantic-diff-object-unmatched,
+#compareTab.active .embedded-diff .diff-line.object-status-old-only,
+#compareTab.active .embedded-diff .diff-line.object-status-new-only,
+#compareTab.active .embedded-diff .diff-line.object-status-unmatched,
+#compareTab.active .embedded-diff .diff-line[data-object-status="old-only"],
+#compareTab.active .embedded-diff .diff-line[data-object-status="new-only"],
+#compareTab.active .embedded-diff .diff-line[data-object-status="unmatched"],
+#compareTab.active .embedded-diff .diff-line.semantic-state-unmatched {
+  background: var(--status-unmatched-bg) !important;
+  color: var(--text) !important;
+  border-radius: 0 !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-diff-object-block.semantic-diff-object-unmatched {
+  border: 1px solid var(--status-unmatched-border) !important;
+  border-left: 5px solid var(--status-unmatched-accent) !important;
+  background: var(--status-unmatched-bg) !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.28) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-head,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-head {
+  background: var(--status-unmatched-bg-strong) !important;
+  color: var(--status-unmatched-text) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-type,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-type,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-type,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-type,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-type,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-type {
+  background: rgba(249, 115, 22, 0.22) !important;
+  color: var(--status-unmatched-text) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-body,
+#compareTab.active .embedded-diff .semantic-diff-config-line.is-unmatched,
+#compareTab.active .embedded-diff .semantic-diff-config-line.object-status-old-only,
+#compareTab.active .embedded-diff .semantic-diff-config-line.object-status-new-only,
+#compareTab.active .embedded-diff .semantic-diff-config-line.object-status-unmatched {
+  background: var(--status-unmatched-bg-soft) !important;
+}
+
+#compareTab.active .embedded-diff .diff-line.object-status-old-only .diff-line-number,
+#compareTab.active .embedded-diff .diff-line.object-status-new-only .diff-line-number,
+#compareTab.active .embedded-diff .diff-line.object-status-unmatched .diff-line-number,
+#compareTab.active .embedded-diff .diff-line[data-object-status="old-only"] .diff-line-number,
+#compareTab.active .embedded-diff .diff-line[data-object-status="new-only"] .diff-line-number,
+#compareTab.active .embedded-diff .diff-line[data-object-status="unmatched"] .diff-line-number {
+  border-left: 5px solid var(--status-unmatched-accent) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-candidate,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-ambiguous,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-changed,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-status-partial,
+#compareTab.active .embedded-diff .diff-line.object-status-candidate,
+#compareTab.active .embedded-diff .diff-line.object-status-ambiguous,
+#compareTab.active .embedded-diff .diff-line.object-status-changed,
+#compareTab.active .embedded-diff .diff-line.object-status-partial {
+  background: var(--status-review-bg) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-old-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-new-only,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-unmatched,
+#compareTab.active .embedded-diff .diff-line.semantic-pair-hover.object-status-old-only,
+#compareTab.active .embedded-diff .diff-line.semantic-pair-hover.object-status-new-only,
+#compareTab.active .embedded-diff .diff-line.semantic-pair-hover.object-status-unmatched {
+  background: var(--status-unmatched-bg-strong) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-pair-selected.object-status-old-only .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-pair-selected.object-status-new-only .semantic-diff-object-block,
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.semantic-pair-selected.object-status-unmatched .semantic-diff-object-block,
+#compareTab.active .embedded-diff .diff-line.semantic-pair-selected.object-status-old-only,
+#compareTab.active .embedded-diff .diff-line.semantic-pair-selected.object-status-new-only,
+#compareTab.active .embedded-diff .diff-line.semantic-pair-selected.object-status-unmatched {
+  outline: 2px solid var(--status-unmatched-accent) !important;
+  outline-offset: 2px;
+}
+
+/* Final unmatched object override: keep source-only/target-only blocks visibly orange. */
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"],
+.embedded-diff .diff-line.object-unmatched-row,
+.embedded-diff .diff-line.object-status-old-only,
+.embedded-diff .diff-line.object-status-new-only,
+.embedded-diff .diff-line.object-status-unmatched,
+.embedded-diff .diff-line.object-status-unmatched-old,
+.embedded-diff .diff-line.object-status-unmatched-new,
+.embedded-diff .diff-line.object-status-source-only,
+.embedded-diff .diff-line.object-status-target-only,
+.embedded-diff .diff-line[data-object-status="old-only"],
+.embedded-diff .diff-line[data-object-status="new-only"],
+.embedded-diff .diff-line[data-object-status="unmatched"],
+.embedded-diff .diff-line[data-object-status="unmatched-old"],
+.embedded-diff .diff-line[data-object-status="unmatched-new"],
+.embedded-diff .diff-line[data-object-status="source-only"],
+.embedded-diff .diff-line[data-object-status="target-only"] {
+  background: var(--status-unmatched-bg) !important;
+  border-radius: 0 !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-block,
+.embedded-diff .semantic-diff-object-block.semantic-diff-object-unmatched {
+  border: 1px solid var(--status-unmatched-border) !important;
+  border-left: 5px solid var(--status-unmatched-accent) !important;
+  background: var(--status-unmatched-bg) !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.28) !important;
+}
+
+.embedded-diff .diff-line.object-unmatched-row .diff-line-number,
+.embedded-diff .diff-line.object-status-old-only .diff-line-number,
+.embedded-diff .diff-line.object-status-new-only .diff-line-number,
+.embedded-diff .diff-line.object-status-unmatched .diff-line-number,
+.embedded-diff .diff-line[data-object-status="old-only"] .diff-line-number,
+.embedded-diff .diff-line[data-object-status="new-only"] .diff-line-number,
+.embedded-diff .diff-line[data-object-status="unmatched"] .diff-line-number {
+  border-left: 5px solid var(--status-unmatched-accent) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"],
+.embedded-diff .diff-line.object-unmatched-row,
+.embedded-diff .diff-line.object-status-old-only,
+.embedded-diff .diff-line.object-status-new-only,
+.embedded-diff .diff-line.object-status-unmatched,
+.embedded-diff .diff-line.object-status-unmatched-old,
+.embedded-diff .diff-line.object-status-unmatched-new,
+.embedded-diff .diff-line.object-status-source-only,
+.embedded-diff .diff-line.object-status-target-only,
+.embedded-diff .diff-line[data-object-status="old-only"],
+.embedded-diff .diff-line[data-object-status="new-only"],
+.embedded-diff .diff-line[data-object-status="unmatched"],
+.embedded-diff .diff-line[data-object-status="unmatched-old"],
+.embedded-diff .diff-line[data-object-status="unmatched-new"],
+.embedded-diff .diff-line[data-object-status="source-only"],
+.embedded-diff .diff-line[data-object-status="target-only"] {
+  background: var(--diff-unmatched-bg) !important;
+  color: var(--text) !important;
+  border-radius: 0 !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"] .semantic-diff-object-block,
+.embedded-diff .semantic-diff-object-block.semantic-diff-object-unmatched {
+  border: 1px solid var(--diff-unmatched-border) !important;
+  border-left: 5px solid var(--diff-unmatched-accent) !important;
+  background: var(--diff-unmatched-bg) !important;
+  color: var(--diff-unmatched-text) !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.28) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"] .semantic-diff-object-head {
+  background: var(--diff-unmatched-bg-soft) !important;
+  color: var(--diff-unmatched-text) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-unmatched-row .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-old-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-new-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-old .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-unmatched-new .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-source-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper.object-status-target-only .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="old-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="new-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-old"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="unmatched-new"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="source-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="target-only"] .semantic-diff-object-body,
+.embedded-diff .semantic-diff-config-line.is-unmatched,
+.embedded-diff .semantic-diff-config-line.object-status-old-only,
+.embedded-diff .semantic-diff-config-line.object-status-new-only,
+.embedded-diff .semantic-diff-config-line.object-status-unmatched {
+  background: var(--diff-unmatched-bg) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-old-only,
+.embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-new-only,
+.embedded-diff .semantic-object-block-wrapper.semantic-pair-hover.object-status-unmatched,
+.embedded-diff .diff-line.semantic-pair-hover.object-status-old-only,
+.embedded-diff .diff-line.semantic-pair-hover.object-status-new-only,
+.embedded-diff .diff-line.semantic-pair-hover.object-status-unmatched {
+  background: var(--diff-unmatched-bg-strong) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-status-comparison-excluded,
+.embedded-diff .semantic-object-block-wrapper.object-status-suppressed,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="comparison-excluded"],
+.embedded-diff .semantic-object-block-wrapper[data-object-status="suppressed"] {
+  background: #f8fafc !important;
+  color: var(--muted) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-status-comparison-excluded .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper.object-status-suppressed .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="comparison-excluded"] .semantic-diff-object-block,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="suppressed"] .semantic-diff-object-block,
+.embedded-diff .semantic-diff-object-excluded,
+.embedded-diff .semantic-diff-object-suppressed {
+  border: 1px solid #cbd5e1 !important;
+  border-left: 5px solid #94a3b8 !important;
+  background: #f8fafc !important;
+  color: var(--muted) !important;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.22) !important;
+}
+
+.embedded-diff .semantic-object-block-wrapper.object-status-comparison-excluded .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper.object-status-suppressed .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="comparison-excluded"] .semantic-diff-object-head,
+.embedded-diff .semantic-object-block-wrapper[data-object-status="suppressed"] .semantic-diff-object-head,
+.embedded-diff .semantic-diff-object-excluded .semantic-diff-object-head,
+.embedded-diff .semantic-diff-object-suppressed .semantic-diff-object-head {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+@media (max-width: 980px) {
+  .report-review-tools {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary-status-header,
+  .summary-workspace-grid,
+  .report-graph-head {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-status-badges,
+  .report-graph-tools {
+    justify-content: flex-start;
+  }
+
+  .field-overlap-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .report-review-table {
+    grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(220px, 1.4fr) minmax(160px, 1fr) 88px;
+  }
+
+  .semantic-object-summary-row {
+    grid-template-columns: auto minmax(0, 1fr) repeat(2, auto);
+  }
+
+  .semantic-object-summary-row .semantic-object-metric:nth-of-type(n + 4) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .line-mapping-connector.is-animated,
+  .line-mapping-shine {
+    animation: none !important;
+  }
+}

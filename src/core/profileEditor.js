@@ -136,6 +136,174 @@ export function renderProfileExceptionEditorTable({
   `;
 }
 
+export function renderProfileExceptionOverview(exceptions = []) {
+  const active = (Array.isArray(exceptions) ? exceptions : []).filter((item) => item && item.enabled !== false);
+  const exclusionCount = active.filter((item) => item.type === "comparison-exclusion").length;
+  const exceptionCount = active.length - exclusionCount;
+
+  if (!active.length) {
+    return `
+      <details class="profile-exception-overview-details" open>
+        <summary>
+          <div>
+            <strong>저장된 예외/비교 제외 규칙</strong>
+            <span>비교 실행 전 현재 프로파일에 적용될 규칙을 확인합니다.</span>
+          </div>
+          <div class="profile-exception-overview-counts">
+            <span>예외 0</span>
+            <span>비교 제외 0</span>
+          </div>
+        </summary>
+        <div class="profile-exception-overview-empty">저장된 예외/비교 제외 규칙 없음.</div>
+      </details>
+    `;
+  }
+
+  return `
+    <details class="profile-exception-overview-details" open>
+      <summary>
+        <div>
+          <strong>저장된 예외/비교 제외 규칙</strong>
+          <span>비교 실행 전 현재 프로파일에 적용될 규칙을 확인합니다.</span>
+        </div>
+        <div class="profile-exception-overview-counts">
+          <span>예외 ${escapeHtml(exceptionCount)}</span>
+          <span>비교 제외 ${escapeHtml(exclusionCount)}</span>
+        </div>
+      </summary>
+      ${renderProfileExceptionRuleGroups(active)}
+    </details>
+  `;
+}
+
+export function renderProfileExceptionRuleGroups(exceptions = [], {
+  actionAttribute = "data-profile-exception-overview-remove",
+  actionLabel = "삭제",
+  emptyMessage = "저장된 예외/비교 제외 규칙 없음.",
+} = {}) {
+  const active = (Array.isArray(exceptions) ? exceptions : []).filter((item) => item && item.enabled !== false);
+  if (!active.length) return `<div class="profile-exception-overview-empty">${escapeHtml(emptyMessage)}</div>`;
+
+  return `
+    <div class="profile-exception-rule-groups">
+      ${groupProfileExceptionsBySettingType(active).map(([settingType, rows]) => {
+        const exclusionCount = rows.filter((item) => item.type === "comparison-exclusion").length;
+        const exceptionCount = rows.length - exclusionCount;
+        return `
+          <section class="profile-exception-rule-group">
+            <div class="profile-exception-rule-group-head">
+              <strong>${escapeHtml(settingType)}</strong>
+              <span>전체 ${escapeHtml(rows.length)} · 라인/항목 예외 ${escapeHtml(exceptionCount)} · 객체 비교 제외 ${escapeHtml(exclusionCount)}</span>
+            </div>
+            <div class="profile-exception-setting-groups">
+              ${groupProfileExceptionsBySetting(rows).map(([setting, settingRows]) => {
+                const settingExclusionCount = settingRows.filter((item) => item.type === "comparison-exclusion").length;
+                const settingExceptionCount = settingRows.length - settingExclusionCount;
+                return `
+                  <details class="profile-exception-setting-group">
+                    <summary>
+                      <strong>${escapeHtml(setting)}</strong>
+                      <span>전체 ${escapeHtml(settingRows.length)} · 라인/항목 예외 ${escapeHtml(settingExceptionCount)} · 객체 비교 제외 ${escapeHtml(settingExclusionCount)}</span>
+                    </summary>
+                    <div class="profile-exception-overview-scroll">
+                      <div class="profile-exception-overview-table">
+                        <div>구분</div>
+                        <div>범위</div>
+                        <div>설정 종류</div>
+                        <div>설정</div>
+                        <div>항목</div>
+                        <div>규칙/상태</div>
+                        <div>사유</div>
+                        <div>동작</div>
+                        ${settingRows.map((exception) => renderProfileExceptionOverviewRow(exception, { actionAttribute, actionLabel })).join("")}
+                      </div>
+                    </div>
+                  </details>
+                `;
+              }).join("")}
+            </div>
+          </section>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function groupProfileExceptionsBySettingType(exceptions = []) {
+  const groups = new Map();
+  exceptions.forEach((exception) => {
+    const settingType = profileExceptionSettingType(exception);
+    if (!groups.has(settingType)) groups.set(settingType, []);
+    groups.get(settingType).push(exception);
+  });
+  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
+}
+
+function groupProfileExceptionsBySetting(exceptions = []) {
+  const groups = new Map();
+  exceptions.forEach((exception) => {
+    const setting = profileExceptionSettingLabel(exception);
+    if (!groups.has(setting)) groups.set(setting, []);
+    groups.get(setting).push(exception);
+  });
+  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
+}
+
+function renderProfileExceptionOverviewRow(exception = {}, { actionAttribute = "data-profile-exception-overview-remove", actionLabel = "삭제" } = {}) {
+  const target = exception.target || {};
+  const match = exception.match || {};
+  const objectType = profileExceptionSettingType(exception);
+  const setting = profileExceptionSettingLabel(exception);
+  const field = target.fieldPath || match.fieldPath || "-";
+  const rule = target.ruleId || match.ruleId || match.findingType || target.findingType || "-";
+  const status = target.changeType || match.changeType || target.matchStatus || match.matchStatus || target.status || "-";
+  const buttonLabel = actionLabel === "auto"
+    ? exception.type === "comparison-exclusion" ? "비교 제외 해제" : "예외 해제"
+    : actionLabel;
+  return `
+    <div><strong>${escapeHtml(profileExceptionKindLabel(exception))}</strong></div>
+    <div>${exception.scope === "profile" ? "프로파일" : exception.scope === "setting" ? "이 설정" : "객체"}</div>
+    <div>${escapeHtml(objectType)}</div>
+    <div><strong>${escapeHtml(setting)}</strong></div>
+    <div>${escapeHtml(field)}</div>
+    <div>${escapeHtml(rule)}<br /><small>${escapeHtml(status)}</small></div>
+    <div>${escapeHtml(exception.reasonKo || exception.reason || "-")}</div>
+    <div><button type="button" ${actionAttribute}="${escapeHtml(exception.id || "")}">${escapeHtml(buttonLabel)}</button></div>
+  `;
+}
+
+function profileExceptionKindLabel(exception = {}) {
+  if (exception.type === "comparison-exclusion") return "객체 비교 제외";
+  const target = exception.target || {};
+  const match = exception.match || {};
+  if (target.fieldPath || match.fieldPath || target.lineNumber || match.lineNumber) return "라인/항목 예외";
+  return "객체 예외";
+}
+
+function profileExceptionSettingType(exception = {}) {
+  const target = exception.target || {};
+  const match = exception.match || {};
+  return target.settingType ||
+    target.objectType ||
+    match.settingType ||
+    match.objectType ||
+    exception.settingType ||
+    exception.objectType ||
+    "-";
+}
+
+function profileExceptionSettingLabel(exception = {}) {
+  const target = exception.target || {};
+  const match = exception.match || {};
+  return target.displayName ||
+    target.settingKey ||
+    target.objectKey ||
+    target.createdFromObjectKey ||
+    match.settingKey ||
+    match.objectKey ||
+    "-";
+}
+
 function canonicalizeComparableLine(line) {
   return String(line ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }

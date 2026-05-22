@@ -95,6 +95,8 @@ import {
   mergeSemanticNodes,
   parseNormalizeMap,
   renderProfileExceptionEditorTable,
+  renderProfileExceptionOverview,
+  renderProfileExceptionRuleGroups,
   renderSemanticMappingRow,
   semanticMappingCardinality,
 } from "./profileEditor.js";
@@ -890,10 +892,43 @@ function renderProfileEditor() {
   renderFieldMappings();
   renderSemanticRuleEditor();
   renderPolicyEditor();
+  renderProfileExceptionOverviewSection();
   renderLineRules();
   renderProfileChanges();
   renderExamplePreviews();
   renderReactProfileMappingPanel();
+}
+
+function renderProfileExceptionOverviewSection() {
+  const container = ensureProfileExceptionOverviewContainer();
+  if (!container) return;
+  container.innerHTML = renderProfileExceptionOverview(state.profileDraft.exceptions || []);
+  container.querySelectorAll("[data-profile-exception-overview-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const exceptionId = button.dataset.profileExceptionOverviewRemove || "";
+      if (!exceptionId) return;
+      state.profileDraft.exceptions = (state.profileDraft.exceptions || []).filter((item) => item.id !== exceptionId);
+      renderProfileEditor();
+      markProfileDirty("Profile Exception", "삭제", exceptionId);
+      markCompareStale();
+    });
+  });
+}
+
+function ensureProfileExceptionOverviewContainer() {
+  let container = document.querySelector("#profileExceptionOverview");
+  if (container) return container;
+
+  const changesSection = selectors.profileChangesList?.closest?.(".profile-section");
+  if (!changesSection?.parentElement) return null;
+
+  const section = document.createElement("div");
+  section.className = "profile-section profile-exception-overview-section collapsible-section";
+  section.innerHTML = `
+    <div id="profileExceptionOverview" class="profile-exception-overview"></div>
+  `;
+  changesSection.parentElement.insertBefore(section, changesSection);
+  return section.querySelector("#profileExceptionOverview");
 }
 
 function renderReactProfileMappingPanel() {
@@ -5227,16 +5262,25 @@ function renderProfileExceptionManager() {
   const exclusionCount = exceptions.filter((item) => item.type === "comparison-exclusion").length;
   return `
     <section class="summary-section profile-exception-manager" data-review-panel="suppressed">
-      <div class="summary-section-head">
-        <h3>예외/비교 제외된 항목</h3>
-        <span>${escapeHtml(exceptions.length)}개${exclusionCount ? ` · 비교 제외 ${escapeHtml(exclusionCount)}개` : ""}</span>
-      </div>
-      ${exceptions.length ? `
-        <div class="profile-exception-table">
-          <div>범위</div><div>설정 종류</div><div>설정</div><div>설정 항목</div><div>규칙/구분</div><div>사유</div><div>동작</div>
-          ${exceptions.map((exception) => renderProfileExceptionRow(exception)).join("")}
-        </div>
-      ` : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외 또는 비교 제외를 추가할 수 있음.</span></div>`}
+      <details class="profile-exception-overview-details summary-profile-exception-details" open>
+        <summary>
+          <div>
+            <strong>예외/비교 제외된 항목</strong>
+            <span>설정 종류별로 저장된 예외와 객체 비교 제외 규칙을 확인합니다.</span>
+          </div>
+          <div class="profile-exception-overview-counts">
+            <span>전체 ${escapeHtml(exceptions.length)}</span>
+            <span>예외 ${escapeHtml(exceptions.length - exclusionCount)}</span>
+            <span>객체 비교 제외 ${escapeHtml(exclusionCount)}</span>
+          </div>
+        </summary>
+        ${exceptions.length
+          ? renderProfileExceptionRuleGroups(exceptions, {
+            actionAttribute: "data-remove-exception",
+            actionLabel: "auto",
+          })
+          : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외 또는 비교 제외를 추가할 수 있음.</span></div>`}
+      </details>
     </section>
   `;
 }
@@ -15884,7 +15928,6 @@ async function renderSavedProfiles() {
                 <div class="small-note">${profile.vendor} | 수정 ${formatDate(profile.updatedAt)}</div>
               </div>
               <div class="saved-profile-actions">
-                <button type="button" data-profile-select-id="${profile.id}">선택</button>
                 <button type="button" data-profile-load-id="${profile.id}">불러오기</button>
               </div>
             </div>
@@ -15892,12 +15935,6 @@ async function renderSavedProfiles() {
         )
         .join("")
     : `<div class="small-note">저장된 프로파일이 없습니다.</div>`;
-
-  selectors.savedProfilesList.querySelectorAll("[data-profile-select-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectSavedProfile(button.dataset.profileSelectId);
-    });
-  });
 
   selectors.savedProfilesList.querySelectorAll("[data-profile-item-id]").forEach((item) => {
     item.addEventListener("click", (event) => {

@@ -10,6 +10,8 @@ import {
   mergeSemanticNodes,
   parseNormalizeMap,
   renderProfileExceptionEditorTable,
+  renderProfileExceptionOverview,
+  renderProfileExceptionRuleGroups,
   renderSemanticMappingRow,
   semanticMappingCardinality,
 } from "../src/core/profileEditor.js";
@@ -58,4 +60,52 @@ test("profile editor render helpers keep existing markup contracts", () => {
   assert.match(row, /neighbor/);
   assert.match(table, /data-profile-exception-remove="ex-1"/);
   assert.match(table, /프로파일 예외/);
+});
+
+test("profile exception overview lists saved exceptions and exclusions", () => {
+  const html = renderProfileExceptionOverview([
+    {
+      id: "field-exception",
+      scope: "profile",
+      reasonKo: "state 예외",
+      target: { objectType: "bgp", fieldPath: "state", ruleId: "rule", changeType: "added", displayName: "bgp 192.0.2.1" },
+    },
+    {
+      id: "setting-exclusion",
+      type: "comparison-exclusion",
+      scope: "setting",
+      reasonKo: "비교 제외",
+      target: { settingType: "static-route", settingKey: "static-route:192.0.2.0/24", matchStatus: "old-only" },
+    },
+  ]);
+
+  assert.match(html, /예외 1/);
+  assert.match(html, /비교 제외 1/);
+  assert.match(html, /<details class="profile-exception-overview-details" open>/);
+  assert.match(html, /<section class="profile-exception-rule-group">/);
+  assert.match(html, /profile-exception-rule-group-head/);
+  assert.match(html, /<details class="profile-exception-setting-group">/);
+  assert.match(html, /라인\/항목 예외/);
+  assert.match(html, /객체 비교 제외/);
+  assert.match(html, /data-profile-exception-overview-remove="field-exception"/);
+  assert.match(html, /data-profile-exception-overview-remove="setting-exclusion"/);
+  assert.match(html, /static-route:192\.0\.2\.0\/24/);
+});
+
+test("profile exception grouped rules can use summary tab removal action", () => {
+  const html = renderProfileExceptionRuleGroups([
+    {
+      id: "setting-exclusion",
+      type: "comparison-exclusion",
+      scope: "setting",
+      target: { settingType: "static-route", settingKey: "static-route:192.0.2.0/24", matchStatus: "old-only" },
+    },
+  ], {
+    actionAttribute: "data-remove-exception",
+    actionLabel: "auto",
+  });
+
+  assert.match(html, /data-remove-exception="setting-exclusion"/);
+  assert.match(html, /비교 제외 해제/);
+  assert.match(html, /객체 비교 제외/);
 });

@@ -1,409 +1,645 @@
-const assert = require("assert");
-const fs = require("fs");
-const path = require("path");
-const vm = require("vm");
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
 
-const root = path.resolve(__dirname, "..");
-const appPath = path.join(root, "app.js");
-const code = fs.readFileSync(appPath, "utf8").replace(/init\(\);\s*$/, "");
+import {
+  createComparisonPlan,
+  matchNormalizedObjects,
+  normalizeConfig,
+  renderComparisonPlanHtml,
+} from "../src/core/comparator.js";
+import { buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
+import {
+  VENDOR_OPTIONS,
+  VENDOR_SUPPORT_STATE,
+  getVendorPairSupportState,
+} from "../src/core/vendorPresets.js";
 
-function createElement() {
-  const element = {
-    addEventListener() {},
-    querySelector() { return createElement(); },
-    querySelectorAll() { return []; },
-    classList: { add() {}, remove() {}, toggle() {} },
-    closest() { return element; },
-    style: {},
-    dataset: {},
-    setAttribute() {},
-    getBoundingClientRect() { return { width: 320, height: 180, left: 0, top: 0, right: 320, bottom: 180 }; },
-    textContent: "",
-    innerHTML: "",
-    value: "",
-    checked: true,
-  };
-  return element;
+function parse(vendor, configText, side = "old") {
+  return normalizeConfig({ vendor, configText, side });
 }
 
-const elements = new Map();
-function querySelector(selector) {
-  if (!elements.has(selector)) elements.set(selector, createElement());
-  return elements.get(selector);
+function compare(oldConfig, newConfig) {
+  const oldResult = parse("nokia-classic", oldConfig, "old");
+  const newResult = parse("nokia-md-cli", newConfig, "new");
+  const matches = matchNormalizedObjects({
+    oldObjects: oldResult.objects,
+    newObjects: newResult.objects,
+  });
+  return {
+    oldResult,
+    newResult,
+    matches,
+    plan: createComparisonPlan(matches, {}),
+  };
 }
 
-const sandbox = {
-  console,
-  document: { querySelector, querySelectorAll() { return []; } },
-  window: { addEventListener() {}, requestAnimationFrame(fn) { return fn(); }, CSS: { escape(value) { return String(value); } }, setTimeout },
-  requestAnimationFrame(fn) { return fn(); },
-  indexedDB: null,
-  localStorage: { getItem() { return null; }, setItem() {} },
-  Blob: function Blob() {},
-  URL: { createObjectURL() { return ""; }, revokeObjectURL() {} },
-  setTimeout,
-  clearTimeout,
-};
+test("vendor support state marks placeholder vendors as non-runnable", () => {
+  const arista = VENDOR_OPTIONS.find((vendor) => vendor.id === "arista-eos");
+  assert.equal(arista.supportState, VENDOR_SUPPORT_STATE.PLANNED);
+  assert.equal(arista.selectable, false);
 
-vm.createContext(sandbox);
-vm.runInContext(code, sandbox);
+  const ciscoPair = getVendorPairSupportState("cisco-ios-xe", "nokia-md-cli");
+  assert.equal(ciscoPair.state, VENDOR_SUPPORT_STATE.PARTIAL);
+  assert.equal(ciscoPair.runnable, true);
 
-const result = JSON.parse(vm.runInContext(`
-  const profile = createDefaultProfile();
-  const options = {
-    vendor: "nokia",
-    normalizeSpacing: true,
-    sortObjects: false,
-    ignoreComments: true,
-    ignoreGenerated: true,
-    selectedObjects: ["static-route"],
-    profile,
-    filter: "",
-    resultFilter: "all",
-  };
-  const oldText = [
-    "static-route-entry 112.174.176.73/32",
-    "    next-hop 112.174.180.82",
-    "    description \\"Skylife DCS Ulsan-MCE073 Lo0\\"",
-    "    tag 701",
+  const aristaPair = getVendorPairSupportState("arista-eos", "nokia-md-cli");
+  assert.equal(aristaPair.state, VENDOR_SUPPORT_STATE.PLANNED);
+  assert.equal(aristaPair.runnable, false);
+});
+
+test("Nokia Classic static route matches MD-CLI one-line route semantically", () => {
+  const oldConfig = [
+    "static-route-entry 10.10.10.0/24",
+    "    next-hop 192.0.2.1",
+    "    tag 100",
     "    no shutdown",
     "exit",
-  ].join("\\n");
-  const newText = [
-    "route 112.174.176.73/32 route-type unicast {",
-    "    next-hop \\"112.174.180.82\\" {",
-    "        admin-state enable",
-    "        description \\"## Skylife DCS Ulsan-MCE073 Lo0 ##\\"",
-    "        tag 700",
-    "    }",
-    "}",
-  ].join("\\n");
-  selectors.oldInput.value = oldText;
-  selectors.newInput.value = newText;
-  const oldObjects = parseConfig(oldText, options, "old");
-  const newObjects = parseConfig(newText, options, "new");
-  const report = compareObjects(oldObjects, newObjects, options);
-  const diffRows = buildDiffRows(oldText, newText, options);
-  JSON.stringify({
-    oldObject: oldObjects[0],
-    newObject: newObjects[0],
-    reportItems: report.items,
-    diffRows: diffRows.map((row) => ({
-      oldText: row.oldRow && row.oldRow.text.trim(),
-      newText: row.newRow && row.newRow.text.trim(),
-      oldField: row.oldRow && row.oldRow.semanticField,
-      newField: row.newRow && row.newRow.semanticField,
-      oldState: row.oldState,
-      newState: row.newState,
-      oldHighlights: row.oldRow && row.oldRow.highlights,
-      newHighlights: row.newRow && row.newRow.highlights,
-    })),
-  });
-`, sandbox));
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Base" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 admin-state enable }',
+    '/configure { router "Base" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 tag 100 }',
+  ].join("\n");
 
-assert.strictEqual(result.oldObject.name, "112.174.176.73/32");
-assert.strictEqual(result.newObject.name, "112.174.176.73/32");
-assert.strictEqual(result.oldObject.key, "static-route:112.174.176.73/32");
-assert.strictEqual(result.newObject.key, "static-route:112.174.176.73/32");
-assert.strictEqual(result.oldObject.canonicalFields.route, "112.174.176.73/32");
-assert.strictEqual(result.newObject.canonicalFields.route, "112.174.176.73/32");
-assert.ok(!result.reportItems.some((item) => item.type === "missing" || item.type === "added"));
-assert.ok(result.reportItems.some((item) => item.type === "changed" && item.message.includes("tag")));
+  const result = compare(oldConfig, newConfig);
+  assert.equal(result.oldResult.objects.length, 1);
+  assert.equal(result.newResult.objects.length, 1);
+  assert.equal(result.matches[0].status, "matched");
+  assert.equal(result.matches[0].score, 100);
+  assert.equal(result.plan[0].fieldStats.changedFields, 0);
+  assert.equal(result.plan[0].relationshipSummary[0].status, "matched");
+});
 
-assert.ok(result.diffRows.some((row) => row.oldField === "route" && row.newField === "route"));
-assert.ok(result.diffRows.some((row) => row.oldField === "description" && row.newField === "description"));
-assert.ok(result.diffRows.some((row) => row.oldField === "next-hop" && row.newField === "next-hop"));
-assert.ok(result.diffRows.some((row) => row.oldField === "tag" && row.newField === "tag"));
-assert.ok(result.diffRows.some((row) => row.oldField === "state" || row.newField === "state"));
-assert.ok(result.diffRows.some((row) => row.oldText === "exit"));
-
-const oneLineResult = JSON.parse(vm.runInContext(`
-(() => {
-  const profile2 = createDefaultProfile();
-  const options2 = {
-    vendor: "nokia",
-    normalizeSpacing: true,
-    sortObjects: false,
-    ignoreComments: true,
-    ignoreGenerated: true,
-    selectedObjects: ["static-route"],
-    profile: profile2,
-    filter: "",
-    resultFilter: "all",
-  };
-  const oldText = [
-    "static-route-entry 10.10.10.0/24",
-    "    description \\"CMP-TEST-SAME\\"",
-    "    next-hop 192.0.2.1",
-    "        tag 100",
+test("Nokia Classic static route with multiple next-hop maps as one route object", () => {
+  const oldConfig = [
+    "static-route-entry 125.144.1.98/32",
+    "    next-hop 14.59.5.65",
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.5.69",
     "        no shutdown",
     "    exit",
     "exit",
-  ].join("\\n");
-  const newText = [
-    "/configure { router \\"Base\\" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 admin-state disable }",
-    "/configure { router \\"Base\\" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 description \\"CMP-TEST-SAME\\" }",
-    "/configure { router \\"Base\\" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 tag 100 }",
-  ].join("\\n");
-  selectors.oldInput.value = oldText;
-  selectors.newInput.value = newText;
-  const oldObjects = parseConfig(oldText, options2, "old");
-  const newObjects = parseConfig(newText, options2, "new");
-  const report = compareObjects(oldObjects, newObjects, options2);
-  return JSON.stringify({
-    oldCount: oldObjects.length,
-    newCount: newObjects.length,
-    newLineCount: newObjects[0].lines.length,
-    oldFields: oldObjects[0].canonicalFields,
-    newFields: newObjects[0].canonicalFields,
-    items: report.items.map((item) => ({ type: item.type, message: item.message })),
-    diffRows: report.diffRows.map((row) => ({
-      oldText: row.oldRow && row.oldRow.text.trim(),
-      newText: row.newRow && row.newRow.text.trim(),
-      oldField: row.oldRow && row.oldRow.semanticField,
-      newField: row.newRow && row.newRow.semanticField,
-      oldState: row.oldState,
-      newState: row.newState,
-      oldHighlights: row.oldRow && row.oldRow.highlights,
-      newHighlights: row.newRow && row.newRow.highlights,
-    })),
-  });
-})()
-`, sandbox));
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Base" static-routes route 125.144.1.98/32 route-type unicast next-hop 14.59.5.65 admin-state enable }',
+    '/configure { router "Base" static-routes route 125.144.1.98/32 route-type unicast next-hop 14.59.5.69 admin-state enable }',
+    '/configure { router "Base" static-routes route 125.144.1.98/32 route-type unicast next-hop 14.59.5.97 admin-state enable }',
+  ].join("\n");
 
-assert.strictEqual(oneLineResult.oldCount, 1);
-assert.strictEqual(oneLineResult.newCount, 1);
-assert.strictEqual(oneLineResult.newLineCount, 3);
-assert.strictEqual(oneLineResult.newFields.route, "10.10.10.0/24");
-assert.strictEqual(oneLineResult.newFields["next-hop"], "192.0.2.1");
-assert.strictEqual(oneLineResult.newFields.tag, "100");
-assert.strictEqual(oneLineResult.newFields.state, "disabled");
-assert.ok(oneLineResult.items.some((item) => item.type === "changed" && item.message.includes("state")));
-assert.ok(oneLineResult.diffRows.some((row) => row.oldText === "exit" && !row.newText && row.oldState === "missing"));
-assert.strictEqual(oneLineResult.diffRows.filter((row) => row.newText).length, 3);
-assert.ok(oneLineResult.diffRows.some((row) => row.oldText === "no shutdown"));
-const adminLine = oneLineResult.diffRows.find((row) => row.newText && row.newText.includes("admin-state disable"));
-assert.ok(adminLine.newHighlights.some((item) => item.field === "route" && item.token === "10.10.10.0/24"));
-assert.ok(adminLine.newHighlights.some((item) => item.field === "next-hop" && item.token === "192.0.2.1"));
-assert.ok(adminLine.newHighlights.some((item) => item.field === "state" && item.token === "admin-state"));
-
-const autoLearnResult = JSON.parse(vm.runInContext(`
-(() => {
-  state.selectedProfileObjectType = "static-route";
-  state.profileDraft = createDefaultProfile();
-  selectors.profileOldExampleInput.value = [
-    "static-route-entry 10.10.10.0/24",
-    "    next-hop 192.0.2.1",
-  ].join("\\n");
-  selectors.profileNewExampleInput.value = [
-    "/configure { router \\"Base\\" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 admin-state disable }",
-    "/configure { router \\"Base\\" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 description \\"CMP-TEST-SAME\\" }",
-    "/configure { router \\"Base\\" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 tag 100 }",
-  ].join("\\n");
-  const oldCandidates = collectAutoSemanticCandidates(selectors.profileOldExampleInput.value, "static-route", "old");
-  const newCandidates = collectAutoSemanticCandidates(selectors.profileNewExampleInput.value, "static-route", "new");
-  const routeNew = newCandidates.filter((item) => item.field === "route" && item.sample === "10.10.10.0/24");
-  const hopNew = newCandidates.filter((item) => item.field === "next-hop" && item.sample === "192.0.2.1");
-  upsertSemanticMappingGroup(
-    "static-route",
-    "route",
-    "object-key",
-    [candidateToMappingSelector(oldCandidates.find((item) => item.field === "route"))],
-    routeNew.map(candidateToMappingSelector),
-  );
-  upsertSemanticMappingGroup(
-    "static-route",
-    "route",
-    "object-key",
-    [candidateToMappingSelector(oldCandidates.find((item) => item.field === "route"))],
-    [candidateToMappingSelector(routeNew[0])],
-  );
-  return JSON.stringify({
-    routeNewCount: routeNew.length,
-    hopNewCount: hopNew.length,
-    mapping: state.profileDraft.semanticMappings["static-route"][0],
-  });
-})()
-`, sandbox));
-
-assert.strictEqual(autoLearnResult.routeNewCount, 3);
-assert.strictEqual(autoLearnResult.hopNewCount, 3);
-assert.strictEqual(autoLearnResult.mapping.oldNodes.length, 1);
-assert.strictEqual(autoLearnResult.mapping.newNodes.length, 3);
-assert.strictEqual(autoLearnResult.mapping.cardinality, "1:N");
-
-const pendingMappingResult = JSON.parse(vm.runInContext(`
-(() => {
-  state.selectedProfileObjectType = "static-route";
-  state.profileDraft = createDefaultProfile();
-  showSemanticMappingConfirm({
-    type: "static-route",
-    field: "route",
-    role: "object-key",
-    policy: "compare",
-    oldNodes: [{ lineIndex: 0, tokenIndex: 1, selectedToken: "10.10.10.0/24", value: "10.10.10.0/24" }],
-    newNodes: [{ lineIndex: 0, tokenIndex: 6, selectedToken: "10.10.10.0/24", value: "10.10.10.0/24" }],
-  });
-  return JSON.stringify({
-    pending: Boolean(state.pendingSemanticMapping),
-    savedCount: state.profileDraft.semanticMappings["static-route"].length,
-  });
-})()
-`, sandbox));
-
-assert.strictEqual(pendingMappingResult.pending, true);
-assert.strictEqual(pendingMappingResult.savedCount, 0);
-
-const profileRuleResult = JSON.parse(vm.runInContext(`
-(() => {
-  const profile = normalizeProfile({
-    lineMappings: { bgp: [{ oldText: "neighbor 1.1.1.1", newText: "neighbor \\"1.1.1.1\\" {" }] },
-    contextMappings: { "static-route": [{ oldText: "tag 701", newText: "tag 700", label: "tag-policy" }] },
-    fieldMappings: { "static-route": [{ oldField: "static-route-entry", newField: "route" }] },
-    lineRules: { bgp: [{ source: "old", text: "authentication-key", action: "required-field", message: "authentication key missing" }] },
-  });
-  return JSON.stringify({
-    lineMapping: profile.lineMappings.bgp[0],
-    contextMapping: profile.contextMappings["static-route"][0],
-    fieldMapping: profile.fieldMappings["static-route"][0],
-    lineRule: profile.lineRules.bgp[0],
-  });
-})()
-`, sandbox));
-
-assert.deepStrictEqual(profileRuleResult.lineMapping, {
-  oldText: "neighbor 1.1.1.1",
-  newText: 'neighbor "1.1.1.1" {',
-});
-assert.deepStrictEqual(profileRuleResult.contextMapping, {
-  oldText: "tag 701",
-  newText: "tag 700",
-  label: "tag-policy",
-});
-assert.deepStrictEqual(profileRuleResult.fieldMapping, {
-  oldField: "static-route-entry",
-  newField: "route",
-});
-assert.deepStrictEqual(profileRuleResult.lineRule, {
-  source: "old",
-  text: "authentication-key",
-  action: "required-field",
-  message: "authentication key missing",
+  const result = compare(oldConfig, newConfig);
+  assert.equal(result.oldResult.objects.length, 1);
+  assert.equal(result.newResult.objects.length, 1);
+  assert.equal(result.oldResult.objects[0].normalizedIdentity, "125.144.1.98/32");
+  assert.equal(result.newResult.objects[0].normalizedIdentity, "125.144.1.98/32");
+  assert.equal(result.oldResult.objects[0].fields["next-hop"], "14.59.5.65, 14.59.5.69");
+  assert.equal(result.newResult.objects[0].fields["next-hop"], "14.59.5.65, 14.59.5.69, 14.59.5.97");
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.matches[0].status, "candidate");
+  assert.equal(result.plan.filter((item) => item.status === "candidate").length, 1);
 });
 
-const multiObjectResult = JSON.parse(vm.runInContext(`
-(() => {
-  const profile = createDefaultProfile();
-  const options = {
-    vendor: "nokia",
-    normalizeSpacing: true,
-    sortObjects: false,
-    ignoreComments: true,
-    ignoreGenerated: true,
-    selectedObjects: ["static-route"],
-    profile,
-    filter: "",
-    resultFilter: "all",
-  };
-  const routes = ["10.10.10.0/24", "10.10.20.0/24", "10.10.30.0/24"];
-  const oldText = routes.flatMap((route, index) => [
-    \`static-route-entry \${route}\`,
-    "    next-hop 192.0.2.1",
-    \`    tag \${100 + index}\`,
-    "    no shutdown",
+test("Nokia Classic static route maps repeated MD-CLI settings by route and next-hop", () => {
+  const oldConfig = [
+    "static-route-entry 125.145.147.20/32",
+    "    next-hop 14.59.4.2",
+    "        tag 600",
+    '        description "## To-Dobong-TOU-FK66_LoopBack ##"',
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.4.18",
+    "        tag 600",
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.5.2",
+    "        metric 100",
+    "        tag 600",
+    "        no shutdown",
+    "    exit",
+    "    next-hop 14.59.5.18",
+    "        metric 100",
+    "        tag 600",
+    "        no shutdown",
+    "    exit",
     "exit",
-  ]).join("\\n");
-  const newText = routes.flatMap((route, index) => [
-    \`/configure { router "Base" static-routes route \${route} route-type unicast next-hop 192.0.2.1 admin-state enable }\`,
-    \`/configure { router "Base" static-routes route \${route} route-type unicast next-hop 192.0.2.1 tag \${100 + index} }\`,
-    \`/configure { router "Base" static-routes route \${route} route-type unicast next-hop 192.0.2.1 description "R\${index}" }\`,
-  ]).join("\\n");
-  selectors.oldInput.value = oldText;
-  selectors.newInput.value = newText;
-  const oldObjects = parseConfig(oldText, options, "old");
-  const newObjects = parseConfig(newText, options, "new");
-  const report = compareObjects(oldObjects, newObjects, options);
-  return JSON.stringify({
-    oldCount: oldObjects.length,
-    newCount: newObjects.length,
-    routeOccurrenceCount: newObjects.reduce((sum, object) => sum + object.fieldOccurrences.filter((item) => item.field === "route" && item.token.includes("/")).length, 0),
-    diffNewLineCount: report.diffRows.filter((row) => row.newRow).length,
-    errorItems: report.items.filter((item) => item.type === "syntax").length,
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.2 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.2 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.2 description "## To-Dobong-TOU-FK66_LoopBack ##" }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.18 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.4.18 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.2 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.2 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.2 metric 100 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.18 admin-state disable }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.18 tag 600 }',
+    '/configure { router "Base" static-routes route 125.145.147.20/32 route-type unicast next-hop 14.59.5.18 metric 100 }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  assert.equal(result.oldResult.objects.length, 1);
+  assert.equal(result.newResult.objects.length, 1);
+  assert.equal(result.oldResult.objects[0].normalizedIdentity, "125.145.147.20/32");
+  assert.equal(result.newResult.objects[0].normalizedIdentity, "125.145.147.20/32");
+  assert.equal(result.oldResult.objects[0].fields["next-hop"], "14.59.4.2, 14.59.4.18, 14.59.5.2, 14.59.5.18");
+  assert.equal(result.newResult.objects[0].fields["next-hop"], "14.59.4.2, 14.59.4.18, 14.59.5.2, 14.59.5.18");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.5.2].metric"], "100");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.5.2].metric"], "100");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.5.18].metric"], "100");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.5.18].metric"], "100");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.4.2].description"], "## To-Dobong-TOU-FK66_LoopBack ##");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.4.2].description"], "## To-Dobong-TOU-FK66_LoopBack ##");
+  assert.equal(result.oldResult.objects[0].fields["next-hop[14.59.4.2].state"], "enabled");
+  assert.equal(result.newResult.objects[0].fields["next-hop[14.59.4.2].state"], "disabled");
+  assert.equal(result.plan[0].fieldSummary.metric.status, "equal");
+  assert.deepEqual(result.plan[0].fieldSummary.metric.oldValues, ["100"]);
+  assert.deepEqual(result.plan[0].fieldSummary.metric.newValues, ["100"]);
+  assert.equal(result.plan[0].fieldSummary.description.status, "equal");
+  assert.deepEqual(result.plan[0].fieldSummary.description.oldValues, ["## To-Dobong-TOU-FK66_LoopBack ##"]);
+  assert.deepEqual(result.plan[0].fieldSummary.description.newValues, ["## To-Dobong-TOU-FK66_LoopBack ##"]);
+  const unmatchedDashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: createComparisonPlan([{
+      status: "old-only",
+      reason: "unmatched",
+      oldObject: result.oldResult.objects[0],
+      newObject: null,
+    }], {}),
+    semanticSummary: {},
   });
-})()
-`, sandbox));
+  const descriptionRow = unmatchedDashboard.review.unmatchedOld[0].fieldRows.find((row) => row.field.includes("description"));
+  assert.equal(descriptionRow.oldValue, "## To-Dobong-TOU-FK66_LoopBack ##");
+  assert.equal(descriptionRow.newValue, "");
+  assert.match(renderComparisonPlanHtml(result.plan), /semantic-object-description[\s\S]*To-Dobong-TOU-FK66_LoopBack/);
+  assert.equal(result.plan.filter((item) => item.status === "matched").length, 1);
+  assert.equal(result.plan.filter((item) => item.status === "new-only").length, 0);
+});
 
-assert.strictEqual(multiObjectResult.oldCount, 3);
-assert.strictEqual(multiObjectResult.newCount, 3);
-assert.strictEqual(multiObjectResult.routeOccurrenceCount, 9);
-assert.strictEqual(multiObjectResult.diffNewLineCount, 9);
-assert.strictEqual(multiObjectResult.errorItems, 0);
+test("Nokia Classic interface maps MD-CLI IES interface by address and normalizes ICMP settings", () => {
+  const oldConfig = [
+    'interface "to-Dobong-TOU-FD09" create',
+    '    description "## OLT,10B,Dobong-TOU-FD09_7/1_02018880-3696,OFD#14-12 ##"',
+    "    address 112.188.24.89/30",
+    "    icmp",
+    "        no mask-reply",
+    "        no redirects",
+    "        no ttl-expired",
+    "        no unreachables",
+    "    exit",
+    "    sap lag-114 create",
+    "        ingress",
+    "            qos 20",
+    "            filter ip 10",
+    "        exit",
+    "        egress",
+    "            qos 20",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" admin-state enable }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" description "## to-Dobong-TOU-FD09, Po11(Te7/1), SBY ##" }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" sap lag-B-6211 ingress filter ip "prtsr-backup" }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" sap lag-B-6211 egress qos sap-egress policy-name "SEA_ACCESS_OUT" }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" ipv4 icmp mask-reply false }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" ipv4 icmp redirects admin-state disable }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" ipv4 icmp ttl-expired admin-state disable }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" ipv4 icmp unreachables admin-state disable }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" ipv4 primary address 112.188.24.89 }',
+    '/configure { service ies "100" interface "renamed-to-Dobong-TOU-FD09" ipv4 primary prefix-length 30 }',
+  ].join("\n");
 
-const groupCleanupResult = JSON.parse(vm.runInContext(`
-(() => {
-  state.selectedProfileObjectType = "static-route";
-  state.profileDraft = createDefaultProfile();
-  const tokenGroup = { id: "node-001", source: "old", type: "token-group", lineIndex: 4, tokenIndex: 0, tokenIndexes: [0, 1], selectedToken: "no shutdown", text: "no shutdown", field: "state", value: "enabled" };
-  state.profileDraft.semanticNodeGroups["static-route"].push(tokenGroup);
-  state.profileDraft.semanticMappings["static-route"].push({
-    id: "map-001",
-    field: "state",
-    role: "compare-field",
-    oldNodes: [tokenGroup],
-    newNodes: [{ id: "node-002", lineIndex: 0, tokenIndex: 10, selectedToken: "admin-state", value: "disabled" }],
-    cardinality: "1:1",
-  });
-  cleanupMappingsForRemovedGroups("static-route", new Set(["node-001"]));
-  state.profileDraft.semanticNodeGroups["static-route"] = state.profileDraft.semanticNodeGroups["static-route"].filter((item) => item.id !== "node-001");
-  return JSON.stringify({
-    nodeGroups: state.profileDraft.semanticNodeGroups["static-route"].length,
-    mappings: state.profileDraft.semanticMappings["static-route"].length,
-  });
-})()
-`, sandbox));
+  const result = compare(oldConfig, newConfig);
+  const oldInterface = result.oldResult.objects.find((object) => object.normalizedType === "interface");
+  const newInterface = result.newResult.objects.find((object) => object.normalizedType === "interface");
+  const interfaceMatch = result.matches.find((match) => match.oldObject?.normalizedType === "interface");
+  const interfacePlan = result.plan.find((item) => item.objectType === "interface");
 
-assert.strictEqual(groupCleanupResult.nodeGroups, 0);
-assert.strictEqual(groupCleanupResult.mappings, 0);
+  assert.deepEqual([...new Set(result.oldResult.objects.map((object) => object.normalizedType))], ["interface"]);
+  assert.deepEqual([...new Set(result.newResult.objects.map((object) => object.normalizedType))], ["interface"]);
+  assert.equal(oldInterface.normalizedIdentity, "112.188.24.89/30");
+  assert.equal(newInterface.normalizedIdentity, "112.188.24.89/30");
+  assert.equal(oldInterface.ipAddress, "112.188.24.89");
+  assert.equal(newInterface.ipAddress, "112.188.24.89");
+  assert.equal(interfaceMatch.status, "matched");
+  assert.equal(interfaceMatch.reason, "prefix");
+  assert.equal(interfacePlan.fieldSummary.address.status, "equal");
+  assert.equal(oldInterface.fields.sap, "lag-114");
+  assert.equal(oldInterface.fields["ingress-filter"], "10");
+  assert.equal(oldInterface.fields["ingress-qos"], "20");
+  assert.equal(oldInterface.fields["egress-qos"], "20");
+  assert.equal(newInterface.fields.sap, "lag-b-6211");
+  assert.equal(newInterface.fields["ingress-filter"], "prtsr-backup");
+  assert.equal(newInterface.fields["egress-qos"], "SEA_ACCESS_OUT");
+  assert.equal(interfacePlan.fieldSummary.sap.status, "changed");
+  assert.equal(interfacePlan.fieldSummary["ingress-filter"].status, "changed");
+  assert.equal(interfacePlan.fieldSummary["ingress-qos"].status, "missing");
+  assert.equal(interfacePlan.fieldSummary["egress-qos"].status, "changed");
 
-const previewGroupingResult = JSON.parse(vm.runInContext(`
-(() => {
-  renderProfileEditor = () => {};
-  markProfileDirty = () => {};
-  setProfileGuide = () => {};
-  state.profileDraft = createDefaultProfile();
-  state.selectedProfileObjectType = "static-route";
-  state.selectedSemanticTokens = {
-    old: [],
-    new: [
-      { id: "new:0:7", source: "new", lineIndex: 0, tokenIndex: 7, token: "admin-state", line: '/configure { router "Base" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 admin-state disable }' },
-      { id: "new:0:8", source: "new", lineIndex: 0, tokenIndex: 8, token: "disable", line: '/configure { router "Base" static-routes route 10.10.10.0/24 route-type unicast next-hop 192.0.2.1 admin-state disable }' },
-    ],
-  };
-  state.activeSemanticSelectionSource = "new";
-  createTokenGroupFromSelection();
-  return JSON.stringify({
-    count: state.profileDraft.semanticNodeGroups["static-route"].length,
-    source: state.profileDraft.semanticNodeGroups["static-route"][0]?.source,
-    field: state.profileDraft.semanticNodeGroups["static-route"][0]?.field,
-  });
-})()
-`, sandbox));
+  for (const field of ["icmp.mask-reply", "icmp.redirects", "icmp.ttl-expired", "icmp.unreachables"]) {
+    assert.equal(oldInterface.fields[field], "disabled");
+    assert.equal(newInterface.fields[field], "disabled");
+    assert.equal(interfacePlan.fieldSummary[field].status, "equal");
+    assert.deepEqual(interfacePlan.fieldSummary[field].oldValues, ["disabled"]);
+    assert.deepEqual(interfacePlan.fieldSummary[field].newValues, ["disabled"]);
+  }
 
-assert.strictEqual(previewGroupingResult.count, 1);
-assert.strictEqual(previewGroupingResult.source, "new");
-assert.strictEqual(previewGroupingResult.field, "state");
+  assert.deepEqual([...new Set(result.plan.map((item) => item.objectType))], ["interface"]);
+  assert.equal(interfacePlan.fieldSummary["admin-state"].status, "added");
+  assert.equal(interfacePlan.fieldSummary.description.status, "changed");
+});
 
-const visualHideResult = JSON.parse(vm.runInContext(`
-(() => {
-  state.profileDraft = createDefaultProfile();
-  const keepExit = shouldHideVisualLine("exit", "port", "old");
-  state.profileDraft.normalize.remove = ["exit"];
-  const hideExit = shouldHideVisualLine("exit", "port", "old");
-  return JSON.stringify({ keepExit, hideExit });
-})()
-`, sandbox));
+test("Nokia Classic interface maps MD-CLI block interface as one object", () => {
+  const oldConfig = [
+    'interface "to-Ulsan-TOD-F063 ge14/1(SBY)" create',
+    '    description "## Ulsan-TOD-F063 xe-14/1(SBY),02600009-0822 ##"',
+    "    address 112.174.180.61/30",
+    "    icmp",
+    "        no mask-reply",
+    "        no redirects",
+    "        no ttl-expired",
+    "        no unreachables",
+    "    exit",
+    "    sap lag-111 create",
+    "        ingress",
+    "            qos 20",
+    "            filter ip 10",
+    "        exit",
+    "        egress",
+    "            qos 20",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    'interface "Ulsan-TOD-F063_B" {',
+    "    admin-state enable",
+    '    description "## to-Ulsan-TOD-F063, Po11(xe14/1), SBY ##"',
+    "    sap lag-B-7216 {",
+    "        ingress {",
+    "            filter {",
+    '                ip "prtsr-backup"',
+    "            }",
+    "        }",
+    "        egress {",
+    "            qos {",
+    "                sap-egress {",
+    '                    policy-name "SEA_ACCESS_OUT"',
+    "                }",
+    "            }",
+    "        }",
+    "    }",
+    "    ipv4 {",
+    "        icmp {",
+    "            mask-reply false",
+    "            redirects {",
+    "                admin-state disable",
+    "            }",
+    "            ttl-expired {",
+    "                admin-state disable",
+    "            }",
+    "            unreachables {",
+    "                admin-state disable",
+    "            }",
+    "        }",
+    "        primary {",
+    "            address 112.174.180.61",
+    "            prefix-length 30",
+    "        }",
+    "    }",
+    "}",
+  ].join("\n");
 
-assert.strictEqual(visualHideResult.keepExit, false);
-assert.strictEqual(visualHideResult.hideExit, true);
+  const result = compare(oldConfig, newConfig);
+  const oldInterfaces = result.oldResult.objects.filter((object) => object.normalizedType === "interface");
+  const newInterfaces = result.newResult.objects.filter((object) => object.normalizedType === "interface");
+  const interfacePlan = result.plan.find((item) => item.objectType === "interface");
 
-console.log("static-route object-key canonicalization passed");
+  assert.equal(oldInterfaces.length, 1);
+  assert.equal(newInterfaces.length, 1);
+  assert.equal(newInterfaces[0].normalizedIdentity, "112.174.180.61/30");
+  assert.equal(newInterfaces[0].fields.address, "112.174.180.61/30");
+  assert.equal(newInterfaces[0].fields.sap, "lag-b-7216");
+  assert.equal(newInterfaces[0].fields["ingress-filter"], "prtsr-backup");
+  assert.equal(newInterfaces[0].fields["egress-qos"], "SEA_ACCESS_OUT");
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.matches[0].status, "matched");
+  assert.equal(result.plan.length, 1);
+  assert.equal(interfacePlan.fieldSummary.address.status, "equal");
+  assert.equal(interfacePlan.fieldSummary.sap.status, "changed");
+  assert.equal(interfacePlan.fieldSummary["ingress-filter"].status, "changed");
+  assert.equal(interfacePlan.fieldSummary["ingress-qos"].status, "missing");
+  assert.equal(interfacePlan.fieldSummary["egress-qos"].status, "changed");
+
+  const lineMatchField = (lineMatch) => lineMatch.fieldMatches?.[0]?.field || "";
+  const ingressQosLineMatch = interfacePlan.lineMatches.find((lineMatch) => lineMatchField(lineMatch) === "ingress-qos");
+  const egressQosLineMatch = interfacePlan.lineMatches.find((lineMatch) => lineMatchField(lineMatch) === "egress-qos");
+
+  assert.equal(ingressQosLineMatch.status, "missing");
+  assert.deepEqual(ingressQosLineMatch.oldLines, ["ingress-qos 20"]);
+  assert.deepEqual(ingressQosLineMatch.newLines, []);
+  assert.equal(egressQosLineMatch.status, "changed");
+  assert.deepEqual(egressQosLineMatch.oldLines, ["egress-qos 20"]);
+  assert.deepEqual(egressQosLineMatch.newLines, ["egress-qos SEA_ACCESS_OUT"]);
+
+  for (const field of ["icmp.mask-reply", "icmp.redirects", "icmp.ttl-expired", "icmp.unreachables"]) {
+    assert.equal(newInterfaces[0].fields[field], "disabled");
+    assert.equal(interfacePlan.fieldSummary[field].status, "equal");
+  }
+});
+
+test("legacy main compare parser keeps static route blocks as route-level objects", () => {
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const styles = fs.readFileSync("src/styles/global.css", "utf8");
+
+  assert.match(source, /objects\.push\(finalizeObject\(current, options, source\)\);/);
+  assert.match(source, /mergeStaticRouteFields\(target\.canonicalFields, safeObject\.canonicalFields\)/);
+  assert.match(source, /function buildStaticRouteIdentityFromFields\(fields = \{\}, fallback = ""\)/);
+  assert.match(source, /function buildInterfaceIdentityFromFields\(fields = \{\}, fallback = "", \{ preferAddress = true \} = \{\}\)/);
+  assert.match(source, /function normalizeMergedObjectIdentity\(object, options, source\)/);
+  assert.match(source, /canonicalType === "static-route" \|\| canonicalType === "interface"/);
+  assert.match(source, /ipv4\\s\+primary\\s\+address/);
+  assert.match(source, /icmp\.mask-reply/);
+  assert.match(source, /function isInterfaceIcmpLine\(line = ""\)/);
+  assert.match(source, /INTERFACE_CONTEXT_ONLY_FIELDS/);
+  assert.match(source, /function detectBuiltinSubscriberInterfaceStart\(normalizedLine = "", source = "old"\)/);
+  assert.match(source, /function buildSubscriberInterfaceIdentityFromFields\(fields = \{\}, fallback = "", \{ preferAddress = true \} = \{\}\)/);
+  assert.match(source, /function extractSubscriberInterfaceCanonicalFieldsFromLines\(lines = \[\], profile = state\.profileDraft\)/);
+  assert.match(source, /function collectBuiltinSubscriberInterfaceObjects\(lines = \[\], options = \{\}, source = "old"\)/);
+  assert.match(source, /const builtinSubscriber = collectBuiltinSubscriberInterfaceObjects\(lines, options, source\);/);
+  assert.match(source, /const INDENT_TERMINATED_OBJECT_TYPES = new Set\(\["port", "lag", "interface", "static-route", "bgp", "pim"\]\);/);
+  assert.match(source, /function shouldTerminateCurrentObject\(current, rawLine, normalizedLine\)[\s\S]*exitIndent <= startIndent/);
+  assert.match(source, /canonicalType === "static-route" \|\| canonicalType === "interface" \|\| canonicalType === "subscriber-interface"/);
+  assert.match(source, /function inferSemanticFieldNameForLineContext\(line, context = \{\}\)/);
+  assert.match(source, /function getClassicLineScope\(rawLines = \[\], lineIndex = -1\)/);
+  assert.match(source, /stateScope === "dhcp"\) return "dhcp\.admin-state"/);
+  assert.match(source, /renderSemanticLineTokens\(line, objectType, fields, relationByField, field\)/);
+  assert.match(source, /lineIndex: oldRawIndex >= 0 \? oldRawIndex : visualLineIndex/);
+  assert.match(source, /lineIndex: newRawIndex >= 0 \? newRawIndex : visualLineIndex/);
+  assert.match(source, /preferredField = normalizeRelationField\(line\?\.dataset\?\.semanticField \|\| ""\)/);
+  assert.match(source, /field === "ingress-filter" \|\| field === "egress-filter"/);
+  assert.match(source, /function getMdCliBraceLineScope\(rawLines = \[\], lineIndex = -1\)/);
+  assert.match(source, /function isInterfaceScopeOnlyLine\(line = ""\)/);
+  assert.match(source, /inferMdCliInterfaceLineField\(normalized, type, \{\s*rawLines,\s*lineIndex,/);
+  assert.match(source, /\^\(\?:address\|prefix-length\)\\b/);
+  assert.match(source, /isInterfaceScopeOnlyLine\(text\)\) return \[\]/);
+  assert.match(source, /datasetField = normalizeRelationField\(line\?\.dataset\?\.semanticField \|\| ""\)/);
+  assert.match(source, /objectType === "interface"[\s\S]*inferScopedInterfaceLineField\(text, \{ objectType \}\)/);
+  const mdInterfaceFieldBody = source.slice(
+    source.indexOf("function inferMdCliInterfaceLineField"),
+    source.indexOf("function inferClassicInterfaceLineField")
+  );
+  const ingressFilterOrder = mdInterfaceFieldBody.indexOf("ingress\\s+filter\\s+ip");
+  const sapOrder = mdInterfaceFieldBody.indexOf("\\bsap\\b");
+  assert.ok(ingressFilterOrder >= 0 && sapOrder >= 0 && ingressFilterOrder < sapOrder);
+  assert.match(source, /add\("metric", stripTrailingSyntax\(metric\[1\]\), "number"\);/);
+  assert.match(source, /object-item-description/);
+  assert.match(source, /data-review-description/);
+  assert.match(source, /renderReportReviewDescriptionCell/);
+  assert.match(source, /normalizeReportReviewFieldName/);
+  assert.match(fs.readFileSync("src/core/compareRenderer.js", "utf8"), /semantic-object-description/);
+  assert.match(styles, /\.line-mapping-connector\.field-metric/);
+  assert.match(styles, /\.report-review-description-cell/);
+});
+
+test("Nokia Classic parser closes major objects on same-indent exit", () => {
+  const result = parse("nokia-classic", [
+    "    port 1/1/1",
+    "        description \"port-a\"",
+    "    exit",
+    "    lag 10",
+    "        description \"lag-a\"",
+    "        port 1/1/1",
+    "    exit",
+    "    interface \"if-a\" create",
+    "        address 10.0.0.1/30",
+    "    exit",
+    "    static-route-entry 192.0.2.0/24 create",
+    "        next-hop 10.0.0.2",
+    "    exit",
+    "    neighbor 192.0.2.1",
+    "        peer-as 65000",
+    "    exit",
+    "    pim interface \"if-a\"",
+    "        no shutdown",
+    "    exit",
+  ].join("\n"));
+
+  for (const type of ["port", "lag", "interface", "static-route", "bgp", "pim"]) {
+    const objects = result.objects.filter((object) => object.normalizedType === type);
+    assert.equal(objects.length, 1, type);
+    assert.equal(objects[0].rawLines.at(-1).trim(), "exit", type);
+  }
+
+  const port = result.objects.find((object) => object.normalizedType === "port");
+  assert.equal(port.rawLines.some((line) => line.trim().startsWith("lag ")), false);
+});
+
+test("Nokia Classic indirect static route preserves next-hop for audit and migration review", () => {
+  const config = [
+    "static-route-entry 125.144.253.0/24",
+    "    indirect 125.144.5.1",
+    "        tunnel-next-hop",
+    "            resolution disabled",
+    "        exit",
+    "        no shutdown",
+    "    exit",
+    "exit",
+  ].join("\n");
+
+  const result = parse("nokia-classic", config, "old");
+  assert.equal(result.objects.length, 1);
+  assert.equal(result.objects[0].normalizedType, "static-route");
+  assert.equal(result.objects[0].fields["next-hop"], "125.144.5.1");
+  assert.equal(result.objects[0].fields["next-hop-type"], "indirect");
+  assert.equal(result.objects[0].fields["tunnel-next-hop"], "true");
+});
+
+test("Nokia MD-CLI nested static route preserves route, next-hop, state and tag", () => {
+  const config = [
+    'router "Base" {',
+    "  static-routes {",
+    "    route 10.10.20.0/24 route-type unicast {",
+    '      next-hop "192.0.2.2" {',
+    "        admin-state enable",
+    "        tag 200",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", config, "new");
+  assert.equal(result.objects.length, 1);
+  assert.equal(result.objects[0].normalizedType, "static-route");
+  assert.equal(result.objects[0].normalizedIdentity, "10.10.20.0/24");
+  assert.equal(result.objects[0].fields["next-hop"], "192.0.2.2");
+  assert.equal(result.objects[0].fields.state, "enabled");
+  assert.equal(result.objects[0].fields.tag, "200");
+});
+
+test("Nokia MD-CLI nested static route with multiple next-hop creates one route object", () => {
+  const config = [
+    'router "Base" {',
+    "  static-routes {",
+    "    route 10.10.20.0/24 route-type unicast {",
+    '      next-hop "192.0.2.2" {',
+    "        admin-state enable",
+    "      }",
+    '      next-hop "192.0.2.3" {',
+    "        admin-state enable",
+    "        tag 200",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", config, "new");
+
+  assert.equal(result.objects.length, 1);
+  assert.equal(result.objects[0].normalizedIdentity, "10.10.20.0/24");
+  assert.equal(result.objects[0].fields["next-hop"], "192.0.2.2, 192.0.2.3");
+  assert.equal(result.objects[0].fields["next-hop[192.0.2.3].tag"], "200");
+});
+
+test("Nokia MD-CLI one-line service objects normalize subscriber, SAP, hosts and sub-sla fields", () => {
+  const config = [
+    '/configure { service ies "100" subscriber-interface "sub1" ipv4 address 10.0.0.1 prefix-length 24 admin-state enable }',
+    '/configure { service ies "100" subscriber-interface "sub1" group-interface "grp1" radius-auth-policy "rad1" }',
+    '/configure { service ies "100" subscriber-interface "sub1" group-interface "grp1" sap 1/1/1:100 ingress filter ip 10 egress filter ip 20 ingress qos sap-ingress policy-name "qin" egress qos sap-egress policy-name "qout" }',
+    '/configure { service ies "100" subscriber-interface "sub1" group-interface "grp1" sap 1/1/1:100 static-host "AA:BB:CC:DD:EE:FF" mac AA:BB:CC:DD:EE:FF sub-profile "subp" sla-profile "slap" }',
+    '/configure { service ies "100" subscriber-interface "sub1" group-interface "grp1" sap 1/1/1:100 default-host ipv4 10.0.0.50 prefix-length 32 next-hop 10.0.0.1 }',
+    '/configure { service ies "100" subscriber-interface "sub1" group-interface "grp1" sap 1/1/1:100 sub-sla-mgmt admin-state enable sub-ident-policy "sip" subscriber-limit 10 defaults sub-profile "sub" sla-profile "sla" subscriber-id "subid" int-dest-id string "intdest" }',
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", config, "new");
+  const objectTypes = new Set(result.objects.map((object) => object.normalizedType));
+  const subscriber = result.objects.find((object) => object.normalizedType === "subscriber-interface");
+
+  assert.deepEqual([...objectTypes], ["subscriber-interface"]);
+  assert.equal(subscriber.normalizedIdentity, "sub1");
+  assert.equal(subscriber.fields.address, "10.0.0.1/24");
+  assert.equal(subscriber.fields.prefix, "10.0.0.1/24");
+  assert.equal(subscriber.fields["group-interface"], "grp1");
+  assert.equal(subscriber.fields["auth-policy"], "rad1");
+  assert.equal(subscriber.fields.sap, "1/1/1:100");
+  assert.equal(subscriber.fields["ingress-filter"], "10");
+  assert.equal(subscriber.fields["egress-filter"], "20");
+  assert.equal(subscriber.fields["ingress-qos"], "qin");
+  assert.equal(subscriber.fields["egress-qos"], "qout");
+  assert.equal(subscriber.fields["static-host"], "aa:bb:cc:dd:ee:ff");
+  assert.equal(subscriber.fields["static-host.sub-profile"], "subp");
+  assert.equal(subscriber.fields["default-host"], "10.0.0.50/32");
+  assert.equal(subscriber.fields["default-host.next-hop"], "10.0.0.1");
+  assert.equal(subscriber.fields["sub-sla-mgmt.sub-ident-policy"], "sip");
+  assert.equal(subscriber.fields["sub-sla-mgmt.defaults.sla-profile"], "sla");
+  assert.equal(subscriber.fields["sub-sla-mgmt.defaults.int-dest-id"], "intdest");
+});
+
+test("Nokia Classic subscriber-interface maps MD-CLI subscriber-interface as one object", () => {
+  const oldConfig = [
+    'subscriber-interface "to-Nowon-TOU-FN17" create',
+    '    description "## to-Nowon-TOU-FN17, Po10(Te6/1), ACT ##"',
+    "    allow-unmatching-subnets",
+    "    address 112.188.27.101/30",
+    '    group-interface "g-to-Nowon-TOU-FN17" create',
+    "        arp-populate",
+    "        dhcp",
+    "            filter 60",
+    "            server 121.128.86.26",
+    "            trusted",
+    "            lease-populate l2-header 32767",
+    "            no shutdown",
+    "        exit",
+    '        authentication-policy "RADIUS"',
+    "        sap lag-53 create",
+    "            cpu-protection 200 ip-src-monitoring",
+    "            default-host 112.188.27.101/30 next-hop 112.188.27.102",
+    "            ingress",
+    "                qos 20",
+    "                filter ip 10",
+    "            exit",
+    "            egress",
+    "                qos 20",
+    "            exit",
+    "            sub-sla-mgmt",
+    '                def-inter-dest-id string "PQ_3WFQ"',
+    "                def-sub-id use-auto-id",
+    '                def-sub-profile "IN_SEA_NTOPIA"',
+    '                def-sla-profile "IN_SEA_NTOPIA"',
+    '                sub-ident-policy "sub-id-pol"',
+    "                multi-sub-sap 32767",
+    "                no shutdown",
+    "            exit",
+    "            static-host ip 112.188.27.102 create",
+    '                inter-dest-id "PQ_3WFQ"',
+    '                sla-profile "IN_SEA_NTOPIA"',
+    '                sub-profile "SI_PIM"',
+    "                subscriber-sap-id",
+    "                no shutdown",
+    "            exit",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 admin-state enable }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 description "## to-Nowon-TOU-FN17, Po10(Te6/1), ACT ##" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 ipv4 allow-unmatching-subnets true }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 ipv4 address 112.188.27.101 prefix-length 30 }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 radius-auth-policy "RADIUS" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 neighbor-discovery populate true }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp admin-state enable }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp filter 60 }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp server [121.128.86.26] }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp trusted true }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp lease-populate max-leases 131071 }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 ipv4 dhcp lease-populate l2-header }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 ingress filter ip "prtsr-active" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 egress qos sap-egress policy-name "SEA_ACCESS_OUT" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 cpu-protection policy-id 200 }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 cpu-protection ip-src-monitoring }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 sub-sla-mgmt admin-state enable }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 sub-sla-mgmt sub-ident-policy "sub-id-pol" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 sub-sla-mgmt subscriber-limit 131071 }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 sub-sla-mgmt defaults sub-profile "IN_SEA_DEFAULT" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 sub-sla-mgmt defaults sla-profile "IN_SEA_DEFAULT" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 sub-sla-mgmt defaults subscriber-id auto-id }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 sub-sla-mgmt defaults int-dest-id string "PQ_3WFQ" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 static-host ipv4 112.188.27.102 mac 00:00:00:00:00:00 admin-state enable }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 static-host ipv4 112.188.27.102 mac 00:00:00:00:00:00 sub-profile "SI_PIM" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 static-host ipv4 112.188.27.102 mac 00:00:00:00:00:00 sla-profile "IN_SEA_DEFAULT" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 static-host ipv4 112.188.27.102 mac 00:00:00:00:00:00 int-dest-id "PQ_3WFQ" }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 static-host ipv4 112.188.27.102 mac 00:00:00:00:00:00 subscriber-id use-sap-id }',
+    '/configure { service ies "100" subscriber-interface to-Nowon-TOU-FN17 group-interface g-to-Nowon-TOU-FN17 sap lag-A-2103 default-host ipv4 112.188.27.101 prefix-length 30 next-hop 112.188.27.102 }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const oldTypes = new Set(result.oldResult.objects.map((object) => object.normalizedType));
+  const newTypes = new Set(result.newResult.objects.map((object) => object.normalizedType));
+  const subscriberPlan = result.plan.find((item) => item.objectType === "subscriber-interface");
+
+  assert.deepEqual([...oldTypes], ["subscriber-interface"]);
+  assert.deepEqual([...newTypes], ["subscriber-interface"]);
+  assert.equal(result.oldResult.objects[0].normalizedIdentity, "to-nowon-tou-fn17");
+  assert.equal(result.newResult.objects[0].normalizedIdentity, "to-nowon-tou-fn17");
+  assert.equal(subscriberPlan.status, "matched");
+  assert.equal(subscriberPlan.fieldSummary.address.status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["group-interface"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["auth-policy"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.admin-state"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.filter"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.server"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["sub-sla-mgmt.admin-state"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["static-host.admin-state"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["static-host"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["default-host"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["sub-sla-mgmt.sub-ident-policy"].status, "equal");
+  assert.equal(subscriberPlan.lineMatches.some((line) => line.fieldMatches?.some((field) => field.field === "sap")), true);
+  assert.equal(subscriberPlan.lineMatches.some((line) => line.fieldMatches?.some((field) => field.field === "dhcp.admin-state" && field.status === "equal")), true);
+  assert.equal(subscriberPlan.lineMatches.some((line) => line.fieldMatches?.some((field) => field.field === "sub-sla-mgmt.admin-state" && field.status === "equal")), true);
+  assert.equal(subscriberPlan.lineMatches.some((line) => line.fieldMatches?.some((field) => field.field === "static-host.admin-state" && field.status === "equal")), true);
+});

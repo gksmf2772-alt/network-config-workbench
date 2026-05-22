@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-05-18T12:21:00.163Z",
+  "caseId": "nokia-classic15-to-nokia-mdcli-22",
+  "summary": {
+    "baselineTotal": 71,
+    "total": 0,
+    "resolvedFromBaseline": 71,
+    "parserExtension": 0,
+    "matcherImprovement": 0,
+    "conversionPolicy": 0,
+    "manualMapping": 0,
+    "targetFixtureCompletion": 0,
+    "actualConfigCorrection": 0,
+    "resolvedFromBaselineDetails": [
+      {
+        "ruleId": "static-route.next-hop-invalid",
+        "count": 71,
+        "resolution": "Classic indirect/tunnel-next-hop static routes now preserve next-hop for audit/migration review."
+      }
+    ],
+    "primaryConclusion": "Remaining blocks are undefined target policy references. Classic indirect static-route next-hop parser gaps are resolved in this pass."
+  },
+  "groups": {
+    "byRuleId": [],
+    "byCategory": [],
+    "byObjectType": [],
+    "bySide": [],
+    "byFieldPath": [],
+    "byParserVsActual": [],
+    "byPolicyVsUnsupported": [],
+    "byResolutionPath": []
+  },
+  "findings": []
+}

@@ -1,4 +1,98 @@
-﻿const objectTypes = ["port", "lag", "interface", "static-route", "pim", "bgp"];
+﻿import {
+  DEFAULT_VENDOR_PRESET_ID,
+  VENDOR_PRESETS,
+  getDefaultVendorPreset,
+  getVendorPresetByLegacyVendor,
+  buildVendorPresetSnapshot,
+  ensureVendorPresetFields,
+  getVendorLabel,
+  getVendorPairSupportState,
+  VENDOR_SUPPORT_STATE,
+} from "./vendorPresets.js";
+
+import {
+  getSemanticDiffBlockState,
+  getSemanticStateClass,
+} from "./semanticTheme.js";
+import {
+  activeSemanticPolicyViolations,
+  applySemanticPlanVisualStatusToDiffRows,
+  buildSemanticPlanLookup,
+  semanticLineRelationState,
+  semanticObjectVisualState,
+  shouldRenderSemanticCleanMatch,
+} from "./compareVisualStatus.js";
+
+import {
+  buildSummaryDashboardData,
+} from "./summaryAnalytics.js";
+import {
+  buildObjectReviewGroups,
+  buildObjectFieldReviewRows,
+  REVIEW_SOURCE_LABELS,
+} from "./objectReviewGroups.js";
+import {
+  buildAnalysisContext,
+  filterAuditForModeScope,
+  filterPlanByModeScope,
+  resolveAnalysisMode,
+  resolveCompareScope,
+} from "./analysisModes.js";
+import {
+  buildSemanticCoverageDiagnostics,
+} from "./coverageDiagnostics.js";
+import {
+  evaluatePolicyContext,
+  comparisonExclusionMatchesContext,
+  profileExceptionMatchesContext,
+} from "./policyEvaluator.js";
+import {
+  AUDIT_SEVERITY_LABELS_KO,
+  MIGRATION_IMPACT_LABELS_KO,
+  attachAuditFindingsToPlan,
+  runStandardsAuditForSides,
+} from "./standardsAudit.js";
+
+import {
+  normalizeConfig,
+  matchNormalizedObjects,
+  createComparisonPlan,
+  renderComparisonPlanHtml,
+  loadManualMapFromLocalStorage,
+  saveManualMapToLocalStorage,
+  removeManualMapping,
+  applyManualSelectionToStorage,
+} from "./comparator.js";
+import {
+  buildStaticRouteNextHopFields,
+  collectStaticRouteNextHopEntriesFromLines,
+  mergeStaticRouteFields,
+  splitStaticRouteNextHopList,
+} from "./staticRouteFields.js";
+
+const objectTypes = [
+  "port",
+  "lag",
+  "interface",
+  "static-route",
+  "pim",
+  "bgp",
+  "subscriber-interface",
+  "group-interface",
+  "sap",
+  "static-host",
+  "default-host",
+  "dhcp",
+  "icmp-options",
+  "sub-sla-mgmt",
+  "cpu-protection",
+  "qos-policy",
+  "filter",
+  "acl",
+  "route-policy",
+  "prefix-list",
+  "community",
+];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
 
 const selectors = {
@@ -11,6 +105,7 @@ const selectors = {
   historySelect: document.querySelector("#historySelect"),
   loadHistoryBtn: document.querySelector("#loadHistoryBtn"),
   saveSessionBtn: document.querySelector("#saveSessionBtn"),
+  deleteSessionBtn: document.querySelector("#deleteSessionBtn"),
   profileSelect: document.querySelector("#profileSelect"),
   loadProfileBtn: document.querySelector("#loadProfileBtn"),
   normalizeSpacingToggle: document.querySelector("#normalizeSpacingToggle"),
@@ -18,6 +113,14 @@ const selectors = {
   autoAlignToggle: document.querySelector("#autoAlignToggle"),
   ignoreCommentsToggle: document.querySelector("#ignoreCommentsToggle"),
   ignoreGeneratedToggle: document.querySelector("#ignoreGeneratedToggle"),
+  semanticDebugToggle: document.querySelector("#semanticDebugToggle"),
+  fieldHighlightToggle: document.querySelector("#fieldHighlightToggle"),
+  objectMappingVisibleToggle: document.querySelector("#objectMappingVisibleToggle"),
+  mappingDebugToggle: document.querySelector("#mappingDebugToggle"),
+  lineMappingStyleSelect: document.querySelector("#lineMappingStyleSelect"),
+  lineMappingBendRange: document.querySelector("#lineMappingBendRange"),
+  lineMappingVisibleToggle: document.querySelector("#lineMappingVisibleToggle"),
+  lineMappingAnimationToggle: document.querySelector("#lineMappingAnimationToggle"),
   objectToggles: document.querySelector("#objectToggles"),
   themeSelect: document.querySelector("#themeSelect"),
   fontSelect: document.querySelector("#fontSelect"),
@@ -27,8 +130,8 @@ const selectors = {
   lastComparedAt: document.querySelector("#lastComparedAt"),
   oldMeta: document.querySelector("#oldMeta"),
   newMeta: document.querySelector("#newMeta"),
-  oldDropZone: document.querySelector("#oldDropZone"),
-  newDropZone: document.querySelector("#newDropZone"),
+  oldDropZone: document.querySelector("#oldConfigInput")?.closest(".code-frame") || document.querySelector("#oldDropZone"),
+  newDropZone: document.querySelector("#newConfigInput")?.closest(".code-frame") || document.querySelector("#newDropZone"),
   oldInput: document.querySelector("#oldConfigInput"),
   newInput: document.querySelector("#newConfigInput"),
   oldLineNumbers: document.querySelector("#oldLineNumbers"),
@@ -68,6 +171,9 @@ const selectors = {
   diffConnectorSvg: document.querySelector("#diffConnectorSvg"),
   profileNameInput: document.querySelector("#profileNameInput"),
   vendorSelect: document.querySelector("#vendorSelect"),
+  oldVendorSelect: document.querySelector("#oldVendorSelect"),
+  newVendorSelect: document.querySelector("#newVendorSelect"),
+  vendorSupportNotice: document.querySelector("#vendorSupportNotice"),
   newProfileBtn: document.querySelector("#newProfileBtn"),
   saveProfileBtn: document.querySelector("#saveProfileBtn"),
   saveProfileAsBtn: document.querySelector("#saveProfileAsBtn"),
@@ -144,6 +250,8 @@ const state = {
   syncingEditorScroll: false,
   syncingDiffScroll: false,
   connectorFrame: null,
+  semanticObjectAlignFrame: null,
+  semanticObjectWidthFrame: null,
   draggingProfileLine: null,
   selectedProfileLineLink: null,
   pendingProfileLineRef: null,
@@ -159,6 +267,29 @@ const state = {
   suppressNextPreviewTokenClick: false,
   pendingSemanticMapping: null,
   activeDiffObjectKey: "",
+  activeSemanticPairKey: "",
+  activeLineRelationKey: "",
+  lastSemanticSummary: null,
+  lastSemanticPlan: [],
+  lastManualMap: {},
+  lastDashboardData: null,
+  lastCoverageDiagnostics: null,
+  lastStandardsAudit: null,
+  lastStandardsAuditRaw: null,
+  lastAnalysisContext: null,
+  exceptionTargets: new Map(),
+  summaryIssueGroups: new Map(),
+  activeIssueContext: null,
+  lastSessionName: "",
+  semanticPairKeyboardBound: false,
+  lineRelationDelegationBound: false,
+  connectorSvgDelegationBound: false,
+  diffResizeObserver: null,
+  diffMutationObserver: null,
+  connectorSettleTimer: null,
+  mappingDebugSignature: "",
+  lineMappingDebugSignature: "",
+  mappingDebugAnchorCount: 0,
   profileDraft: createDefaultProfile(),
 };
 
@@ -183,14 +314,32 @@ const defaultSamples = {
 };
 
 function createDefaultProfile() {
+  const defaultPreset = getDefaultVendorPreset();
+
   return {
     id: null,
-    name: "Nokia 기본 검증",
-    vendor: "nokia",
+    name: "새 프로파일",
+
+    // 기존 legacyCore.js 호환용
+    vendor: defaultPreset.legacyVendor,
+
+    // 신규 vendor preset 구조
+    vendorPresetId: defaultPreset.id,
+    oldVendor: defaultPreset.oldVendor,
+    newVendor: defaultPreset.newVendor,
+    vendorPreset: {
+      id: defaultPreset.id,
+      label: defaultPreset.label,
+      oldVendor: defaultPreset.oldVendor,
+      newVendor: defaultPreset.newVendor,
+      legacyVendor: defaultPreset.legacyVendor,
+    },
+
     mappings: objectTypes.map((type) => ({ oldType: type, newType: type })),
     objects: createDefaultSemanticObjects(),
     normalize: createDefaultNormalizeRules(),
     rules: { ignore: [], required: [] },
+    exceptions: [],
     examples: createDefaultExamples(),
     identityRules: createDefaultIdentityRules(),
     lineMappings: createEmptyRulesByType(),
@@ -203,19 +352,115 @@ function createDefaultProfile() {
     semanticNodeGroups: createEmptyRulesByType(),
     semanticLineGroups: createEmptyRulesByType(),
     parserRules: createDefaultParserRules(),
+    manualMap: {},
   };
 }
 
-function createEmptyProfile(vendor = state.profileDraft?.vendor || "nokia") {
+const vendorLabels = {
+  "nokia-classic": "Nokia Classic",
+  "nokia-md-cli": "Nokia MD-CLI",
+  "cisco-ios-xe": "Cisco IOS-XE",
+  "juniper-set": "Juniper Set",
+  "arista-eos": "Arista EOS",
+};
+
+function createEmptyProfile(vendor = state.profileDraft?.vendor || "nokia", vendorPair = null) {
+  const preset = getVendorPresetByLegacyVendor(vendor);
+  const vendorState = buildProfileVendorState(
+    vendorPair?.oldVendor || preset.oldVendor,
+    vendorPair?.newVendor || preset.newVendor,
+  );
+
   return {
     ...createDefaultProfile(),
     id: null,
     name: "새 프로파일",
-    vendor,
+    ...vendorState,
     semanticMappings: Object.fromEntries(objectTypes.map((type) => [type, []])),
     semanticNodeGroups: createEmptyRulesByType(),
     semanticLineGroups: createEmptyRulesByType(),
   };
+}
+
+function buildProfileVendorState(oldVendor, newVendor) {
+  const fallback = getDefaultVendorPreset();
+  const safeOldVendor = oldVendor || fallback.oldVendor;
+  const safeNewVendor = newVendor || fallback.newVendor;
+  const supportState = getVendorPairSupportState(safeOldVendor, safeNewVendor);
+  const matchedPreset = VENDOR_PRESETS.find((preset) =>
+    preset.oldVendor === safeOldVendor && preset.newVendor === safeNewVendor
+  );
+  const legacyVendor = matchedPreset?.legacyVendor || legacyVendorFromParserId(safeOldVendor);
+  const vendorPreset = matchedPreset
+    ? buildVendorPresetSnapshot(matchedPreset)
+    : {
+      id: `custom:${safeOldVendor}->${safeNewVendor}`,
+      label: `${vendorLabel(safeOldVendor)} → ${vendorLabel(safeNewVendor)}`,
+      oldVendor: safeOldVendor,
+      newVendor: safeNewVendor,
+      legacyVendor,
+      status: supportState.state,
+    };
+
+  return {
+    vendor: legacyVendor,
+    vendorPresetId: vendorPreset.id,
+    oldVendor: safeOldVendor,
+    newVendor: safeNewVendor,
+    vendorPreset,
+  };
+}
+
+function vendorLabel(vendorId) {
+  return getVendorLabel(vendorId) || vendorLabels[vendorId] || vendorId || "";
+}
+
+function legacyVendorFromParserId(vendorId = "") {
+  if (vendorId.startsWith("cisco")) return "cisco";
+  if (vendorId.startsWith("juniper")) return "juniper";
+  if (vendorId.startsWith("arista")) return "arista";
+  return "nokia";
+}
+
+function getProfileVendorPairFromControls() {
+  const ensuredProfile = ensureVendorPresetFields(state.profileDraft || createDefaultProfile());
+  return {
+    oldVendor:
+      selectors.oldVendorSelect?.value ||
+      ensuredProfile.oldVendor ||
+      ensuredProfile.vendorPreset?.oldVendor ||
+      getDefaultVendorPreset().oldVendor,
+    newVendor:
+      selectors.newVendorSelect?.value ||
+      ensuredProfile.newVendor ||
+      ensuredProfile.vendorPreset?.newVendor ||
+      getDefaultVendorPreset().newVendor,
+  };
+}
+
+function syncLegacyVendorControl(vendorState = state.profileDraft) {
+  if (!selectors.vendorSelect || !vendorState) return;
+  selectors.vendorSelect.value = vendorState.vendor || legacyVendorFromParserId(vendorState.oldVendor || "");
+}
+
+function renderVendorSupportNotice(vendorState = state.profileDraft) {
+  if (!selectors.vendorSupportNotice || !vendorState) return;
+  const support = getVendorPairSupportState(vendorState.oldVendor, vendorState.newVendor);
+  selectors.vendorSupportNotice.dataset.state = support.state;
+  selectors.vendorSupportNotice.innerHTML = `
+    <strong>${escapeHtml(vendorLabel(vendorState.oldVendor))} → ${escapeHtml(vendorLabel(vendorState.newVendor))}</strong>
+    <span>${escapeHtml(support.label)} · ${escapeHtml(support.state === VENDOR_SUPPORT_STATE.PLANNED
+      ? "placeholder 파서는 비교 실행 대상이 아닙니다."
+      : support.state === VENDOR_SUPPORT_STATE.PARTIAL
+        ? "파서는 동작하지만 preset 검증 범위는 확대 중입니다."
+        : "파서와 기본 preset을 사용할 수 있습니다."
+    )}</span>
+  `;
+}
+
+function isCurrentVendorPairRunnable() {
+  const vendorPair = getProfileVendorPairFromControls();
+  return getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor).runnable;
 }
 
 function createEmptyRulesByType() {
@@ -230,7 +475,7 @@ function createDefaultIdentityRules() {
 }
 
 function createDefaultIdentityRuleForType(type) {
-  const rule = { mode: ["port", "lag", "interface"].includes(type) ? "description" : "header", pattern: "" };
+  const rule = { mode: ["port", "interface"].includes(type) ? "description" : "header", pattern: "" };
   return { old: { ...rule }, new: { ...rule } };
 }
 
@@ -258,11 +503,68 @@ function createDefaultSemanticObjects() {
       objectKey: ["interface"],
       fields: {
         interface: { patterns: ['interface "{value}"', "interface {value}", 'configure router interface "{value}"', "configure router interface {value}"] },
-        address: { patterns: ["address {value}", "ip address {value}"] },
+        address: { patterns: ["address {value}", "ip address {value}", "ipv4 primary address {value}", "ipv4 address {value}"] },
+        "prefix-length": { patterns: ["prefix-length {value}", "ipv4 primary prefix-length {value}"] },
         description: { patterns: ['description "{value}"', "description {value}"] },
         "admin-state": { patterns: ["no shutdown -> enabled", "shutdown -> disabled", "admin-state enable -> enabled", "admin-state disable -> disabled"] },
+        "icmp.mask-reply": { patterns: ["no mask-reply -> disabled", "mask-reply false -> disabled", "mask-reply true -> enabled"] },
+        "icmp.redirects": { patterns: ["no redirects -> disabled", "redirects admin-state disable -> disabled", "redirects admin-state enable -> enabled"] },
+        "icmp.ttl-expired": { patterns: ["no ttl-expired -> disabled", "ttl-expired admin-state disable -> disabled", "ttl-expired admin-state enable -> enabled"] },
+        "icmp.unreachables": { patterns: ["no unreachables -> disabled", "unreachables admin-state disable -> disabled", "unreachables admin-state enable -> enabled"] },
       },
-      policies: { interface: "presence", address: "compare", description: "compare", "admin-state": "compare" },
+      policies: {
+        interface: "presence",
+        address: "compare",
+        "prefix-length": "ignore",
+        description: "compare",
+        "admin-state": "compare",
+        "icmp.mask-reply": "compare",
+        "icmp.redirects": "compare",
+        "icmp.ttl-expired": "compare",
+        "icmp.unreachables": "compare",
+      },
+    },
+    "subscriber-interface": {
+      objectKey: ["subscriber-interface"],
+      fields: {
+        "subscriber-interface": { patterns: ['subscriber-interface "{value}"', "subscriber-interface {value}"] },
+        "group-interface": { patterns: ['group-interface "{value}"', "group-interface {value}"] },
+        address: { patterns: ["address {value}", "ipv4 address {value}"] },
+        "prefix-length": { patterns: ["prefix-length {value}"] },
+        description: { patterns: ['description "{value}"', "description {value}"] },
+        "admin-state": { patterns: ["no shutdown -> enabled", "shutdown -> disabled", "admin-state enable -> enabled", "admin-state disable -> disabled"] },
+        sap: { patterns: ["sap {value}"] },
+        "ingress-filter": { patterns: ["ingress filter ip {value}", "filter ip {value}"] },
+        "egress-filter": { patterns: ["egress filter ip {value}"] },
+        "ingress-qos": { patterns: ["ingress qos {value}", "qos {value}"] },
+        "egress-qos": { patterns: ["egress qos {value}"] },
+        "auth-policy": { patterns: ['authentication-policy "{value}"', "authentication-policy {value}", 'radius-auth-policy "{value}"', "radius-auth-policy {value}"] },
+        "dhcp.filter": { patterns: ["dhcp filter {value}", "filter {value}"] },
+        "dhcp.server": { patterns: ["dhcp server {value}", "server {value}"] },
+        "dhcp.trusted": { patterns: ["trusted -> true", "dhcp trusted true -> true"] },
+        "default-host": { patterns: ["default-host {value}", "default-host ipv4 {value}"] },
+        "static-host": { patterns: ["static-host ip {value}", "static-host ipv4 {value}", "static-host {value}"] },
+        "sub-sla-mgmt.sub-ident-policy": { patterns: ['sub-ident-policy "{value}"', "sub-ident-policy {value}"] },
+      },
+      policies: {
+        "subscriber-interface": "presence",
+        address: "compare",
+        "prefix-length": "ignore",
+        description: "compare",
+        "admin-state": "compare",
+        "group-interface": "compare",
+        sap: "compare",
+        "ingress-filter": "compare",
+        "egress-filter": "compare",
+        "ingress-qos": "compare",
+        "egress-qos": "compare",
+        "auth-policy": "compare",
+        "dhcp.filter": "compare",
+        "dhcp.server": "compare",
+        "default-host": "compare",
+        "static-host": "compare",
+        "sub-sla-mgmt.sub-ident-policy": "compare",
+      },
     },
     "static-route": {
       objectKey: ["route"],
@@ -323,6 +625,21 @@ function createDefaultValidationPolicies() {
       { field: "address", policy: "compare" },
       { field: "description", policy: "compare" },
       { field: "admin-state", policy: "compare" },
+    ],
+    "subscriber-interface": [
+      { field: "subscriber-interface", policy: "presence" },
+      { field: "address", policy: "compare" },
+      { field: "description", policy: "compare" },
+      { field: "admin-state", policy: "compare" },
+      { field: "group-interface", policy: "compare" },
+      { field: "sap", policy: "compare" },
+      { field: "ingress-filter", policy: "compare" },
+      { field: "egress-filter", policy: "compare" },
+      { field: "ingress-qos", policy: "compare" },
+      { field: "egress-qos", policy: "compare" },
+      { field: "auth-policy", policy: "compare" },
+      { field: "dhcp.filter", policy: "compare" },
+      { field: "dhcp.server", policy: "compare" },
     ],
     "static-route": [
       { field: "route", policy: "compare" },
@@ -393,7 +710,7 @@ function createDefaultExamples() {
 async function init() {
   selectors.oldInput.value = defaultSamples.oldConfig;
   selectors.newInput.value = defaultSamples.newConfig;
-  captureInitialConfigSnapshot(true);
+  resetInitialConfigSnapshot();
   renderObjectToggles();
   renderProfileEditor();
   bindEvents();
@@ -403,7 +720,12 @@ async function init() {
   await refreshProfileSelect();
   await renderSavedProfiles();
   commitProfileSnapshot();
+  renderSummaryEmptyState();
   showEditMode();
+  const fontReady = document.fonts?.ready;
+  if (fontReady?.then) {
+    fontReady.then(() => scheduleSettledDiffConnectorRender()).catch(() => {});
+  }
 }
 
 function bindEvents() {
@@ -412,6 +734,7 @@ function bindEvents() {
   selectors.summaryPageTabBtn?.addEventListener("click", () => setActiveTab("summary"));
   selectors.loadHistoryBtn.addEventListener("click", loadSelectedSession);
   selectors.saveSessionBtn.addEventListener("click", saveSession);
+  selectors.deleteSessionBtn?.addEventListener("click", deleteSelectedSession);
   selectors.loadProfileBtn.addEventListener("click", loadSelectedProfile);
   selectors.deleteProfileBtn.addEventListener("click", deleteSelectedProfile);
   selectors.newProfileBtn?.addEventListener("click", createNewEmptyProfile);
@@ -467,8 +790,13 @@ function bindEvents() {
   window.addEventListener("pointerup", finishSemanticPreviewTokenDrag);
   selectors.oldDiffPane.addEventListener("dblclick", showEditMode);
   selectors.newDiffPane.addEventListener("dblclick", showEditMode);
-  window.addEventListener("resize", scheduleDiffConnectorRender);
+  window.addEventListener("resize", scheduleSemanticObjectWidthSync);
+  window.addEventListener("resize", scheduleSemanticObjectStartAlignment);
+  window.addEventListener("resize", scheduleSettledDiffConnectorRender);
   window.addEventListener("resize", scheduleProfileExampleConnectorRender);
+  setupDiffConnectorResizeObserver();
+  setupDiffConnectorMutationObserver();
+  ensureConnectorSvgDelegation();
 
   [
     [selectors.profileOldExampleInput, "old"],
@@ -501,18 +829,42 @@ function bindEvents() {
     selectors.autoAlignToggle,
     selectors.ignoreCommentsToggle,
     selectors.ignoreGeneratedToggle,
+    selectors.semanticDebugToggle,
+    selectors.fieldHighlightToggle,
     selectors.filterInput,
     selectors.resultFilterSelect,
-  ].forEach((control) => control.addEventListener("input", markCompareStale));
+  ].filter(Boolean).forEach((control) => control.addEventListener("input", markCompareStale));
 
   selectors.profileNameInput.addEventListener("focus", () => pushProfileUndoSnapshot("profile-name"));
   selectors.profileNameInput.addEventListener("input", () => {
     state.profileDraft.name = selectors.profileNameInput.value.trim() || "이름 없는 프로파일";
     markProfileDirty("Profile", "수정", "프로파일 이름");
   });
-  selectors.vendorSelect.addEventListener("input", () => {
+  const handleProfileVendorPairChange = () => {
     pushProfileUndoSnapshot("profile-vendor");
-    state.profileDraft.vendor = selectors.vendorSelect.value;
+    const vendorPair = getProfileVendorPairFromControls();
+    Object.assign(state.profileDraft, buildProfileVendorState(vendorPair.oldVendor, vendorPair.newVendor));
+    syncLegacyVendorControl(state.profileDraft);
+    renderVendorSupportNotice(state.profileDraft);
+
+    markProfileDirty("Profile", "수정", "벤더");
+    markCompareStale();
+  };
+  selectors.oldVendorSelect?.addEventListener("input", handleProfileVendorPairChange);
+  selectors.newVendorSelect?.addEventListener("input", handleProfileVendorPairChange);
+  selectors.vendorSelect?.addEventListener("input", () => {
+    pushProfileUndoSnapshot("profile-vendor");
+
+    const legacyVendor = selectors.vendorSelect.value;
+    const preset = getVendorPresetByLegacyVendor(legacyVendor);
+
+    state.profileDraft.vendor = preset.legacyVendor;
+    state.profileDraft.vendorPresetId = preset.id;
+    state.profileDraft.oldVendor = preset.oldVendor;
+    state.profileDraft.newVendor = preset.newVendor;
+    state.profileDraft.vendorPreset = buildVendorPresetSnapshot(preset);
+    renderVendorSupportNotice(state.profileDraft);
+
     markProfileDirty("Profile", "수정", "벤더");
     markCompareStale();
   });
@@ -525,6 +877,62 @@ function bindEvents() {
   });
   selectors.themeSelect.addEventListener("input", saveUiPreferences);
   selectors.fontSelect.addEventListener("input", saveUiPreferences);
+  selectors.fieldHighlightToggle?.addEventListener("input", handleFieldHighlightToggle);
+  selectors.semanticDebugToggle?.addEventListener("input", saveUiPreferences);
+  selectors.mappingDebugToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleSettledDiffConnectorRender();
+  });
+  selectors.objectMappingVisibleToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleSettledDiffConnectorRender();
+  });
+  selectors.lineMappingStyleSelect?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleSettledDiffConnectorRender();
+  });
+  selectors.lineMappingBendRange?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleDiffConnectorRender();
+  });
+  selectors.lineMappingVisibleToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleSettledDiffConnectorRender();
+  });
+  selectors.lineMappingAnimationToggle?.addEventListener("input", () => {
+    saveUiPreferences();
+    scheduleSettledDiffConnectorRender();
+  });
+}
+
+function setupDiffConnectorResizeObserver() {
+  if (state.diffResizeObserver || !window.ResizeObserver) return;
+  const grid = selectors.diffConnectorSvg?.closest(".editor-grid");
+  const targets = [grid, selectors.oldDiffPane, selectors.newDiffPane].filter(Boolean);
+  if (!targets.length) return;
+
+  state.diffResizeObserver = new ResizeObserver(() => {
+    scheduleSettledDiffConnectorRender();
+  });
+  targets.forEach((target) => state.diffResizeObserver.observe(target));
+}
+
+function setupDiffConnectorMutationObserver() {
+  if (state.diffMutationObserver || !window.MutationObserver) return;
+  const targets = [selectors.oldDiffPane, selectors.newDiffPane].filter(Boolean);
+  if (!targets.length) return;
+
+  state.diffMutationObserver = new MutationObserver(() => {
+    scheduleSettledDiffConnectorRender();
+  });
+  targets.forEach((target) => {
+    state.diffMutationObserver.observe(target, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["open"],
+    });
+  });
 }
 
 function setActiveTab(tab, options = {}) {
@@ -541,21 +949,34 @@ function setActiveTab(tab, options = {}) {
   selectors.profilesTab.classList.toggle("active", profiles);
   selectors.summaryTab?.classList.toggle("active", summary);
   if (summary) renderObjectNavigator();
+  if (compare) scheduleSettledDiffConnectorRender();
   return true;
 }
 
 function renderObjectToggles() {
   selectors.objectToggles.innerHTML = objectTypes
-    .map((type) => `<label><input type="checkbox" data-object-type="${type}" checked />${type}</label>`)
+    .map((type) => `
+      <label class="object-scope-chip" title="${escapeHtml(type)}">
+        <input class="object-scope-chip__input" type="checkbox" data-object-type="${escapeHtml(type)}" checked aria-label="${escapeHtml(type)}" />
+        <span class="object-scope-chip__indicator" aria-hidden="true"></span>
+        <span class="object-scope-chip__label">${escapeHtml(type)}</span>
+      </label>
+    `)
     .join("");
   selectors.objectToggles.querySelectorAll("input").forEach((input) => input.addEventListener("input", markCompareStale));
 }
 
 function renderProfileEditor() {
   hideProfileRulePopover();
+
+  state.profileDraft = ensureVendorPresetFields(state.profileDraft);
+
   ensureProfileExamples(state.profileDraft);
   selectors.profileNameInput.value = state.profileDraft.name;
-  selectors.vendorSelect.value = state.profileDraft.vendor;
+  if (selectors.oldVendorSelect) selectors.oldVendorSelect.value = state.profileDraft.oldVendor || getDefaultVendorPreset().oldVendor;
+  if (selectors.newVendorSelect) selectors.newVendorSelect.value = state.profileDraft.newVendor || getDefaultVendorPreset().newVendor;
+  syncLegacyVendorControl(state.profileDraft);
+  renderVendorSupportNotice(state.profileDraft);
   selectors.profileObjectTypeSelect.innerHTML = objectTypes
     .map((type) => `<option value="${type}" ${state.selectedProfileObjectType === type ? "selected" : ""}>${type}</option>`)
     .join("");
@@ -649,6 +1070,7 @@ function getProfileMappingSnapshot() {
       kind: "token",
       field: mapping.field || "",
       role: mapping.role || "compare-field",
+      policy: mapping.policy || "compare",
       cardinality: mapping.cardinality || semanticMappingCardinality(oldNodes, newNodes),
       oldLabel: oldNodes.map(formatSemanticNodeLabel).filter(Boolean).join(", ") || "-",
       newLabel: newNodes.map(formatSemanticNodeLabel).filter(Boolean).join(", ") || "-",
@@ -1071,6 +1493,7 @@ function renderSemanticMappingConfirmPopover() {
       <select id="pendingMappingPolicy">
         ${[
           ["compare", "값 동일 비교"],
+          ["changed", "변경"],
           ["presence", "존재 여부"],
           ["required", "신규 필수"],
           ["conditional", "기존 있으면 신규 필수"],
@@ -1111,6 +1534,7 @@ function confirmPendingSemanticMapping() {
   pushProfileUndoSnapshot(`mapping:${field}`);
   const mapping = upsertSemanticMappingGroup(pending.type, field, role, pending.oldNodes || [], pending.newNodes || []);
   mapping.cardinality = cardinality;
+  mapping.policy = normalizeSemanticMappingPolicy(policy);
 
   if (role === "object-key") {
     upsertObjectKeyIdentityRuleFromMapping(pending.type, field, pending.oldNodes || [], pending.newNodes || []);
@@ -1167,6 +1591,7 @@ function cancelPendingSemanticMapping() {
 }
 
 function applyMappingPolicy(type, field, policy) {
+  if (policy === "changed" || policy === "변경") policy = "compare";
   if (!["compare", "presence", "required", "conditional", "ignore", "normalize"].includes(policy)) return;
   const profilePolicy = policy === "normalize" ? "compare" : policy;
   const policies = state.profileDraft.validationPolicies[type] || [];
@@ -1432,6 +1857,7 @@ function defaultSemanticFieldForType(type) {
     "static-route": "route",
     bgp: "neighbor",
     interface: "interface",
+    "subscriber-interface": "subscriber-interface",
     port: "port",
     lag: "lag",
     pim: "interface",
@@ -1454,6 +1880,8 @@ function defaultObjectFieldForType(type) {
     "static-route": "route",
     bgp: "neighbor",
     interface: "interface",
+    "subscriber-interface": "subscriber-interface",
+    "group-interface": "group-interface",
     port: "port",
     lag: "lag",
     pim: "interface",
@@ -1471,6 +1899,7 @@ function renderPolicyEditor() {
     <div class="policy-rows">
       ${policies.length ? policies.map(renderPolicyRow).join("") : `<div class="small-note">정책이 없습니다. 필드 정책을 추가하세요.</div>`}
     </div>
+    ${renderProfileExceptionEditorTable(type)}
   `;
 
   selectors.policyEditor.querySelector("#addPolicyRowBtn").addEventListener("click", () => {
@@ -1496,6 +1925,16 @@ function renderPolicyEditor() {
       state.profileDraft.validationPolicies[type].splice(index, 1);
       renderProfileEditor();
       markProfileDirty("Compare Policy", "삭제", type);
+      markCompareStale();
+    });
+  });
+
+  selectors.policyEditor.querySelectorAll("[data-profile-exception-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const exceptionId = button.dataset.profileExceptionRemove || "";
+      state.profileDraft.exceptions = (state.profileDraft.exceptions || []).filter((item) => item.id !== exceptionId);
+      renderProfileEditor();
+      markProfileDirty("Profile Exception", "삭제", exceptionId);
       markCompareStale();
     });
   });
@@ -2654,23 +3093,409 @@ function inferFieldFromLinkedLines(oldLine, newLine) {
   return oldField || newField || "";
 }
 
+function inferSemanticFieldNameForLineContext(line, context = {}) {
+  const objectType =
+    context.objectType ||
+    context.object?.normalizedType ||
+    context.object?.type ||
+    context.object?.sourceType ||
+    "";
+  const rawLines = Array.isArray(context.rawLines) && context.rawLines.length
+    ? context.rawLines
+    : getSemanticObjectRawLines(context.object);
+  const lineIndex = Number.isFinite(context.lineIndex) ? context.lineIndex : -1;
+  if (canonicalizeComparableLine(objectType) === "lag") {
+    return inferLagLineFields(line)[0] || "";
+  }
+
+  const scopedField = inferScopedInterfaceLineField(line, {
+    objectType,
+    rawLines,
+    lineIndex,
+  });
+
+  if (scopedField) return scopedField;
+  if (["interface", "subscriber-interface"].includes(canonicalizeComparableLine(objectType)) && isInterfaceScopeOnlyLine(line)) {
+    return "";
+  }
+
+  return inferSemanticFieldName(line);
+}
+
+function inferScopedInterfaceLineField(line, {
+  objectType = "",
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  const type = canonicalizeComparableLine(objectType);
+  if (!["interface", "subscriber-interface"].includes(type)) return "";
+
+  const normalized = canonicalizeComparableLine(line);
+  if (!normalized) return "";
+
+  const mdField = inferMdCliInterfaceLineField(normalized, type, {
+    rawLines,
+    lineIndex,
+  });
+  if (mdField) return mdField;
+
+  return inferClassicInterfaceLineField(normalized, {
+    objectType: type,
+    rawLines,
+    lineIndex,
+  });
+}
+
+function inferMdCliInterfaceLineField(normalized = "", objectType = "", {
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  const isConfigureLine = /^\/?configure\b/.test(normalized);
+
+  if (objectType === "interface") {
+    const scope = getMdCliBraceLineScope(rawLines, lineIndex);
+    const nearestScope = (...names) => {
+      for (let index = scope.length - 1; index >= 0; index -= 1) {
+        if (names.includes(scope[index])) return scope[index];
+      }
+      return "";
+    };
+    const currentIcmpScope = nearestScope("mask-reply", "redirects", "ttl-expired", "unreachables");
+    const icmpField =
+      normalized.match(/\bicmp\s+(mask-reply|redirects|ttl-expired|unreachables)\b/) ||
+      normalized.match(/^(mask-reply|redirects|ttl-expired|unreachables)\b/);
+    if (icmpField) return `icmp.${icmpField[1]}`;
+    if (/^admin-state\b/.test(normalized) && currentIcmpScope) return `icmp.${currentIcmpScope}`;
+    if (/\b(?:ipv4\s+primary\s+address|ipv4\s+address)\b/.test(normalized) || /^(?:address|prefix-length)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
+    if (/\bdescription\b/.test(normalized)) return "description";
+    if (nearestScope("ingress") && (/\bfilter\s+ip\b/.test(normalized) || /^ip\b/.test(normalized))) return "ingress-filter";
+    if (nearestScope("egress") && (/\bfilter\s+ip\b/.test(normalized) || /^ip\b/.test(normalized))) return "egress-filter";
+    if (nearestScope("ingress") && (/\bpolicy-name\b/.test(normalized) || /\bingress\s+qos\b/.test(normalized))) return "ingress-qos";
+    if (nearestScope("egress") && (/\bpolicy-name\b/.test(normalized) || /\begress\s+qos\b/.test(normalized))) return "egress-qos";
+    if (/\bingress\s+filter\s+ip\b/.test(normalized)) return "ingress-filter";
+    if (/\bingress\s+qos\b/.test(normalized)) return "ingress-qos";
+    if (/\begress\s+filter\s+ip\b/.test(normalized)) return "egress-filter";
+    if (/\begress\s+qos\b/.test(normalized)) return "egress-qos";
+    if (/\bsap\b/.test(normalized)) return "sap";
+    if (/\badmin-state\b/.test(normalized)) return "state";
+    if (!isConfigureLine) return "";
+    return "";
+  }
+
+  if (!isConfigureLine) return "";
+
+  if (/\bdhcp\s+admin-state\b/.test(normalized)) return "dhcp.admin-state";
+  if (/\bsub-sla-mgmt\s+admin-state\b/.test(normalized)) return "sub-sla-mgmt.admin-state";
+  if (/\bstatic-host\b.*\badmin-state\b/.test(normalized)) return "static-host.admin-state";
+  if (/\bdhcp\s+filter\b/.test(normalized)) return "dhcp.filter";
+  if (/\bdhcp\s+server\b/.test(normalized)) return "dhcp.server";
+  if (/\bdhcp\s+trusted\b/.test(normalized)) return "dhcp.trusted";
+  if (/\bdhcp\s+lease-populate\s+l2-header\b/.test(normalized)) return "dhcp.lease-populate.l2-header";
+  if (/\bdhcp\s+lease-populate\s+max-leases\b/.test(normalized)) return "dhcp.lease-populate.max-leases";
+  if (/\ballow-unmatching-subnets\b/.test(normalized)) return "dhcp.allow-unmatching-subnets";
+  if (/\bneighbor-discovery\s+populate\b/.test(normalized)) return "neighbor-discovery.populate";
+  if (/\bradius-auth-policy\b/.test(normalized)) return "auth-policy";
+  if (/\bgroup-interface\b/.test(normalized) && !/\bsap\b/.test(normalized)) return "group-interface";
+  if (/\bdefault-host\b.*\bnext-hop\b/.test(normalized)) return "default-host.next-hop";
+  if (/\bdefault-host\b/.test(normalized)) return "default-host";
+  if (/\bstatic-host\b.*\bsub-profile\b/.test(normalized)) return "static-host.sub-profile";
+  if (/\bstatic-host\b.*\bsla-profile\b/.test(normalized)) return "static-host.sla-profile";
+  if (/\bstatic-host\b.*\bint-dest-id\b/.test(normalized)) return "static-host.int-dest-id";
+  if (/\bstatic-host\b.*\bsubscriber-id\b/.test(normalized)) return "static-host.subscriber-id";
+  if (/\bstatic-host\b/.test(normalized)) return "static-host";
+  if (/\bsub-sla-mgmt\b.*\bsub-ident-policy\b/.test(normalized)) return "sub-sla-mgmt.sub-ident-policy";
+  if (/\bsub-sla-mgmt\b.*\bsubscriber-limit\b/.test(normalized)) return "sub-sla-mgmt.subscriber-limit";
+  if (/\bdefaults\s+sub-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sub-profile";
+  if (/\bdefaults\s+sla-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sla-profile";
+  if (/\bdefaults\s+subscriber-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.subscriber-id";
+  if (/\bdefaults\s+int-dest-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.int-dest-id";
+  if (/\bcpu-protection\s+policy-id\b/.test(normalized)) return "cpu-protection.policy-id";
+  if (/\bcpu-protection\s+ip-src-monitoring\b/.test(normalized)) return "cpu-protection.ip-src-monitoring";
+  if (/\bingress\s+filter\s+ip\b/.test(normalized)) return "ingress-filter";
+  if (/\bingress\s+qos\b/.test(normalized)) return "ingress-qos";
+  if (/\begress\s+filter\s+ip\b/.test(normalized)) return "egress-filter";
+  if (/\begress\s+qos\b/.test(normalized)) return "egress-qos";
+  if (/\bsap\b/.test(normalized)) return "sap";
+  if (/\b(?:ipv4\s+address|address)\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
+  if (/\bdescription\b/.test(normalized)) return "description";
+  if (/\badmin-state\b/.test(normalized)) return "state";
+  if (/\bsubscriber-interface\b/.test(normalized)) return "subscriber-interface";
+  return "";
+}
+
+function getMdCliBraceLineScope(rawLines = [], lineIndex = -1) {
+  if (!Array.isArray(rawLines) || lineIndex <= 0) return [];
+  const scope = [];
+
+  for (let index = 0; index < Math.min(lineIndex, rawLines.length); index += 1) {
+    updateMdCliBraceLineScope(scope, rawLines[index]);
+  }
+
+  return scope;
+}
+
+function updateMdCliBraceLineScope(scope, rawLine = "") {
+  const text = canonicalizeComparableLine(rawLine);
+  if (!text) return;
+
+  const openCount = (text.match(/\{/g) || []).length;
+  if (openCount) {
+    const match = text.match(/^([a-z0-9-]+)(?:\s+[^{}]+)?\s*\{/);
+    const name = match?.[1] || "";
+    if (name) scope.push(name);
+  }
+
+  const closeCount = (text.match(/\}/g) || []).length;
+  for (let count = 0; count < closeCount; count += 1) {
+    scope.pop();
+  }
+}
+
+function isInterfaceScopeOnlyLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return /^(?:ipv4|ipv6|icmp|primary|ingress|egress|filter|qos|sap-egress|sap-ingress)\s*\{?$/.test(normalized);
+}
+
+function inferClassicInterfaceLineField(normalized = "", {
+  objectType = "",
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  const scope = getClassicLineScope(rawLines, lineIndex);
+  const nearestScope = (...names) => {
+    for (let index = scope.length - 1; index >= 0; index -= 1) {
+      if (names.includes(scope[index].name)) return scope[index].name;
+    }
+    return "";
+  };
+  const currentScope = nearestScope("dhcp", "sub-sla-mgmt", "static-host", "ingress", "egress", "icmp", "sap", "group-interface");
+
+  if (/^(no\s+shutdown|shutdown)$/.test(normalized)) {
+    const stateScope = nearestScope("dhcp", "sub-sla-mgmt", "static-host");
+    if (stateScope === "dhcp") return "dhcp.admin-state";
+    if (stateScope === "sub-sla-mgmt") return "sub-sla-mgmt.admin-state";
+    if (stateScope === "static-host") return "static-host.admin-state";
+    return "state";
+  }
+
+  if (objectType === "interface") {
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) return `icmp.${classicIcmp[1]}`;
+    if (/^description\b/.test(normalized)) return "description";
+    if (/^address\b/.test(normalized)) return "address";
+    if (/^sap\b/.test(normalized)) return "sap";
+    if (currentScope === "ingress" && /^filter\s+ip\b/.test(normalized)) return "ingress-filter";
+    if (currentScope === "ingress" && /^qos\b/.test(normalized)) return "ingress-qos";
+    if (currentScope === "egress" && /^filter\s+ip\b/.test(normalized)) return "egress-filter";
+    if (currentScope === "egress" && /^qos\b/.test(normalized)) return "egress-qos";
+    return "";
+  }
+
+  if (currentScope === "dhcp") {
+    if (/^filter\b/.test(normalized)) return "dhcp.filter";
+    if (/^server\b/.test(normalized)) return "dhcp.server";
+    if (/^trusted$/.test(normalized)) return "dhcp.trusted";
+    if (/^lease-populate\s+l2-header\b/.test(normalized)) return "dhcp.lease-populate.l2-header";
+  }
+
+  if (currentScope === "sub-sla-mgmt") {
+    if (/^def-inter-dest-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.int-dest-id";
+    if (/^def-sub-id\b/.test(normalized)) return "sub-sla-mgmt.defaults.subscriber-id";
+    if (/^def-sub-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sub-profile";
+    if (/^def-sla-profile\b/.test(normalized)) return "sub-sla-mgmt.defaults.sla-profile";
+    if (/^sub-ident-policy\b/.test(normalized)) return "sub-sla-mgmt.sub-ident-policy";
+    if (/^multi-sub-sap\b/.test(normalized)) return "sub-sla-mgmt.subscriber-limit";
+  }
+
+  if (currentScope === "static-host") {
+    if (/^inter-dest-id\b/.test(normalized)) return "static-host.int-dest-id";
+    if (/^sla-profile\b/.test(normalized)) return "static-host.sla-profile";
+    if (/^sub-profile\b/.test(normalized)) return "static-host.sub-profile";
+    if (/^subscriber-sap-id$/.test(normalized)) return "static-host.subscriber-id";
+  }
+
+  if (currentScope === "ingress" && /^filter\s+ip\b/.test(normalized)) return "ingress-filter";
+  if (currentScope === "ingress" && /^qos\b/.test(normalized)) return "ingress-qos";
+  if (currentScope === "egress" && /^filter\s+ip\b/.test(normalized)) return "egress-filter";
+  if (currentScope === "egress" && /^qos\b/.test(normalized)) return "egress-qos";
+
+  if (/^subscriber-interface\b/.test(normalized)) return "subscriber-interface";
+  if (/^group-interface\b/.test(normalized)) return "group-interface";
+  if (/^sap\b/.test(normalized)) return "sap";
+  if (/^static-host\b/.test(normalized)) return "static-host";
+  if (/^default-host\b.*\bnext-hop\b/.test(normalized)) return "default-host.next-hop";
+  if (/^default-host\b/.test(normalized)) return "default-host";
+  if (/^authentication-policy\b/.test(normalized)) return "auth-policy";
+  if (/^arp-populate$/.test(normalized)) return "neighbor-discovery.populate";
+  if (/^allow-unmatching-subnets$/.test(normalized)) return "dhcp.allow-unmatching-subnets";
+  if (/^cpu-protection\b/.test(normalized)) return "cpu-protection.policy-id";
+  if (/^description\b/.test(normalized)) return "description";
+  if (/^address\b/.test(normalized)) return "address";
+
+  return "";
+}
+
+function getClassicLineScope(rawLines = [], lineIndex = -1) {
+  if (!Array.isArray(rawLines) || lineIndex <= 0) return [];
+  const scope = [];
+
+  for (let index = 0; index < Math.min(lineIndex, rawLines.length); index += 1) {
+    updateClassicLineScope(scope, rawLines[index]);
+  }
+
+  return scope;
+}
+
+function updateClassicLineScope(scope, rawLine = "") {
+  const source = String(rawLine || "");
+  const text = canonicalizeComparableLine(source);
+  if (!text) return;
+
+  const indent = source.match(/^\s*/)?.[0]?.length || 0;
+  if (text === "exit" || text === "}") {
+    while (scope.length > 1 && scope.at(-1).indent > indent) scope.pop();
+    if (scope.length) scope.pop();
+    return;
+  }
+
+  while (scope.length && indent <= scope.at(-1).indent && !isClassicScopeStart(text)) {
+    scope.pop();
+  }
+
+  const name = classicScopeNameForLine(text);
+  if (name) scope.push({ name, indent });
+}
+
+function isClassicScopeStart(text = "") {
+  return Boolean(classicScopeNameForLine(text));
+}
+
+function classicScopeNameForLine(text = "") {
+  if (/^subscriber-interface\b/.test(text)) return "subscriber-interface";
+  if (/^interface\b/.test(text)) return "interface";
+  if (/^group-interface\b/.test(text)) return "group-interface";
+  if (/^sap\b/.test(text)) return "sap";
+  if (/^dhcp$/.test(text)) return "dhcp";
+  if (/^sub-sla-mgmt$/.test(text)) return "sub-sla-mgmt";
+  if (/^static-host\b/.test(text)) return "static-host";
+  if (/^ingress$/.test(text)) return "ingress";
+  if (/^egress$/.test(text)) return "egress";
+  if (/^icmp$/.test(text)) return "icmp";
+  return "";
+}
+
 function inferSemanticFieldName(line) {
   const normalized = canonicalizeComparableLine(line);
+  const oneLineStaticRouteField = inferOneLineStaticRouteField(normalized);
+  if (oneLineStaticRouteField) return oneLineStaticRouteField;
   if (/(?:^|\s)(?:static-route-entry|route)\s+[\d./]+/.test(normalized)) return "route";
-  if (/\bnext-hop\b/.test(normalized)) return "next-hop";
+  if (/\b(?:next-hop|gateway)\b/.test(normalized)) return "next-hop";
+  const icmpField = normalized.match(/\b(?:icmp\s+)?(mask-reply|redirects|ttl-expired|unreachables)\b/);
+  if (icmpField) return `icmp.${icmpField[1]}`;
+  if (/^(?:ip\s+address|address)\b/.test(normalized) || /^ipv[46]\s+(?:primary\s+)?address\b/.test(normalized) || /\bprefix-length\b/.test(normalized)) return "address";
   if (/\btag\b/.test(normalized)) return "tag";
   if (/\bno\s+shutdown\b|\badmin-state\b/.test(normalized)) return "state";
+  if (/\bdescription\b/.test(normalized)) return "description";
+  if (/\bauthentication-key\b/.test(normalized)) return "authentication-key";
+  if (/\b(?:group|peer-group)\b/.test(normalized)) return "group";
+  if (/\b(?:peer-as|remote-as)\b/.test(normalized)) return "peer-as";
+  if (/\bneighbor\b/.test(normalized)) return "neighbor";
+  if (/^interface\b/.test(normalized)) return "interface";
   return extractFieldName(normalized);
+}
+
+function inferLagLineFields(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  const fields = [];
+  const add = (field) => {
+    const normalizedField = normalizeRelationField(field);
+    if (normalizedField && !fields.includes(normalizedField)) fields.push(normalizedField);
+  };
+
+  if (!normalized) return fields;
+
+  if (/\bdescription\b/.test(normalized)) add("description");
+  if (/\bno\s+shutdown\b|\badmin-state\b/.test(normalized) || /^shutdown$/.test(normalized)) add("state");
+  if (/\blacp-xmit-interval\b/.test(normalized)) add("lacp-xmit-interval");
+  if (/\blacp\s+mode\s+[^"\s{}]+/.test(normalized) || /^lacp\s+[^"\s{}]+(?:\s+administrative-key\b|$)/.test(normalized)) add("lacp-mode");
+  if (/\blacp\s+administrative-key\s+[^"\s{}]+/.test(normalized) || /^lacp\s+[^"\s{}]+\s+administrative-key\s+[^"\s{}]+/.test(normalized)) add("lacp.administrative-key");
+  if (/\baccess\s+adapt-qos\s+mode\s+[^"\s{}]+/.test(normalized) || /^adapt-qos\s+[^"\s{}]+/.test(normalized)) add("access.adapt-qos.mode");
+  if (!fields.length && (/\blag\s+"?[^"\s{}]+"?\s+mode\s+[^"\s{}]+/.test(normalized) || /^mode\s+[^"\s{}]+/.test(normalized))) add("mode");
+  if (/\blag\s+"?[^"\s{}]+"?\s+port\s+[^"\s{}]+/.test(normalized) || /^port\s+[^"\s{}]+/.test(normalized)) add("member-port");
+  if (!fields.length && /\blag\s+"?[^"\s{}]+"?/.test(normalized)) add("lag");
+
+  return fields;
+}
+
+function inferOneLineStaticRouteField(normalized = "") {
+  if (!/^\/?configure\s*\{.*\bstatic-routes\s+route\b/.test(normalized)) return "";
+  if (/\bdescription\b/.test(normalized)) return "description";
+  if (/\btag\b/.test(normalized)) return "tag";
+  if (/\bmetric\b/.test(normalized)) return "metric";
+  if (/\badmin-state\b/.test(normalized)) return "state";
+  if (/\bnext-hop\b/.test(normalized)) return "next-hop";
+  return "route";
 }
 
 function inferValueForField(line, field) {
   const normalized = canonicalizeComparableLine(line);
+  const normalizedField = normalizeRelationField(field);
   if (field === "route") return stripTrailingSyntax(normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?([^"\s{}]+)"?/)?.[1] || "");
-  if (field === "next-hop") return stripTrailingSyntax(normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "next-hop") return stripTrailingSyntax(normalized.match(/\b(?:next-hop|gateway)\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "address") return stripTrailingSyntax(normalized.match(/\b\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?\b/)?.[0] || "");
+  if (field === "interface") return stripTrailingSyntax(normalized.match(/^interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "group") return stripTrailingSyntax(normalized.match(/\b(?:group|peer-group)\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (field === "tag") return stripTrailingSyntax(normalized.match(/\btag\s+([^"\s{}]+)/)?.[1] || "");
   if (field === "state") {
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
     if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (field === "sap") return stripTrailingSyntax(normalized.match(/\bsap\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (field === "ingress-filter" || field === "egress-filter") {
+    return stripTrailingSyntax(normalized.match(/\bfilter\s+ip\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  }
+  if (field === "ingress-qos" || field === "egress-qos") {
+    return stripTrailingSyntax(
+      normalized.match(/\bpolicy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/\bqos\s+"?([^"\s{}]+)"?/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "member-port") {
+    return stripTrailingSyntax(
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^port\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "lacp-mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "lacp.administrative-key") {
+    return stripTrailingSyntax(
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (normalizedField === "lacp-xmit-interval") return stripTrailingSyntax(normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/)?.[1] || "");
+  if (normalizedField === "access.adapt-qos.mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
   }
   return field ? extractFieldValue(normalized, field) : "";
 }
@@ -3096,22 +3921,82 @@ function previewActionLabel(action) {
 }
 
 function bindDropZone(zone, input, meta) {
+  if (!zone || !input) return;
+  const setConfigText = (text, label = "") => {
+    input.value = text;
+    if (label && meta) meta.textContent = label;
+    captureInitialConfigSnapshot(true);
+    updateLineNumbers();
+    markCompareStale();
+    input.focus();
+  };
+
+  zone.addEventListener("click", (event) => {
+    if (event.target === input || event.target.closest?.("button")) return;
+    input.focus();
+  });
   zone.addEventListener("dragover", (event) => {
     event.preventDefault();
     zone.classList.add("drag-over");
   });
-  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+  zone.addEventListener("dragleave", (event) => {
+    if (!event.relatedTarget || !zone.contains(event.relatedTarget)) {
+      zone.classList.remove("drag-over");
+    }
+  });
   zone.addEventListener("drop", async (event) => {
     event.preventDefault();
     zone.classList.remove("drag-over");
     const [file] = event.dataTransfer.files;
-    if (!file) return;
-    input.value = await file.text();
-    meta.textContent = `${file.name} | 마지막 수정 ${formatDate(file.lastModified)}`;
-    captureInitialConfigSnapshot(true);
-    updateLineNumbers();
-    markCompareStale();
+    if (file) {
+      setConfigText(
+        await file.text(),
+        `${file.name} | 마지막 수정 ${formatDate(file.lastModified)}`
+      );
+      return;
+    }
+
+    const text = event.dataTransfer.getData("text/plain");
+    if (text) setConfigText(text);
   });
+  zone.addEventListener("paste", (event) => {
+    if (event.target === input) return;
+    const text = event.clipboardData?.getData("text/plain") || "";
+    if (!text) return;
+    event.preventDefault();
+    setConfigText(text);
+  });
+}
+
+function renderProfileExceptionEditorTable(objectType = "") {
+  const exceptions = (state.profileDraft.exceptions || [])
+    .filter((item) => item.enabled !== false)
+    .filter((item) => !objectType || item.target?.objectType === objectType || item.match?.objectType === objectType);
+  return `
+    <div class="profile-exception-editor">
+      <div class="policy-toolbar">
+        <strong>프로파일 예외</strong>
+        <span class="small-note">${escapeHtml(objectType)} 기준 ${escapeHtml(exceptions.length)}개</span>
+      </div>
+      ${exceptions.length ? `
+        <div class="profile-exception-table compact">
+          <div>범위</div><div>필드</div><div>규칙</div><div>상태</div><div>사유</div><div>동작</div>
+          ${exceptions.map((exception) => {
+            const target = exception.target || {};
+            const match = exception.match || {};
+            return `
+              <div>${escapeHtml(exception.scope === "profile" ? "프로파일" : "객체")}</div>
+              <div>${escapeHtml(target.fieldPath || match.fieldPath || "-")}</div>
+              <div>${escapeHtml(target.ruleId || match.ruleId || "-")}</div>
+              <div>${escapeHtml(target.changeType || match.changeType || target.status || "-")}</div>
+              <div>${escapeHtml(exception.reasonKo || "-")}</div>
+              <div><button type="button" data-profile-exception-remove="${escapeHtml(exception.id || "")}">삭제</button></div>
+            `;
+          }).join("")}
+        </div>
+      ` : `<div class="small-note">이 객체 타입의 프로파일 예외 없음.</div>`}
+    </div>
+  `;
 }
 
 function captureInitialConfigSnapshot(force = false) {
@@ -3171,10 +4056,10 @@ function markCompareStale() {
 function toggleCompareControls() {
   const workspace = selectors.compareTab.querySelector(".workspace");
   const hidden = workspace.classList.toggle("controls-hidden");
-  selectors.toggleControlsBtn.textContent = hidden ? "›" : "‹";
   selectors.toggleControlsBtn.title = hidden ? "비교 옵션 보이기" : "비교 옵션 숨기기";
   selectors.toggleControlsBtn.setAttribute("aria-label", selectors.toggleControlsBtn.title);
-  scheduleDiffConnectorRender();
+  selectors.toggleControlsBtn.classList.toggle("is-collapsed", hidden);
+  scheduleSettledDiffConnectorRender();
 }
 
 function setResultTab(tabName) {
@@ -3196,6 +4081,18 @@ function setProfileStatus(message, kind = "info") {
   if (!selectors.profileStatus) return;
   selectors.profileStatus.textContent = message;
   selectors.profileStatus.dataset.kind = kind;
+}
+
+function showWorkbenchToast(message = "", kind = "info") {
+  const toast = document.createElement("div");
+  toast.className = `workbench-toast workbench-toast-${cssSafeClassName(kind)}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  window.setTimeout(() => toast.classList.add("visible"), 20);
+  window.setTimeout(() => {
+    toast.classList.remove("visible");
+    window.setTimeout(() => toast.remove(), 220);
+  }, 2600);
 }
 
 function serializeProfileDraft(profile = state.profileDraft) {
@@ -3318,7 +4215,7 @@ function showDiffMode() {
   selectors.oldInput.closest(".code-frame").classList.add("diff-mode");
   selectors.newInput.closest(".code-frame").classList.add("diff-mode");
   selectors.diffConnectorSvg.closest(".editor-grid").classList.add("diff-connectors-active");
-  scheduleDiffConnectorRender();
+  scheduleSettledDiffConnectorRender();
 }
 
 function buildLineNumbers(value) {
@@ -3359,6 +4256,17 @@ function clearSelectedDiffTokens() {
 }
 
 function getOptions() {
+  const selectedObjects = [...selectors.objectToggles.querySelectorAll("input:checked")].map((input) => input.dataset.objectType);
+  const analysisMode = resolveAnalysisMode({
+    profile: state.profileDraft,
+    options: { semanticDebug: Boolean(selectors.semanticDebugToggle?.checked) },
+  });
+  const compareScope = resolveCompareScope({
+    profile: state.profileDraft,
+    selectedObjects,
+    oldText: selectors.oldInput?.value || "",
+    newText: selectors.newInput?.value || "",
+  });
   return {
     vendor: state.profileDraft.vendor,
     normalizeSpacing: selectors.normalizeSpacingToggle.checked,
@@ -3366,7 +4274,11 @@ function getOptions() {
     autoAlignObjects: selectors.autoAlignToggle.checked,
     ignoreComments: selectors.ignoreCommentsToggle.checked,
     ignoreGenerated: selectors.ignoreGeneratedToggle.checked,
-    selectedObjects: [...selectors.objectToggles.querySelectorAll("input:checked")].map((input) => input.dataset.objectType),
+    semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
+    fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
+    selectedObjects,
+    analysisMode,
+    compareScope,
     filter: selectors.filterInput.value.trim().toLowerCase(),
     resultFilter: selectors.resultFilterSelect.value,
     profile: state.profileDraft,
@@ -3375,21 +4287,441 @@ function getOptions() {
 
 function runCompare() {
   try {
+    if (!isCurrentVendorPairRunnable()) {
+      const vendorPair = getProfileVendorPairFromControls();
+      const support = getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor);
+      selectors.compareStatus.textContent = "비교 불가";
+      selectors.lastComparedAt.textContent = `${support.description} · ${formatDate(Date.now())}`;
+      renderSummaryEmptyState({
+        title: "지원 예정 벤더 포함",
+        message: "placeholder 파서가 포함되어 비교를 실행하지 않았습니다.",
+        tone: "warning",
+      });
+      setActiveTab("summary", { skipConfirm: true });
+      return;
+    }
+
     selectors.compareStatus.textContent = "비교 중";
+    state.lastSemanticPlan = [];
+    state.lastSemanticSummary = null;
+
     const options = getOptions();
-    const oldObjects = safeStep("기존 config 파싱", () => parseConfig(selectors.oldInput.value, options, "old"));
-    const newObjects = safeStep("신규 config 파싱", () => parseConfig(selectors.newInput.value, options, "new"));
-    const report = safeStep("객체 비교", () => compareObjects(oldObjects, newObjects, options));
+
+    const oldObjects = safeStep("기존 config 파싱", () =>
+      parseConfig(selectors.oldInput.value, options, "old")
+    );
+
+    const newObjects = safeStep("신규 config 파싱", () =>
+      parseConfig(selectors.newInput.value, options, "new")
+    );
+
+    const report = safeStep("객체 비교", () =>
+      compareObjects(oldObjects, newObjects, options)
+    );
+
+    const semanticRuntime = safeStep("의미 기반 비교 상태 계산", () =>
+      buildSemanticRuntime({
+        oldText: selectors.oldInput.value,
+        newText: selectors.newInput.value,
+        options,
+        includeManualCandidates: true,
+      })
+    );
+    if (semanticRuntime?.plan?.length) {
+      report.diffRows = applySemanticPlanVisualStatusToDiffRows(report.diffRows || [], semanticRuntime.plan);
+    }
+
+    if (options.semanticDebug) {
+      logStaticRouteCoverageSummary(oldObjects, newObjects, report);
+    }
+
     state.lastReport = report;
+
     safeStep("리포트 렌더링", () => renderReportV2(report));
     safeStep("diff 렌더링", () => renderDiff(report.diffRows || []));
+
     showDiffMode();
+
+    safeStep("semantic preview 렌더링", () => {
+      renderSemanticPreview(semanticRuntime);
+    });
+
     state.compareDirty = false;
-    selectors.compareStatus.textContent = report.items.length ? `차이 ${report.items.length}건` : "차이 없음";
+    selectors.compareStatus.textContent = report.items.length
+      ? `차이 ${report.items.length}건`
+      : "차이 없음";
     selectors.lastComparedAt.textContent = `마지막 비교: ${formatDate(Date.now())}`;
   } catch (error) {
     handleCompareError(error);
   }
+}
+
+function handleFieldHighlightToggle() {
+  saveUiPreferences();
+  if (!state.lastReport?.diffRows) {
+    scheduleSettledDiffConnectorRender();
+    return;
+  }
+
+  const oldScrollTop = selectors.oldDiffPane?.scrollTop || 0;
+  const newScrollTop = selectors.newDiffPane?.scrollTop || 0;
+  renderDiff(state.lastReport.diffRows || []);
+  if (selectors.oldDiffPane) selectors.oldDiffPane.scrollTop = oldScrollTop;
+  if (selectors.newDiffPane) selectors.newDiffPane.scrollTop = newScrollTop;
+  scheduleSettledDiffConnectorRender();
+}
+
+function countRawRowLines(row = {}) {
+  return [row.oldRow?.text, row.newRow?.text]
+    .filter(Boolean)
+    .reduce((count, text) => count + String(text).split(/\r?\n/).filter((line) => line.trim()).length, 0);
+}
+
+function logStaticRouteCoverageSummary(oldObjects = [], newObjects = [], report = {}) {
+  const oldStaticRoutes = oldObjects.filter((object) => object.type === "static-route");
+  const newStaticRoutes = newObjects.filter((object) => object.type === "static-route");
+  const oldKeys = new Set(oldStaticRoutes.map((object) => object.key));
+  const matchedCount = newStaticRoutes.filter((object) => oldKeys.has(object.key)).length;
+  const unmatchedLineCount = (report.diffRows || [])
+    .filter((row) => row.semanticReason === "raw-block-unmatched")
+    .reduce((count, row) => count + countRawRowLines(row), 0);
+
+  console.table([{
+    oldStaticRouteObjects: oldStaticRoutes.length,
+    newStaticRouteObjects: newStaticRoutes.length,
+    matchedStaticRoutes: matchedCount,
+    unmatchedRawLineCount: unmatchedLineCount,
+  }]);
+}
+
+function getCurrentVendorPresetForSemanticPreview() {
+  if (state.profileDraft?.oldVendor && state.profileDraft?.newVendor) {
+    return {
+      oldVendor: state.profileDraft.oldVendor,
+      newVendor: state.profileDraft.newVendor,
+    };
+  }
+
+  // 1순위:
+  // 사용자가 프로파일에서 명시적으로 선택한 vendor preset
+  // heuristic보다 항상 우선한다.
+  const preset =
+    state.profileDraft?.vendorPreset ||
+    null;
+
+  if (preset?.oldVendor && preset?.newVendor) {
+    return {
+      oldVendor: preset.oldVendor,
+      newVendor: preset.newVendor,
+    };
+  }
+
+  const oldText = selectors.oldInput?.value || "";
+  const newText = selectors.newInput?.value || "";
+
+  const oldLooksCisco =
+    /^\s*interface\s+\S+/im.test(oldText) ||
+    /^\s*router\s+bgp\s+/im.test(oldText) ||
+    /^\s*ip\s+route\s+/im.test(oldText);
+
+  const oldLooksJuniper =
+    /^\s*set\s+interfaces\s+/im.test(oldText) ||
+    /^\s*set\s+protocols\s+bgp\s+/im.test(oldText) ||
+    /^\s*set\s+routing-options\s+static\s+route\s+/im.test(oldText);
+
+  const oldLooksNokiaClassic =
+    /^\s*configure\s+router\s+/im.test(oldText) ||
+    /^\s*static-route-entry\s+/im.test(oldText) ||
+    /^\s*neighbor\s+"?\d{1,3}(?:\.\d{1,3}){3}"?/im.test(oldText);
+
+  const newLooksNokiaMdCli =
+    /^\s*route\s+\S+\/\d+\s+route-type\s+/im.test(newText) ||
+    /^\s*interface\s+"[^"]+"\s*\{/im.test(newText) ||
+    /^\s*neighbor\s+"?\d{1,3}(?:\.\d{1,3}){3}"?\s*\{/im.test(newText);
+
+  // 2순위:
+  // heuristic fallback
+  if (oldLooksJuniper && newLooksNokiaMdCli) {
+    return {
+      oldVendor: "juniper-set",
+      newVendor: "nokia-md-cli",
+    };
+  }
+
+  if (oldLooksCisco && newLooksNokiaMdCli) {
+    return {
+      oldVendor: "cisco-ios-xe",
+      newVendor: "nokia-md-cli",
+    };
+  }
+
+  if (oldLooksNokiaClassic && newLooksNokiaMdCli) {
+    return {
+      oldVendor: "nokia-classic",
+      newVendor: "nokia-md-cli",
+    };
+  }
+
+  // 마지막 fallback
+  return {
+    oldVendor: "cisco-ios-xe",
+    newVendor: "nokia-md-cli",
+  };
+}
+
+function ensureSemanticPreviewContainer() {
+  let container = document.querySelector("#semanticPreviewPanel");
+
+  if (container) return container;
+
+  container = document.createElement("section");
+  container.id = "semanticPreviewPanel";
+  container.className = "semantic-preview-panel";
+
+  selectors.reportList?.parentElement?.prepend(container);
+
+  return container;
+}
+
+function getManualCandidateObjectId(object) {
+  if (!object || typeof object !== "object") return "";
+  return object.id || object.objectId || object.sourceName || "";
+}
+
+function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = []) {
+  const matchedOldIds = new Set();
+  const matchedNewIds = new Set();
+
+  plan.forEach((item) => {
+    if (!item) return;
+
+    const oldId = getManualCandidateObjectId(item.oldObject);
+    const newId = getManualCandidateObjectId(item.newObject);
+
+    const status = String(item.status || "").toLowerCase();
+
+    if (status === "matched") {
+      if (oldId) matchedOldIds.add(oldId);
+      if (newId) matchedNewIds.add(newId);
+    }
+  });
+
+  return plan.map((item) => {
+    if (!item) return item;
+
+    const status = String(item.status || "").toLowerCase();
+
+    if (status === "old-only") {
+      const candidates = newObjects
+        .filter((candidate) => {
+          const candidateId = getManualCandidateObjectId(candidate);
+          return candidateId && !matchedNewIds.has(candidateId);
+        })
+        .map((candidate) => ({
+          id: getManualCandidateObjectId(candidate),
+          sourceName:
+            candidate.sourceName ||
+            candidate.id ||
+            candidate.objectId ||
+            candidate.key ||
+            candidate.normalizedKey ||
+            candidate.matchKey ||
+            candidate.name ||
+            candidate.address ||
+            candidate.prefix ||
+            "-",
+          score: "-",
+          reason: "manual-candidate",
+        }));
+
+      return {
+        ...item,
+        manualCandidates: candidates,
+      };
+    }
+
+    if (status === "new-only") {
+      const candidates = oldObjects
+        .filter((candidate) => {
+          const candidateId = getManualCandidateObjectId(candidate);
+          return candidateId && !matchedOldIds.has(candidateId);
+        })
+        .map((candidate) => ({
+          id: getManualCandidateObjectId(candidate),
+          sourceName:
+            candidate.sourceName ||
+            candidate.id ||
+            candidate.objectId ||
+            candidate.key ||
+            candidate.normalizedKey ||
+            candidate.matchKey ||
+            candidate.name ||
+            candidate.address ||
+            candidate.prefix ||
+            "-",
+          score: "-",
+          reason: "manual-candidate",
+        }));
+
+      return {
+        ...item,
+        manualCandidates: candidates,
+      };
+    }
+
+    return item;
+  });
+}
+
+function renderSemanticPreview(precomputedRuntime = null) {
+  const container = ensureSemanticPreviewContainer();
+
+  const runtime = precomputedRuntime || buildSemanticRuntime({
+    oldText: selectors.oldInput.value,
+    newText: selectors.newInput.value,
+    options: getOptions(),
+    includeManualCandidates: true,
+  });
+  const { oldVendor, newVendor, oldResult, newResult, plan, manualMap, audit, rawAudit, analysisContext } = runtime;
+  state.lastSemanticPlan = plan;
+  state.lastManualMap = manualMap || {};
+  state.lastStandardsAudit = audit || null;
+  state.lastStandardsAuditRaw = rawAudit || null;
+  state.lastAnalysisContext = analysisContext || null;
+  state.lastCoverageDiagnostics = buildSemanticCoverageDiagnostics({
+    oldText: selectors.oldInput.value,
+    newText: selectors.newInput.value,
+    oldResult,
+    newResult,
+    plan,
+    profile: state.profileDraft || {},
+  });
+  state.lastSemanticSummary = buildSemanticSummaryMetrics({
+    plan,
+    oldObjects: oldResult.objects,
+    newObjects: newResult.objects,
+    manualMap,
+    oldVendor,
+    newVendor,
+    coverageDiagnostics: state.lastCoverageDiagnostics,
+  });
+
+  if (selectors.semanticDebugToggle?.checked) {
+    console.groupCollapsed("[semantic-object-debug]");
+    console.table(plan.map((item, index) => {
+      const oldObject = item.oldObject || null;
+      const newObject = item.newObject || null;
+      const identity = oldObject?.normalizedIdentity || newObject?.normalizedIdentity || "";
+      const sourceName = oldObject?.sourceName || newObject?.sourceName || "";
+      return {
+        index,
+        type: item.objectType,
+        status: item.status,
+        score: item.score,
+        reason: item.reason || "",
+        oldId: oldObject?.id || "",
+        newId: newObject?.id || "",
+        oldIdentity: oldObject?.normalizedIdentity || "",
+        newIdentity: newObject?.normalizedIdentity || "",
+        normalizedIdentity: identity,
+        sortKey: `${item.objectType}:${identity || sourceName}`,
+        ambiguityReason: (item.scoreReasons || []).join(", "),
+      };
+    }));
+    console.groupEnd();
+  }
+
+  if (state.lastReport) {
+    renderSummaryCards(state.lastReport, state.lastSemanticSummary);
+    renderOverviewReport(state.lastReport);
+    renderReportPolicyList(state.lastReport);
+  } else {
+    state.exceptionTargets = new Map();
+  }
+
+  const html = renderComparisonPlanHtml(plan, {
+    getFieldExceptionTargetId: (item, field) => registerSemanticFieldExceptionTarget(item, field),
+    getSettingExclusionTargetId: (item) => registerSemanticSettingExclusionTarget(item, "semantic-preview"),
+  });
+
+  container.innerHTML = `
+    <div class="semantic-preview-header">
+      <strong>의미 기반 비교</strong>
+      <span>${escapeHtml(vendorLabel(oldVendor))} → ${escapeHtml(vendorLabel(newVendor))}</span>
+      <small>설정 항목 카드에서 예외 선택 가능</small>
+    </div>
+    ${html}
+  `;
+
+  container.querySelectorAll(".semantic-candidate-select-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextManualMap = applyManualSelectionToStorage(
+        button.dataset.oldObjectId,
+        button.dataset.newObjectId
+      );
+
+      state.profileDraft.manualMap = {
+        ...(state.profileDraft.manualMap || {}),
+        ...nextManualMap,
+      };
+
+      selectors.compareStatus.textContent = "수동 매핑 저장됨";
+      renderSemanticPreview();
+      scheduleSettledDiffConnectorRender();
+    });
+  });
+
+  container.querySelectorAll(".semantic-manual-remove-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const oldObjectId = button.dataset.oldObjectId;
+
+      const profileManualMap = state.profileDraft?.manualMap || {};
+      const localManualMap = loadManualMapFromLocalStorage();
+
+      const mergedManualMap = {
+        ...localManualMap,
+        ...profileManualMap,
+      };
+
+      const nextManualMap = removeManualMapping(mergedManualMap, oldObjectId);
+
+      state.profileDraft.manualMap = nextManualMap;
+      saveManualMapToLocalStorage(nextManualMap);
+
+      selectors.compareStatus.textContent = "수동 매핑 삭제됨";
+      if (selectors.mappingDebugToggle?.checked) {
+        console.log("[manual-map-remove]", {
+          oldObjectId,
+          before: mergedManualMap,
+          after: nextManualMap,
+        });
+      }
+      renderSemanticPreview();
+      scheduleSettledDiffConnectorRender();
+    });
+  });
+
+  container.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExceptionFromTarget(button.dataset.addException || "", button.dataset.exceptionFixedScope || "object", button);
+    });
+  });
+
+  container.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
+    });
+  });
+
+  container.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
+    });
+  });
+
 }
 
 function safeStep(label, callback) {
@@ -3405,7 +4737,11 @@ function handleCompareError(error) {
   console.error("Network Config Workbench compare error", error);
   selectors.compareStatus.textContent = "비교 오류";
   selectors.lastComparedAt.textContent = `오류 발생: ${formatDate(Date.now())}`;
-  selectors.summaryCards.innerHTML = "";
+  renderSummaryEmptyState({
+    title: "비교 오류",
+    message: error?.message || String(error),
+    tone: "danger",
+  });
   selectors.reportList.innerHTML = `<li data-type="syntax">비교 중 오류: ${escapeHtml(error?.message || String(error))}</li>`;
   selectors.objectList.innerHTML = "";
   state.lastReport = null;
@@ -3416,6 +4752,1835 @@ function handleCompareError(error) {
   }
 }
 
+function renderSummaryEmptyState({
+  title = "비교 결과 없음",
+  message = "Config 비교를 실행하면 요약, 위험도, semantic match 품질이 표시됩니다.",
+  tone = "info",
+} = {}) {
+  if (!selectors.summaryCards) return;
+  const vendorState = state.profileDraft || getDefaultVendorPreset();
+  const support = getVendorPairSupportState(vendorState.oldVendor, vendorState.newVendor);
+  selectors.summaryCards.innerHTML = `
+    <section class="summary-empty-state summary-tone-${escapeHtml(tone)}">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(message)}</p>
+      </div>
+      <div class="summary-context-row">
+        <span>${escapeHtml(vendorLabel(vendorState.oldVendor))} → ${escapeHtml(vendorLabel(vendorState.newVendor))}</span>
+        <span>${escapeHtml(support.label)}</span>
+        <span>${escapeHtml(state.profileDraft?.name || "프로파일 없음")}</span>
+      </div>
+    </section>
+  `;
+}
+
+function buildSemanticSummaryMetrics({
+  plan = [],
+  oldObjects = [],
+  newObjects = [],
+  manualMap = {},
+  oldVendor = "",
+  newVendor = "",
+  coverageDiagnostics = null,
+} = {}) {
+  const summary = {
+    totalObjects: plan.length,
+    matched: 0,
+    oldOnly: 0,
+    newOnly: 0,
+    ambiguous: 0,
+    manual: Object.keys(manualMap || {}).length,
+    relationshipDiffs: 0,
+    policyViolations: 0,
+    lineCovered: 0,
+    lineTotal: 0,
+    noopSuppressed: 0,
+    averageScore: 0,
+    lowConfidence: 0,
+    oldObjectCount: oldObjects.length,
+    newObjectCount: newObjects.length,
+    oldVendor,
+    newVendor,
+  };
+  let scoreTotal = 0;
+  let scoreCount = 0;
+
+  plan.forEach((item) => {
+    if (item.policySuppressed) {
+      summary.noopSuppressed += 1;
+      return;
+    }
+    const status = String(item.status || "");
+    const reason = String(item.reason || "");
+    if (status === "matched") summary.matched += 1;
+    if (status === "old-only") summary.oldOnly += 1;
+    if (status === "new-only") summary.newOnly += 1;
+    if (status === "candidate" || item.ambiguousAlternatives?.length) summary.ambiguous += 1;
+    if (reason === "manual") summary.manual += 1;
+    if (Number.isFinite(Number(item.score))) {
+      const score = Number(item.score);
+      scoreTotal += score;
+      scoreCount += 1;
+      if (score > 0 && score < 80) summary.lowConfidence += 1;
+    }
+    summary.policyViolations += Number(item.policyViolationCount || 0);
+    (item.relationshipSummary || []).forEach((relationship) => {
+      if (!["matched", "unknown"].includes(String(relationship.status || ""))) {
+        summary.relationshipDiffs += 1;
+      }
+    });
+    (item.lineMatches || []).forEach((lineMatch) => {
+      summary.lineTotal += 1;
+      if (lineMatch.semanticCovered) summary.lineCovered += 1;
+      if (/ignored|suppressed|noop/i.test(String(lineMatch.reason || ""))) {
+        summary.noopSuppressed += 1;
+      }
+    });
+  });
+
+  summary.averageScore = scoreCount ? Math.round(scoreTotal / scoreCount) : 0;
+  if (coverageDiagnostics) {
+    summary.lineCovered = Number(coverageDiagnostics.recognizedLineCount || 0);
+    summary.lineTotal = Number(coverageDiagnostics.eligibleLineCount || 0);
+    summary.noopSuppressed = Number(coverageDiagnostics.ignoredLineCount || coverageDiagnostics.suppressedLineCount || summary.noopSuppressed || 0);
+    summary.coveragePercent = coverageDiagnostics.coveragePercent == null
+      ? null
+      : Number(coverageDiagnostics.coveragePercent);
+    summary.coverageDiagnostics = coverageDiagnostics;
+  } else {
+    summary.coveragePercent = summary.lineTotal
+      ? Math.round((summary.lineCovered / summary.lineTotal) * 100)
+      : 0;
+  }
+  summary.matchPercent = summary.totalObjects
+    ? Math.round((summary.matched / summary.totalObjects) * 100)
+    : 0;
+  return summary;
+}
+
+function buildCurrentDashboardData(report, semantic = state.lastSemanticSummary) {
+  const vendorPair = getCurrentVendorPresetForSemanticPreview();
+  const support = getVendorPairSupportState(vendorPair.oldVendor, vendorPair.newVendor);
+  const dashboard = buildSummaryDashboardData({
+    report,
+    plan: state.lastSemanticPlan || [],
+    semanticSummary: semantic || {},
+    manualMap: state.lastManualMap || state.profileDraft?.manualMap || {},
+    vendorPair,
+    support,
+    profileName: state.profileDraft?.name || "프로파일 없음",
+    sessionName: state.lastSessionName || "현재 입력",
+    comparedAt: selectors.lastComparedAt?.textContent?.replace(/^마지막 비교:\s*/, "") || "",
+    coverageDiagnostics: state.lastCoverageDiagnostics,
+    audit: state.lastStandardsAudit || {},
+    fixtureScope: state.profileDraft?.fixturePolicy || null,
+    analysisMode: state.lastAnalysisContext?.analysisMode || getOptions().analysisMode,
+    compareScope: state.lastAnalysisContext?.compareScope || getOptions().compareScope,
+    selectedObjects: getOptions().selectedObjects,
+  });
+  state.lastDashboardData = dashboard;
+  return dashboard;
+}
+
+function renderMetricCard({ label, value, detail = "", state = "", action = "", help = "" }) {
+  const tag = action ? "button" : "div";
+  const attrs = action
+    ? ` type="button" data-summary-filter="${escapeHtml(action)}" title="${escapeHtml(help || detail || label)}"`
+    : "";
+  return `
+    <${tag}${attrs} class="summary-card summary-metric ${action ? "summary-metric-action" : ""} ${state ? `summary-metric-${escapeHtml(state)}` : ""}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+    </${tag}>
+  `;
+}
+
+function renderStandardsAuditSummary(audit = {}) {
+  const summary = audit.summary || {};
+  const bySeverity = summary.bySeverity || {};
+  const migration = summary.byMigrationImpact || {};
+  const activeFindings = (audit.findings || []).filter((finding) => !finding.suppressed);
+  const suppressedFindings = (audit.findings || []).filter((finding) => finding.suppressed);
+
+  return `
+    <section class="summary-section audit-summary-section" data-review-panel="standards-audit">
+      <div class="summary-section-head">
+        <h3>표준 점검 요약</h3>
+        <button type="button" data-summary-action="overview">통합 리포트</button>
+      </div>
+      <div class="audit-metric-row">
+        ${renderMetricCard({ label: "위험 항목", value: bySeverity.critical || 0, detail: "즉시 조치", state: bySeverity.critical ? "removed" : "ok", action: "audit-critical" })}
+        ${renderMetricCard({ label: "경고 항목", value: bySeverity.warning || 0, detail: "표준 위반 가능", state: bySeverity.warning ? "warning" : "ok", action: "audit-warning" })}
+        ${renderMetricCard({ label: "수동 검토 항목", value: bySeverity["manual-review"] || 0, detail: "판단 필요", state: bySeverity["manual-review"] ? "warning" : "ok", action: "audit-manual" })}
+        ${renderMetricCard({ label: "미지원/부분 지원 항목", value: bySeverity.unsupported || 0, detail: "전환 주의", state: bySeverity.unsupported ? "warning" : "ok", action: "audit-unsupported" })}
+        ${renderMetricCard({ label: "전환 위험 설정", value: (migration["blocks-auto-generation"] || 0) + (migration["manual-conversion-required"] || 0) + (migration["target-default-risk"] || 0), detail: "migration impact", state: "changed", action: "audit-migration" })}
+        ${renderMetricCard({ label: "예외/숨김 처리된 항목", value: suppressedFindings.length, detail: "active risk 제외", state: "changed", action: "audit-suppressed" })}
+      </div>
+      <div class="audit-finding-list">
+        ${activeFindings.slice(0, 8).map(renderAuditFindingCompact).join("") || `<div class="small-note">활성 표준 점검 항목 없음</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderAuditFindingCompact(finding = {}) {
+  const severity = finding.suppressed ? "suppressed" : finding.severity || "info";
+  const exceptionTargetId = registerAuditExceptionTarget(finding, "summary-audit");
+  return `
+    <article class="audit-finding-item audit-severity-${escapeHtml(cssSafeClassName(severity))}" data-audit-finding-id="${escapeHtml(finding.id || "")}">
+      <div>
+        <strong>${escapeHtml(AUDIT_SEVERITY_LABELS_KO[severity] || severity)} · ${escapeHtml(finding.titleKo || "검토 항목")}</strong>
+        <span>${escapeHtml(finding.objectType || "-")} ${escapeHtml(finding.objectKey || "-")}</span>
+      </div>
+      <p>${escapeHtml(finding.recommendationKo || finding.descriptionKo || "")}</p>
+      <div class="exception-action-row">
+        <button type="button" data-audit-detail="${escapeHtml(finding.id || "")}">상세</button>
+        ${renderExceptionActionControls(exceptionTargetId)}
+      </div>
+    </article>
+  `;
+}
+
+function renderHiddenDiagnosticsLinks(context = {}, counts = {}) {
+  if (context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible) return "";
+  return `
+    <section class="summary-section summary-hidden-diagnostics">
+      <div class="summary-section-head">
+        <h3>고급 결과</h3>
+      </div>
+      <div class="summary-action-grid">
+        <button type="button" data-summary-filter="standards-audit">표준 점검 결과 보기</button>
+        <button type="button" data-summary-filter="audit-migration">전환 준비도 보기</button>
+        <button type="button" data-summary-filter="coverage">고급 진단 보기</button>
+        <button type="button" data-summary-filter="audit-suppressed">예외/숨김 처리된 항목</button>
+      </div>
+      <p class="small-note">현재 모드에서는 표준 점검, 전환 준비도, 고급 진단을 활성 이슈로 표시하지 않음. 예외/숨김 항목 ${escapeHtml(counts.auditSuppressed || 0)}개.</p>
+    </section>
+  `;
+}
+
+function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
+  if (!selectors.summaryCards || !report) return;
+  state.exceptionTargets = preserveSemanticExceptionTargets(state.exceptionTargets);
+  state.summaryIssueGroups = new Map();
+  const semanticSummary = semantic || {};
+  const dashboard = buildCurrentDashboardData(report, semanticSummary);
+  const { lineSummary, counts, fieldAnalysis, review, severity, context, audit } = dashboard;
+  const risk = severity.level || "ok";
+  const support = context.support || {};
+  const coverage = semanticSummary.coveragePercent == null ? null : Number(semanticSummary.coveragePercent);
+  const coverageLabel = coverage == null ? "계산 불가" : `${coverage}%`;
+  const alerts = buildOperatorAlerts({ dashboard, semanticSummary, report });
+
+  selectors.summaryCards.innerHTML = `
+    <section class="operator-dashboard summary-risk-${escapeHtml(risk)}">
+      <div class="summary-status-header">
+        <div class="summary-status-main">
+          <span class="summary-kicker">비교 요약</span>
+          <strong>${escapeHtml(severity.label)}</strong>
+          <p>${escapeHtml(severity.reason)}</p>
+        </div>
+        <div class="summary-status-badges">
+          <span class="summary-risk-badge">${escapeHtml(severity.label)}</span>
+          <span>${escapeHtml(vendorLabel(context.oldVendor))} → ${escapeHtml(vendorLabel(context.newVendor))}</span>
+          <span>${escapeHtml(support.label || "지원 상태 확인")}</span>
+        </div>
+      </div>
+      <div class="summary-context-row">
+        <span>프로파일: ${escapeHtml(context.profileName || "프로파일 없음")}</span>
+        <span>세션: ${escapeHtml(context.sessionName || "현재 입력")}</span>
+        <span>비교 시각: ${escapeHtml(context.comparedAt || "방금 실행")}</span>
+        <span>파싱 설정: ${escapeHtml(context.parsedObjectCount || 0)}개</span>
+        <span>모드: ${escapeHtml(context.modeLabelKo || "단순 비교")}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.currentScope || `현재 비교 범위: ${context.scopeLabelKo || "전체"}`)}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.standardsAudit || "표준 점검: 꺼짐")}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.migrationReadiness || "전환 준비도: 꺼짐")}</span>
+        <span>${escapeHtml(context.modeScopeLabelsKo?.debugDiagnostics || "고급 진단 숨김")}</span>
+        ${state.compareDirty ? "<span>비교 후 변경됨</span>" : ""}
+      </div>
+      <div class="operator-metric-grid">
+        ${renderMetricCard({ label: "라인 변경", value: lineSummary.changed, detail: `추가 ${lineSummary.added} / 삭제 ${lineSummary.removed}`, state: "changed", action: "line-diff", help: "변경된 라인 그룹으로 이동" })}
+        ${renderMetricCard({ label: "의미 일치도", value: `${semanticSummary.matchPercent ?? 0}%`, detail: `평균 일치도 ${semanticSummary.averageScore ?? 0}`, state: (semanticSummary.matchPercent ?? 0) >= 80 ? "ok" : "warning", action: "field-overlap" })}
+        ${renderMetricCard({ label: "연결된 설정", value: counts.matched, detail: `전체 ${semanticSummary.totalObjects ?? 0}개`, state: "ok", action: "matched" })}
+        ${renderMetricCard({ label: "기존 설정에서만 있음", value: counts.oldOnly, detail: "삭제/누락 가능성", state: counts.oldOnly ? "removed" : "ok", action: "unmatched-old" })}
+        ${renderMetricCard({ label: "신규 설정에서만 있음", value: counts.newOnly, detail: "신규 추가 가능성", state: counts.newOnly ? "added" : "ok", action: "unmatched-new" })}
+        ${renderMetricCard({ label: "확인 필요 후보", value: counts.ambiguous, detail: "매핑 후보 여러 개", state: counts.ambiguous ? "warning" : "ok", action: "ambiguous" })}
+        ${renderMetricCard({ label: "낮은 신뢰도", value: counts.lowConfidence, detail: "수동 검토 권장", state: counts.lowConfidence ? "warning" : "ok", action: "low-confidence" })}
+        ${renderMetricCard({ label: "분석된 라인 비율", value: coverageLabel, detail: `${semanticSummary.lineCovered ?? 0}/${semanticSummary.lineTotal ?? 0} 라인`, state: coverage != null && coverage >= 70 ? "ok" : "warning", action: "coverage" })}
+        ${renderMetricCard({ label: "숨김 처리 라인", value: semanticSummary.noopSuppressed ?? lineSummary.suppressed, detail: "의미상 동일/구조 라인", state: "changed", action: "suppressed" })}
+        ${renderMetricCard({ label: "비교 제외된 항목", value: counts.excluded || 0, detail: "활성 검토 제외", state: counts.excluded ? "changed" : "ok", action: "suppressed" })}
+        ${renderMetricCard({ label: "직접 연결", value: counts.manual, detail: "사용자 저장 매핑", state: counts.manual ? "changed" : "ok", action: "manual" })}
+        ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
+          ? renderMetricCard({ label: "표준 점검", value: counts.auditActive, detail: `예외 ${counts.auditSuppressed}개`, state: counts.auditCritical ? "removed" : counts.auditWarning ? "warning" : "ok", action: "standards-audit" })
+          : ""}
+      </div>
+    </section>
+
+    ${alerts.length ? `
+      <section class="summary-alert-panel summary-risk-${escapeHtml(risk)}" data-review-panel="critical">
+        <strong>검토 우선순위</strong>
+        <ul>${alerts.map((alert) => `<li>${escapeHtml(alert)}</li>`).join("")}</ul>
+      </section>
+    ` : ""}
+
+    ${dashboard.lowCoverage ? renderCoverageWarning(semanticSummary, support, context.coverageDiagnostics) : ""}
+    ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
+      ? renderStandardsAuditSummary(audit)
+      : renderHiddenDiagnosticsLinks(context, counts)}
+
+    <section class="summary-workspace-grid">
+      <div class="summary-workspace-main">
+        <section class="summary-section" data-review-panel="field-overlap">
+          <div class="summary-section-head">
+            <h3>공통 필드 분석</h3>
+            <button type="button" data-summary-action="overview">통합 리포트</button>
+          </div>
+          ${renderFieldOverlapSummary(fieldAnalysis)}
+        </section>
+
+        <section class="summary-section">
+          <div class="summary-section-head">
+            <h3>즉시 검토 항목</h3>
+            <button type="button" data-summary-action="semantic">의미 비교 보기</button>
+          </div>
+          ${renderSummaryIssueWorkspace(review)}
+        </section>
+        ${renderProfileExceptionManager()}
+      </div>
+
+      <aside class="summary-workspace-side">
+        <section class="summary-section">
+          <div class="summary-section-head">
+            <h3>변경 미리보기</h3>
+            <button type="button" data-summary-action="objects">설정 목록</button>
+          </div>
+          ${renderTopTypePreview("변경 많은 설정 종류", dashboard.topChangedTypes)}
+          ${renderTopTypePreview("연결되지 않은 설정 종류", dashboard.topUnmatchedTypes)}
+          ${renderLowOverlapPreview(fieldAnalysis.pairs)}
+        </section>
+
+        <section class="summary-section">
+          <div class="summary-section-head">
+            <h3>빠른 이동</h3>
+          </div>
+          <div class="summary-action-grid">
+            <button type="button" data-summary-filter="unmatched-old">기존만 보기</button>
+            <button type="button" data-summary-filter="unmatched-new">신규만 보기</button>
+            <button type="button" data-summary-filter="ambiguous">후보 확인</button>
+            <button type="button" data-summary-filter="low-confidence">낮은 신뢰도</button>
+            <button type="button" data-summary-action="overview">통합 리포트</button>
+            <button type="button" data-summary-action="issues">라인 차이</button>
+          </div>
+        </section>
+      </aside>
+    </section>
+  `;
+  bindSummaryActions();
+}
+
+function buildOperatorAlerts({ dashboard, semanticSummary, report }) {
+  const { review, counts, context } = dashboard;
+  return [
+    counts.oldOnly ? `기존 설정에만 있는 항목 ${counts.oldOnly}개` : "",
+    counts.newOnly ? `신규 설정에만 있는 항목 ${counts.newOnly}개` : "",
+    counts.ambiguous ? `매핑 후보 여러 개 ${counts.ambiguous}개` : "",
+    counts.lowConfidence ? `낮은 신뢰도 설정 ${counts.lowConfidence}개` : "",
+    review.relationshipChanges.length ? `연결/참조 관계 변경 ${review.relationshipChanges.length}개` : "",
+    review.abnormal.length ? `비정상/검토 필요 값 ${review.abnormal.length}개` : "",
+    Number(semanticSummary.coveragePercent || 0) < 60 ? `분석된 라인 비율 ${semanticSummary.coveragePercent || 0}%` : "",
+    report.summary?.required ? `필수 규칙 위반 ${report.summary.required}건` : "",
+    context.support?.state === VENDOR_SUPPORT_STATE.PARTIAL ? "부분 지원 벤더 포함" : "",
+  ].filter(Boolean);
+}
+
+function renderCoverageWarning(semanticSummary = {}, support = {}, diagnostics = null) {
+  const sideSummary = diagnostics
+    ? `미분석 ${diagnostics.unparsedLineCount ?? 0} · wrapper ${diagnostics.wrapperLineCount ?? 0} · 라인매핑 없음 ${diagnostics.linesWithoutSourceMapping ?? 0}`
+    : "";
+  return `
+    <section class="summary-coverage-warning" data-review-panel="coverage">
+      <strong>분석된 라인 비율이 낮음</strong>
+      <p>의미 기반 분석이 인식한 라인이 ${escapeHtml(semanticSummary.coveragePercent ?? "계산 불가")}%입니다. ${escapeHtml(diagnostics?.reason || "파서 미지원 구문, router log wrapper, 예외 처리 라인이 원인일 수 있습니다.")}</p>
+      <div class="summary-context-row">
+        <span>분석 ${escapeHtml(semanticSummary.lineCovered ?? 0)} / 전체 ${escapeHtml(semanticSummary.lineTotal ?? 0)}</span>
+        <span>숨김 처리 ${escapeHtml(semanticSummary.noopSuppressed ?? 0)}</span>
+        ${sideSummary ? `<span>${escapeHtml(sideSummary)}</span>` : ""}
+        <span>${escapeHtml(support.label || "지원 상태 확인")}</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderFieldOverlapSummary(fieldAnalysis = {}) {
+  const aggregate = fieldAnalysis.aggregate || {};
+  const rows = fieldAnalysis.aggregateByType || [];
+  const excludedByPolicy = Number(aggregate.policyExcludedFields || 0);
+  const rawPercent = Number(aggregate.rawOverlapPercent ?? aggregate.overlapPercent ?? 0);
+  const appliedPercent = Number(aggregate.overlapPercent ?? 0);
+  return `
+    <div class="field-overlap-hero">
+      <div>
+        <span>공통 필드 분석</span>
+        <strong>${escapeHtml(appliedPercent)}%</strong>
+      </div>
+      <div class="field-overlap-bar" aria-label="예외/숨김 처리된 항목 제외 기준 공통률 ${escapeHtml(appliedPercent)}%">
+        <span style="width:${Math.max(0, Math.min(100, appliedPercent))}%"></span>
+      </div>
+      <small>예외/숨김 처리된 항목 제외 기준 · 같음 ${escapeHtml(aggregate.sameFields || 0)} · 다름 ${escapeHtml(aggregate.differentFields || 0)} · 기존 누락 ${escapeHtml(aggregate.missingOldFields || 0)} · 신규 누락 ${escapeHtml(aggregate.missingNewFields || 0)}</small>
+      <small>원본 기준 ${escapeHtml(rawPercent)}% · 예외/숨김/제외 ${escapeHtml(excludedByPolicy)}개 제외</small>
+    </div>
+    <div class="summary-table field-overlap-table">
+      <div class="summary-table-head">설정 종류</div>
+      <div class="summary-table-head">연결</div>
+      <div class="summary-table-head">같은 필드</div>
+      <div class="summary-table-head">다른 필드</div>
+      <div class="summary-table-head">누락</div>
+      <div class="summary-table-head">평균 공통률</div>
+      ${rows.length ? rows.slice(0, 10).map((row) => `
+        <button type="button" data-field-type-filter="${escapeHtml(row.objectType)}">${escapeHtml(row.objectType)}</button>
+        <div>${escapeHtml(row.matchedObjects)}</div>
+        <div>${escapeHtml(row.commonFields)}</div>
+        <div>${escapeHtml(row.changedFields)}</div>
+        <div>${escapeHtml(row.missingOldFields + row.missingNewFields)}</div>
+        <div><span class="mini-overlap"><span style="width:${Math.max(0, Math.min(100, Number(row.averageOverlap || 0)))}%"></span></span>${escapeHtml(row.averageOverlap)}%</div>
+      `).join("") : `<div class="summary-table-empty">연결된 설정의 설정 항목 분석 결과가 없습니다.</div>`}
+    </div>
+    ${renderFieldHotList(fieldAnalysis.byField || [])}
+  `;
+}
+
+function renderFieldHotList(fields = []) {
+  if (!fields.length) return "";
+  return `
+    <div class="summary-field-hotlist">
+      ${fields.slice(0, 10).map((field) => `
+        <span title="다른 값 ${escapeHtml(field.different)} / 기존 누락 ${escapeHtml(field.missingOld)} / 신규 누락 ${escapeHtml(field.missingNew)}">
+          ${escapeHtml(field.field)} <strong>${escapeHtml(field.different + field.missingOld + field.missingNew)}</strong>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderReviewPanel(panelKey, title, items = [], tone = "") {
+  const open = items.length > 0 ? " open" : "";
+  return `
+    <details class="summary-review-panel summary-review-${escapeHtml(tone)}" data-review-panel="${escapeHtml(panelKey)}"${open}>
+      <summary>
+        <span>${escapeHtml(title)}</span>
+        <strong>${escapeHtml(items.length)}</strong>
+      </summary>
+      <div class="summary-review-list">
+        ${items.length ? items.slice(0, 8).map((item) => renderReviewItem(panelKey, item)).join("") : `<div class="small-note">검토 항목 없음</div>`}
+      </div>
+    </details>
+  `;
+}
+
+function renderReviewItem(panelKey, item = {}) {
+  const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
+  const exceptionTargetId = registerReviewExceptionTarget(panelKey, item, "summary-review");
+  const exclusionTargetId = isSettingExclusionPanel(panelKey)
+    ? registerReviewSettingExclusionTarget(panelKey, item, "summary-review")
+    : "";
+  const fields = [
+    item.commonFields ? `공통 ${item.commonFields}` : "",
+    item.differentFields ? `다름 ${item.differentFields}` : "",
+    item.missingOldFields ? `기존 누락 ${item.missingOldFields}` : "",
+    item.missingNewFields ? `신규 누락 ${item.missingNewFields}` : "",
+  ].filter(Boolean).join(" · ");
+  return `
+    <article class="summary-review-item" data-summary-review-kind="${escapeHtml(panelKey)}">
+      <div>
+        <strong>${escapeHtml(item.objectType)} ${escapeHtml(item.label || "-")}</strong>
+        <span>${escapeHtml(item.reason || "")}</span>
+        ${fields ? `<small>${escapeHtml(fields)}</small>` : ""}
+        ${item.score ? `<small>일치도 ${escapeHtml(item.score)}%</small>` : ""}
+        ${renderCandidatePreview(item.candidates)}
+      </div>
+      <div class="summary-review-actions">
+        <button type="button" data-object-jump="${escapeHtml(jumpKey)}">이동</button>
+        ${exclusionTargetId ? renderSettingExclusionActionControls(exclusionTargetId) : renderExceptionActionControls(exceptionTargetId)}
+      </div>
+    </article>
+  `;
+}
+
+function isSettingExclusionPanel(panelKey = "") {
+  return panelKey === "unmatched-old" || panelKey === "unmatched-new" || panelKey === "excluded";
+}
+
+function preserveSemanticExceptionTargets(targets = new Map()) {
+  return new Map([...targets.entries()].filter(([, target]) => target?.source === "semantic-field"));
+}
+
+const reviewIssueMeta = {
+  "unmatched-old": { label: "기존 설정에만 있음", tone: "old-only" },
+  "unmatched-new": { label: "신규 설정에만 있음", tone: "new-only" },
+  ambiguous: { label: "매핑 후보 여러 개", tone: "warning" },
+  "low-confidence": { label: "낮은 신뢰도", tone: "warning" },
+  abnormal: { label: "검토 필요 값", tone: "review" },
+  relationship: { label: "관계 변경", tone: "changed" },
+};
+
+function renderSummaryIssueWorkspace(review = {}) {
+  const rows = buildSummaryIssueRows(review, state.lastSemanticPlan || []);
+  const firstTargetId = rows[0]?.targetId || "";
+  return `
+    <div class="summary-issue-workspace" data-summary-issue-root>
+      <div class="summary-issue-toolbar">
+        <div class="summary-issue-counts">
+          ${Object.entries(reviewIssueMeta).map(([key, meta]) => {
+            const count = rows.filter((row) => row.panelKey === key).length;
+            return `<button type="button" data-summary-issue-filter="${escapeHtml(key)}">${escapeHtml(meta.label)} <strong>${escapeHtml(count)}</strong></button>`;
+          }).join("")}
+        </div>
+        <label class="summary-issue-search">
+          <span>검색</span>
+          <input type="search" data-summary-issue-search placeholder="설정, 사유, 항목 검색" />
+        </label>
+      </div>
+      <div class="summary-issue-layout">
+        <div class="summary-issue-list" data-summary-issue-list>
+          ${rows.length ? rows.map((row, index) => renderSummaryIssueRow(row, index === 0)).join("") : `
+            <div class="summary-empty-state">
+              <strong>즉시 검토 항목 없음</strong>
+              <span>현재 비교 범위에서 활성 검토 항목이 없음.</span>
+            </div>
+          `}
+        </div>
+        <aside class="summary-issue-detail" data-summary-issue-detail>
+          ${firstTargetId ? renderSummaryIssueDetail(firstTargetId) : `<div class="summary-empty-state"><strong>선택 항목 없음</strong><span>검토 항목을 선택하면 상세가 표시됨.</span></div>`}
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+function buildSummaryIssueRows(review = {}, plan = []) {
+  state.summaryIssueGroups = new Map();
+  return buildObjectReviewGroups({ review, plan }).map(hydrateSummaryObjectGroup);
+}
+
+function hydrateSummaryObjectGroup(group = {}) {
+  const targetId = createId();
+  const activeIssues = (group.activeIssues || []).map((issue) => ({
+    ...issue,
+    issueTargetId: registerReviewExceptionTarget(
+      issue.panelKey,
+      issue.sourceItem || {},
+      "summary-review",
+      issue.fieldRow || null
+    ),
+  }));
+  const suppressedIssues = group.suppressedIssues || [];
+  const excludedIssues = group.excludedIssues || [];
+  const hydrated = {
+    ...group,
+    targetId,
+    activeIssues,
+    suppressedIssues,
+    excludedIssues,
+  };
+  const panelKey = activeIssues[0]?.panelKey || "suppressed";
+  const suppressedOnly = !group.activeIssueCount && group.suppressedIssueCount > 0;
+  const excludedOnly = !group.activeIssueCount && !group.suppressedIssueCount && group.excludedIssueCount > 0;
+  state.summaryIssueGroups.set(targetId, hydrated);
+  return {
+    targetId,
+    panelKey,
+    statusLabel: group.activeIssueCount ? "검토 필요" : excludedOnly ? "비교 제외됨" : "예외 처리됨",
+    tone: group.activeIssueCount ? (reviewIssueMeta[panelKey]?.tone || "review") : "suppressed",
+    objectType: group.objectType || "-",
+    displayName: group.displayName || "-",
+    objectKey: group.objectKey || group.oldKey || group.newKey || "",
+    reason: group.representativeReason || "검토 필요",
+    fieldText: (group.issueFields || []).slice(0, 5).join(", "),
+    valueText: group.severitySummary || "",
+    score: group.score || "",
+    activeIssueCount: group.activeIssueCount || 0,
+    suppressedIssueCount: group.suppressedIssueCount || 0,
+    excludedIssueCount: group.excludedIssueCount || 0,
+    suppressedOnly,
+    excludedOnly,
+  };
+}
+
+function renderSummaryIssueRow(row = {}, selected = false) {
+  return `
+    <article class="summary-issue-row summary-issue-${escapeHtml(row.tone)}${selected ? " selected" : ""}" data-summary-issue-target="${escapeHtml(row.targetId)}" data-summary-issue-kind="${escapeHtml(row.panelKey)}" data-summary-issue-search-text="${escapeHtml([row.statusLabel, row.objectType, row.displayName, row.reason, row.fieldText, row.valueText].join(" ").toLowerCase())}">
+      <div class="summary-issue-status">${escapeHtml(row.statusLabel)}</div>
+      <div class="summary-issue-main">
+        <strong>${escapeHtml(row.displayName)}</strong>
+        <span>${escapeHtml(row.reason)}</span>
+        <small>${escapeHtml(row.objectType)} · ${escapeHtml(row.objectKey || "-")}${row.score ? ` · ${escapeHtml(row.score)}%` : ""}</small>
+      </div>
+      <div class="summary-issue-fields">
+        <span>검토 ${escapeHtml(row.activeIssueCount || 0)} / 예외 ${escapeHtml(row.suppressedIssueCount || 0)} / 비교 제외 ${escapeHtml(row.excludedIssueCount || 0)}</span>
+        ${row.fieldText ? `<small>${renderIssueChips(row.fieldText)}</small>` : ""}
+      </div>
+      <div class="summary-issue-actions">
+        <button type="button" data-summary-issue-open="${escapeHtml(row.targetId)}">상세</button>
+        <button type="button" data-issue-jump="${escapeHtml(row.targetId)}">비교 보기</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderSummaryIssueDetail(targetId = "") {
+  const group = state.summaryIssueGroups?.get?.(targetId);
+  if (!group) return `<div class="summary-empty-state"><strong>상세 없음</strong><span>검토 항목을 다시 선택.</span></div>`;
+  const fieldRows = buildObjectFieldReviewRows(group);
+  const activeRows = fieldRows.filter((row) => row.activeCount > 0);
+  const suppressedOnlyRows = fieldRows.filter((row) => row.activeCount === 0 && row.suppressedCount > 0);
+  const exclusionTargetId = registerSummarySettingExclusionTarget(group);
+  return `
+    <div class="summary-issue-detail-card" data-summary-issue-detail-id="${escapeHtml(targetId)}">
+      <div class="summary-issue-detail-head">
+        <span>${escapeHtml(group.activeIssueCount ? "설정 검토" : group.excludedIssueCount && !group.suppressedIssueCount ? "비교 제외됨" : "예외 처리됨")}</span>
+        <strong>${escapeHtml(group.displayName || group.objectKey || "-")}</strong>
+        <small>${escapeHtml(group.objectType || "-")} · ${escapeHtml(group.objectKey || "-")}</small>
+      </div>
+      <dl class="summary-issue-detail-grid">
+        <div><dt>대표 사유</dt><dd>${escapeHtml(group.representativeReason || "-")}</dd></div>
+        <div><dt>검토 항목</dt><dd>${escapeHtml(group.activeIssueCount || 0)}개 / 예외 ${escapeHtml(group.suppressedIssueCount || 0)}개 / 비교 제외 ${escapeHtml(group.excludedIssueCount || 0)}개</dd></div>
+        <div><dt>상태</dt><dd>${escapeHtml(group.matchStatus || "-")}</dd></div>
+        <div><dt>일치도</dt><dd>${group.score ? `${escapeHtml(group.score)}%` : "-"}</dd></div>
+        <div><dt>Old Key</dt><dd>${escapeHtml(group.oldKey || "-")}</dd></div>
+        <div><dt>New Key</dt><dd>${escapeHtml(group.newKey || "-")}</dd></div>
+      </dl>
+      <div class="summary-object-issue-sections">
+        <section class="summary-object-issue-section">
+          <div class="summary-object-issue-section-head">
+            <strong>활성 검토 항목</strong>
+            <span>${escapeHtml(activeRows.length)}개 설정 항목</span>
+          </div>
+          ${activeRows.length ? activeRows.map((row) => renderSummaryFieldReviewCard(row, false)).join("") : `
+            <div class="summary-empty-row">활성 검토 항목 없음</div>
+          `}
+        </section>
+        ${suppressedOnlyRows.length ? `
+          <section class="summary-object-issue-section summary-object-issue-section-muted">
+            <div class="summary-object-issue-section-head">
+              <strong>예외/숨김 처리된 항목</strong>
+              <span>${escapeHtml(suppressedOnlyRows.length)}개 설정 항목</span>
+            </div>
+            ${suppressedOnlyRows.map((row) => renderSummaryFieldReviewCard(row, true)).join("")}
+          </section>
+        ` : ""}
+      </div>
+      ${group.suppressedIssues?.length ? `
+        <div class="summary-issue-suppressed-note">
+          예외 처리 항목 ${escapeHtml(group.suppressedIssues.length)}개. 같은 설정 항목의 활성/예외 상세는 한 줄 안에서 분리 표시됨.
+        </div>
+      ` : ""}
+      <div class="summary-issue-detail-actions">
+        <button type="button" data-issue-jump="${escapeHtml(targetId)}">비교 화면에서 보기</button>
+        ${renderSettingExclusionActionControls(exclusionTargetId)}
+      </div>
+    </div>
+  `;
+}
+
+function renderSummaryFieldReviewCard(row = {}, suppressedOnly = false) {
+  const primaryIssue = suppressedOnly ? (row.suppressedIssues?.[0] || {}) : (row.activeIssues?.[0] || {});
+  const actions = suppressedOnly
+    ? renderSuppressedFieldActions(row)
+    : renderActiveFieldActions(primaryIssue);
+  const suppressedBadge = !suppressedOnly && row.suppressedCount
+    ? `<span class="summary-object-issue-badge">예외 ${escapeHtml(row.suppressedCount)}개 적용</span>`
+    : "";
+  const suppressedDetail = !suppressedOnly && row.suppressedCount
+    ? `<div class="summary-object-issue-subnote">예외 상세: ${escapeHtml(row.suppressionReason || "예외 처리됨")}</div>`
+    : "";
+  return `
+    <article class="summary-object-issue-card${suppressedOnly ? " suppressed" : ""}">
+      <div class="summary-object-issue-card-main">
+        <div class="summary-object-issue-card-title">
+          <strong>${escapeHtml(row.fieldPath || "설정")}</strong>
+          <span>${escapeHtml(suppressedOnly ? "예외 처리" : row.statusLabel || fieldStatusLabel(row.status))}</span>
+          ${suppressedBadge}
+        </div>
+        <div class="summary-object-issue-reason">${escapeHtml(row.representativeReason || row.suppressionReason || "-")}</div>
+        <div class="summary-object-issue-values">
+          <span>기존: ${escapeHtml(row.oldValue || "-")}</span>
+          <span>신규: ${escapeHtml(row.newValue || "-")}</span>
+        </div>
+        ${suppressedDetail}
+      </div>
+      <div class="summary-object-issue-meta">
+        <span>${escapeHtml(suppressedOnly ? "예외 처리됨" : row.classification || "-")}</span>
+        <small>${escapeHtml(row.ruleId || "-")}</small>
+        <div class="summary-issue-row-actions">${actions}</div>
+      </div>
+    </article>
+  `;
+}
+
+function renderActiveFieldActions(issue = {}) {
+  if (!issue.issueTargetId) return `<span class="small-note">예외 대상 없음</span>`;
+  return `<span class="small-note">하단 의미 기반 비교에서 예외 선택</span>`;
+}
+
+function renderSuppressedFieldActions(row = {}) {
+  const policyIds = [...new Set((row.suppressedIssues || []).map((issue) => issue.policyId).filter(Boolean))];
+  if (!policyIds.length) return `<span class="small-note">정책 적용</span>`;
+  return policyIds
+    .map((policyId) => `<button type="button" data-remove-exception="${escapeHtml(policyId)}">예외 해제</button>`)
+    .join("");
+}
+
+function renderSummaryDetailIssueRow(issue = {}, suppressed = false) {
+  const actions = suppressed
+    ? issue.policyId
+      ? `<button type="button" data-remove-exception="${escapeHtml(issue.policyId)}">예외 해제</button>`
+      : `<span class="small-note">정책 적용</span>`
+    : `<span class="small-note">하단 의미 기반 비교에서 예외 선택</span>`;
+  return `
+    <div>${escapeHtml(issue.fieldPath || "설정")}</div>
+    <div>${escapeHtml(issue.statusLabel || fieldStatusLabel(issue.status))}</div>
+    <div>${escapeHtml(issue.reason || "-")}</div>
+    <div>${escapeHtml(issue.oldValue || "-")}</div>
+    <div>${escapeHtml(issue.newValue || "-")}</div>
+    <div>${escapeHtml(suppressed ? "예외 처리됨" : issue.classification || "-")}</div>
+    <div class="summary-issue-row-actions">${actions}</div>
+  `;
+}
+
+function renderIssueChips(fieldText = "") {
+  return String(fieldText || "")
+    .split(",")
+    .map((field) => field.trim())
+    .filter(Boolean)
+    .slice(0, 5)
+    .map((field) => `<span class="summary-issue-chip">${escapeHtml(field)}</span>`)
+    .join("");
+}
+
+function reviewReasonForField(panelKey = "", row = {}, item = {}) {
+  const field = String(row.field || "").toLowerCase();
+  const status = String(row.status || "").toLowerCase();
+  if (field === "group" && item.objectType === "bgp") return "MD-CLI BGP group 구조 전환";
+  if (status === "structure-converted") return "구조 전환";
+  if (status === "added" || status === "missing-old") return "신규값 추가 확인";
+  if (status === "missing" || status === "missing-new") return "신규 설정 누락 확인";
+  if (status === "different" || status === "changed") return "값 변경 확인";
+  return readableReviewReason(panelKey, item.reason || "");
+}
+
+function summarizeReviewFields(item = {}) {
+  const rows = Array.isArray(item.fieldRows) ? item.fieldRows : [];
+  const actionableRows = rows.filter((row) => {
+    const status = String(row.status || "").toLowerCase();
+    return row.field && !["same", "equal", "present", "ignored"].includes(status);
+  });
+  const selectedRows = (actionableRows.length ? actionableRows : rows).slice(0, 3);
+  const text = selectedRows.map((row) => row.field).filter(Boolean).join(", ");
+  const valueText = selectedRows
+    .map((row) => formatFieldValueChange(row))
+    .filter(Boolean)
+    .join(" · ");
+  return { text, valueText };
+}
+
+function formatFieldValueChange(row = {}) {
+  const oldValue = String(row.oldValue || "").trim();
+  const newValue = String(row.newValue || "").trim();
+  if (!oldValue && !newValue) return "";
+  if (oldValue && newValue && oldValue !== newValue) return `${row.field}: ${oldValue} → ${newValue}`;
+  if (oldValue && !newValue) return `${row.field}: 기존 ${oldValue}`;
+  if (!oldValue && newValue) return `${row.field}: 신규 ${newValue}`;
+  return `${row.field}: ${oldValue}`;
+}
+
+function buildReviewDisplayName(item = {}) {
+  const rows = Array.isArray(item.fieldRows) ? item.fieldRows : [];
+  const descriptionRow = rows.find((row) => row.field === "description");
+  const description = String(descriptionRow?.newValue || descriptionRow?.oldValue || "").trim();
+  const label = String(item.label || item.objectKey || item.oldKey || item.newKey || "").trim();
+  if (description && label && !description.includes(label)) return `${description} · ${label}`;
+  return description || label || "-";
+}
+
+function readableReviewReason(panelKey = "", reason = "") {
+  const fallback = {
+    "unmatched-old": "기존 설정에만 있어 누락 여부 확인 필요",
+    "unmatched-new": "신규 설정에만 있어 추가 여부 확인 필요",
+    ambiguous: "매핑 후보가 여러 개 있어 확인 필요",
+    "low-confidence": "일치도가 낮아 수동 검토 필요",
+    abnormal: "중요 설정 항목 값 변경",
+    relationship: "연결/참조 관계 변경",
+  };
+  const text = String(reason || "").trim();
+  if (!text || /[?�]/.test(text)) return fallback[panelKey] || "검토 필요";
+  return text;
+}
+
+function issueKindLabel(panelKey = "", findingType = "") {
+  return reviewIssueMeta[panelKey]?.label || findingType || "검토 항목";
+}
+
+function fieldStatusLabel(status = "") {
+  const key = String(status || "").toLowerCase();
+  return {
+    same: "동일",
+    different: "차이",
+    changed: "차이",
+    "structure-converted": "구조 전환",
+    "missing-old": "기존 누락",
+    "missing-new": "신규 누락",
+    added: "추가",
+    missing: "누락",
+    ignored: "예외 처리",
+  }[key] || status || "-";
+}
+
+function renderProfileExceptionManager() {
+  const exceptions = getEnabledProfileExceptions();
+  const exclusionCount = exceptions.filter((item) => item.type === "comparison-exclusion").length;
+  return `
+    <section class="summary-section profile-exception-manager" data-review-panel="suppressed">
+      <div class="summary-section-head">
+        <h3>예외/비교 제외된 항목</h3>
+        <span>${escapeHtml(exceptions.length)}개${exclusionCount ? ` · 비교 제외 ${escapeHtml(exclusionCount)}개` : ""}</span>
+      </div>
+      ${exceptions.length ? `
+        <div class="profile-exception-table">
+          <div>범위</div><div>설정 종류</div><div>설정</div><div>설정 항목</div><div>규칙/구분</div><div>사유</div><div>동작</div>
+          ${exceptions.map((exception) => renderProfileExceptionRow(exception)).join("")}
+        </div>
+      ` : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외 또는 비교 제외를 추가할 수 있음.</span></div>`}
+    </section>
+  `;
+}
+
+function renderProfileExceptionRow(exception = {}) {
+  const target = exception.target || {};
+  const isExclusion = exception.type === "comparison-exclusion";
+  const scopeLabel = exception.scope === "profile" ? "현재 프로파일" : isExclusion ? "이 설정" : "이 설정";
+  const settingType = exceptionSettingTypeLabel(exception);
+  const objectLabel = target.displayName || [target.settingType || target.objectType, target.settingKey || target.objectKey || target.createdFromObjectKey].filter(Boolean).join(" ") || "-";
+  const ruleLabel = [target.ruleId, target.matchStatus || target.category || target.findingType].filter(Boolean).join(" · ") || "-";
+  return `
+    <div>${escapeHtml(scopeLabel)}</div>
+    <div><strong>${escapeHtml(settingType)}</strong></div>
+    <div>
+      <strong>${escapeHtml(objectLabel)}</strong>
+      <small>${escapeHtml(target.settingType || target.objectType || "-")} · ${escapeHtml(target.settingKey || target.objectKey || target.createdFromObjectKey || "-")}</small>
+    </div>
+    <div>${escapeHtml(target.fieldPath || "-")}</div>
+    <div>${escapeHtml(ruleLabel)}</div>
+    <div>${escapeHtml(exception.reasonKo || (isExclusion ? "비교 제외 규칙" : "사용자 예외"))}</div>
+    <div class="profile-exception-actions">
+      <button type="button" data-remove-exception="${escapeHtml(exception.id || "")}">${isExclusion ? "비교 제외 해제" : "예외 해제"}</button>
+    </div>
+  `;
+}
+
+function exceptionSettingTypeLabel(exception = {}) {
+  const target = exception.target || {};
+  const match = exception.match || {};
+  return target.settingType ||
+    target.objectType ||
+    match.settingType ||
+    match.objectType ||
+    exception.settingType ||
+    exception.objectType ||
+    "-";
+}
+
+function getEnabledProfileExceptions() {
+  return (state.profileDraft?.exceptions || []).filter((exception) => exception && exception.enabled !== false);
+}
+
+function renderCandidatePreview(candidates = []) {
+  if (!Array.isArray(candidates) || !candidates.length) return "";
+  return `
+    <div class="summary-candidate-list">
+      ${candidates.slice(0, 3).map((candidate) => `<span>${escapeHtml(candidate.key)} · ${escapeHtml(candidate.score)}%</span>`).join("")}
+    </div>
+  `;
+}
+
+function renderExceptionActionControls(targetId = "") {
+  if (!targetId) return "";
+  return `
+    <div class="exception-inline-control" data-exception-control="${escapeHtml(targetId)}">
+      <select data-exception-scope="${escapeHtml(targetId)}" aria-label="예외 범위">
+        <option value="object">이 설정에서만 예외</option>
+        <option value="profile">현재 프로파일에서 예외</option>
+      </select>
+      <button type="button" data-add-exception="${escapeHtml(targetId)}">예외 추가</button>
+    </div>
+  `;
+}
+
+function renderSettingExclusionActionControls(targetId = "") {
+  if (!targetId) return "";
+  return `
+    <div class="exception-inline-control setting-exclusion-inline-control" data-exclusion-control="${escapeHtml(targetId)}">
+      <button type="button" data-add-exclusion="${escapeHtml(targetId)}" data-exclusion-fixed-scope="setting">이 설정만 비교 제외</button>
+      <button type="button" data-add-exclusion="${escapeHtml(targetId)}" data-exclusion-fixed-scope="profile">현재 프로파일에서 같은 조건 비교 제외</button>
+    </div>
+  `;
+}
+
+function registerSemanticFieldExceptionTarget(item = {}, fieldSummary = {}) {
+  const field = String(fieldSummary.field || "").trim();
+  const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+  if (!field || !objectType) return "";
+  const changeType = normalizeExceptionChangeType(fieldSummary.effectiveStatus || fieldSummary.status || item.status || "");
+  const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
+  const targetId = createId();
+  const displayName = buildSemanticExceptionDisplayName(item, objectType, objectKey);
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source: "semantic-field",
+    targetType: "semantic-field",
+    findingType: changeType,
+    issueType: "field-difference",
+    changeType,
+    panelKey: changeType || "semantic-field",
+    ruleId: semanticExceptionRuleId(objectType, field, changeType),
+    category: "semantic-compare",
+    objectType,
+    objectKey,
+    oldKey: item.oldObject ? exceptionObjectKeyFromPlanItem({ oldObject: item.oldObject }, objectType) : "",
+    newKey: item.newObject ? exceptionObjectKeyFromPlanItem({ newObject: item.newObject }, objectType) : "",
+    displayName,
+    description: displayName,
+    field,
+    status: changeType,
+    statusLabel: getSemanticFieldStatusLabel(fieldSummary),
+    oldValue: firstSummaryValue(fieldSummary.oldValues),
+    newValue: firstSummaryValue(fieldSummary.newValues),
+    side: "both",
+    title: `${field} ${getSemanticFieldStatusLabel(fieldSummary)}`,
+    sourceLineIds: [],
+    targetLineIds: [],
+    planId: item.id || "",
+  });
+  return targetId;
+}
+
+function registerSemanticSettingExclusionTarget(item = {}, source = "summary-review") {
+  const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+  const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
+  if (!objectType || !objectKey || !isSettingExclusionStatus(item.status)) return "";
+  const targetId = createId();
+  const side = settingExclusionSideFromPlanItem(item);
+  const displayName = buildSemanticExceptionDisplayName(item, objectType, objectKey);
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source,
+    targetType: "setting-exclusion",
+    issueId: `${item.id || objectKey}:comparison-exclusion`,
+    panelKey: item.status === "old-only" ? "unmatched-old" : "unmatched-new",
+    ruleId: "semantic-compare.unmatched-setting",
+    category: "semantic-compare",
+    objectType,
+    settingType: objectType,
+    objectKey,
+    settingKey: objectKey,
+    oldKey: item.oldObject ? exceptionObjectKeyFromPlanItem({ oldObject: item.oldObject }, objectType) : "",
+    newKey: item.newObject ? exceptionObjectKeyFromPlanItem({ newObject: item.newObject }, objectType) : "",
+    displayName,
+    description: displayName,
+    field: "",
+    side,
+    status: item.status || "",
+    matchStatus: item.status || "",
+    statusLabel: getSemanticDiffStatusLabel(item.status),
+    title: `${displayName} ${getSemanticDiffStatusLabel(item.status)}`,
+    planId: item.id || "",
+  });
+  return targetId;
+}
+
+function isSettingExclusionStatus(status = "") {
+  return ["old-only", "new-only", "unmatched-source", "unmatched-target", "source-only", "target-only", "unmatched"].includes(String(status || "").toLowerCase());
+}
+
+function settingExclusionSideFromPlanItem(item = {}) {
+  const status = String(item.status || "").toLowerCase();
+  if (status === "old-only" || (item.oldObject && !item.newObject)) return "old";
+  if (status === "new-only" || (item.newObject && !item.oldObject)) return "new";
+  return "both";
+}
+
+function buildSemanticExceptionDisplayName(item = {}, objectType = "", objectKey = "") {
+  const object = item.oldObject || item.newObject || {};
+  const description = String(object.fields?.description || object.canonicalFields?.description || object.description || "").trim();
+  const identity = String(object.normalizedIdentity || object.identity || object.sourceName || object.id || objectKey || "").trim();
+  if (description && identity && !description.includes(identity)) return `${description} · ${identity}`;
+  return description || identity || objectKey || objectType || "-";
+}
+
+function getSemanticFieldStatusLabel(fieldSummary = {}) {
+  return fieldStatusLabel(normalizeExceptionChangeType(fieldSummary.effectiveStatus || fieldSummary.status || ""));
+}
+
+function registerReviewExceptionTarget(panelKey = "", item = {}, source = "summary-review", fieldRow = null) {
+  const targetId = createId();
+  const field = fieldRow?.field || primaryReviewExceptionField(item);
+  const side = item.side || (panelKey === "unmatched-old" ? "old" : panelKey === "unmatched-new" ? "new" : "both");
+  const objectKey = item.oldKey || item.newKey || item.objectKey || "";
+  const changeType = normalizeExceptionChangeType(fieldRow?.status || item.status || panelKey);
+  const ruleId = semanticExceptionRuleId(item.objectType || "", field, changeType);
+  state.exceptionTargets.set(targetId, {
+    source,
+    targetType: "review",
+    issueId: [item.planId || targetId, field || "object", changeType].join(":"),
+    panelKey,
+    objectType: item.objectType || "",
+    objectKey,
+    oldKey: item.oldKey || "",
+    newKey: item.newKey || "",
+    side,
+    field,
+    fieldRows: Array.isArray(item.fieldRows) ? item.fieldRows : [],
+    findingType: item.status || panelKey,
+    ruleId,
+    issueType: field ? "field-difference" : "object-difference",
+    changeType,
+    status: changeType,
+    category: "semantic-compare",
+    title: fieldRow ? reviewReasonForField(panelKey, fieldRow, item) : (item.reason || panelKey || "검토 항목"),
+    description: `${item.objectType || "object"} ${item.label || objectKey || ""}`.trim(),
+    displayName: buildReviewDisplayName(item),
+    oldValue: fieldRow?.oldValue ?? firstFieldValue(item.fieldRows, field, "oldValue"),
+    newValue: fieldRow?.newValue ?? firstFieldValue(item.fieldRows, field, "newValue"),
+  });
+  return targetId;
+}
+
+function registerReviewSettingExclusionTarget(panelKey = "", item = {}, source = "summary-review") {
+  const objectType = String(item.objectType || "").trim();
+  const objectKey = String(item.oldKey || item.newKey || item.objectKey || "").trim();
+  if (!objectType || !objectKey) return "";
+  const targetId = createId();
+  const side = panelKey === "unmatched-old" || item.side === "old"
+    ? "old"
+    : panelKey === "unmatched-new" || item.side === "new"
+      ? "new"
+      : "both";
+  const matchStatus = panelKey === "unmatched-old"
+    ? "old-only"
+    : panelKey === "unmatched-new"
+      ? "new-only"
+      : item.status || "";
+  const displayName = buildReviewDisplayName(item);
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source,
+    targetType: "setting-exclusion",
+    issueId: `${item.planId || objectKey}:comparison-exclusion`,
+    panelKey,
+    ruleId: "semantic-compare.unmatched-setting",
+    category: "semantic-compare",
+    objectType,
+    settingType: objectType,
+    objectKey,
+    settingKey: objectKey,
+    oldKey: item.oldKey || "",
+    newKey: item.newKey || "",
+    displayName,
+    description: displayName,
+    field: "",
+    side,
+    status: matchStatus,
+    matchStatus,
+    statusLabel: getSemanticDiffStatusLabel(matchStatus),
+    title: `${displayName} ${getSemanticDiffStatusLabel(matchStatus)}`,
+    planId: item.planId || "",
+  });
+  return targetId;
+}
+
+function registerSummarySettingExclusionTarget(group = {}) {
+  if (!isSettingExclusionStatus(group.matchStatus)) return "";
+  const objectType = String(group.objectType || "").trim();
+  const objectKey = String(group.objectKey || group.oldKey || group.newKey || "").trim();
+  if (!objectType || !objectKey) return "";
+  const targetId = createId();
+  const side = group.matchStatus === "new-only" ? "new" : group.matchStatus === "old-only" ? "old" : "both";
+  const displayName = String(group.displayName || objectKey || "").trim();
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source: "summary-review",
+    targetType: "setting-exclusion",
+    issueId: `${group.objectId || objectKey}:comparison-exclusion`,
+    panelKey: group.matchStatus === "old-only" ? "unmatched-old" : "unmatched-new",
+    ruleId: "semantic-compare.unmatched-setting",
+    category: "semantic-compare",
+    objectType,
+    settingType: objectType,
+    objectKey,
+    settingKey: objectKey,
+    oldKey: group.oldKey || "",
+    newKey: group.newKey || "",
+    displayName,
+    description: displayName,
+    field: "",
+    side,
+    status: group.matchStatus || "",
+    matchStatus: group.matchStatus || "",
+    statusLabel: getSemanticDiffStatusLabel(group.matchStatus),
+    title: `${displayName} ${getSemanticDiffStatusLabel(group.matchStatus)}`,
+  });
+  return targetId;
+}
+
+function registerAuditExceptionTarget(finding = {}, source = "summary-audit") {
+  const targetId = createId();
+  state.exceptionTargets.set(targetId, {
+    source,
+    targetType: "audit",
+    findingId: finding.id || "",
+    ruleId: finding.ruleId || "",
+    category: finding.category || "",
+    objectType: finding.objectType || "",
+    objectKey: finding.objectKey || "",
+    side: finding.side || "both",
+    field: finding.fieldPath || "",
+    findingType: "audit-finding",
+    title: finding.titleKo || finding.ruleId || "표준 점검 항목",
+    description: finding.descriptionKo || finding.recommendationKo || "",
+  });
+  return targetId;
+}
+
+function primaryReviewExceptionField(item = {}) {
+  const rows = Array.isArray(item.fieldRows) ? item.fieldRows : [];
+  const actionable = rows.find((row) => {
+    const status = String(row.status || "").toLowerCase();
+    return row.field && !["same", "equal", "present", "ignored"].includes(status);
+  });
+  return actionable?.field || rows.find((row) => row.field)?.field || "";
+}
+
+function normalizeExceptionChangeType(status = "") {
+  const value = String(status || "").toLowerCase();
+  if (value === "structure-converted") return "structure-converted";
+  if (value === "missing-old") return "added";
+  if (value === "missing-new") return "missing";
+  if (value === "different") return "changed";
+  return value || "changed";
+}
+
+function semanticExceptionRuleId(objectType = "", field = "", changeType = "") {
+  if (isImportantExceptionField(objectType, field)) return "semantic-compare.important-field-change";
+  if (changeType === "added") return "semantic-compare.field-added";
+  if (changeType === "missing") return "semantic-compare.field-missing";
+  return "semantic-compare.field-difference";
+}
+
+function isImportantExceptionField(objectType = "", field = "") {
+  const normalizedField = String(field || "").toLowerCase();
+  if (objectType === "bgp") {
+    return [
+      "neighbor",
+      "peerip",
+      "group",
+      "peer-as",
+      "import.policy",
+      "export.policy",
+      "state",
+      "admin-state",
+      "description",
+      "authentication-key",
+    ].includes(normalizedField);
+  }
+  return [
+    "route",
+    "next-hop",
+    "gateway",
+    "tag",
+    "metric",
+    "state",
+    "admin-state",
+    "description",
+    "sap",
+    "port",
+    "lag",
+    "interface",
+  ].includes(normalizedField);
+}
+
+function firstFieldValue(rows = [], field = "", valueKey = "oldValue") {
+  if (!Array.isArray(rows)) return "";
+  const exact = rows.find((row) => row.field === field);
+  return String((exact || rows.find((row) => row?.[valueKey]))?.[valueKey] || "");
+}
+
+function renderTopTypePreview(title, rows = []) {
+  return `
+    <div class="summary-side-block">
+      <strong>${escapeHtml(title)}</strong>
+      ${rows.length ? `<div class="summary-type-list">${rows.map((row) => `<button type="button" data-field-type-filter="${escapeHtml(row.type)}">${escapeHtml(row.type)} <span>${escapeHtml(row.count)}</span></button>`).join("")}</div>` : `<p class="small-note">표시할 항목 없음</p>`}
+    </div>
+  `;
+}
+
+function renderLowOverlapPreview(pairs = []) {
+  const rows = [...pairs]
+    .filter((pair) => pair.reviewNeeded)
+    .sort((left, right) => left.overlapPercent - right.overlapPercent)
+    .slice(0, 5);
+  return `
+    <div class="summary-side-block">
+      <strong>공통 설정 항목 낮은 설정</strong>
+      ${rows.length ? rows.map((pair) => `
+        <button type="button" class="summary-low-overlap" data-object-jump="${escapeHtml(pair.oldKey || pair.newKey)}">
+          <span>${escapeHtml(pair.label)}</span>
+          <b>${escapeHtml(pair.overlapPercent)}%</b>
+        </button>
+      `).join("") : `<p class="small-note">낮은 공통률 설정 없음</p>`}
+    </div>
+  `;
+}
+
+function bindSummaryActions() {
+  selectors.summaryCards?.querySelectorAll("[data-summary-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.summaryAction;
+      if (action === "issues") {
+        setResultTab("summary");
+        selectors.reportList?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      } else if (action === "semantic") {
+        setResultTab("summary");
+        document.querySelector("#semanticPreviewPanel")?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      } else if (action === "objects") {
+        setResultTab("objects");
+      } else if (action === "overview") {
+        setResultTab("overview");
+      }
+    });
+  });
+  selectors.summaryCards?.querySelectorAll("[data-summary-filter]").forEach((button) => {
+    button.addEventListener("click", () => focusSummaryReviewPanel(button.dataset.summaryFilter));
+  });
+  selectors.summaryCards?.querySelectorAll("[data-object-jump]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      scrollToDiffObject(button.dataset.objectJump);
+    });
+  });
+  bindSummaryIssueWorkspaceActions();
+  selectors.summaryCards?.querySelectorAll("[data-field-type-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
+      renderObjectNavigator();
+      setResultTab("objects");
+    });
+  });
+  selectors.summaryCards?.querySelectorAll("[data-audit-detail]").forEach((button) => {
+    button.addEventListener("click", () => openAuditFindingDetail(button.dataset.auditDetail));
+  });
+  selectors.summaryCards?.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.dataset.addException || "";
+      const scope = button.dataset.exceptionFixedScope || selectors.summaryCards?.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+  selectors.summaryCards?.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
+    });
+  });
+  selectors.summaryCards?.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
+    });
+  });
+}
+
+function bindSummaryIssueWorkspaceActions() {
+  const root = selectors.summaryCards?.querySelector("[data-summary-issue-root]");
+  if (!root) return;
+  root.querySelectorAll("[data-summary-issue-target]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
+      selectSummaryIssue(row.dataset.summaryIssueTarget || "");
+    });
+  });
+  root.querySelectorAll("[data-summary-issue-open]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectSummaryIssue(button.dataset.summaryIssueOpen || "");
+    });
+  });
+  root.querySelectorAll("[data-issue-jump]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openIssueInCompare(button.dataset.issueJump || "");
+    });
+  });
+  const search = root.querySelector("[data-summary-issue-search]");
+  search?.addEventListener("input", () => filterSummaryIssueRows(root));
+  root.querySelectorAll("[data-summary-issue-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const active = button.classList.toggle("active");
+      root.querySelectorAll("[data-summary-issue-filter]").forEach((item) => {
+        if (item !== button) item.classList.remove("active");
+      });
+      root.dataset.issueFilter = active ? button.dataset.summaryIssueFilter || "" : "";
+      filterSummaryIssueRows(root);
+    });
+  });
+}
+
+function selectSummaryIssue(targetId = "") {
+  const root = selectors.summaryCards?.querySelector("[data-summary-issue-root]");
+  if (!root || !targetId) return;
+  root.querySelectorAll("[data-summary-issue-target]").forEach((row) => {
+    row.classList.toggle("selected", row.dataset.summaryIssueTarget === targetId);
+  });
+  const detail = root.querySelector("[data-summary-issue-detail]");
+  if (detail) {
+    detail.innerHTML = renderSummaryIssueDetail(targetId);
+    bindSummaryIssueDetailActions(detail);
+  }
+}
+
+function bindSummaryIssueDetailActions(detail) {
+  detail.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExceptionFromTarget(button.dataset.addException || "", button.dataset.exceptionFixedScope || "object", button);
+    });
+  });
+  detail.querySelectorAll("[data-issue-jump]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openIssueInCompare(button.dataset.issueJump || "");
+    });
+  });
+  detail.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
+    });
+  });
+  detail.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
+    });
+  });
+}
+
+function filterSummaryIssueRows(root) {
+  const query = String(root.querySelector("[data-summary-issue-search]")?.value || "").trim().toLowerCase();
+  const filter = root.dataset.issueFilter || "";
+  let visible = 0;
+  root.querySelectorAll("[data-summary-issue-target]").forEach((row) => {
+    const text = row.dataset.summaryIssueSearchText || "";
+    const kind = row.dataset.summaryIssueKind || "";
+    const show = (!query || text.includes(query)) && (!filter || filter === kind);
+    row.hidden = !show;
+    if (show) visible += 1;
+  });
+  root.classList.toggle("summary-issue-filter-empty", visible === 0);
+}
+
+function openAuditFindingDetail(findingId = "") {
+  const finding = (state.lastStandardsAudit?.findings || []).find((item) => item.id === findingId);
+  if (!finding) return;
+  setResultTab("overview");
+  renderOverviewReport(state.lastReport);
+  const detail = selectors.overviewReport?.querySelector(`[data-audit-detail-id="${cssEscape(findingId)}"]`);
+  if (detail) {
+    detail.open = true;
+    detail.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    detail.classList.add("summary-panel-pulse");
+    window.setTimeout(() => detail.classList.remove("summary-panel-pulse"), 900);
+  }
+}
+
+function openIssueInCompare(targetId = "") {
+  const group = state.summaryIssueGroups?.get?.(targetId);
+  const issueTargetId = group?.activeIssues?.[0]?.issueTargetId || "";
+  const target = state.exceptionTargets?.get?.(targetId) || state.exceptionTargets?.get?.(issueTargetId) || group;
+  if (!target) {
+    showWorkbenchToast("이동할 검토 항목 없음", "error");
+    return;
+  }
+  state.activeIssueContext = { ...target, targetId: issueTargetId || targetId };
+  scrollToDiffObject(target.objectKey || target.oldKey || target.newKey || "");
+  renderCompareIssueContextBanner();
+}
+
+function renderCompareIssueContextBanner() {
+  const grid = selectors.diffConnectorSvg?.closest(".editor-grid");
+  if (!grid) return;
+  let banner = grid.querySelector("[data-compare-issue-context]")
+    || grid.parentElement?.querySelector("[data-compare-issue-context]");
+  if (!state.activeIssueContext) {
+    banner?.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.className = "compare-issue-context-banner";
+    banner.dataset.compareIssueContext = "true";
+    grid.appendChild(banner);
+  } else if (banner.parentElement !== grid) {
+    grid.appendChild(banner);
+  }
+  const target = state.activeIssueContext;
+  banner.innerHTML = `
+    <div>
+      <strong>요약에서 이동한 항목</strong>
+      <span>${escapeHtml(target.displayName || target.description || target.objectKey || "-")}</span>
+      <small>${escapeHtml(readableReviewReason(target.panelKey, target.title || ""))} · ${escapeHtml(target.field || "-")}</small>
+    </div>
+    <div>
+      <span class="small-note">예외는 하단 의미 기반 비교에서 선택</span>
+      <button type="button" data-clear-issue-context>선택 해제</button>
+    </div>
+  `;
+  banner.querySelector("[data-clear-issue-context]")?.addEventListener("click", () => {
+    state.activeIssueContext = null;
+    document.querySelectorAll(".object-active").forEach((line) => line.classList.remove("object-active"));
+    renderCompareIssueContextBanner();
+  });
+}
+
+async function addExceptionFromTarget(targetId = "", exceptionScope = "object", triggerButton = null) {
+  const target = state.exceptionTargets?.get?.(targetId);
+  if (!target) {
+    setProfileStatus("예외 대상 없음", "error");
+    showWorkbenchToast("예외 대상 없음", "error");
+    return;
+  }
+
+  const exception = buildProfileExceptionFromTarget(target, exceptionScope);
+  if (!exception) {
+    setProfileStatus("예외 생성 실패", "error");
+    showWorkbenchToast("예외 생성 실패", "error");
+    return;
+  }
+
+  const estimatedImpact = estimateExceptionImpact(exception);
+  if (!confirmProfileExceptionCreate(exception, estimatedImpact)) return;
+
+  const previousText = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "추가 중...";
+  }
+
+  try {
+    if (!Array.isArray(state.profileDraft.exceptions)) state.profileDraft.exceptions = [];
+    const duplicate = state.profileDraft.exceptions.some((item) => sameProfileException(item, exception));
+    if (!duplicate) state.profileDraft.exceptions.push(exception);
+
+    await saveProfile();
+    await syncActiveSessionProfileReference();
+    if (state.lastReport) {
+      runCompare();
+      setResultTab("summary");
+    }
+    const message = duplicate
+      ? "이미 등록된 예외"
+      : exception.scope === "profile"
+        ? "현재 프로파일에 예외가 저장됨"
+        : "이 설정 예외가 추가됨";
+    setProfileStatus(`${message}: ${exception.reasonKo}`, duplicate ? "info" : "saved");
+    showWorkbenchToast(`${message}. ${estimatedImpact || 1}개 항목에 적용됨.`, duplicate ? "info" : "success");
+  } catch (error) {
+    setProfileStatus(`예외 추가 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`예외 추가 실패: ${error?.message || error}`, "error");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText || "예외 추가";
+    }
+  }
+}
+
+async function addExclusionFromTarget(targetId = "", exclusionScope = "setting", triggerButton = null) {
+  const target = state.exceptionTargets?.get?.(targetId);
+  if (!target) {
+    setProfileStatus("비교 제외 대상 없음", "error");
+    showWorkbenchToast("비교 제외 대상 없음", "error");
+    return;
+  }
+
+  const exclusion = buildComparisonExclusionFromTarget(target, exclusionScope);
+  if (!exclusion) {
+    setProfileStatus("비교 제외 규칙 생성 실패", "error");
+    showWorkbenchToast("비교 제외 규칙 생성 실패", "error");
+    return;
+  }
+
+  const estimatedImpact = estimateComparisonExclusionImpact(exclusion);
+  if (!confirmComparisonExclusionCreate(exclusion, estimatedImpact)) return;
+
+  const previousText = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "적용 중...";
+  }
+
+  try {
+    if (!Array.isArray(state.profileDraft.exceptions)) state.profileDraft.exceptions = [];
+    const duplicate = state.profileDraft.exceptions.some((item) => sameProfileException(item, exclusion));
+    if (!duplicate) state.profileDraft.exceptions.push(exclusion);
+
+    await saveProfile();
+    await syncActiveSessionProfileReference();
+    if (state.lastReport) {
+      runCompare();
+      setResultTab("summary");
+    }
+    const message = duplicate
+      ? "이미 등록된 비교 제외 규칙"
+      : exclusion.scope === "profile"
+        ? "현재 프로파일에 비교 제외 규칙 저장됨"
+        : "이 설정 비교 제외 규칙 추가됨";
+    setProfileStatus(`${message}: ${exclusion.reasonKo}`, duplicate ? "info" : "saved");
+    showWorkbenchToast(`${message}. ${estimatedImpact || 1}개 설정에 적용됨.`, duplicate ? "info" : "success");
+  } catch (error) {
+    setProfileStatus(`비교 제외 추가 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`비교 제외 추가 실패: ${error?.message || error}`, "error");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText || "비교 제외";
+    }
+  }
+}
+
+function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object") {
+  const objectScoped = exceptionScope === "object";
+  const objectType = String(target.objectType || "").trim();
+  const objectKey = String(target.objectKey || "").trim();
+  const field = String(target.field || "").trim();
+  const ruleId = String(target.ruleId || "").trim();
+  const category = String(target.category || "").trim();
+  const findingType = String(target.findingType || target.panelKey || target.targetType || "").trim();
+  const issueType = String(target.issueType || (field ? "field-difference" : "object-difference")).trim();
+  const changeType = normalizeExceptionChangeType(target.changeType || target.status || findingType);
+  const matchFindingType = objectScoped ? findingType : changeType;
+  const displayName = String(target.displayName || target.description || objectKey || "").trim();
+
+  if (!objectType && !objectKey && !field && !ruleId && !findingType) return null;
+
+  const scopeLabel = objectScoped ? "이 설정" : "현재 프로파일";
+  const reasonKo = `${scopeLabel} 예외: ${target.title || displayName || field || findingType || objectType}`;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  return {
+    id: createId(),
+    scope: objectScoped ? "object" : "profile",
+    createdAt: new Date().toISOString(),
+    createdBy: "user",
+    createdFromIssueId: target.findingId || target.issueId || target.planId || "",
+    reasonKo,
+    reason: reasonKo,
+    target: {
+      ruleId,
+      category,
+      vendorPair,
+      objectType,
+      objectKey: objectScoped ? objectKey : "",
+      createdFromObjectKey: objectScoped ? "" : objectKey,
+      displayName,
+      fieldPath: field,
+      side: normalizeExceptionSide(target.side || "both"),
+      oldValue: target.oldValue ?? "",
+      newValue: target.newValue ?? "",
+      sourceLineIds: Array.isArray(target.sourceLineIds) ? target.sourceLineIds : [],
+      targetLineIds: Array.isArray(target.targetLineIds) ? target.targetLineIds : [],
+      findingType: matchFindingType,
+      issueType,
+      status: changeType,
+      changeType,
+    },
+    match: {
+      mode: objectScoped ? "exact-object-field-rule" : "profile-field-rule",
+      objectType,
+      objectKey: objectScoped ? objectKey : "",
+      fieldPath: field,
+      ruleId,
+      category,
+      findingType: matchFindingType,
+      issueType,
+      changeType,
+      changeTypes: [...new Set([changeType, target.status, changeType === "structure-converted" ? "added" : ""].filter(Boolean))],
+      valueMode: "any",
+      newValuePattern: exceptionScope === "profile" ? "*" : "",
+      vendorPair,
+    },
+    enabled: true,
+  };
+}
+
+function buildComparisonExclusionFromTarget(target = {}, exclusionScope = "setting") {
+  const profileScoped = exclusionScope === "profile";
+  const objectType = String(target.settingType || target.objectType || "").trim();
+  const objectKey = String(target.settingKey || target.objectKey || "").trim();
+  const side = normalizeExceptionSide(target.side || "both");
+  const matchStatus = String(target.matchStatus || target.status || "").trim();
+  const ruleId = String(target.ruleId || "semantic-compare.unmatched-setting").trim();
+  const displayName = String(target.displayName || target.description || objectKey || "").trim();
+  if (!objectType || !objectKey || !matchStatus) return null;
+
+  const scopeLabel = profileScoped ? "현재 프로파일에서 같은 조건" : "이 설정만";
+  const sideLabel = side === "old" ? "기존 설정에만 있는" : side === "new" ? "신규 설정에만 있는" : "반대편 설정이 없는";
+  const reasonKo = `${scopeLabel} 비교 제외: ${sideLabel} ${objectType} ${displayName || objectKey}`;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  return {
+    id: createId(),
+    type: "comparison-exclusion",
+    scope: profileScoped ? "profile" : "setting",
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    createdBy: "user",
+    createdFromIssueId: target.issueId || target.planId || "",
+    reasonKo,
+    reason: reasonKo,
+    target: {
+      ruleId,
+      category: "semantic-compare",
+      vendorPair,
+      objectType,
+      settingType: objectType,
+      objectKey: profileScoped ? "" : objectKey,
+      settingKey: profileScoped ? "" : objectKey,
+      createdFromObjectKey: profileScoped ? objectKey : "",
+      displayName,
+      fieldPath: "",
+      side,
+      matchStatus,
+      status: matchStatus,
+      issueType: "object-difference",
+      findingType: matchStatus,
+    },
+    match: {
+      mode: profileScoped ? "profile-setting-status" : "exact-setting",
+      vendorPair,
+      objectType,
+      settingType: objectType,
+      objectKey: profileScoped ? "" : objectKey,
+      settingKey: profileScoped ? "" : objectKey,
+      side,
+      matchStatus,
+      ruleId,
+      category: "semantic-compare",
+    },
+  };
+}
+
+function sameProfileException(left = {}, right = {}) {
+  const leftTarget = left.target || {};
+  const rightTarget = right.target || {};
+  const leftMatch = left.match || {};
+  const rightMatch = right.match || {};
+  const leftScope = left.scope === "profile" ? "profile" : "object";
+  const rightScope = right.scope === "profile" ? "profile" : "object";
+  const checks = [
+    ["type", left.type || "", right.type || ""],
+    ["scope", left.scope, right.scope],
+    ["mode", leftMatch.mode || "", rightMatch.mode || ""],
+    ["side", leftTarget.side, rightTarget.side],
+    ["objectType", leftMatch.settingType || leftMatch.objectType || leftTarget.settingType || leftTarget.objectType, rightMatch.settingType || rightMatch.objectType || rightTarget.settingType || rightTarget.objectType],
+    ["fieldPath", leftMatch.fieldPath || leftTarget.fieldPath, rightMatch.fieldPath || rightTarget.fieldPath],
+    ["ruleId", leftMatch.ruleId || leftTarget.ruleId, rightMatch.ruleId || rightTarget.ruleId],
+    ["category", leftMatch.category || leftTarget.category, rightMatch.category || rightTarget.category],
+    ["findingType", leftMatch.findingType || leftTarget.findingType, rightMatch.findingType || rightTarget.findingType],
+    ["issueType", leftMatch.issueType || leftTarget.issueType, rightMatch.issueType || rightTarget.issueType],
+    ["changeType", leftMatch.changeType || leftTarget.changeType, rightMatch.changeType || rightTarget.changeType],
+    ["matchStatus", leftMatch.matchStatus || leftTarget.matchStatus || leftTarget.status, rightMatch.matchStatus || rightTarget.matchStatus || rightTarget.status],
+  ];
+  if (leftScope !== "profile" || rightScope !== "profile") {
+    checks.push(["objectKey", leftMatch.settingKey || leftMatch.objectKey || leftTarget.settingKey || leftTarget.objectKey, rightMatch.settingKey || rightMatch.objectKey || rightTarget.settingKey || rightTarget.objectKey]);
+  }
+  return checks.every(([key, leftValue, rightValue]) => canonicalizeExceptionComparable(key, leftValue) === canonicalizeExceptionComparable(key, rightValue));
+}
+
+function canonicalizeExceptionComparable(key = "", value = "") {
+  const normalized = canonicalizeComparableLine(value || "");
+  if (key === "ruleId") return canonicalizeComparableLine(normalized.split(/[·|,]/)[0] || "");
+  if (key === "fieldPath") return normalized.replace(/\s+/g, "-");
+  return normalized;
+}
+
+function confirmProfileExceptionCreate(exception = {}, estimatedImpact = 0) {
+  const target = exception.target || {};
+  const scopeLabel = exception.scope === "profile" ? "현재 프로파일에서 예외" : "이 설정에서만 예외";
+  const profileWarning = exception.scope === "profile"
+    ? "\n주의: 같은 프로파일의 동일 설정 종류 + 설정 항목 + 규칙/변경 조건에도 적용됨."
+    : "";
+  return window.confirm([
+    "예외 추가",
+    `범위: ${scopeLabel}`,
+    `대상: ${target.displayName || target.objectKey || "-"}`,
+    `설정 종류: ${target.objectType || "-"}`,
+    `설정 항목: ${target.fieldPath || "-"}`,
+    `규칙/상태: ${target.ruleId || target.findingType || "-"} / ${target.changeType || target.status || "-"}`,
+    `예상 영향: ${estimatedImpact || 1}개 항목이 활성 검토에서 제외되고 예외/숨김 목록으로 이동`,
+    profileWarning,
+  ].filter(Boolean).join("\n"));
+}
+
+function estimateExceptionImpact(exception = {}) {
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+  if (!plan.length) return 1;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  let count = 0;
+  for (const item of plan) {
+    const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+    const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
+    for (const [field, summary] of Object.entries(item.fieldSummary || {})) {
+      const changeType = normalizeExceptionChangeType(summary?.effectiveStatus || summary?.status || "");
+      if (!["added", "missing", "changed", "structure-converted"].includes(changeType)) continue;
+      const matched = profileExceptionMatchesContext(exception, {
+        side: "both",
+        objectType,
+        objectKey,
+        field,
+        fieldValue: firstSummaryValue(summary?.newValues) || firstSummaryValue(summary?.oldValues),
+        ruleId: semanticExceptionRuleId(objectType, field, changeType),
+        category: "semantic-compare",
+        findingType: changeType,
+        issueType: "field-difference",
+        changeType,
+        oldValue: firstSummaryValue(summary?.oldValues),
+        newValue: firstSummaryValue(summary?.newValues),
+        vendorPair,
+      });
+      if (matched) count += 1;
+    }
+  }
+  return count || 1;
+}
+
+function estimateComparisonExclusionImpact(exclusion = {}) {
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+  if (!plan.length) return 1;
+  const vendorPair = [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->");
+  let count = 0;
+  for (const item of plan) {
+    const objectType = item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "";
+    const objectKey = exceptionObjectKeyFromPlanItem(item, objectType);
+    const side = settingExclusionSideFromPlanItem(item);
+    if (comparisonExclusionMatchesContext(exclusion, {
+      side,
+      objectType,
+      objectKey,
+      matchStatus: item.status || "",
+      ruleId: "semantic-compare.unmatched-setting",
+      vendorPair,
+    })) {
+      count += 1;
+    }
+  }
+  return count || 1;
+}
+
+function confirmComparisonExclusionCreate(exclusion = {}, estimatedImpact = 0) {
+  const target = exclusion.target || {};
+  const scopeLabel = exclusion.scope === "profile"
+    ? "현재 프로파일에서 같은 조건 비교 제외"
+    : "이 설정만 비교 제외";
+  const profileWarning = exclusion.scope === "profile"
+    ? "\n주의: 같은 프로파일의 동일 vendorPair + 설정 종류 + 방향 + 연결 상태 + 규칙 조건에도 적용됨."
+    : "";
+  return window.confirm([
+    "설정 비교 제외",
+    `범위: ${scopeLabel}`,
+    `대상: ${target.displayName || target.objectKey || target.createdFromObjectKey || "-"}`,
+    `설정 종류: ${target.objectType || "-"}`,
+    `방향/상태: ${target.side || "-"} / ${target.matchStatus || target.status || "-"}`,
+    `예상 영향: ${estimatedImpact || 1}개 설정이 활성 검토에서 빠지고 비교 제외 목록으로 이동`,
+    profileWarning,
+  ].filter(Boolean).join("\n"));
+}
+
+function exceptionObjectKeyFromPlanItem(item = {}, objectType = "") {
+  const object = item.oldObject || item.newObject || {};
+  const identity = object.normalizedIdentity || object.identity || object.sourceName || object.name || object.id || "";
+  return object.key || `${objectType}:${identity}`;
+}
+
+function firstSummaryValue(values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  return String(list.find((value) => value !== undefined && value !== null && String(value).trim()) ?? "");
+}
+
+async function removeProfileException(exceptionId = "", triggerButton = null) {
+  if (!exceptionId) return;
+  const exceptions = Array.isArray(state.profileDraft.exceptions) ? state.profileDraft.exceptions : [];
+  const target = exceptions.find((item) => item.id === exceptionId);
+  if (!target) {
+    showWorkbenchToast("해제할 예외 없음", "error");
+    return;
+  }
+  const isExclusion = target.type === "comparison-exclusion";
+  const actionLabel = isExclusion ? "비교 제외 해제" : "예외 해제";
+  if (!window.confirm(`${actionLabel}\n대상: ${target.target?.displayName || target.target?.settingKey || target.target?.objectKey || target.target?.createdFromObjectKey || "-"}\n해제 후 활성 검토 항목으로 복원됨.`)) return;
+  const previousText = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "해제 중...";
+  }
+  try {
+    state.profileDraft.exceptions = exceptions.filter((item) => item.id !== exceptionId);
+    await saveProfile();
+    await syncActiveSessionProfileReference();
+    if (state.lastReport) {
+      runCompare();
+      setResultTab("summary");
+    }
+    setProfileStatus(`${actionLabel} 완료`, "saved");
+    showWorkbenchToast(`${actionLabel}됨. 활성 검토 항목으로 복원됨.`, "success");
+  } catch (error) {
+    setProfileStatus(`${actionLabel} 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`${actionLabel} 실패: ${error?.message || error}`, "error");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText || actionLabel;
+    }
+  }
+}
+
+function normalizeExceptionSide(side = "both") {
+  const value = String(side || "both").toLowerCase();
+  if (value === "old" || value === "existing") return "old";
+  if (value === "new" || value === "target" || value === "generated") return "new";
+  return "both";
+}
+
+function focusSummaryReviewPanel(panelKey = "") {
+  const normalizedPanelKey = String(panelKey || "").startsWith("audit-") ? "standards-audit" : panelKey;
+  const target = selectors.summaryCards?.querySelector(`[data-review-panel="${cssEscape(panelKey)}"]`)
+    || selectors.summaryCards?.querySelector(`[data-review-panel="${cssEscape(normalizedPanelKey)}"]`)
+    || selectors.summaryCards?.querySelector(`[data-summary-review-kind="${cssEscape(normalizedPanelKey)}"]`);
+  if (target) {
+    target.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    target.classList.add("summary-panel-pulse");
+    window.setTimeout(() => target.classList.remove("summary-panel-pulse"), 900);
+    return;
+  }
+  if (panelKey === "line-diff") {
+    setResultTab("summary");
+    selectors.reportList?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
+}
+
 function hasLeadingIndent(rawLine = "") {
   return /^\s+/.test(String(rawLine || ""));
 }
@@ -3423,6 +6588,57 @@ function hasLeadingIndent(rawLine = "") {
 function isObjectTerminatorLine(normalizedLine = "") {
   const line = canonicalizeComparableLine(normalizedLine);
   return line === "exit" || line === "}" || line === "!";
+}
+
+const INDENT_TERMINATED_OBJECT_TYPES = new Set(["port", "lag", "interface", "static-route", "bgp", "pim"]);
+
+function isStaticRouteBlockHeaderLine(normalizedLine = "") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  if (/\bnext-hop\b/.test(line) && !/^static-route-entry\s+\S+\s+create\b/.test(line)) {
+    return false;
+  }
+  return (
+    /^static-route-entry\s+\S+(?:\s+create\b|\s*\{|$)/.test(line) ||
+    /^route\s+"?[^"\s{}]+"?(?:\s+route-type\b|\s+create\b|\s*\{|$)/.test(line) ||
+    /^configure\s+router\s+(?:\S+\s+)?static-routes\s+route\s+"?\S+"?/.test(line) ||
+    /^\/?configure\s*\{.*\bstatic-routes\s+route\s+"?\S+"?/.test(line)
+  );
+}
+
+function appendLineToParsedObject(current, rawLine, normalizedLine) {
+  if (!current) return false;
+
+  const line = canonicalizeComparableLine(normalizedLine);
+
+  if (
+    current.type === "static-route" &&
+    current.blockDepth > 0 &&
+    isStaticRouteBlockHeaderLine(line) &&
+    current.rawLines.length > 0
+  ) {
+    current.blockDepth += 1;
+  }
+
+  current.lines.push(normalizedLine);
+  current.rawLines.push(rawLine);
+
+  if (!isObjectTerminatorLine(line)) return false;
+
+  if (current.type === "static-route" && current.blockDepth > 0) {
+    current.blockDepth -= 1;
+  }
+
+  return shouldTerminateCurrentObject(current, rawLine, line);
+}
+
+function shouldTerminateCurrentObject(current, rawLine, normalizedLine) {
+  if (!current || !isObjectTerminatorLine(normalizedLine)) return false;
+  const objectType = canonicalizeComparableLine(current.type || current.sourceType || "");
+  if (!INDENT_TERMINATED_OBJECT_TYPES.has(objectType)) return false;
+
+  const startIndent = lineIndent(current.rawLines?.[0] || "");
+  const exitIndent = lineIndent(rawLine);
+  return exitIndent <= startIndent;
 }
 
 function isInsideConfigBlock(current) {
@@ -3444,6 +6660,22 @@ function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
   const line = canonicalizeComparableLine(normalizedLine);
   if (!line) return true;
 
+  if (current.type === "static-route" && current.blockDepth > 0) {
+    return true;
+  }
+
+  if (current.type === "bgp" && /^neighbor\s+"?[^"\s{}]+/.test(line)) {
+    return false;
+  }
+
+  if (
+    current.type === "static-route" &&
+    current.rawLines?.length &&
+    isStaticRouteBlockHeaderLine(line)
+  ) {
+    return false;
+  }
+
   if (isObjectTerminatorLine(line)) return true;
 
   // 가장 중요한 공통 규칙: 들여쓰기 된 라인은 현재 객체 내부 설정이다.
@@ -3452,10 +6684,138 @@ function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
   return false;
 }
 
+function lineIndent(rawLine = "") {
+  return String(rawLine || "").match(/^\s*/)?.[0]?.length || 0;
+}
+
+function isClassicSubscriberInterfaceStartLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return /\bsubscriber-interface\s+"?[^"\s{}]+/.test(normalized) &&
+    !/^\/?configure\b/.test(normalized);
+}
+
+function isMdCliSubscriberInterfaceLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return /^\/?configure\b/.test(normalized) &&
+    /\bservice\s+(?:ies|vprn)\b/.test(normalized) &&
+    /\bsubscriber-interface\s+"?[^"\s{}]+/.test(normalized);
+}
+
+function subscriberNameFromLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return stripTrailingSyntax(normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+}
+
+function collectClassicSubscriberBlock(lines = [], startIndex = 0) {
+  const startIndent = lineIndent(lines[startIndex] || "");
+  const block = [];
+  let endIndex = startIndex;
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const normalized = canonicalizeComparableLine(rawLine);
+    const indent = lineIndent(rawLine);
+
+    if (
+      index > startIndex &&
+      normalized &&
+      indent <= startIndent &&
+      isClassicSubscriberInterfaceStartLine(rawLine)
+    ) {
+      break;
+    }
+
+    block.push(rawLine);
+    endIndex = index;
+
+    if (
+      index > startIndex &&
+      normalized === "exit" &&
+      indent <= startIndent
+    ) {
+      break;
+    }
+  }
+
+  return { rawLines: block, endIndex };
+}
+
+function collectBuiltinSubscriberInterfaceObjects(lines = [], options = {}, source = "old") {
+  const objects = [];
+  const consumedLineIndexes = new Set();
+
+  if (source === "new") {
+    const groups = new Map();
+
+    lines.forEach((rawLine, index) => {
+      if (!isMdCliSubscriberInterfaceLine(rawLine)) return;
+      const subscriberName = subscriberNameFromLine(rawLine);
+      if (!subscriberName) return;
+      if (!groups.has(subscriberName)) {
+        groups.set(subscriberName, {
+          name: subscriberName,
+          startLine: index + 1,
+          rawLines: [],
+          lineIndexes: [],
+        });
+      }
+      const group = groups.get(subscriberName);
+      group.rawLines.push(rawLine);
+      group.lineIndexes.push(index);
+      consumedLineIndexes.add(index);
+    });
+
+    groups.forEach((group) => {
+      objects.push(finalizeObject({
+        type: "subscriber-interface",
+        sourceType: "subscriber-interface",
+        name: group.name,
+        key: `subscriber-interface:${group.name}`,
+        startLine: group.startLine,
+        lines: group.rawLines.map((line) => normalizeLine(line, options)),
+        rawLines: group.rawLines,
+        blockDepth: 0,
+      }, options, source));
+    });
+
+    return { objects, consumedLineIndexes };
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    if (!isClassicSubscriberInterfaceStartLine(rawLine)) continue;
+    const subscriberName = subscriberNameFromLine(rawLine);
+    if (!subscriberName) continue;
+
+    const block = collectClassicSubscriberBlock(lines, index);
+    for (let lineIndex = index; lineIndex <= block.endIndex; lineIndex += 1) {
+      consumedLineIndexes.add(lineIndex);
+    }
+
+    objects.push(finalizeObject({
+      type: "subscriber-interface",
+      sourceType: "subscriber-interface",
+      name: subscriberName,
+      key: `subscriber-interface:${subscriberName}`,
+      startLine: index + 1,
+      lines: block.rawLines.map((line) => normalizeLine(line, options)),
+      rawLines: block.rawLines,
+      blockDepth: 0,
+    }, options, source));
+
+    index = block.endIndex;
+  }
+
+  return { objects, consumedLineIndexes };
+}
+
 function parseConfig(text, options, source) {
   try {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const objects = [];
+  const builtinSubscriber = collectBuiltinSubscriberInterfaceObjects(lines, options, source);
+  const consumedSubscriberLines = builtinSubscriber.consumedLineIndexes;
+  objects.push(...builtinSubscriber.objects);
   let current = null;
   const flushCurrent = () => {
     if (!current) return;
@@ -3464,14 +6824,16 @@ function parseConfig(text, options, source) {
   };
 
   lines.forEach((rawLine, index) => {
+    if (consumedSubscriberLines.has(index)) {
+      flushCurrent();
+      return;
+    }
+
     const normalized = normalizeLine(rawLine, options);
 
     // 현재 객체 내부의 하위 설정 라인은 canonical object / detected object로 분리하지 않는다.
     if (shouldKeepLineInCurrentObject(current, rawLine, normalized)) {
-      current.lines.push(normalized);
-      current.rawLines.push(rawLine);
-
-      if (isObjectTerminatorLine(normalized)) {
+      if (appendLineToParsedObject(current, rawLine, normalized)) {
         flushCurrent();
       }
 
@@ -3481,6 +6843,14 @@ function parseConfig(text, options, source) {
     const canonicalObject = buildCanonicalObject(rawLine, options, source, index + 1);
     if (canonicalObject) {
       flushCurrent();
+      if (canonicalObject.type === "static-route" && isStaticRouteBlockHeaderLine(normalized)) {
+        current = {
+          ...canonicalObject,
+          canonicalOnly: false,
+          blockDepth: 1,
+        };
+        return;
+      }
       objects.push(canonicalObject);
       return;
     }
@@ -3496,6 +6866,7 @@ function parseConfig(text, options, source) {
         startLine: index + 1,
         lines: [normalized],
         rawLines: [rawLine],
+        blockDepth: detected.type === "static-route" && isStaticRouteBlockHeaderLine(normalized) ? 1 : 0,
       };
       return;
     }
@@ -3658,14 +7029,20 @@ function buildCanonicalObject(rawLine, options, source, lineNumber = 1) {
   const objectField = defaultObjectFieldForType(canonicalType);
   const objectName = fields[objectField] || fields.route || fields.neighbor || fields.interface || "";
   if (!objectName) return null;
+  const objectIdentity =
+    canonicalType === "static-route"
+      ? buildStaticRouteIdentityFromFields(fields, objectName)
+      : canonicalType === "subscriber-interface"
+        ? buildSubscriberInterfaceIdentityFromFields(fields, objectName)
+      : objectName;
 
   const lines = [normalized];
   const fieldOccurrences = extractFieldOccurrencesFromLine(rawLine, canonicalType, 0);
   const object = {
     type: canonicalType,
     sourceType: type,
-    name: objectName,
-    key: `${canonicalType}:${objectName}`,
+    name: objectIdentity,
+    key: `${canonicalType}:${objectIdentity}`,
     startLine: lineNumber,
     endLine: lineNumber,
     lines,
@@ -3687,6 +7064,7 @@ function buildCanonicalObject(rawLine, options, source, lineNumber = 1) {
 function inferCanonicalLineObjectType(normalizedLine, options, source) {
   const line = canonicalizeComparableLine(normalizedLine);
   if (isOneLineStaticRoute(line)) return "static-route";
+  if (isOneLineSubscriberInterface(line, source)) return "subscriber-interface";
 
   for (const type of objectTypes) {
     if (type === "static-route") continue;
@@ -3715,9 +7093,12 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
   };
 
   if (!objectType || objectType === "static-route") {
+    const vprnMatch = normalized.match(/\bservice\s+vprn\s+"?([^"\s{}]+)"?/);
     setField("route", normalized.match(/(?:^|[\s{])(?:static-route-entry|route)\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?/)?.[1]);
+    setField("routing-context", vprnMatch?.[1] ? `vprn:${vprnMatch[1]}` : "");
     setField("next-hop", normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1]);
     setField("tag", normalized.match(/\btag\s+([^"\s{}]+)/)?.[1]);
+    setField("metric", normalized.match(/\bmetric\s+([^"\s{}]+)/)?.[1]);
     setField("description", extractDescriptionValue(line));
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
     if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
@@ -3736,16 +7117,132 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
     if (/^shutdown$|\bshutdown\b/.test(normalized)) setField("state", "disabled");
   }
 
+  if (!objectType || objectType === "lag") {
+    setField("lag", extractLagNameFromLine(normalized));
+    setField("description", extractDescriptionValue(line));
+    setField("mode",
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("member-port",
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^port\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("lacp-xmit-interval", normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/)?.[1]);
+    setField("lacp-mode",
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/)?.[1]
+    );
+    setField("lacp.administrative-key",
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("access.adapt-qos.mode",
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/)?.[1]
+    );
+
+    if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
+    if (/^shutdown$|\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
+  }
+
+  if (!objectType || objectType === "interface") {
+    setField("interface", normalized.match(/\binterface\s+"?([^"\s{}]+)"?/)?.[1]);
+    const vprnMatch = normalized.match(/\bservice\s+vprn\s+"?([^"\s{}]+)"?/);
+    setField("routing-context", vprnMatch?.[1] ? `vprn:${vprnMatch[1]}` : "");
+    setField("address", normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/)?.[1]);
+    setField("address", normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/)?.[1]);
+    setField("address", normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1]);
+    setField("prefix-length", normalized.match(/\bprefix-length\s+(\d{1,3})\b/)?.[1]);
+    setField("description", extractDescriptionValue(line));
+
+    if (!isInterfaceIcmpLine(normalized)) {
+      if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
+      if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
+    }
+
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) setField(`icmp.${classicIcmp[1]}`, "disabled");
+
+    const mdIcmpBoolean = normalized.match(/\bicmp\s+(mask-reply)\s+(true|false)\b/);
+    if (mdIcmpBoolean) setField(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2] === "false" ? "disabled" : "enabled");
+
+    const mdIcmpAdminState = normalized.match(/\bicmp\s+(redirects|ttl-expired|unreachables)\s+admin-state\s+(enable|disable)\b/);
+    if (mdIcmpAdminState) setField(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled");
+  }
+
+  if (!objectType || objectType === "subscriber-interface") {
+    setField("subscriber-interface", normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("group-interface", normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("description", extractDescriptionValue(line));
+    setField("address", normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/)?.[1]);
+    setField("address", normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1]);
+    setField("prefix-length", normalized.match(/\bprefix-length\s+(\d{1,3})\b/)?.[1]);
+    setField("sap", normalized.match(/\bsap\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("auth-policy", normalized.match(/\bauthentication-policy\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("auth-policy", normalized.match(/\bradius-auth-policy\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("dhcp.filter", normalized.match(/\bdhcp\s+filter\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("dhcp.server", normalized.match(/\bdhcp\s+server\s+\[?([^"\]\s{}]+)\]?/)?.[1]);
+    setField("dhcp.lease-populate.max-leases", normalized.match(/\bdhcp\s+lease-populate\s+max-leases\s+([^"\s{}]+)/)?.[1]);
+    setField("default-host", normalized.match(/\bdefault-host\s+(?:ipv4\s+)?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)/)?.[1]);
+    setField("default-host.next-hop", normalized.match(/\bdefault-host\b.*\bnext-hop\s+(\d{1,3}(?:\.\d{1,3}){3})/)?.[1]);
+    setField("static-host", normalized.match(/\bstatic-host\s+(?:ip|ipv4)?\s*(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]{11,})/)?.[1]);
+    setField("static-host.sub-profile", normalized.match(/\bstatic-host\b.*\bsub-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("static-host.sla-profile", normalized.match(/\bstatic-host\b.*\bsla-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("static-host.int-dest-id", normalized.match(/\bstatic-host\b.*\bint-dest-id\s+(?:string\s+)?"?([^"\s{}]+)"?/)?.[1]);
+    setField("static-host.subscriber-id", normalized.match(/\bstatic-host\b.*\bsubscriber-id\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.sub-ident-policy", normalized.match(/\bsub-ident-policy\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.subscriber-limit", normalized.match(/\bsubscriber-limit\s+([^"\s{}]+)/)?.[1]);
+    setField("sub-sla-mgmt.defaults.sub-profile", normalized.match(/\bdefaults\s+sub-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.defaults.sla-profile", normalized.match(/\bdefaults\s+sla-profile\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.defaults.subscriber-id", normalized.match(/\bdefaults\s+subscriber-id\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("sub-sla-mgmt.defaults.int-dest-id", normalized.match(/\bdefaults\s+int-dest-id\s+string\s+"?([^"\s{}]+)"?/)?.[1]);
+    setField("cpu-protection.policy-id", normalized.match(/\bcpu-protection\s+policy-id\s+([^"\s{}]+)/)?.[1]);
+    if (/\bipv4\s+allow-unmatching-subnets\s+true\b|\ballow-unmatching-subnets\b/.test(normalized)) setField("dhcp.allow-unmatching-subnets", "true");
+    if (/\bneighbor-discovery\s+populate\s+true\b|\barp-populate\b/.test(normalized)) setField("neighbor-discovery.populate", "true");
+    if (/\bdhcp\s+trusted\s+true\b|\btrusted\b/.test(normalized)) setField("dhcp.trusted", "true");
+    if (/\bdhcp\s+lease-populate\s+l2-header\b|\blease-populate\s+l2-header\b/.test(normalized)) setField("dhcp.lease-populate.l2-header", "true");
+    if (/\bcpu-protection\s+ip-src-monitoring\b|\bip-src-monitoring\b/.test(normalized)) setField("cpu-protection.ip-src-monitoring", "true");
+    if (/\bsubscriber-id\s+use-sap-id\b|\bsubscriber-sap-id\b/.test(normalized)) setField("static-host.subscriber-id", "use-sap-id");
+    if (/\bdhcp\s+admin-state\s+enable\b/.test(normalized)) setField("dhcp.admin-state", "enabled");
+    if (/\bdhcp\s+admin-state\s+disable\b/.test(normalized)) setField("dhcp.admin-state", "disabled");
+    if (/\bsub-sla-mgmt\s+admin-state\s+enable\b/.test(normalized)) setField("sub-sla-mgmt.admin-state", "enabled");
+    if (/\bsub-sla-mgmt\s+admin-state\s+disable\b/.test(normalized)) setField("sub-sla-mgmt.admin-state", "disabled");
+    if (/\bstatic-host\b.*\badmin-state\s+enable\b/.test(normalized)) setField("static-host.admin-state", "enabled");
+    if (/\bstatic-host\b.*\badmin-state\s+disable\b/.test(normalized)) setField("static-host.admin-state", "disabled");
+
+    if (!/\b(?:dhcp|sub-sla-mgmt|static-host|icmp)\b/.test(normalized)) {
+      if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) setField("state", "enabled");
+      if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
+    }
+
+    const ingressFilter = normalized.match(/\bingress\s+filter\s+ip\s+"?([^"\s{}]+)"?/);
+    if (ingressFilter) setField("ingress-filter", ingressFilter[1]);
+    const egressFilter = normalized.match(/\begress\s+filter\s+ip\s+"?([^"\s{}]+)"?/);
+    if (egressFilter) setField("egress-filter", egressFilter[1]);
+    const ingressQos = normalized.match(/\bingress\s+qos(?:\s+sap-ingress\s+policy-name)?\s+"?([^"\s{}]+)"?/);
+    if (ingressQos) setField("ingress-qos", ingressQos[1]);
+    const egressQos = normalized.match(/\begress\s+qos(?:\s+sap-egress\s+policy-name)?\s+"?([^"\s{}]+)"?/);
+    if (egressQos) setField("egress-qos", egressQos[1]);
+  }
+
   const objectProfile = profile?.objects?.[objectType];
   Object.entries(objectProfile?.fields || {}).forEach(([field, rule]) => {
     if (fields[field] !== undefined) return;
+    const normalizedField = canonicalizeComparableLine(field);
+    if (objectType === "interface" && isInterfaceIcmpLine(normalized) && ["state", "admin-state"].includes(normalizedField)) return;
     const value = extractSemanticFieldFromLine(normalized, rule, field, profile?.normalize);
     if (value) fields[field] = value;
   });
 
   const genericField = extractGenericSemanticField(line);
   if (genericField?.field) {
-    setField(genericField.field, genericField.value || genericField.token);
+    const normalizedField = canonicalizeComparableLine(genericField.field);
+    const skipInterfaceGeneric =
+      objectType === "interface" &&
+      (INTERFACE_CONTEXT_ONLY_FIELDS.has(normalizedField) ||
+        (isInterfaceIcmpLine(normalized) && ["state", "admin-state"].includes(normalizedField)));
+    if (!skipInterfaceGeneric) setField(genericField.field, genericField.value || genericField.token);
   }
 
   return fields;
@@ -3790,6 +7287,11 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
     if (tag) {
       add("tag", tag[1], "tag", "terminal");
       add("tag", tag[1], tag[1], "terminal");
+    }
+    const metric = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+    if (metric) {
+      add("metric", metric[1], "metric", "terminal");
+      add("metric", metric[1], metric[1], "terminal");
     }
     if (/\bno\s+shutdown\b/.test(normalized)) {
       add("state", "enabled", "no shutdown", "terminal");
@@ -3850,6 +7352,204 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
       add("state", "disabled", "disable", "terminal");
     }
   }
+  if (!objectType || objectType === "lag") {
+    const lag = extractLagNameFromLine(normalized);
+    if (lag) {
+      add("lag", lag, "lag", "context");
+      add("lag", lag, lag, "context");
+      add("lag", lag, `"${lag}"`, "context");
+    }
+
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "description", "terminal");
+      add("description", description, description, "terminal");
+      add("description", description, `"${description}"`, "terminal");
+    }
+
+    const mode =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^mode\s+([^"\s{}]+)/);
+    if (mode) {
+      add("mode", mode[1], "mode", "terminal");
+      add("mode", mode[1], mode[1], "terminal");
+    }
+
+    const memberPort =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/) ||
+      normalized.match(/^port\s+([^"\s{}]+)/);
+    if (memberPort) {
+      add("member-port", memberPort[1], "port", "terminal");
+      add("member-port", memberPort[1], memberPort[1], "terminal");
+    }
+
+    const xmitInterval = normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/);
+    if (xmitInterval) {
+      add("lacp-xmit-interval", xmitInterval[1], "lacp-xmit-interval", "terminal");
+      add("lacp-xmit-interval", xmitInterval[1], xmitInterval[1], "terminal");
+    }
+
+    const lacpMode =
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/);
+    if (lacpMode) {
+      add("lacp-mode", lacpMode[1], "lacp", "terminal");
+      add("lacp-mode", lacpMode[1], lacpMode[1], "terminal");
+    }
+
+    const lacpKey =
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/);
+    if (lacpKey) {
+      add("lacp.administrative-key", lacpKey[1], "administrative-key", "terminal");
+      add("lacp.administrative-key", lacpKey[1], lacpKey[1], "terminal");
+    }
+
+    const adaptQos =
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/);
+    if (adaptQos) {
+      add("access.adapt-qos.mode", adaptQos[1], "adapt-qos", "terminal");
+      add("access.adapt-qos.mode", adaptQos[1], adaptQos[1], "terminal");
+    }
+
+    if (/\bno\s+shutdown\b/.test(normalized)) add("state", "enabled", "no shutdown", "terminal");
+    if (/\badmin-state\s+enable\b/.test(normalized)) add("state", "enabled", "admin-state", "terminal");
+    if (/\badmin-state\s+disable\b/.test(normalized)) add("state", "disabled", "admin-state", "terminal");
+    if (/^shutdown$|\bshutdown\b/.test(normalized)) add("state", "disabled", "shutdown", "terminal");
+  }
+  if (!objectType || objectType === "interface") {
+    const interfaceName = normalized.match(/\binterface\s+"?([^"\s{}]+)"?/);
+    if (interfaceName) {
+      add("interface", interfaceName[1], "interface", "context");
+      add("interface", interfaceName[1], interfaceName[1], "context");
+      add("interface", interfaceName[1], `"${interfaceName[1]}"`, "context");
+    }
+
+    const address =
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/) ||
+      normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/) ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (address) {
+      add("address", address[1], "address", "terminal");
+      add("address", address[1], address[1], "terminal");
+    }
+
+    const prefixLength = normalized.match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (prefixLength) {
+      add("prefix-length", prefixLength[1], "prefix-length", "terminal");
+      add("prefix-length", prefixLength[1], prefixLength[1], "terminal");
+    }
+
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) {
+      add(`icmp.${classicIcmp[1]}`, "disabled", "no", "terminal");
+      add(`icmp.${classicIcmp[1]}`, "disabled", classicIcmp[1], "terminal");
+    }
+
+    const mdIcmpBoolean = normalized.match(/\bicmp\s+(mask-reply)\s+(true|false)\b/);
+    if (mdIcmpBoolean) {
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2] === "false" ? "disabled" : "enabled", mdIcmpBoolean[1], "terminal");
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2] === "false" ? "disabled" : "enabled", mdIcmpBoolean[2], "terminal");
+    }
+
+    const mdIcmpAdminState = normalized.match(/\bicmp\s+(redirects|ttl-expired|unreachables)\s+admin-state\s+(enable|disable)\b/);
+    if (mdIcmpAdminState) {
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled", mdIcmpAdminState[1], "terminal");
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled", "admin-state", "terminal");
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2] === "disable" ? "disabled" : "enabled", mdIcmpAdminState[2], "terminal");
+    }
+  }
+  if (!objectType || objectType === "subscriber-interface") {
+    const subscriber = normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/);
+    if (subscriber) {
+      add("subscriber-interface", subscriber[1], "subscriber-interface", "context");
+      add("subscriber-interface", subscriber[1], subscriber[1], "context");
+      add("subscriber-interface", subscriber[1], `"${subscriber[1]}"`, "context");
+    }
+
+    const group = normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/);
+    if (group) {
+      add("group-interface", group[1], "group-interface", "context");
+      add("group-interface", group[1], group[1], "context");
+      add("group-interface", group[1], `"${group[1]}"`, "context");
+    }
+
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "description", "terminal");
+      add("description", description, description, "terminal");
+      add("description", description, `"${description}"`, "terminal");
+    }
+
+    const address =
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/) ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (address) {
+      add("address", address[1], "address", "terminal");
+      add("address", address[1], address[1], "terminal");
+    }
+
+    const prefixLength = normalized.match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (prefixLength) add("prefix-length", prefixLength[1], "prefix-length", "terminal");
+
+    const sap = normalized.match(/\bsap\s+"?([^"\s{}]+)"?/);
+    if (sap) {
+      add("sap", sap[1], "sap", "context");
+      add("sap", sap[1], sap[1], "context");
+    }
+
+    [
+      ["auth-policy", /\b(?:authentication-policy|radius-auth-policy)\s+"?([^"\s{}]+)"?/],
+      ["dhcp.filter", /\bdhcp\s+filter\s+"?([^"\s{}]+)"?/],
+      ["dhcp.server", /\bdhcp\s+server\s+\[?([^"\]\s{}]+)\]?/],
+      ["dhcp.lease-populate.max-leases", /\bdhcp\s+lease-populate\s+max-leases\s+([^"\s{}]+)/],
+      ["default-host", /\bdefault-host\s+(?:ipv4\s+)?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)/],
+      ["default-host.next-hop", /\bdefault-host\b.*\bnext-hop\s+(\d{1,3}(?:\.\d{1,3}){3})/],
+      ["static-host", /\bstatic-host\s+(?:ip|ipv4)?\s*(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]{11,})/],
+      ["sub-sla-mgmt.sub-ident-policy", /\bsub-ident-policy\s+"?([^"\s{}]+)"?/],
+      ["cpu-protection.policy-id", /\bcpu-protection\s+policy-id\s+([^"\s{}]+)/],
+    ].forEach(([field, pattern]) => {
+      const match = normalized.match(pattern);
+      if (match) add(field, match[1], field, "terminal");
+    });
+
+    [
+      ["dhcp.allow-unmatching-subnets", /\b(?:ipv4\s+)?allow-unmatching-subnets\s+true\b|\ballow-unmatching-subnets\b/],
+      ["neighbor-discovery.populate", /\bneighbor-discovery\s+populate\s+true\b|\barp-populate\b/],
+      ["dhcp.trusted", /\bdhcp\s+trusted\s+true\b|\btrusted\b/],
+      ["dhcp.lease-populate.l2-header", /\bdhcp\s+lease-populate\s+l2-header\b|\blease-populate\s+l2-header\b/],
+      ["cpu-protection.ip-src-monitoring", /\bcpu-protection\s+ip-src-monitoring\b|\bip-src-monitoring\b/],
+    ].forEach(([field, pattern]) => {
+      if (pattern.test(normalized)) add(field, "true", field, "terminal");
+    });
+
+    const stateRules = [
+      ["dhcp.admin-state", /\bdhcp\s+admin-state\s+(enable|disable)\b/],
+      ["sub-sla-mgmt.admin-state", /\bsub-sla-mgmt\s+admin-state\s+(enable|disable)\b/],
+      ["static-host.admin-state", /\bstatic-host\b.*\badmin-state\s+(enable|disable)\b/],
+    ];
+    stateRules.forEach(([field, pattern]) => {
+      const match = normalized.match(pattern);
+      if (match) add(field, match[1] === "disable" ? "disabled" : "enabled", "admin-state", "terminal");
+    });
+
+    if (!/\b(?:dhcp|sub-sla-mgmt|static-host|icmp)\b/.test(normalized)) {
+      if (/\bno\s+shutdown\b/.test(normalized)) add("state", "enabled", "no shutdown", "terminal");
+      if (/\badmin-state\s+enable\b/.test(normalized)) add("state", "enabled", "admin-state", "terminal");
+      if (/\badmin-state\s+disable\b/.test(normalized)) add("state", "disabled", "admin-state", "terminal");
+    }
+
+    [
+      ["ingress-filter", /\bingress\s+filter\s+ip\s+"?([^"\s{}]+)"?/],
+      ["egress-filter", /\begress\s+filter\s+ip\s+"?([^"\s{}]+)"?/],
+      ["ingress-qos", /\bingress\s+qos(?:\s+sap-ingress\s+policy-name)?\s+"?([^"\s{}]+)"?/],
+      ["egress-qos", /\begress\s+qos(?:\s+sap-egress\s+policy-name)?\s+"?([^"\s{}]+)"?/],
+    ].forEach(([field, pattern]) => {
+      const match = normalized.match(pattern);
+      if (match) add(field, match[1], field, "terminal");
+    });
+  }
   const genericField = extractGenericSemanticField(source);
 
   if (genericField?.field) {
@@ -3870,6 +7570,17 @@ function extractDescriptionValue(line) {
   if (quoted) return quoted[1];
   const normalized = canonicalizeComparableLine(source);
   return normalized.match(/\bdescription\s+([^{}\s]+)/)?.[1] || "";
+}
+
+function extractLagNameFromLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return stripTrailingSyntax(
+    normalized.match(/^lag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^\/configure\s*\{\s*lag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^configure\s+lag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/\blag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    ""
+  ).replace(/^"|"$/g, "");
 }
 
 function mergeObjectsByCanonicalKey(objects, options, source) {
@@ -3900,7 +7611,9 @@ function mergeObjectsByCanonicalKey(objects, options, source) {
     target.lines.push(...safeObject.lines);
     target.rawLines.push(...safeObject.rawLines);
     target.fieldOccurrences.push(...(safeObject.fieldOccurrences || []).map((item) => ({ ...item, rawLineIndex: item.rawLineIndex + lineOffset })));
-    target.canonicalFields = mergeCanonicalFields(target.canonicalFields, safeObject.canonicalFields);
+    target.canonicalFields = target.type === "static-route"
+      ? mergeStaticRouteFields(target.canonicalFields, safeObject.canonicalFields)
+      : mergeCanonicalFields(target.canonicalFields, safeObject.canonicalFields);
     target.fields = target.canonicalFields;
     target.comparableText = semanticObjectToComparableLines({
       type: target.type,
@@ -3908,6 +7621,79 @@ function mergeObjectsByCanonicalKey(objects, options, source) {
       fields: target.canonicalFields,
     }, options.profile, source).map(canonicalizeComparableLine).join("\n");
   });
+  return mergeFinalizedObjectsByCanonicalKey(
+    output.map((object) => normalizeMergedObjectIdentity(object, options, source)),
+    options,
+    source
+  );
+}
+
+function normalizeMergedObjectIdentity(object, options, source) {
+  if (!object || !["interface", "subscriber-interface"].includes(object.type)) return object;
+
+  const fields = object.type === "subscriber-interface"
+    ? normalizeSubscriberInterfaceCanonicalFields(object.canonicalFields || object.fields || {})
+    : normalizeInterfaceCanonicalFields(object.canonicalFields || object.fields || {});
+  const identity = object.type === "subscriber-interface"
+    ? buildSubscriberInterfaceIdentityFromFields(fields, object.name, { preferAddress: true })
+    : buildInterfaceIdentityFromFields(fields, object.name, { preferAddress: true });
+  if (!identity || identity === object.name) {
+    return {
+      ...object,
+      canonicalFields: fields,
+      fields,
+    };
+  }
+
+  return {
+    ...object,
+    name: identity,
+    key: `${object.type}:${identity}`,
+    canonicalFields: fields,
+    fields,
+    comparableText: semanticObjectToComparableLines({
+      type: object.type,
+      source,
+      fields,
+    }, options.profile, source).map(canonicalizeComparableLine).join("\n"),
+  };
+}
+
+function mergeFinalizedObjectsByCanonicalKey(objects, options, source) {
+  const merged = new Map();
+  const output = [];
+
+  objects.forEach((object, index) => {
+    const safeObject = ensureObjectShape(object, source, index);
+    if (safeObject.type === "global") {
+      output.push(safeObject);
+      return;
+    }
+
+    if (!merged.has(safeObject.key)) {
+      merged.set(safeObject.key, safeObject);
+      output.push(safeObject);
+      return;
+    }
+
+    const target = merged.get(safeObject.key);
+    const lineOffset = target.lines.length;
+    target.startLine = Math.min(target.startLine, safeObject.startLine);
+    target.endLine = Math.max(target.endLine, safeObject.endLine);
+    target.lines.push(...safeObject.lines);
+    target.rawLines.push(...safeObject.rawLines);
+    target.fieldOccurrences.push(...(safeObject.fieldOccurrences || []).map((item) => ({ ...item, rawLineIndex: item.rawLineIndex + lineOffset })));
+    target.canonicalFields = target.type === "static-route"
+      ? mergeStaticRouteFields(target.canonicalFields, safeObject.canonicalFields)
+      : mergeCanonicalFields(target.canonicalFields, safeObject.canonicalFields);
+    target.fields = target.canonicalFields;
+    target.comparableText = semanticObjectToComparableLines({
+      type: target.type,
+      source,
+      fields: target.canonicalFields,
+    }, options.profile, source).map(canonicalizeComparableLine).join("\n");
+  });
+
   return output;
 }
 
@@ -3936,11 +7722,13 @@ function ensureObjectShape(object, source, index = 0) {
 }
 
 function mergeCanonicalFields(current = {}, incoming = {}) {
-  return Object.entries(incoming || {}).reduce((result, [field, value]) => {
+  const merged = Object.entries(incoming || {}).reduce((result, [field, value]) => {
     if (value === undefined || value === "") return result;
     result[field] = value;
     return result;
   }, { ...(current || {}) });
+
+  return normalizeInterfaceCanonicalFields(merged);
 }
 
 function normalizeLine(line, options) {
@@ -3954,11 +7742,19 @@ function shouldIgnoreLine(normalizedLine, rawLine, options, source) {
   const lower = normalizedLine.trim().toLowerCase();
   if (options.ignoreComments && (!lower || lower.startsWith("#") || lower.startsWith("//") || lower.startsWith("!"))) return true;
   if (options.ignoreGenerated && /timestamp|last modified|generated|created by|time:|date:/.test(lower)) return true;
-  return options.profile.rules.ignore.some((rule) => rule.source === source && canonicalizeComparableLine(rawLine).includes(canonicalizeComparableLine(rule.pattern)));
+  return evaluatePolicyContext({
+    profile: options.profile || state.profileDraft || {},
+    rawLine,
+    normalizedLine,
+    side: source,
+  }).suppressed;
 }
 
 function detectObjectStart(line, options, source = "old") {
   const normalized = canonicalizeComparableLine(line);
+  const builtinSubscriber = detectBuiltinSubscriberInterfaceStart(normalized, source);
+  if (builtinSubscriber) return builtinSubscriber;
+
   const profileObjectDetected = detectSemanticProfileObjectStart(normalized, options, source);
   if (profileObjectDetected) return profileObjectDetected;
 
@@ -3977,6 +7773,21 @@ function detectObjectStart(line, options, source = "old") {
     if (match) return { type: rule.type, name: match[1] || normalized };
   }
   return null;
+}
+
+function detectBuiltinSubscriberInterfaceStart(normalizedLine = "", source = "old") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  const match = line.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/);
+  if (!match?.[1]) return null;
+
+  if (source === "new" && /^\/?configure\b/.test(line)) {
+    return null;
+  }
+
+  return {
+    type: "subscriber-interface",
+    name: stripTrailingSyntax(match[1]),
+  };
 }
 
 function detectSemanticProfileObjectStart(normalizedLine, options, source) {
@@ -4106,6 +7917,10 @@ function normalizeParserFieldValue(field, value) {
     if (["enable", "enabled", "no shutdown"].includes(normalized)) return "enabled";
     if (["disable", "disabled", "shutdown"].includes(normalized)) return "disabled";
   }
+  if (field.startsWith("icmp.")) {
+    if (["true", "enable", "enabled"].includes(normalized)) return "enabled";
+    if (["false", "disable", "disabled"].includes(normalized)) return "disabled";
+  }
   return normalized;
 }
 
@@ -4173,7 +7988,11 @@ function finalizeObject(object, options, source) {
   };
   const lines = buildComparableLines(finalizedObject, options, source);
   const comparableLines = options.sortObjects ? sortComparableLines(lines) : lines;
-  const identityName = buildProfileObjectIdentity(finalizedObject, options);
+  const profileIdentityName = buildProfileObjectIdentity(finalizedObject, options);
+  const identityName =
+    canonicalType === "static-route" || canonicalType === "interface" || canonicalType === "subscriber-interface"
+      ? canonicalIdentity.name
+      : profileIdentityName;
   const finalName = identityName || canonicalIdentity.name;
   return {
     ...finalizedObject,
@@ -4188,6 +8007,42 @@ function finalizeObject(object, options, source) {
 
 function computeCanonicalObjectIdentity(object, profile, source) {
   const fields = extractCanonicalFields(object, profile, source);
+  if (object.type === "static-route") {
+    const identity = buildStaticRouteIdentityFromFields(fields, object.name);
+    if (identity) {
+      return {
+        name: identity,
+        key: `${object.type}:${identity}`,
+        fields,
+      };
+    }
+  }
+
+  if (object.type === "interface") {
+    const normalizedFields = normalizeInterfaceCanonicalFields(fields);
+    const preferAddress = !normalizedFields.interface || (object.rawLines?.length || object.lines?.length || 0) > 1;
+    const identity = buildInterfaceIdentityFromFields(normalizedFields, object.name, { preferAddress });
+    if (identity) {
+      return {
+        name: identity,
+        key: `${object.type}:${identity}`,
+        fields: normalizedFields,
+      };
+    }
+  }
+
+  if (object.type === "subscriber-interface") {
+    const normalizedFields = normalizeSubscriberInterfaceCanonicalFields(fields);
+    const identity = buildSubscriberInterfaceIdentityFromFields(normalizedFields, object.name, { preferAddress: true });
+    if (identity) {
+      return {
+        name: identity,
+        key: `${object.type}:${identity}`,
+        fields: normalizedFields,
+      };
+    }
+  }
+
   const keyFields = profile?.objects?.[object.type]?.objectKey || getDefaultObjectKeyFields(object.type);
   for (const field of keyFields) {
     const normalizedField = canonicalizeComparableLine(field);
@@ -4212,6 +8067,8 @@ function getDefaultObjectKeyFields(type) {
     port: ["port"],
     lag: ["lag"],
     interface: ["interface"],
+    "subscriber-interface": ["subscriber-interface"],
+    "group-interface": ["group-interface"],
     "static-route": ["route"],
     pim: ["interface"],
     bgp: ["neighbor"],
@@ -4263,19 +8120,221 @@ function extractValueByTokenSelector(line, field, selector) {
 function extractFallbackCanonicalFields(object, profile = state.profileDraft) {
   const lines = object.lines.map((line) => prepareSemanticSourceLine(line, profile?.normalize)).filter(Boolean);
   const fields = {};
+  if (["port", "lag", "bgp", "pim"].includes(object.type)) {
+    [...(object.rawLines || []), ...(object.lines || [])].forEach((line) => {
+      Object.entries(extractFieldsFromLine(line, profile, object.type)).forEach(([field, value]) => {
+        if (fields[field] !== undefined) return;
+        if (value !== undefined && value !== "") fields[field] = value;
+      });
+    });
+  }
   if (object.type === "static-route") {
     fields.route = findStaticRoutePrefix(lines) || normalizeSemanticValue(object.name, profile?.normalize);
-    const nextHop = findStaticRouteNextHop(lines);
-    const tag = findStaticRouteTag(lines);
-    const state = findStaticRouteState(lines);
-    if (nextHop) fields["next-hop"] = nextHop;
-    if (tag) fields.tag = tag;
-    if (state) fields.state = state;
+    Object.assign(
+      fields,
+      buildStaticRouteNextHopFields(
+        collectStaticRouteNextHopEntriesFromLines(lines)
+      )
+    );
+  }
+  if (object.type === "interface") {
+    const description = [
+      ...(object.rawLines || []),
+      ...(object.lines || []),
+    ].map(extractDescriptionValue).find(Boolean);
+    const address = findInterfaceAddress(lines);
+    const prefixLength = findInterfacePrefixLength(lines);
+    if (description) fields.description = normalizeSemanticValue(description, profile?.normalize);
+    if (address) fields.address = address;
+    if (prefixLength) fields["prefix-length"] = prefixLength;
+    Object.assign(fields, normalizeInterfaceCanonicalFields(fields));
+  }
+  if (object.type === "subscriber-interface") {
+    Object.assign(
+      fields,
+      extractSubscriberInterfaceCanonicalFieldsFromLines([
+        ...(object.rawLines || []),
+        ...(object.lines || []),
+      ], profile)
+    );
   }
   return fields;
 }
 
+function extractSubscriberInterfaceCanonicalFieldsFromLines(lines = [], profile = state.profileDraft) {
+  const fields = {};
+  const stack = [];
+  let currentSap = "";
+  let direction = "";
+
+  const setField = (field, value) => {
+    const normalizedField = canonicalizeComparableLine(field);
+    const normalizedValue = normalizeParserFieldValue(normalizedField, stripTrailingSyntax(value || ""));
+    if (!normalizedField || !normalizedValue) return;
+    if (["sap", "ingress-filter", "egress-filter", "ingress-qos", "egress-qos"].includes(normalizedField)) {
+      fields[normalizedField] = mergeCanonicalFieldValue(fields[normalizedField], normalizedValue);
+      return;
+    }
+    if (fields[normalizedField] === undefined) fields[normalizedField] = normalizedValue;
+  };
+
+  const topScope = () => stack.at(-1) || "";
+
+  lines.forEach((line) => {
+    const normalized = canonicalizeComparableLine(line);
+    if (!normalized) return;
+
+    Object.entries(extractFieldsFromLine(line, profile, "subscriber-interface")).forEach(([field, value]) => {
+      setField(field, value);
+    });
+
+    let match = normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/);
+    if (match) {
+      setField("subscriber-interface", match[1]);
+      stack.push("subscriber-interface");
+      return;
+    }
+
+    match = normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/);
+    if (match) {
+      setField("group-interface", match[1]);
+      stack.push("group-interface");
+      return;
+    }
+
+    match = normalized.match(/^sap\s+"?([^"\s{}]+)"?/);
+    if (match) {
+      currentSap = match[1];
+      direction = "";
+      setField("sap", match[1]);
+      stack.push("sap");
+      return;
+    }
+
+    if (normalized === "dhcp") {
+      stack.push("dhcp");
+      return;
+    }
+
+    if (normalized === "sub-sla-mgmt") {
+      stack.push("sub-sla-mgmt");
+      return;
+    }
+
+    match = normalized.match(/^static-host\s+(?:ip\s+)?([^"\s{}]+)/);
+    if (match) {
+      setField("static-host", match[1]);
+      stack.push("static-host");
+      return;
+    }
+
+    match = normalized.match(/^default-host\s+([^"\s{}]+)(?:\s+next-hop\s+([^"\s{}]+))?/);
+    if (match) {
+      setField("default-host", match[1]);
+      setField("default-host.next-hop", match[2]);
+      return;
+    }
+
+    if (normalized === "ingress") {
+      direction = "ingress";
+      stack.push("ingress");
+      return;
+    }
+
+    if (normalized === "egress") {
+      direction = "egress";
+      stack.push("egress");
+      return;
+    }
+
+    if (normalized === "exit" || normalized === "}") {
+      const scope = stack.pop();
+      if (scope === "sap") currentSap = "";
+      if (["ingress", "egress"].includes(scope)) direction = "";
+      return;
+    }
+
+    match = normalized.match(/^filter\s+ip\s+(.+)$/);
+    if (match && currentSap) {
+      setField(direction === "egress" ? "egress-filter" : "ingress-filter", match[1]);
+      return;
+    }
+
+    match = normalized.match(/^qos\s+(.+)$/);
+    if (match && currentSap) {
+      setField(direction === "egress" ? "egress-qos" : "ingress-qos", match[1]);
+      return;
+    }
+
+    if (/^(no\s+shutdown|shutdown)$/.test(normalized)) {
+      const stateValue = normalized === "shutdown" ? "disabled" : "enabled";
+      const scope = topScope();
+      if (scope === "dhcp") setField("dhcp.admin-state", stateValue);
+      else if (scope === "sub-sla-mgmt") setField("sub-sla-mgmt.admin-state", stateValue);
+      else if (scope === "static-host") setField("static-host.admin-state", stateValue);
+      else setField("state", stateValue);
+      return;
+    }
+
+    if (topScope() === "dhcp") {
+      match = normalized.match(/^filter\s+(.+)$/);
+      if (match) {
+        setField("dhcp.filter", match[1]);
+        return;
+      }
+      match = normalized.match(/^server\s+(.+)$/);
+      if (match) {
+        setField("dhcp.server", match[1]);
+        return;
+      }
+      if (normalized === "trusted") {
+        setField("dhcp.trusted", "true");
+        return;
+      }
+      match = normalized.match(/^lease-populate\s+l2-header(?:\s+(.+))?/);
+      if (match) {
+        setField("dhcp.lease-populate.l2-header", "true");
+        setField("dhcp.lease-populate.max-leases", match[1]);
+      }
+    }
+
+    if (topScope() === "sub-sla-mgmt") {
+      [
+        ["sub-sla-mgmt.defaults.int-dest-id", /^def-inter-dest-id\s+string\s+(.+)$/],
+        ["sub-sla-mgmt.defaults.subscriber-id", /^def-sub-id\s+(.+)$/],
+        ["sub-sla-mgmt.defaults.sub-profile", /^def-sub-profile\s+(.+)$/],
+        ["sub-sla-mgmt.defaults.sla-profile", /^def-sla-profile\s+(.+)$/],
+        ["sub-sla-mgmt.sub-ident-policy", /^sub-ident-policy\s+(.+)$/],
+        ["sub-sla-mgmt.subscriber-limit", /^multi-sub-sap\s+(.+)$/],
+      ].some(([field, pattern]) => {
+        const fieldMatch = normalized.match(pattern);
+        if (!fieldMatch) return false;
+        setField(field, fieldMatch[1]);
+        return true;
+      });
+    }
+
+    if (topScope() === "static-host") {
+      [
+        ["static-host.int-dest-id", /^inter-dest-id\s+(.+)$/],
+        ["static-host.sla-profile", /^sla-profile\s+(.+)$/],
+        ["static-host.sub-profile", /^sub-profile\s+(.+)$/],
+      ].some(([field, pattern]) => {
+        const fieldMatch = normalized.match(pattern);
+        if (!fieldMatch) return false;
+        setField(field, fieldMatch[1]);
+        return true;
+      });
+      if (normalized === "subscriber-sap-id") setField("static-host.subscriber-id", "use-sap-id");
+    }
+  });
+
+  return normalizeSubscriberInterfaceCanonicalFields(fields);
+}
+
 function buildProfileObjectIdentity(object, options) {
+  if (object?.type === "lag") return inferObjectIdentityFromLines(object);
+
   const rule = getIdentityRuleForSource(options.profile?.identityRules?.[object.type], object.source || "old", object.type);
   const lines = [...object.lines, ...object.rawLines].map(canonicalizeComparableLine);
 
@@ -4324,10 +8383,7 @@ function inferObjectIdentityFromLines(object) {
     if (!line) continue;
 
     if (type === "lag") {
-      const value =
-        line.match(/^lag\s+([^\s{}]+)/)?.[1] ||
-        line.match(/^\/configure\s*\{\s*lag\s+([^\s{}]+)/)?.[1] ||
-        line.match(/\blag\s+([^\s{}]+)/)?.[1];
+      const value = extractLagNameFromLine(line);
 
       if (value) return canonicalizeIdentity(stripTrailingSyntax(value));
     }
@@ -4572,13 +8628,45 @@ function extractKnownFieldValue(line, fieldName) {
   if (fieldName === "route") return stripTrailingSyntax(normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?\b/)?.[1] || "");
   if (fieldName === "next-hop") return stripTrailingSyntax(normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (fieldName === "tag") return stripTrailingSyntax(normalized.match(/\btag\s+([^"\s{}]+)/)?.[1] || "");
+  if (fieldName === "interface") return stripTrailingSyntax(normalized.match(/\binterface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "subscriber-interface") return stripTrailingSyntax(normalized.match(/\bsubscriber-interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "group-interface") return stripTrailingSyntax(normalized.match(/\bgroup-interface\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "sap") return stripTrailingSyntax(normalized.match(/\bsap\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "auth-policy") return stripTrailingSyntax(normalized.match(/\b(?:authentication-policy|radius-auth-policy)\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "dhcp.filter") return stripTrailingSyntax(normalized.match(/\bdhcp\s+filter\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "dhcp.server") return stripTrailingSyntax(normalized.match(/\bdhcp\s+server\s+\[?([^"\]\s{}]+)\]?/)?.[1] || "");
   if (fieldName === "description") return stripTrailingSyntax(normalized.match(/\bdescription\s+"([^"]+)"/)?.[1] || normalized.match(/\bdescription\s+([^{}\s]+)/)?.[1] || "");
   if (fieldName === "state" || fieldName === "admin-state") {
+    if (isInterfaceIcmpLine(normalized)) return "";
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
-    if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+    if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (fieldName === "address") {
+    return stripTrailingSyntax(
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1] ||
+      normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/)?.[1] ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "prefix-length") return stripTrailingSyntax(normalized.match(/\bprefix-length\s+(\d{1,3})\b/)?.[1] || "");
+  if (fieldName.startsWith("icmp.")) {
+    const icmpName = fieldName.replace(/^icmp\./, "");
+    if (new RegExp(`^no\\s+${escapeRegExp(icmpName)}$`).test(normalized)) return "disabled";
+    const boolMatch = normalized.match(new RegExp(`\\bicmp\\s+${escapeRegExp(icmpName)}\\s+(true|false)\\b`));
+    if (boolMatch) return boolMatch[1] === "false" ? "disabled" : "enabled";
+    const stateMatch = normalized.match(new RegExp(`\\bicmp\\s+${escapeRegExp(icmpName)}\\s+admin-state\\s+(enable|disable)\\b`));
+    if (stateMatch) return stateMatch[1] === "disable" ? "disabled" : "enabled";
   }
   if (fieldName === "neighbor") return stripTrailingSyntax(normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/)?.[1] || "");
   return "";
+}
+
+function isOneLineSubscriberInterface(line = "", source = "") {
+  const normalized = canonicalizeComparableLine(line);
+  if (!/\bsubscriber-interface\s+"?[^"\s{}]+/.test(normalized)) return false;
+  if (source === "new") return /^\/?configure\b/.test(normalized) || /\bservice\s+(?:ies|vprn)\b/.test(normalized);
+  return /^\/?configure\b/.test(normalized) && /\bservice\s+(?:ies|vprn)\b/.test(normalized);
 }
 
 function extractSemanticPatternValue(line, pattern, normalizeRules) {
@@ -4668,19 +8756,31 @@ function buildStaticRouteComparableLines(object, profile = state.profileDraft, s
   const lines = object.lines.map(canonicalizeComparableLine);
   const parserFields = collectParserRuleFields(object, profile);
   const semanticFields = collectSemanticFields(object, profile);
+  const staticRouteFields = mergeStaticRouteFields(
+    extractFallbackCanonicalFields(object, profile),
+    mergeStaticRouteFields(object.canonicalFields || {}, {
+      ...parserFields,
+      ...semanticFields,
+    })
+  );
   const contextLines = applyContextMappingsToLines(object.lines, object.type, source, profile.contextMappings);
   const contextFields = collectContextComparableFields(contextLines);
-  const route = object.canonicalFields?.route || parserFields.route || semanticFields.route || findStaticRoutePrefix(lines) || object.name;
+  const route = staticRouteFields.route || findStaticRoutePrefix(lines) || object.name;
   const result = [`route ${route}`];
-  const nextHop = semanticFields["next-hop"] || parserFields["next-hop"] || parserFields.nextHop || findStaticRouteNextHop(lines);
-  const tag = semanticFields.tag || parserFields.tag || findStaticRouteTag(lines);
-  const state = semanticFields.state || parserFields.state || parserFields["admin-state"] || findStaticRouteState(lines);
 
-  if (nextHop) result.push(`next-hop ${nextHop}`);
-  if (tag) result.push(`tag ${tag}`);
-  if (state) result.push(`state ${state}`);
+  const nextHops = splitStaticRouteNextHopList(staticRouteFields["next-hop"] || staticRouteFields.nextHop);
+  if (nextHops.length) result.push(`next-hop ${nextHops.join(", ")}`);
+  if (nextHops.length <= 1) {
+    if (staticRouteFields.tag) result.push(`tag ${staticRouteFields.tag}`);
+    if (staticRouteFields.metric) result.push(`metric ${staticRouteFields.metric}`);
+    if (staticRouteFields.state) result.push(`state ${staticRouteFields.state}`);
+  }
+  Object.keys(staticRouteFields)
+    .filter((field) => /^next-hop\[.+]\./.test(field))
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+    .forEach((field) => result.push(`${field} ${staticRouteFields[field]}`));
   Object.entries(contextFields).forEach(([field, value]) => {
-    if (!["route", "next-hop", "tag", "state"].includes(field)) result.push(`${field} ${value}`);
+    if (!["route", "next-hop", "tag", "metric", "state"].includes(field)) result.push(`${field} ${value}`);
   });
   return result;
 }
@@ -4772,9 +8872,40 @@ function findStaticRouteTag(lines) {
   return "";
 }
 
+function findStaticRouteMetric(lines) {
+  for (const line of lines) {
+    const match = line.match(/\bmetric\s+([^"\s{}]+)/);
+    if (match) return stripTrailingSyntax(match[1]);
+  }
+  return "";
+}
+
 function findStaticRouteState(lines) {
   if (lines.some((line) => /\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(line))) return "enabled";
   if (lines.some((line) => /\bshutdown\b|\badmin-state\s+disable\b/.test(line))) return "disabled";
+  return "";
+}
+
+function findInterfaceAddress(lines) {
+  for (const line of lines) {
+    const normalized = canonicalizeComparableLine(line);
+    const classic = normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})\b/);
+    if (classic) return stripTrailingSyntax(classic[1]);
+
+    const mdPrimary = normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/);
+    if (mdPrimary) return stripTrailingSyntax(mdPrimary[1]);
+
+    const mdAddress = normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (mdAddress) return stripTrailingSyntax(mdAddress[1]);
+  }
+  return "";
+}
+
+function findInterfacePrefixLength(lines) {
+  for (const line of lines) {
+    const match = canonicalizeComparableLine(line).match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (match) return stripTrailingSyntax(match[1]);
+  }
   return "";
 }
 
@@ -4893,7 +9024,19 @@ function splitPolicyValues(value) {
 }
 
 function extractFieldValue(line, field) {
-  return stripTrailingSyntax(canonicalizeComparableLine(line).slice(field.length).trim());
+  const normalized = canonicalizeComparableLine(line);
+  const normalizedField = normalizeFieldName(field);
+  if (normalizedField === "state") {
+    if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
+    if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (normalizedField === "neighbor") {
+    return stripTrailingSyntax(normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  }
+  if (["mode", "member-port", "lacp-mode", "lacp.administrative-key", "lacp-xmit-interval", "access.adapt-qos.mode"].includes(normalizedField)) {
+    return inferValueForField(normalized, normalizedField);
+  }
+  return stripTrailingSyntax(normalized.slice(String(field || "").length).trim());
 }
 
 function sortObjects(objects) {
@@ -4920,6 +9063,7 @@ function sortComparableLines(lines) {
 function compareObjects(oldObjects, newObjects, options) {
   const oldMap = buildObjectMap(oldObjects);
   const newMap = buildObjectMap(newObjects);
+  alignObjectMapsByDescriptionEndpoint(oldMap, newMap, ["lag", "port", "interface"]);
   const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])].sort(compareObjectKeys);
   const items = [];
 
@@ -4927,6 +9071,8 @@ function compareObjects(oldObjects, newObjects, options) {
     if (key.startsWith("global:")) return;
     const oldObject = oldMap.get(key);
     const newObject = newMap.get(key);
+    if (!oldObject && isObjectSuppressedByPolicy(newObject, "new", options.profile)) return;
+    if (!newObject && isObjectSuppressedByPolicy(oldObject, "old", options.profile)) return;
     if (!oldObject) return items.push(buildReportItem("added", key, null, newObject, "신규 config에만 존재하는 객체입니다."));
     if (!newObject) return items.push(buildReportItem("missing", key, oldObject, null, "신규 config에서 누락된 객체입니다."));
     const objectRequiredItems = buildObjectRequiredItems(oldObject, newObject, options.profile);
@@ -4950,7 +9096,10 @@ function compareObjects(oldObjects, newObjects, options) {
   return {
     items: mergedItems,
     visibleItems: filterItems(mergedItems, options),
-    diffRows: buildDiffRows(selectors.oldInput.value, selectors.newInput.value, options),
+
+    // Semantic Preview와 상단 diff 창의 source-of-truth를 통일한다.
+    diffRows: buildPairedObjectDiffRows(oldMap, newMap, comparedObjectKeys),
+
     oldObjects,
     newObjects,
     summary: {
@@ -4962,6 +9111,231 @@ function compareObjects(oldObjects, newObjects, options) {
       syntax: 0,
       required: mergedItems.filter((item) => item.type === "required").length,
     },
+  };
+}
+
+function alignObjectMapsByDescriptionEndpoint(oldMap, newMap, objectTypes = []) {
+  const targetTypes = new Set(objectTypes.map(canonicalizeComparableLine).filter(Boolean));
+  const oldObjects = [...oldMap.entries()].filter(([, object]) => isEndpointAlignedObject(object, targetTypes));
+  const newObjects = [...newMap.entries()].filter(([, object]) => isEndpointAlignedObject(object, targetTypes));
+  const usedNewKeys = new Set();
+
+  oldObjects.forEach(([oldKey, oldObject]) => {
+    if (newMap.has(oldKey)) return;
+
+    const objectType = canonicalizeComparableLine(oldObject.type || oldObject.normalizedType || oldObject.sourceType || "");
+    const oldEndpoints = new Set(objectDescriptionEndpoints(oldObject));
+    if (!oldEndpoints.size) return;
+
+    const candidates = newObjects.filter(([newKey, newObject]) => {
+      if (usedNewKeys.has(newKey)) return false;
+      if (!newMap.has(newKey)) return false;
+      const newType = canonicalizeComparableLine(newObject.type || newObject.normalizedType || newObject.sourceType || "");
+      if (newType !== objectType) return false;
+      return objectDescriptionEndpoints(newObject).some((endpoint) => oldEndpoints.has(endpoint));
+    });
+
+    if (candidates.length !== 1) return;
+
+    const [newKey, newObject] = candidates[0];
+    if (newKey === oldKey) return;
+
+    newMap.delete(newKey);
+    newMap.set(oldKey, {
+      ...newObject,
+      key: oldKey,
+      originalKey: newObject.key || newKey,
+      descriptionEndpointMappedFrom: newKey,
+    });
+    usedNewKeys.add(newKey);
+  });
+}
+
+function isEndpointAlignedObject(object = {}, targetTypes = new Set()) {
+  const objectType = canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "");
+  return targetTypes.has(objectType);
+}
+
+function objectDescriptionEndpoints(object = {}) {
+  const description =
+    [...(object.rawLines || []), ...(object.lines || [])]
+      .map(extractDescriptionValue)
+      .find(Boolean) ||
+    object.canonicalFields?.description ||
+    object.fields?.description ||
+    object.description ||
+    "";
+
+  return descriptionEndpointCandidates(description);
+}
+
+function descriptionEndpointCandidates(description = "") {
+  const segments = String(description || "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^#+|#+$/g, "")
+    .split(/[,;]+/)
+    .flatMap((segment) => {
+      const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
+      return [
+        cleanSegment,
+        ...cleanSegment.split(/\s+/),
+      ];
+    });
+
+  return [...new Set(segments
+    .map((segment) => normalizeDescriptionEndpoint(segment))
+    .filter(isLikelyDescriptionEndpoint))];
+}
+
+function normalizeDescriptionEndpoint(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function isLikelyDescriptionEndpoint(value = "") {
+  if (!value) return false;
+  if (!/[a-z]/i.test(value) || !/\d/.test(value)) return false;
+  if (!value.includes("-")) return false;
+  if (/^(lag|port|po|te|gi|ge|xe|et|eth|ethernet|ae)[-_/]?\w*/i.test(value)) return false;
+  if (/^(to|from|via|stby|sby|standby|active|fiber)$/i.test(value)) return false;
+  return true;
+}
+
+function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {
+  const rows = [];
+
+  keys.forEach((key, objectIndex) => {
+    const oldObject = oldMap.get(key) || null;
+    const newObject = newMap.get(key) || null;
+    const objectStatus = pairedObjectStatus(oldObject, newObject);
+    const objectMatched = Boolean(oldObject && newObject);
+
+    const oldLines = getObjectDisplayLines(oldObject);
+    const newLines = getObjectDisplayLines(newObject);
+    const maxLines = Math.max(oldLines.length, newLines.length, 1);
+
+    for (let lineIndex = 0; lineIndex < maxLines; lineIndex += 1) {
+      const oldLine = oldLines[lineIndex] || null;
+      const newLine = newLines[lineIndex] || null;
+
+      rows.push({
+        oldRow: oldLine
+          ? buildPairedObjectLineRow(oldObject, oldLine, objectIndex, lineIndex, maxLines, "old", objectStatus, objectMatched)
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "old", objectStatus, objectMatched),
+        newRow: newLine
+          ? buildPairedObjectLineRow(newObject, newLine, objectIndex, lineIndex, maxLines, "new", objectStatus, objectMatched)
+          : buildPairedPlaceholderRow(oldObject || newObject, objectIndex, lineIndex, maxLines, "new", objectStatus, objectMatched),
+        oldState: oldLine ? (objectStatus === "old-only" ? "missing" : "equal") : "placeholder",
+        newState: newLine ? (objectStatus === "new-only" ? "added" : "equal") : "placeholder",
+        semanticCovered: true,
+        semanticReason: "paired-object-block",
+        objectMatched,
+        semanticObjectLine: true,
+        semanticObjectStart: lineIndex === 0,
+        semanticObjectEnd: lineIndex === maxLines - 1,
+      });
+    }
+  });
+
+  return rows;
+}
+
+function pairedObjectStatus(oldObject = null, newObject = null) {
+  if (oldObject && newObject) {
+    return hasPairedObjectDifference(oldObject, newObject) ? "changed" : "matched";
+  }
+  return oldObject ? "old-only" : "new-only";
+}
+
+function hasPairedObjectDifference(oldObject = null, newObject = null) {
+  if (!oldObject || !newObject) return false;
+  if (compareCanonicalObjects(oldObject, newObject, state.profileDraft || {}).length) return true;
+  if (!hasCanonicalCompareSurface(oldObject, newObject)) {
+    return hasUnexplainedObjectDifference(oldObject, newObject, []);
+  }
+  return false;
+}
+
+function getObjectDisplayLines(object) {
+  if (!object) return [];
+  if (Array.isArray(object.rawLines) && object.rawLines.length) return object.rawLines;
+  if (Array.isArray(object.lines) && object.lines.length) return object.lines;
+  return [];
+}
+
+function buildPairedObjectLineRow(object, line, objectIndex, lineIndex, maxLines, side, objectStatus = "matched", objectMatched = true) {
+  const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
+  const objectKey = object?.key || `${objectType}:${object?.name || object?.normalizedIdentity || objectIndex}`;
+  const lineText = String(line || "");
+  const semanticField = inferSemanticFieldNameForLineContext(lineText, {
+    objectType,
+    object,
+    rawLines: getObjectDisplayLines(object),
+    lineIndex,
+  });
+  const identity =
+    object?.normalizedIdentity ||
+    object?.identity ||
+    object?.name ||
+    object?.sourceName ||
+    object?.id ||
+    objectIndex;
+
+  return {
+    number: lineIndex + 1,
+    text: lineText,
+    key: `${objectKey}:${side}:${lineIndex}`,
+    objectKey,
+    objectIdentity: identity,
+    objectStatus,
+    objectScore: objectMatched ? 100 : "",
+    semanticPairKey: objectKey,
+    semanticObjectIndex: objectIndex,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: lineIndex === maxLines - 1,
+    normalized: canonicalizeComparableLine(lineText),
+    semanticField,
+    highlights: buildScopedLineSemanticHighlights(lineText, objectType, object, lineIndex),
+    objectMatched,
+    semanticCovered: true,
+    semanticReason: "paired-object-block-line",
+  };
+}
+
+function buildPairedPlaceholderRow(object, objectIndex, lineIndex, maxLines, side, objectStatus = "matched", objectMatched = true) {
+  const objectType = object?.type || object?.normalizedType || object?.sourceType || "object";
+  const objectKey = object?.key || `${objectType}:placeholder:${objectIndex}`;
+  const identity =
+    object?.normalizedIdentity ||
+    object?.identity ||
+    object?.name ||
+    object?.sourceName ||
+    object?.id ||
+    objectIndex;
+
+  return {
+    number: "",
+    text: "",
+    key: `${objectKey}:${side}:placeholder:${lineIndex}`,
+    objectKey,
+    objectIdentity: identity,
+    objectStatus,
+    objectScore: objectMatched ? 100 : "",
+    semanticPairKey: objectKey,
+    semanticObjectIndex: objectIndex,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: lineIndex === maxLines - 1,
+    normalized: "",
+    semanticField: "",
+    highlights: [],
+    placeholder: true,
+    hidden: true,
+    objectMatched,
+    semanticCovered: true,
+    semanticReason: "paired-object-placeholder",
   };
 }
 
@@ -4982,7 +9356,7 @@ function compareCanonicalObjects(oldObject, newObject, profile = state.profileDr
     const policy = findProfilePolicyForField(oldObject.type, field, profile)?.policy
       || profile?.objects?.[oldObject.type]?.policies?.[field]
       || "compare";
-    if (policy === "ignore") return;
+    if (policy === "ignore" || policy === "exception") return;
     const oldHas = oldFields[field] !== undefined;
     const newHas = newFields[field] !== undefined;
     if (["presence", "required", "conditional"].includes(policy)) {
@@ -5001,7 +9375,7 @@ function compareCanonicalObjects(oldObject, newObject, profile = state.profileDr
       details.push({
         kind: oldHas ? "missing-line" : "added-line",
         field,
-        rule: oldHas ? "기존 필드가 신규 객체에 없음" : "신규 필드가 기존 객체에 없음",
+        rule: oldHas ? "기존 설정 항목이 신규 설정에 없음" : "신규 설정 항목이 기존 설정에 없음",
         oldText: oldHas ? `${field} ${oldFields[field]}` : "-",
         newText: newHas ? `${field} ${newFields[field]}` : "-",
       });
@@ -5031,7 +9405,7 @@ function canonicalComparableFields(object, profile = state.profileDraft) {
     const policy = findProfilePolicyForField(object.type, normalizedField, profile)?.policy
       || profile?.objects?.[object.type]?.policies?.[normalizedField]
       || "compare";
-    if (!normalizedField || value === undefined || value === "" || policy === "ignore") return result;
+    if (!normalizedField || value === undefined || value === "" || policy === "ignore" || policy === "exception") return result;
     result[normalizedField] = applySemanticPolicyNormalize(normalizedField, value, object.type, object.source, profile);
     return result;
   }, {});
@@ -5107,10 +9481,10 @@ function buildPolicyRequiredItems(oldObject, newObject, profile) {
     if (!violated) return [];
 
     const defaultMessage = {
-      required: `필드 '${field}'는 신규 객체에 반드시 있어야 합니다.`,
-      presence: `필드 '${field}'는 양쪽 객체에서 존재 여부가 같아야 합니다.`,
-      conditional: `기존 객체에 있는 필드 '${field}'가 신규 객체에 없습니다.`,
-    }[policy.policy] || `필드 '${field}' 정책을 위반했습니다.`;
+      required: `설정 항목 '${field}'는 신규 설정에 반드시 있어야 합니다.`,
+      presence: `설정 항목 '${field}'는 양쪽 설정에서 존재 여부가 같아야 합니다.`,
+      conditional: `기존 설정에 있는 설정 항목 '${field}'가 신규 설정에 없습니다.`,
+    }[policy.policy] || `설정 항목 '${field}' 정책을 위반했습니다.`;
     return [{
       type: "required",
       key: `policy-required:${oldObject.key}:${field}`,
@@ -5197,7 +9571,7 @@ function buildObjectChangeDetails(oldObject, newObject, requiredItems = []) {
     details.push({
       kind: "missing-line",
       field: oldLine.field,
-      rule: "기존 라인이 신규 객체에 없음",
+      rule: "기존 라인이 신규 설정에 없음",
       oldText: oldLine.text,
       newText: "-",
     });
@@ -5208,7 +9582,7 @@ function buildObjectChangeDetails(oldObject, newObject, requiredItems = []) {
     details.push({
       kind: "added-line",
       field: newLine.field,
-      rule: "신규 라인이 기존 객체에 없음",
+      rule: "신규 라인이 기존 설정에 없음",
       oldText: "-",
       newText: newLine.text,
     });
@@ -5240,12 +9614,12 @@ function groupDetailLinesByField(lines) {
 }
 
 function summarizeObjectChange(details) {
-  if (!details.length) return "객체 내용이 다릅니다.";
+  if (!details.length) return "설정 내용이 다릅니다.";
   const first = details[0];
-  if (first.kind === "field-changed") return `필드 '${first.field}' 값이 다릅니다.`;
-  if (first.kind === "missing-line") return `필드 '${first.field}'가 신규 객체에 없습니다.`;
-  if (first.kind === "added-line") return `필드 '${first.field}'가 신규 객체에 추가되었습니다.`;
-  return "객체 내용이 다릅니다.";
+  if (first.kind === "field-changed") return `설정 항목 '${first.field}' 값이 다릅니다.`;
+  if (first.kind === "missing-line") return `설정 항목 '${first.field}'가 신규 설정에 없습니다.`;
+  if (first.kind === "added-line") return `설정 항목 '${first.field}'가 신규 설정에 추가되었습니다.`;
+  return "설정 내용이 다릅니다.";
 }
 
 function hasComparableField(object, field) {
@@ -5370,17 +9744,40 @@ function buildDiffRows(oldText, newText, options) {
 }
 
 const semanticFieldOrder = [
+  "lag",
+  "member-port",
   "route",
-  "neighbor",
-  "interface",
-  "description",
-  "authentication-key",
-  "group",
-  "peer-as",
   "next-hop",
   "tag",
+  "description",
+  "metric",
+  "mode",
+  "lacp-mode",
+  "lacp.administrative-key",
+  "lacp-xmit-interval",
+  "access.adapt-qos.mode",
+  "neighbor",
+  "authentication-key",
+  "group",
   "state",
   "admin-state",
+  "peer-as",
+  "interface",
+  "subscriber-interface",
+  "group-interface",
+  "address",
+  "sap",
+  "ingress-filter",
+  "ingress-qos",
+  "egress-filter",
+  "egress-qos",
+  "auth-policy",
+  "dhcp.filter",
+  "dhcp.server",
+  "icmp.mask-reply",
+  "icmp.redirects",
+  "icmp.ttl-expired",
+  "icmp.unreachables",
 ];
 
 const commonFieldAliases = {
@@ -5391,10 +9788,12 @@ const commonFieldAliases = {
   "authentication-key": "authentication-key",
   "auth-key": "authentication-key",
   "group": "group",
+  "peer-group": "group",
   "peer-as": "peer-as",
   "remote-as": "peer-as",
   "next-hop": "next-hop",
   "nexthop": "next-hop",
+  "gateway": "next-hop",
   "tag": "tag",
   "preference": "preference",
   "metric": "metric",
@@ -5410,12 +9809,37 @@ const commonFieldAliases = {
   "vlan": "vlan",
   "sap": "sap",
   "port": "port",
+  "member-port": "member-port",
   "neighbor": "neighbor",
   "interface": "interface",
+  "subscriber-interface": "subscriber-interface",
+  "group-interface": "group-interface",
   "lag": "lag",
+  "lacp-mode": "lacp-mode",
+  "administrative-key": "lacp.administrative-key",
+  "lacp.administrative-key": "lacp.administrative-key",
+  "lacp-xmit-interval": "lacp-xmit-interval",
+  "adapt-qos": "access.adapt-qos.mode",
+  "access.adapt-qos.mode": "access.adapt-qos.mode",
   "route": "route",
   "static-route-entry": "route",
 };
+
+const INTERFACE_CONTEXT_ONLY_FIELDS = new Set([
+  "configure",
+  "service",
+  "ies",
+  "vprn",
+  "router",
+  "base",
+  "ipv4",
+  "ipv6",
+  "interface",
+]);
+
+function isInterfaceIcmpLine(line = "") {
+  return /\bicmp\s+(?:mask-reply|redirects|ttl-expired|unreachables)\b/.test(canonicalizeComparableLine(line));
+}
 
 function stripConfigureEnvelope(line = "") {
   return String(line)
@@ -5424,51 +9848,1551 @@ function stripConfigureEnvelope(line = "") {
     .trim();
 }
 
+function buildStaticRouteIdentityFromFields(fields = {}, fallback = "") {
+  const route = canonicalizeComparableLine(fields.route || fields.prefix || fallback || "");
+  const routingContext = canonicalizeComparableLine(fields["routing-context"] || fields.vrf || fields.vprn || "");
+  return route && routingContext ? `${routingContext}|${route}` : route;
+}
+
+function buildInterfaceAddressFromFields(fields = {}) {
+  const address = canonicalizeComparableLine(fields.address || fields.prefix || "");
+  const prefixLength = canonicalizeComparableLine(fields["prefix-length"] || "");
+
+  if (address && prefixLength && !address.includes("/")) {
+    return `${address}/${prefixLength}`;
+  }
+
+  return address;
+}
+
+function mergeCanonicalFieldValue(current = "", incoming = "") {
+  const next = canonicalizeComparableLine(incoming);
+  if (!next) return current;
+  const values = String(current || "")
+    .split(/\s*,\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!values.includes(next)) values.push(next);
+  return values.join(", ");
+}
+
+function normalizeInterfaceCanonicalFields(fields = {}) {
+  const result = { ...(fields || {}) };
+  const address = buildInterfaceAddressFromFields(result);
+
+  if (address) {
+    result.address = address;
+  }
+
+  return result;
+}
+
+function normalizeSubscriberInterfaceCanonicalFields(fields = {}) {
+  const result = normalizeInterfaceCanonicalFields(fields);
+  if (result["subscriber-interface"]) {
+    result["subscriber-interface"] = canonicalizeComparableLine(result["subscriber-interface"]);
+  }
+  if (result["group-interface"]) {
+    result["group-interface"] = canonicalizeComparableLine(result["group-interface"]);
+  }
+  if (result.sap) result.sap = canonicalizeComparableLine(result.sap);
+  if (result["dhcp.server"]) result["dhcp.server"] = canonicalizeComparableLine(result["dhcp.server"]).replace(/^\[|\]$/g, "");
+  if (result["sub-sla-mgmt.defaults.subscriber-id"] === "use-auto-id") {
+    result["sub-sla-mgmt.defaults.subscriber-id"] = "auto-id";
+  }
+  if (result["static-host.subscriber-id"] === "subscriber-sap-id") {
+    result["static-host.subscriber-id"] = "use-sap-id";
+  }
+  return result;
+}
+
+function buildInterfaceIdentityFromFields(fields = {}, fallback = "", { preferAddress = true } = {}) {
+  const address = buildInterfaceAddressFromFields(fields);
+  const routingContext = canonicalizeComparableLine(fields["routing-context"] || fields.vrf || fields.vprn || "");
+  const interfaceName = canonicalizeComparableLine(fields.interface || fallback || "");
+
+  if (preferAddress && address) {
+    return routingContext ? `${routingContext}|${address}` : address;
+  }
+
+  return interfaceName || (routingContext && address ? `${routingContext}|${address}` : address);
+}
+
+function buildSubscriberInterfaceIdentityFromFields(fields = {}, fallback = "", { preferAddress = true } = {}) {
+  const normalizedFields = normalizeSubscriberInterfaceCanonicalFields(fields);
+  const address = buildInterfaceAddressFromFields(normalizedFields);
+  const routingContext = canonicalizeComparableLine(
+    normalizedFields["routing-context"] || normalizedFields.vrf || normalizedFields.vprn || ""
+  );
+  if (preferAddress && address) {
+    return routingContext ? `${routingContext}|${address}` : address;
+  }
+  return canonicalizeComparableLine(normalizedFields["subscriber-interface"] || fallback || "");
+}
+
 function normalizeFieldName(field = "") {
   const normalized = canonicalizeComparableLine(String(field).trim());
   return commonFieldAliases[normalized] || normalized;
 }
 
 function buildSemanticObjectDiffRows(oldText, newText, options) {
-  const oldObjects = mergeObjectsByKey(parseConfig(oldText, options, "old"));
-  const newObjects = mergeObjectsByKey(parseConfig(newText, options, "new"));
-  
-  console.log("[semantic object diff] old objects", oldObjects.map((obj) => ({
-    type: obj.type,
-    sourceType: obj.sourceType,
-    name: obj.name,
-    key: obj.key,
-    identity: obj.identity,
-    startLine: obj.startLine,
-    lines: obj.lines,
-  })));
+  return buildSemanticPlanDiffRows(oldText, newText, options);
+}
 
-  console.log("[semantic object diff] new objects", newObjects.map((obj) => ({
-    type: obj.type,
-    sourceType: obj.sourceType,
-    name: obj.name,
-    key: obj.key,
-    identity: obj.identity,
-    startLine: obj.startLine,
-    lines: obj.lines,
-  })));
+function isObjectSuppressedByPolicy(object, source, profile = state.profileDraft) {
+  if (!object) return false;
+  const lines = object.rawLines?.length ? object.rawLines : object.lines || [];
+  const fields = object.canonicalFields || object.fields || {};
+  const lineSuppressed = lines.length > 0 && lines.every((line) => evaluatePolicyContext({
+    profile,
+    rawLine: line,
+    normalizedLine: canonicalizeComparableLine(line),
+    side: source,
+    objectType: object.type || object.normalizedType || "",
+    objectKey: object.key || "",
+  }).suppressed);
+  const fieldSuppressed = Object.entries(fields).length > 0 && Object.entries(fields).every(([field, value]) => evaluatePolicyContext({
+    profile,
+    rawLine: "",
+    normalizedLine: "",
+    side: source,
+    objectType: object.type || object.normalizedType || "",
+    objectKey: object.key || "",
+    field,
+    fieldValue: value,
+  }).suppressed);
+  return lineSuppressed || fieldSuppressed;
+}
 
-  if (!oldObjects.length && !newObjects.length) return [];
+function buildSemanticRuntime({
+  oldText = selectors.oldInput?.value || "",
+  newText = selectors.newInput?.value || "",
+  options = getOptions(),
+  includeManualCandidates = false,
+} = {}) {
+  const { oldVendor, newVendor } = getCurrentVendorPresetForSemanticPreview();
 
-  const oldMap = buildObjectMap(oldObjects);
-  const newMap = buildObjectMap(newObjects);
-  const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])].sort(compareObjectKeys);
+  const oldResult = normalizeConfig({
+    vendor: oldVendor,
+    profile: state.profileDraft,
+    configText: oldText,
+    side: "old",
+  });
+
+  const newResult = normalizeConfig({
+    vendor: newVendor,
+    profile: state.profileDraft,
+    configText: newText,
+    side: "new",
+  });
+
+  const manualMap =
+    state.profileDraft?.manualMap &&
+      Object.keys(state.profileDraft.manualMap).length
+      ? state.profileDraft.manualMap
+      : loadManualMapFromLocalStorage();
+
+  const matches = matchNormalizedObjects({
+    oldObjects: oldResult.objects,
+    newObjects: newResult.objects,
+    manualMap,
+    profile: state.profileDraft || {},
+  });
+
+  const analysisContext = buildAnalysisContext({
+    mode: options.analysisMode,
+    scope: options.compareScope,
+    profile: state.profileDraft || {},
+    selectedObjects: options.selectedObjects,
+    oldText,
+    newText,
+  });
+  const rawAudit = runStandardsAuditForSides({
+    oldResult,
+    newResult,
+    profile: state.profileDraft || {},
+    oldVendor,
+    newVendor,
+  });
+  const audit = filterAuditForModeScope(rawAudit, analysisContext);
+  const rawPlan = createComparisonPlan(matches, state.profileDraft || {});
+  const scopedRawPlan = filterPlanByModeScope(
+    filterSemanticPlanByScope(rawPlan, options.selectedObjects),
+    {
+      scope: analysisContext.compareScope,
+      selectedObjects: options.selectedObjects,
+    },
+  );
+  const scopedPlan = attachAuditFindingsToPlan(scopedRawPlan, audit);
+  const sortedPlan = options.sortObjects === false
+    ? scopedPlan
+    : sortSemanticComparisonPlan(scopedPlan);
+  const plan = includeManualCandidates
+    ? sortSemanticComparisonPlan(attachManualCandidatesToPlan(sortedPlan, oldResult.objects, newResult.objects))
+    : sortedPlan;
+
+  return {
+    oldVendor,
+    newVendor,
+    oldResult,
+    newResult,
+    matches,
+    plan,
+    manualMap,
+    audit,
+    rawAudit,
+    analysisContext,
+  };
+}
+
+function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
+  const runtime = buildSemanticRuntime({ oldText, newText, options });
+  const plan = runtime.plan;
+  const rows = buildSemanticObjectBlockRows(plan);
+
+  return appendUnmatchedRawLinesToSemanticRows(
+    rows,
+    runtime.oldResult?.preprocess?.text || oldText,
+    runtime.newResult?.preprocess?.text || newText,
+    plan
+  );
+}
+
+function semanticPlanSortKey(item = {}) {
+  const object = item.oldObject || item.newObject || {};
+  const type = item.objectType || object.normalizedType || object.type || object.sourceType || "unknown";
+  const identity =
+    object.normalizedIdentity ||
+    object.identity ||
+    object.name ||
+    object.sourceName ||
+    object.id ||
+    "";
+  const line = Number(object.startLine || object.lineNo || 0);
+
+  return {
+    type,
+    identity: String(identity),
+    line,
+    rank: objectTypeRank(type),
+  };
+}
+
+function filterSemanticPlanByScope(plan = [], selectedObjects = objectTypes) {
+  const allowed = new Set(Array.isArray(selectedObjects) && selectedObjects.length ? selectedObjects : objectTypes);
+  return plan.filter((item) => allowed.has(item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType));
+}
+
+function sortSemanticComparisonPlan(plan = []) {
+  return [...plan].sort((left, right) => {
+    const a = semanticPlanSortKey(left);
+    const b = semanticPlanSortKey(right);
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    const identityCompare = a.identity.localeCompare(b.identity, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+    if (identityCompare !== 0) return identityCompare;
+    return a.line - b.line;
+  });
+}
+
+function buildSemanticObjectBlockRows(plan = []) {
   const rows = [];
 
-  keys.forEach((key) => {
-    const oldObject = oldMap.get(key);
-    const newObject = newMap.get(key);
-    if (oldObject && newObject) {
-      rows.push(...buildMatchedObjectDiffRows(oldObject, newObject));
+  plan.forEach((item, objectIndex) => {
+    const oldObject = item.oldObject || null;
+    const newObject = item.newObject || null;
+
+    if (objectIndex > 0) {
+      rows.push(buildSemanticObjectGapRow(item, objectIndex));
+    }
+
+    rows.push({
+      semanticBlockRow: true,
+      oldRow: buildSemanticObjectBlockRow({
+        side: "old",
+        item,
+        object: oldObject,
+        objectIndex,
+      }),
+      newRow: buildSemanticObjectBlockRow({
+        side: "new",
+        item,
+        object: newObject,
+        objectIndex,
+      }),
+      oldState: oldObject ? semanticBlockState(item, "old") : "placeholder",
+      newState: newObject ? semanticBlockState(item, "new") : "placeholder",
+      semanticCovered: isSemanticItemFullyMatched(item),
+      semanticReason: item.reason || "",
+      objectMatched: isSemanticItemFullyMatched(item),
+      semanticObjectLine: true,
+      semanticObjectStart: true,
+      semanticObjectEnd: true,
+    });
+  });
+
+  return rows;
+}
+
+function buildSemanticObjectGapRow(item = {}, objectIndex = 0) {
+  const key = `${item.id || "semantic-object"}:gap:${objectIndex}`;
+  return {
+    semanticGapRow: true,
+    oldRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}:old`,
+      objectKey: `${item.objectType || "object"}:gap:${objectIndex}`,
+      semanticPairKey: "",
+      placeholder: true,
+      hidden: true,
+    },
+    newRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}:new`,
+      objectKey: `${item.objectType || "object"}:gap:${objectIndex}`,
+      semanticPairKey: "",
+      placeholder: true,
+      hidden: true,
+    },
+    oldState: "semantic-gap",
+    newState: "semantic-gap",
+    semanticCovered: true,
+    objectMatched: false,
+  };
+}
+
+function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
+  const objectStatus = semanticRenderStatusForSide(item, object, side);
+  if (!object) {
+    return {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${item.id || "semantic-object"}:${side}:empty:${objectIndex}`,
+      objectKey: `${item.objectType || "object"}:empty:${objectIndex}`,
+      semanticObjectIndex: objectIndex,
+      semanticPairKey: item.id || "",
+      semanticField: "",
+      objectStatus,
+      objectScore: item.score ?? "",
+      objectReason: item.reason || "",
+      objectMatched: false,
+      semanticCovered: true,
+      semanticReason: "semantic-object-placeholder",
+      highlights: [],
+      placeholder: true,
+      semanticObjectBlock: true,
+      semanticObjectStart: true,
+      semanticObjectEnd: true,
+    };
+  }
+
+  const objectType = item.objectType || object.normalizedType || object.type || object.sourceType || "object";
+  const identity =
+    object.normalizedIdentity ||
+    object.identity ||
+    object.name ||
+    object.sourceName ||
+    object.id ||
+    "-";
+
+  const objectKey =
+    object.key ||
+    `${objectType}:${identity}`;
+
+  const rawLines = getSemanticObjectRawLines(object);
+  const fields = object.fields || object.canonicalFields || {};
+  const lineMatches = Array.isArray(item.lineMatches) ? item.lineMatches : [];
+  const matchIndex = buildSemanticLineMatchIndex(lineMatches, side, item);
+
+  return {
+    number: "",
+    text: renderSemanticObjectBlockHtml({
+      side,
+      item,
+      object,
+      objectType,
+      identity,
+      rawLines,
+      fields,
+      matchIndex,
+    }),
+    rawHtml: true,
+    normalized: canonicalizeComparableLine(`${objectType} ${identity}`),
+    key: `${item.id || "semantic-object"}:${side}:block:${objectIndex}`,
+    objectKey,
+    objectIdentity: identity,
+    semanticObjectIndex: objectIndex,
+    objectStatus,
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    semanticPairKey: item.id || "",
+    semanticField: "",
+    objectMatched: isSemanticItemFullyMatched(item),
+    semanticCovered: true,
+    semanticReason: item.reason || "",
+    highlights: [],
+    semanticObjectBlock: true,
+    semanticObjectStart: true,
+    semanticObjectEnd: true,
+  };
+}
+
+function semanticRenderStatusForSide(item = {}, object = null, side = "") {
+  if (item.comparisonExcluded || item.excluded) return "comparison-excluded";
+  if (item.policySuppressed || item.suppressed) return "suppressed";
+  if (object && side === "old" && !item.newObject) return "old-only";
+  if (object && side === "new" && !item.oldObject) return "new-only";
+  if (!object) {
+    if (side === "old" && item.newObject) return "new-only";
+    if (side === "new" && item.oldObject) return "old-only";
+    return item.status || "unmatched";
+  }
+  const visualStatus = getSemanticDiffBlockState(item);
+  if (visualStatus === "partial" && shouldRenderSemanticCleanMatch(item)) return "matched";
+  if (["partial", "ambiguous", "manual"].includes(visualStatus)) return visualStatus;
+  return item.status || "";
+}
+
+function isSemanticItemFullyMatched(item = {}) {
+  return item.status === "matched" && Boolean(item.oldObject && item.newObject);
+}
+
+function semanticBlockState(item = {}, side = "") {
+  const visualStatus = getSemanticDiffBlockState(item);
+  if (visualStatus === "partial" && shouldRenderSemanticCleanMatch(item)) return "equal";
+  if (visualStatus === "partial" || visualStatus === "ambiguous") return "changed";
+  if (item.status === "matched" || item.status === "candidate") return "equal";
+  if (item.status === "old-only") return side === "old" ? "missing" : "placeholder";
+  if (item.status === "new-only") return side === "new" ? "added" : "placeholder";
+  return "changed";
+}
+
+function buildSemanticLineMatchIndex(lineMatches = [], side = "", item = {}) {
+  const index = new Map();
+
+  lineMatches.forEach((lineMatch, matchIndex) => {
+    const lines = side === "old" ? lineMatch.oldLines : lineMatch.newLines;
+    const field =
+      lineMatch.field ||
+      lineMatch.semanticField ||
+      inferSemanticFieldFromLineMatch(lineMatch);
+    const relationKey = `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(lineMatch, matchIndex)}`;
+
+    (Array.isArray(lines) ? lines : []).forEach((line) => {
+      const key = canonicalizeComparableLine(line);
+      if (!key) return;
+      index.set(key, {
+        field,
+        status: lineMatch.status || "equal",
+        reason: lineMatch.reason || "semantic-line-match",
+        relationKey,
+        relationState: semanticLineRelationState(lineMatch, field, item),
+      });
+    });
+  });
+
+  return index;
+}
+
+function buildLineRelationKeyFromMatch(lineMatch = {}, matchIndex = 0) {
+  const field =
+    lineMatch.field ||
+    lineMatch.semanticField ||
+    inferSemanticFieldFromLineMatch(lineMatch) ||
+    `line-${matchIndex}`;
+  const oldValue = lineMatch.oldValue ?? lineMatch.oldLines?.[0] ?? "";
+  const newValue = lineMatch.newValue ?? lineMatch.newLines?.[0] ?? "";
+  return `${cssSafeClassName(field)}:${matchIndex}:${canonicalizeComparableLine(oldValue)}:${canonicalizeComparableLine(newValue)}`;
+}
+
+function findSemanticLineRelationForRawLine({
+  line,
+  objectType,
+  item,
+  matchIndex,
+  object = null,
+  rawLines = [],
+  lineIndex = -1,
+}) {
+  const normalized = canonicalizeComparableLine(line);
+  const exact = matchIndex.get(normalized);
+  const field = exact?.field || inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines,
+    lineIndex,
+  }) || "";
+
+  if (!field || isSemanticStructuralLine(line)) {
+    return {
+      field,
+      relationKey: "",
+      relationState: "",
+    };
+  }
+
+  if (exact?.relationKey) {
+    return exact;
+  }
+
+  const lineMatches = Array.isArray(item?.lineMatches) ? item.lineMatches : [];
+  const fieldMatches = lineMatches
+    .map((lineMatch, index) => ({
+      lineMatch,
+      index,
+      inferredField:
+        lineMatch.field ||
+        lineMatch.semanticField ||
+        inferSemanticFieldFromLineMatch(lineMatch),
+    }))
+    .filter(({ lineMatch, inferredField }) =>
+      inferredField === field &&
+      Array.isArray(lineMatch.oldLines) &&
+      Array.isArray(lineMatch.newLines) &&
+      lineMatch.oldLines.length &&
+      lineMatch.newLines.length
+    );
+
+  if (!fieldMatches.length) {
+    return {
+      field,
+      relationKey: "",
+      relationState: "",
+    };
+  }
+
+  const best = fieldMatches[0];
+  return {
+    field,
+    status: best.lineMatch.status || "equal",
+    reason: best.lineMatch.reason || "semantic-field-relation",
+    relationKey: `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(best.lineMatch, best.index)}`,
+    relationState: semanticLineRelationState(best.lineMatch, field, item),
+  };
+}
+
+function inferSemanticFieldFromLineMatch(lineMatch = {}) {
+  const sample =
+    lineMatch.oldLines?.[0] ||
+    lineMatch.newLines?.[0] ||
+    "";
+
+  return inferSemanticFieldName(sample) || "";
+}
+
+function renderSemanticObjectBlockHtml({
+  side,
+  item,
+  object,
+  objectType,
+  identity,
+  rawLines,
+  fields,
+  matchIndex,
+}) {
+  const state = semanticObjectVisualState(item);
+  const stateLabel = item.comparisonExcluded || item.excluded
+    ? "비교 제외됨"
+    : (item.policySuppressed || item.suppressed ? "예외/숨김 처리됨" : getSemanticDiffStatusLabel(item.status));
+  const score = item.score ?? "-";
+  const reason = semanticReasonLabel(item.reason || "-");
+  const fieldCount = Object.keys(fields || {}).length;
+  const sideLabel = side === "old" ? "기존" : "신규";
+  const objectStatus = semanticRenderStatusForSide(item, object, side);
+
+  return `
+    <section class="semantic-diff-object-block semantic-diff-object-${escapeHtml(state)}" data-semantic-object-block="true">
+      <header class="semantic-diff-object-head">
+        <div class="semantic-diff-object-title">
+          <span class="semantic-diff-object-type">${escapeHtml(objectType)}</span>
+          <strong>${escapeHtml(identity)}</strong>
+        </div>
+        <div class="semantic-diff-object-badges">
+          <span class="semantic-diff-badge side">${escapeHtml(sideLabel)}</span>
+          <span class="semantic-diff-badge">${escapeHtml(stateLabel)}</span>
+          <span class="semantic-diff-badge muted">일치도 ${escapeHtml(score)}</span>
+          <span class="semantic-diff-badge muted">설정 항목 ${escapeHtml(fieldCount)}</span>
+        </div>
+      </header>
+      <div class="semantic-diff-object-meta">
+        <span>${escapeHtml(side === "old" ? "기존" : "신규")}</span>
+        <span>연결 방식 ${escapeHtml(reason)}</span>
+      </div>
+      <div class="semantic-diff-object-body">
+        ${rawLines.length
+      ? rawLines.map((line, index) => renderSemanticObjectConfigLine({
+        side,
+        line,
+        index,
+        item,
+        object,
+        objectType,
+        rawLines,
+        fields,
+        matchIndex,
+        objectStatus,
+      })).join("")
+      : `<div class="semantic-diff-empty-line">설정 라인 없음</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function isUnmatchedObjectStatus(status = "") {
+  return [
+    "old-only",
+    "new-only",
+    "unmatched",
+    "unmatched-old",
+    "unmatched-new",
+    "unmatched-source",
+    "unmatched-target",
+    "source-only",
+    "target-only",
+  ].includes(String(status || "").toLowerCase());
+}
+
+function renderSemanticObjectConfigLine({
+  side,
+  line,
+  index,
+  item,
+  object = null,
+  objectType,
+  rawLines = [],
+  fields,
+  matchIndex,
+  objectStatus = "",
+}) {
+  const normalized = canonicalizeComparableLine(line);
+  const matched = findSemanticLineRelationForRawLine({
+    line,
+    objectType,
+    item,
+    matchIndex,
+    object,
+    rawLines,
+    lineIndex: index,
+  });
+  const relationByField = buildSemanticRelationMapByField(item);
+  const field = matched?.field || inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines,
+    lineIndex: index,
+  }) || "";
+  const depth = semanticLineDepth(line);
+  const structural = isSemanticStructuralLine(line);
+  const relationKey = matched?.relationKey || "";
+  const relationState = matched?.relationState || "";
+  const normalizedObjectStatus = String(objectStatus || item?.status || "").toLowerCase();
+  const unmatchedObject = isUnmatchedObjectStatus(normalizedObjectStatus);
+  const classes = [
+    "semantic-diff-config-line",
+    relationKey ? "is-line-related" : "",
+    matched?.status ? "is-matched" : (unmatchedObject ? "is-unmatched" : "is-covered"),
+    relationState ? `line-relation-${cssSafeClassName(relationState)}` : "",
+    normalizedObjectStatus ? `object-status-${cssSafeClassName(normalizedObjectStatus)}` : "",
+    structural ? "is-structural" : "",
+    field ? `field-${cssSafeClassName(field)}` : "",
+  ].filter(Boolean);
+
+  return `
+    <div class="${classes.join(" ")}"
+      data-side="${escapeHtml(side || "")}"
+      data-semantic-line-index="${index}"
+      data-semantic-field="${escapeHtml(field)}"
+      data-line-relation-key="${escapeHtml(relationKey)}"
+      data-line-relation-state="${escapeHtml(relationState)}"
+      data-line-relation-reason="${escapeHtml(matched?.reason || "")}"
+      data-semantic-pair-key="${escapeHtml(item?.id || "")}"
+      data-object-status="${escapeHtml(normalizedObjectStatus)}"
+      style="padding-left:${10 + depth * 16}px">
+      <span class="semantic-diff-line-no">${index + 1}</span>
+      <code>${renderSemanticLineTokens(line, objectType, fields, relationByField, field)}</code>
+      ${field && !structural ? `<span class="semantic-diff-line-field field-${cssSafeClassName(normalizeRelationField(field))}">${escapeHtml(field)}</span>` : ""}
+    </div>
+  `;
+}
+
+function getSemanticDiffStatusLabel(status = "") {
+  return ({
+    matched: "연결됨",
+    candidate: "후보",
+    "old-only": "기존 설정에만 있음",
+    "new-only": "신규 설정에만 있음",
+    ambiguous: "확인 필요",
+    partial: "부분 일치",
+    unknown: "알 수 없음",
+  })[String(status || "unknown").toLowerCase()] || String(status || "알 수 없음").toUpperCase();
+}
+
+function semanticReasonLabel(reason = "") {
+  return ({
+    manual: "사용자가 직접 연결",
+    "manual-candidate": "직접 연결 후보",
+    exact: "정확히 일치",
+    identity: "설정 기준 일치",
+    "semantic-score": "의미 점수 기반",
+    "line-score": "라인 유사도 기반",
+    candidate: "후보",
+  })[String(reason || "").toLowerCase()] || reason;
+}
+
+function buildSemanticRelationMapByField(item = {}) {
+  const map = new Map();
+  (item.lineMatches || []).forEach((lineMatch, index) => {
+    const field =
+      lineMatch.field ||
+      lineMatch.semanticField ||
+      inferSemanticFieldFromLineMatch(lineMatch);
+    if (!field || !lineMatch.oldLines?.length || !lineMatch.newLines?.length) return;
+    if (map.has(field)) return;
+    map.set(field, {
+      key: `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(lineMatch, index)}`,
+      state: semanticLineRelationState(lineMatch, field, item),
+      reason: lineMatch.reason || "semantic-field-relation",
+    });
+  });
+  return map;
+}
+
+function semanticLineDepth(line = "") {
+  const raw = String(line || "");
+  const leading = raw.match(/^\s*/)?.[0]?.length || 0;
+  return Math.min(6, Math.floor(leading / 4));
+}
+
+function isSemanticStructuralLine(line = "") {
+  const text = String(line || "").trim();
+  return text === "exit" || text === "}" || text === "{" || isInterfaceScopeOnlyLine(text);
+}
+
+function renderHighlightedLine(line = "", highlights = [], relationByField = new Map()) {
+  if (!Array.isArray(highlights) || highlights.length === 0) {
+    return escapeHtml(line);
+  }
+
+  const source = String(line || "");
+  const visualTokens = highlights
+    .map((item) => ({
+      token: String(item.token || item.value || "").trim(),
+      kind: item.kind || item.type || "",
+      field: normalizeRelationField(item.field || item.semanticField || ""),
+      className: item.className || "",
+    }))
+    .filter((item) => item.token)
+    .sort((left, right) => right.token.length - left.token.length);
+
+  if (!visualTokens.length) return escapeHtml(source);
+
+  const placeholders = [];
+  let temp = source;
+  dedupeVisualTokens(visualTokens).forEach((item, index) => {
+    const marker = `__SEMANTIC_TOKEN_${index}__`;
+    temp = temp.replace(buildTokenHighlightRegex(item.token), marker);
+    placeholders.push({ marker, item });
+  });
+
+  let html = escapeHtml(temp);
+  placeholders.forEach(({ marker, item }) => {
+    const relation = relationByField.get(item.field);
+    const relationAttrs = relation
+      ? ` data-line-relation-key="${escapeHtml(relation.key)}" data-line-relation-state="${escapeHtml(relation.state)}" data-line-relation-reason="${escapeHtml(relation.reason)}"`
+      : "";
+    const className = [
+      "diff-token-match",
+      `token-color-${tokenColorIndex(item.field || item.token)}`,
+      item.className,
+      item.kind ? `token-kind-${cssSafeClassName(item.kind)}` : "",
+      item.field ? `field-${cssSafeClassName(item.field)}` : "",
+    ].filter(Boolean).join(" ");
+
+    html = html.replaceAll(
+      marker,
+      `<span class="${className}" data-token-kind="${escapeHtml(item.kind)}" data-token-match="semantic" data-semantic-field="${escapeHtml(item.field)}" data-token="${escapeHtml(item.token)}"${relationAttrs}>${escapeHtml(item.token)}</span>`
+    );
+  });
+
+  return html;
+}
+
+function renderSemanticLineTokens(line, objectType, fields, relationByField = new Map(), forcedField = "") {
+  if (selectors.fieldHighlightToggle?.checked === false) {
+    return escapeHtml(line);
+  }
+
+  const forcedHighlights = forcedField
+    ? buildForcedSemanticTokens(line, forcedField).map((item) => ({
+      field: item.field,
+      value: item.value || item.token,
+      token: item.token,
+      role: item.role || "terminal",
+      colorGroup: item.colorSeed || item.field,
+      kind: item.kind || tokenHighlightKind(item.token),
+    }))
+    : [];
+
+  const highlights = forcedHighlights.length ? forcedHighlights : buildLineSemanticHighlights(
+    line,
+    objectType,
+    fields || {},
+    []
+  );
+
+  if (!highlights.length) {
+    return escapeHtml(line);
+  }
+
+  return renderHighlightedLine(line, highlights, relationByField);
+}
+
+function buildScopedLineSemanticHighlights(line, objectType, object = null, lineIndex = -1, fieldOccurrences = []) {
+  const fields = object?.fields || object?.canonicalFields || {};
+  const scopedField = inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines: getSemanticObjectRawLines(object),
+    lineIndex,
+  });
+  const genericField = inferSemanticFieldName(line);
+  const forcedHighlights = scopedField && scopedField !== genericField
+    ? buildForcedSemanticTokens(line, scopedField).map((item) => ({
+      field: item.field,
+      value: item.value || item.token,
+      token: item.token,
+      role: item.role || "terminal",
+      colorGroup: item.colorSeed || item.field,
+      kind: item.kind || tokenHighlightKind(item.token),
+    }))
+    : [];
+
+  return forcedHighlights.length
+    ? forcedHighlights
+    : buildLineSemanticHighlights(line, objectType, fields, fieldOccurrences);
+}
+
+function cssSafeClassName(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "unknown";
+}
+
+function buildSemanticObjectLineRows(item = {}, objectIndex = 0) {
+  const oldObject = item.oldObject || null;
+  const newObject = item.newObject || null;
+
+  if (Array.isArray(item.lineMatches) && item.lineMatches.length) {
+    return buildSemanticMappedLineRows(item, objectIndex, oldObject, newObject);
+  }
+
+  const oldLines = getSemanticObjectRawLines(oldObject);
+  const newLines = getSemanticObjectRawLines(newObject);
+
+  const maxLines = Math.max(oldLines.length, newLines.length);
+  const rows = [];
+
+  const status =
+    item.status === "matched" || item.status === "candidate"
+      ? "equal"
+      : item.status === "old-only"
+        ? "missing"
+        : item.status === "new-only"
+          ? "added"
+          : "changed";
+
+  for (let lineIndex = 0; lineIndex < maxLines; lineIndex += 1) {
+    const oldLine = oldLines[lineIndex] || "";
+    const newLine = newLines[lineIndex] || "";
+
+    rows.push({
+      oldRow: oldLine
+        ? buildSemanticLineRow({
+          side: "old",
+          line: oldLine,
+          object: oldObject,
+          item,
+          objectIndex,
+          lineIndex,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "old",
+          item,
+          objectIndex,
+          lineIndex,
+        }),
+
+      newRow: newLine
+        ? buildSemanticLineRow({
+          side: "new",
+          line: newLine,
+          object: newObject,
+          item,
+          objectIndex,
+          lineIndex,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "new",
+          item,
+          objectIndex,
+          lineIndex,
+        }),
+
+      oldState:
+        status === "added"
+          ? "placeholder"
+          : oldLine
+            ? status
+            : "placeholder",
+
+      newState:
+        status === "missing"
+          ? "placeholder"
+          : newLine
+            ? status
+            : "placeholder",
+
+      semanticCovered: status === "equal",
+      semanticReason: item.reason || "",
+      objectMatched: isSemanticItemFullyMatched(item),
+      semanticObjectLine: true,
+      semanticObjectStart: lineIndex === 0,
+      semanticObjectEnd: lineIndex === maxLines - 1,
+    });
+
+    rows[rows.length - 1].oldRow.semanticObjectEnd = lineIndex === maxLines - 1;
+    rows[rows.length - 1].newRow.semanticObjectEnd = lineIndex === maxLines - 1;
+  }
+
+  return rows;
+}
+
+function getLineMatchStates(lineMatch = {}, item = {}) {
+  const status = String(lineMatch.status || "").toLowerCase();
+  const objectMatched = isSemanticItemFullyMatched(item);
+
+  if (status === "missing") return { oldState: "missing", newState: "placeholder" };
+  if (status === "added") return { oldState: "placeholder", newState: "added" };
+  if (status === "changed") return { oldState: "changed", newState: "changed" };
+  if (status === "ignored") return { oldState: "ignored", newState: "ignored" };
+  if (objectMatched || status === "equal") return { oldState: "equal", newState: "equal" };
+
+  return { oldState: status || "changed", newState: status || "changed" };
+}
+
+function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = null, newObject = null) {
+  const rows = [];
+  const oldRawLines = getSemanticObjectRawLines(oldObject);
+  const newRawLines = getSemanticObjectRawLines(newObject);
+
+  const oldConsumed = new Set();
+  const newConsumed = new Set();
+
+  const oldMatchedByNormalized = new Map();
+  const newMatchedByNormalized = new Map();
+
+  (item.lineMatches || []).forEach((lineMatch, matchIndex) => {
+    (lineMatch.oldLines || []).forEach((line) => {
+      const key = canonicalizeComparableLine(line);
+      if (key) oldMatchedByNormalized.set(key, { lineMatch, matchIndex });
+    });
+
+    (lineMatch.newLines || []).forEach((line) => {
+      const key = canonicalizeComparableLine(line);
+      if (key) newMatchedByNormalized.set(key, { lineMatch, matchIndex });
+    });
+  });
+
+  function findOldLineIndexForNewLine(newLine) {
+    const newKey = canonicalizeComparableLine(newLine);
+    const matched = newMatchedByNormalized.get(newKey);
+    if (!matched) return -1;
+
+    const oldCandidate = matched.lineMatch.oldLines?.[0];
+    const oldKey = canonicalizeComparableLine(oldCandidate);
+
+    return oldRawLines.findIndex((line, index) =>
+      !oldConsumed.has(index) && canonicalizeComparableLine(line) === oldKey
+    );
+  }
+
+  function findNewLineIndexForOldLine(oldLine) {
+    const oldKey = canonicalizeComparableLine(oldLine);
+    const matched = oldMatchedByNormalized.get(oldKey);
+    if (!matched) return -1;
+
+    const newCandidate = matched.lineMatch.newLines?.[0];
+    const newKey = canonicalizeComparableLine(newCandidate);
+
+    return newRawLines.findIndex((line, index) =>
+      !newConsumed.has(index) && canonicalizeComparableLine(line) === newKey
+    );
+  }
+
+  function isClosingLine(line = "") {
+    const text = String(line || "").trim();
+    return text === "exit" || text === "}";
+  }
+
+  function pushRow({
+    oldLine = "",
+    newLine = "",
+    oldRawIndex = -1,
+    newRawIndex = -1,
+    lineMatch = null,
+    visualLineIndex = rows.length,
+    reason = "object-raw-line-covered",
+  }) {
+    const mappingKey = `${item.id || "semantic-object"}:raw-line:${visualLineIndex}`;
+    const sourceOnly = Boolean(oldLine && !newLine);
+    const targetOnly = Boolean(newLine && !oldLine);
+    const rowObjectStatus = sourceOnly ? "old-only" : targetOnly ? "new-only" : "";
+    const oldMatched = Boolean(lineMatch?.oldLines?.some((line) =>
+      canonicalizeComparableLine(line) === canonicalizeComparableLine(oldLine)
+    ));
+    const newMatched = Boolean(lineMatch?.newLines?.some((line) =>
+      canonicalizeComparableLine(line) === canonicalizeComparableLine(newLine)
+    ));
+
+    rows.push({
+      oldRow: oldLine
+        ? buildSemanticLineRow({
+          side: "old",
+          line: oldLine,
+          object: oldObject,
+          item,
+          objectIndex,
+          lineIndex: oldRawIndex >= 0 ? oldRawIndex : visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
+          lineMatch: {
+            status: oldMatched ? "equal" : "covered",
+            semanticCovered: true,
+            reason,
+          },
+          mappingKey,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "old",
+          item,
+          objectIndex,
+          lineIndex: visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
+          mappingKey,
+        }),
+
+      newRow: newLine
+        ? buildSemanticLineRow({
+          side: "new",
+          line: newLine,
+          object: newObject,
+          item,
+          objectIndex,
+          lineIndex: newRawIndex >= 0 ? newRawIndex : visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
+          lineMatch: {
+            status: newMatched ? "equal" : "covered",
+            semanticCovered: true,
+            reason,
+          },
+          mappingKey,
+        })
+        : buildSemanticPlaceholderLineRow({
+          side: "new",
+          item,
+          objectIndex,
+          lineIndex: visualLineIndex,
+          objectStatusOverride: rowObjectStatus,
+          mappingKey,
+        }),
+
+      oldState: sourceOnly ? "missing" : oldLine ? (oldMatched ? "equal" : "ignored") : "placeholder",
+      newState: targetOnly ? "added" : newLine ? (newMatched ? "equal" : "ignored") : "placeholder",
+      semanticCovered: true,
+      semanticReason: reason,
+      objectMatched: isSemanticItemFullyMatched(item),
+      semanticObjectLine: true,
+      semanticObjectStart: rows.length === 0,
+      semanticObjectEnd: false,
+      semanticLineMapped: Boolean(lineMatch),
+      semanticLineMappingKey: mappingKey,
+    });
+  }
+
+  newRawLines.forEach((newLine, newIndex) => {
+    if (newConsumed.has(newIndex)) return;
+
+    const oldIndex = findOldLineIndexForNewLine(newLine);
+
+    if (oldIndex >= 0) {
+      oldConsumed.add(oldIndex);
+      newConsumed.add(newIndex);
+
+      const newKey = canonicalizeComparableLine(newLine);
+      const lineMatch = newMatchedByNormalized.get(newKey)?.lineMatch || null;
+
+      pushRow({
+        oldLine: oldRawLines[oldIndex],
+        newLine,
+        oldRawIndex: oldIndex,
+        newRawIndex: newIndex,
+        lineMatch,
+        reason: "semantic-line-match",
+      });
       return;
     }
-    rows.push(...buildUnmatchedObjectDiffRows(oldObject, newObject));
+
+    const nextOldClosingIndex = oldRawLines.findIndex((oldLine, index) =>
+      !oldConsumed.has(index) && isClosingLine(oldLine) && isClosingLine(newLine)
+    );
+
+    if (nextOldClosingIndex >= 0) {
+      oldConsumed.add(nextOldClosingIndex);
+      newConsumed.add(newIndex);
+
+      pushRow({
+        oldLine: oldRawLines[nextOldClosingIndex],
+        newLine,
+        oldRawIndex: nextOldClosingIndex,
+        newRawIndex: newIndex,
+        lineMatch: null,
+        reason: "structural-closing-line-covered",
+      });
+      return;
+    }
+
+    newConsumed.add(newIndex);
+
+    pushRow({
+      oldLine: "",
+      newLine,
+      newRawIndex: newIndex,
+      lineMatch: null,
+      reason: "target-only-object-raw-line-covered",
+    });
   });
+
+  oldRawLines.forEach((oldLine, oldIndex) => {
+    if (oldConsumed.has(oldIndex)) return;
+
+    const newIndex = findNewLineIndexForOldLine(oldLine);
+
+    if (newIndex >= 0 && !newConsumed.has(newIndex)) {
+      oldConsumed.add(oldIndex);
+      newConsumed.add(newIndex);
+
+      const oldKey = canonicalizeComparableLine(oldLine);
+      const lineMatch = oldMatchedByNormalized.get(oldKey)?.lineMatch || null;
+
+      pushRow({
+        oldLine,
+        newLine: newRawLines[newIndex],
+        oldRawIndex: oldIndex,
+        newRawIndex: newIndex,
+        lineMatch,
+        reason: "semantic-line-match",
+      });
+      return;
+    }
+
+    oldConsumed.add(oldIndex);
+
+    pushRow({
+      oldLine,
+      newLine: "",
+      oldRawIndex: oldIndex,
+      lineMatch: null,
+      reason: "source-only-object-raw-line-covered",
+    });
+  });
+
+  if (rows.length > 0) {
+    rows[rows.length - 1].semanticObjectEnd = true;
+    rows[rows.length - 1].oldRow.semanticObjectEnd = true;
+    rows[rows.length - 1].newRow.semanticObjectEnd = true;
+  }
+
+  return objectIndex > 0
+    ? [buildSemanticObjectGapRow(item, objectIndex), ...rows]
+    : rows;
+}
+
+function getSemanticObjectRawLines(object = null) {
+  if (!object) return [];
+
+  if (Array.isArray(object.rawLines) && object.rawLines.length) {
+    return object.rawLines.map((line) => String(line || ""));
+  }
+
+  if (Array.isArray(object.lines) && object.lines.length) {
+    return object.lines.map((line) => String(line || ""));
+  }
+
+  return [];
+}
+
+function collectSemanticCoveredLines(plan = []) {
+  const covered = new Set();
+
+  plan.forEach((item) => {
+    [item.oldObject, item.newObject].forEach((object) => {
+      if (!object) return;
+
+      const rawLines = getSemanticObjectRawLines(object);
+
+      rawLines.forEach((line) => {
+        const normalized = canonicalizeComparableLine(line);
+
+        if (!normalized) return;
+
+        covered.add(normalized);
+      });
+    });
+  });
+
+  return covered;
+}
+
+function buildSemanticLineRow({
+  side,
+  line,
+  object,
+  item,
+  objectIndex,
+  lineIndex,
+  lineMatch = null,
+  mappingKey = "",
+  objectStatusOverride = "",
+}) {
+  const objectStatus = objectStatusOverride || semanticRenderStatusForSide(item, object, side);
+  const objectType = item.objectType || object?.normalizedType || "";
+  const semanticField = inferSemanticFieldNameForLineContext(line, {
+    objectType,
+    object,
+    rawLines: getSemanticObjectRawLines(object),
+    lineIndex,
+  }) || item.matchKeyFields?.[0] || "";
+  return {
+    number: "",
+    text: line,
+    normalized: canonicalizeComparableLine(line),
+    key: `${item.id || "semantic-object"}:${side}:${objectIndex}:${lineIndex}`,
+    objectKey: `${item.objectType || object?.normalizedType || "object"}:${object?.sourceName || object?.id || objectIndex}`,
+    semanticObjectIndex: objectIndex,
+    semanticPairKey: item.id || "",
+    objectStatus,
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    objectIdentity: object?.normalizedIdentity || object?.identity || object?.name || object?.sourceName || object?.id || "",
+    objectMatched: isSemanticItemFullyMatched(item),
+    semanticCovered: Boolean(lineMatch?.semanticCovered || isSemanticItemFullyMatched(item)),
+    semanticReason: lineMatch?.reason || item.reason || "",
+    semanticLineMappingKey: mappingKey,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: false,
+    semanticField,
+    highlights: buildScopedLineSemanticHighlights(line, objectType, object, lineIndex),
+  };
+}
+
+function buildSemanticPlaceholderLineRow({
+  side,
+  item,
+  objectIndex,
+  lineIndex,
+  mappingKey = "",
+  objectStatusOverride = "",
+}) {
+  const objectStatus = objectStatusOverride || semanticRenderStatusForSide(item, null, side);
+  return {
+    number: "",
+    text: "",
+    normalized: "",
+    key: `${item.id || "semantic-object"}:${side}:placeholder:${objectIndex}:${lineIndex}`,
+    objectKey: `${item.objectType || "object"}:placeholder:${objectIndex}`,
+    semanticObjectIndex: objectIndex,
+    semanticPairKey: item.id || "",
+    semanticLineMappingKey: mappingKey,
+    semanticField: "",
+    objectStatus,
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    objectMatched: isSemanticItemFullyMatched(item),
+    semanticCovered: true,
+    semanticReason: "semantic-visual-padding",
+    highlights: [],
+    placeholder: true,
+    hidden: true,
+    semanticObjectStart: lineIndex === 0,
+    semanticObjectEnd: false,
+  };
+}
+
+function padSemanticBlockLines(lines = [], targetLength = 0) {
+  const padded = [...lines];
+
+  while (padded.length < targetLength) {
+    padded.push({
+      placeholder: true,
+      hidden: true,
+      text: "",
+    });
+  }
+
+  return padded;
+}
+
+function getSemanticObjectRawBlock(object = null) {
+  if (!object) return "";
+
+  if (Array.isArray(object.rawLines) && object.rawLines.length) {
+    return object.rawLines.join("\n");
+  }
+
+  if (Array.isArray(object.lines) && object.lines.length) {
+    return object.lines.join("\n");
+  }
+
+  return "";
+}
+
+function buildSemanticRawBlockRow({
+  side,
+  text,
+  object,
+  item,
+  index,
+}) {
+  const objectStatus = semanticRenderStatusForSide(item, object, side);
+  return {
+    number: "",
+    text,
+    normalized: canonicalizeComparableLine(text),
+    key: `${item.id || "semantic-object"}:${side}:${index}`,
+    objectKey: `${item.objectType || object?.normalizedType || "object"}:${object?.sourceName || object?.id || index}`,
+    semanticField: item.matchKeyFields?.[0] || "",
+    objectStatus,
+    objectScore: item.score ?? "",
+    objectReason: item.reason || "",
+    objectIdentity: object?.normalizedIdentity || object?.identity || object?.name || object?.sourceName || object?.id || "",
+    objectMatched: isSemanticItemFullyMatched(item),
+    semanticCovered: isSemanticItemFullyMatched(item),
+    semanticReason: item.reason || "",
+    highlights: [],
+  };
+}
+
+function normalizeRawLineForSemanticAppend(line = "") {
+  return canonicalizeComparableLine(line)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function addConsumedLineCounts(counts, text = "") {
+  String(text || "")
+    .split(/\r?\n/)
+    .map(normalizeRawLineForSemanticAppend)
+    .filter(Boolean)
+    .forEach((line) => {
+      counts.set(line, (counts.get(line) || 0) + 1);
+    });
+}
+
+function consumeLineIfMatched(counts, line = "") {
+  const key = normalizeRawLineForSemanticAppend(line);
+  if (!key) return true;
+
+  const current = counts.get(key) || 0;
+  if (current <= 0) return false;
+
+  counts.set(key, current - 1);
+  return true;
+}
+
+function appendUnmatchedRawLinesToSemanticRows(
+  rows = [],
+  oldText = "",
+  newText = "",
+  plan = []
+) {
+  const oldConsumed = new Map();
+  const newConsumed = new Map();
+
+  rows.forEach((row) => {
+    addConsumedLineCounts(oldConsumed, row.oldRow?.text || "");
+    addConsumedLineCounts(newConsumed, row.newRow?.text || "");
+  });
+
+  plan.forEach((item) => {
+    addConsumedLineCounts(oldConsumed, (item.oldObject?.rawLines || []).join("\n"));
+    addConsumedLineCounts(newConsumed, (item.newObject?.rawLines || []).join("\n"));
+  });
+
+  const semanticCoveredLines = collectSemanticCoveredLines(plan);
+
+  const oldUnmatchedLines = [];
+  const newUnmatchedLines = [];
+
+  String(oldText || "")
+    .split(/\r?\n/)
+    .forEach((line, index) => {
+      const normalized = canonicalizeComparableLine(line);
+
+      if (!line.trim()) return;
+      if (semanticCoveredLines.has(normalized)) return;
+      if (evaluatePolicyContext({ profile: state.profileDraft || {}, rawLine: line, normalizedLine: normalized, side: "old" }).suppressed) return;
+      if (consumedLineIfMatched(oldConsumed, line)) return;
+
+      oldUnmatchedLines.push({ line, index });
+    });
+
+  String(newText || "")
+    .split(/\r?\n/)
+    .forEach((line, index) => {
+      const normalized = canonicalizeComparableLine(line);
+
+      if (!line.trim()) return;
+      if (semanticCoveredLines.has(normalized)) return;
+      if (evaluatePolicyContext({ profile: state.profileDraft || {}, rawLine: line, normalizedLine: normalized, side: "new" }).suppressed) return;
+      if (consumedLineIfMatched(newConsumed, line)) return;
+
+      newUnmatchedLines.push({ line, index });
+    });
+
+  if (!oldUnmatchedLines.length && !newUnmatchedLines.length) {
+    return rows;
+  }
+  
+  const unmatchedRows = buildGroupedUnmatchedRawRows(
+    oldUnmatchedLines,
+    newUnmatchedLines
+  );
+
+  return [
+    ...rows,
+    buildSemanticSpacerRow("semantic-unmatched-spacer-1"),
+    buildUnmatchedRawDividerRow(),
+    ...unmatchedRows,
+  ];
+}
+
+function buildSemanticSpacerRow(key = "semantic-spacer") {
+  return {
+    oldRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}-old`,
+      objectKey: key,
+      highlights: [],
+    },
+    newRow: {
+      number: "",
+      text: "",
+      normalized: "",
+      key: `${key}-new`,
+      objectKey: key,
+      highlights: [],
+    },
+    oldState: "placeholder",
+    newState: "placeholder",
+    semanticDivider: true,
+  };
+}
+
+function buildUnmatchedRawDividerRow() {
+  return {
+    oldRow: {
+      number: "",
+      text: "──── UNMATCHED RAW CONFIG ────",
+      normalized: "",
+      key: "semantic-unmatched-divider-old",
+      objectKey: "semantic-unmatched-divider",
+      highlights: [],
+    },
+    newRow: {
+      number: "",
+      text: "──── UNMATCHED RAW CONFIG ────",
+      normalized: "",
+      key: "semantic-unmatched-divider-new",
+      objectKey: "semantic-unmatched-divider",
+      highlights: [],
+    },
+    oldState: "equal",
+    newState: "equal",
+    semanticDivider: true,
+  };
+}
+
+function groupAdjacentRawLines(items = []) {
+  const groups = [];
+
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+
+    if (last && item.index === last.endIndex + 1) {
+      last.items.push(item);
+      last.endIndex = item.index;
+      continue;
+    }
+
+    groups.push({
+      startIndex: item.index,
+      endIndex: item.index,
+      items: [item],
+    });
+  }
+
+  return groups;
+}
+
+function buildRawBlockRow(group, side) {
+  if (!group) return null;
+
+  const text = group.items.map((item) => item.line).join("\n");
+  const number = group.items[0]?.index + 1;
+
+  return {
+    number,
+    text,
+    normalized: canonicalizeComparableLine(text),
+    key: `semantic-unmatched-${side}-${group.startIndex}-${group.endIndex}`,
+    objectKey: `semantic-unmatched-${side}`,
+    semanticField: "",
+    objectMatched: false,
+    semanticCovered: false,
+    semanticReason: `${side}-raw-block-unmatched`,
+    highlights: [],
+  };
+}
+
+function buildGroupedUnmatchedRawRows(oldItems = [], newItems = []) {
+  const oldGroups = groupAdjacentRawLines(oldItems);
+  const newGroups = groupAdjacentRawLines(newItems);
+  const maxLength = Math.max(oldGroups.length, newGroups.length);
+  const rows = [];
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const oldRow = buildRawBlockRow(oldGroups[index], "old");
+    const newRow = buildRawBlockRow(newGroups[index], "new");
+
+    rows.push({
+      oldRow,
+      newRow,
+      oldState: oldRow ? "missing" : "placeholder",
+      newState: newRow ? "added" : "placeholder",
+      semanticCovered: false,
+      semanticReason: "raw-block-unmatched",
+      objectMatched: false,
+    });
+  }
 
   return rows;
 }
@@ -5517,11 +11441,7 @@ function inferIdentityForObjectType(type, line = "") {
   }
 
   if (t === "lag") {
-    return cleanObjectIdentity(
-      text.match(/^lag\s+([^\s{}]+)/)?.[1] ||
-      text.match(/^\/configure\s*\{\s*lag\s+([^\s{}]+)/)?.[1] ||
-      ""
-    );
+    return cleanObjectIdentity(extractLagNameFromLine(text));
   }
 
   if (t === "interface") {
@@ -5599,6 +11519,78 @@ function mergeObjectsByKey(objects = []) {
   return Array.from(merged.values());
 }
 
+function isJuniperInterfaceAddressRow(row = {}) {
+  const text = canonicalizeComparableLine(row.text || row.normalized || "");
+
+  return /^set interfaces \S+ unit \S+ family inet address \S+\/\d+$/.test(text);
+}
+
+function isNokiaMdInterfaceAddressGroupRow(row = {}) {
+  const rawText = String(row.text || row.normalized || "").trim();
+
+  const normalizedText = canonicalizeComparableLine(rawText)
+    .replace(/[{}"]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const rawLooksLogicalInterface =
+    /^interface\s+"?[^"\s{]+\.\d+"?\s*\{$/i.test(rawText);
+
+  const normalizedLooksLogicalInterface =
+    /^interface\s+\S+\.\d+$/.test(normalizedText);
+
+  console.log("[nokia-md-group-row-debug]", {
+    rawText,
+    normalizedText,
+    rawLooksLogicalInterface,
+    normalizedLooksLogicalInterface,
+  });
+
+  return (
+    rawLooksLogicalInterface ||
+    normalizedLooksLogicalInterface ||
+    normalizedText === "ipv4" ||
+    normalizedText === "primary" ||
+    /^address\s+\d{1,3}(?:\.\d{1,3}){3}$/.test(normalizedText) ||
+    /^prefix-length\s+\d+$/.test(normalizedText)
+  );
+}
+
+function buildInterfaceOneToManyAddressDiffRows(oldRows = [], newRows = []) {
+  const oldIndex = oldRows.findIndex(isJuniperInterfaceAddressRow);
+
+  if (oldIndex < 0) return null;
+
+  const newIndexes = newRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => isNokiaMdInterfaceAddressGroupRow(row))
+    .map(({ index }) => index);
+
+  if (!newIndexes.length) return null;
+
+  const oldRow = oldRows[oldIndex];
+
+  const mergedNewRow = {
+    ...newRows[newIndexes[0]],
+    text: newIndexes.map((index) => newRows[index].text).join("\n"),
+    normalized: newIndexes.map((index) => newRows[index].normalized).join("\n"),
+    key: `${oldRow.objectKey}|interface-address-group`,
+    semanticField: "address",
+    objectMatched: true,
+  };
+
+  return {
+    oldIndex,
+    newIndexes,
+    row: {
+      oldRow,
+      newRow: mergedNewRow,
+      oldState: "equal",
+      newState: "equal",
+    },
+  };
+}
+
 function buildMatchedObjectDiffRows(oldObject, newObject) {
   const oldRows = buildObjectVisualRows(oldObject);
   const newRows = buildObjectVisualRows(newObject);
@@ -5607,7 +11599,21 @@ function buildMatchedObjectDiffRows(oldObject, newObject) {
   const usedNewIndexes = new Set();
   const rows = [];
 
-  oldRows.forEach((oldRow) => {
+  const interfaceAddressGroup =
+    oldObject.type === "interface" && newObject.type === "interface"
+      ? buildInterfaceOneToManyAddressDiffRows(oldRows, newRows)
+      : null;
+
+  const usedOldIndexes = new Set();
+
+  if (interfaceAddressGroup) {
+    rows.push(interfaceAddressGroup.row);
+    usedOldIndexes.add(interfaceAddressGroup.oldIndex);
+    interfaceAddressGroup.newIndexes.forEach((index) => usedNewIndexes.add(index));
+  }
+
+  oldRows.forEach((oldRow, oldIndex) => {
+    if (usedOldIndexes.has(oldIndex)) return;
     const newIndex = findBestNewRowForOldRow(oldRow, newRows, usedNewIndexes);
     const newRow = newIndex >= 0 ? newRows[newIndex] : null;
 
@@ -5619,7 +11625,14 @@ function buildMatchedObjectDiffRows(oldObject, newObject) {
     const newChanged = rowTouchesChangedField(newRow, changedFields);
 
     rows.push({
-      oldRow,
+      oldRow: !newRow
+        ? {
+          ...oldRow,
+          objectMatched: false,
+          objectStatus: "old-only",
+          semanticReason: "unmatched-source-line",
+        }
+        : oldRow,
       newRow,
       oldState: !newRow ? "missing" : oldChanged || newChanged ? "changed" : "equal",
       newState: !newRow ? "placeholder" : oldChanged || newChanged ? "changed" : "equal",
@@ -5631,7 +11644,12 @@ function buildMatchedObjectDiffRows(oldObject, newObject) {
 
     rows.push({
       oldRow: null,
-      newRow,
+      newRow: {
+        ...newRow,
+        objectMatched: false,
+        objectStatus: "new-only",
+        semanticReason: "unmatched-target-line",
+      },
       oldState: "placeholder",
       newState: "added",
     });
@@ -5699,6 +11717,11 @@ function effectiveRowSemanticField(row) {
 
   const text = canonicalizeComparableLine(row.text || "");
   const highlights = Array.isArray(row.highlights) ? row.highlights : [];
+  const objectType = row.objectKey ? splitObjectKey(row.objectKey).type : "";
+  if (objectType === "lag") {
+    const lagField = inferLagLineFields(text)[0];
+    if (lagField) return lagField;
+  }
 
   if (/\bno\s+shutdown\b/.test(text)) return "state";
   if (/\bshutdown\b/.test(text)) return "state";
@@ -5781,7 +11804,7 @@ function effectiveRowSemanticValue(row) {
     return text.match(/\b(?:peer-as|remote-as)\s+([^\s{}]+)/)?.[1] || "";
   }
 
-  return "";
+  return inferValueForField(text, field);
 }
 
 function normalizeSemanticFieldName(field = "") {
@@ -5903,14 +11926,20 @@ function buildObjectVisualRows(object) {
   return object.lines.map((line, index) => {
     const text = object.rawLines[index] || line;
     const occurrences = (object.fieldOccurrences || []).filter((item) => item.rawLineIndex === index);
-    const highlights = buildLineSemanticHighlights(text, object.type, object.canonicalFields || {}, occurrences);
+    const semanticField = inferSemanticFieldNameForLineContext(text, {
+      objectType: object.type,
+      object,
+      rawLines: object.rawLines || object.lines || [],
+      lineIndex: index,
+    });
+    const highlights = buildScopedLineSemanticHighlights(text, object.type, object, index, occurrences);
     return {
       number: object.startLine + index,
       text,
       key: `${object.key}|raw:${index}:${canonicalizeComparableLine(text)}`,
       objectKey: object.key,
       normalized: canonicalizeComparableLine(text),
-      semanticField: highlights[0]?.field || inferSemanticFieldName(text),
+      semanticField: highlights[0]?.field || semanticField,
       highlights,
       objectMatched: true,
       ignoredVisual: isVisualIgnoredLine(line, object.type, object.source),
@@ -5950,7 +11979,15 @@ function mapObjectFieldLines(object) {
   const result = new Map();
   object.lines.forEach((line, index) => {
     const fields = Object.keys(extractFieldsFromLine(line, state.profileDraft, object.type));
-    const lineFields = fields.length ? fields : [inferSemanticFieldName(line)].filter(Boolean);
+    const scopedField = inferSemanticFieldNameForLineContext(object.rawLines[index] || line, {
+      objectType: object.type,
+      object,
+      rawLines: object.rawLines || object.lines || [],
+      lineIndex: index,
+    });
+    const lineFields = scopedField && scopedField !== inferSemanticFieldName(line)
+      ? [scopedField, ...fields.filter((field) => !["state", "admin-state"].includes(field))]
+      : (fields.length ? fields : [scopedField || inferSemanticFieldName(line)].filter(Boolean));
     lineFields.forEach((field) => {
       if (!field || result.has(field)) return;
       result.set(field, {
@@ -5979,15 +12016,24 @@ function buildObjectDiffRow(object, line, field, value, same) {
 function appendUnusedObjectLines(rows, object, usedIndexes, side) {
   object.lines.forEach((line, index) => {
     if (usedIndexes.has(index)) return;
+    const text = object.rawLines[index] || line;
     const diffRow = {
       number: object.startLine + index,
-      text: object.rawLines[index] || line,
+      text,
       key: `${object.key}|__unmatched__:${side}:${index}`,
       objectKey: object.key,
       normalized: canonicalizeComparableLine(line),
-      highlights: buildLineSemanticHighlights(object.rawLines[index] || line, object.type, object.canonicalFields || {}, (object.fieldOccurrences || []).filter((item) => item.rawLineIndex === index)),
+      semanticField: inferSemanticFieldNameForLineContext(text, {
+        objectType: object.type,
+        object,
+        rawLines: object.rawLines || object.lines || [],
+        lineIndex: index,
+      }),
+      highlights: buildScopedLineSemanticHighlights(text, object.type, object, index, (object.fieldOccurrences || []).filter((item) => item.rawLineIndex === index)),
       ignoredVisual: isVisualIgnoredLine(line, object.type, side),
-      objectMatched: true,
+      objectMatched: false,
+      objectStatus: side === "old" ? "old-only" : "new-only",
+      semanticReason: side === "old" ? "unmatched-source-line" : "unmatched-target-line",
     };
     rows.push({
       oldRow: side === "old" ? diffRow : null,
@@ -6001,6 +12047,14 @@ function appendUnusedObjectLines(rows, object, usedIndexes, side) {
 function isVisualIgnoredLine(line, objectType, source) {
   const normalized = canonicalizeComparableLine(line);
   if (!normalized) return true;
+  if (evaluatePolicyContext({
+    profile: state.profileDraft || {},
+    rawLine: line,
+    normalizedLine: normalized,
+    side: source,
+    objectType,
+    field: inferSemanticFieldName(line),
+  }).suppressed) return true;
   const rule = findLineRule(normalized, objectType, source, state.profileDraft.lineRules);
   if (rule?.action === "ignore") return true;
   if (state.profileDraft.rules.ignore.some((item) => item.source === source && normalized.includes(canonicalizeComparableLine(item.pattern)))) return true;
@@ -6039,8 +12093,13 @@ function buildUnmatchedObjectDiffRows(oldObject, newObject) {
       key: `${object.key}|__object_unmatched__:${side}:${index}`,
       objectKey: object.key,
       normalized: canonicalizeComparableLine(line),
-      semanticField: Object.keys(extractFieldsFromLine(line, state.profileDraft, object.type))[0] || inferSemanticFieldName(line),
-      highlights: buildLineSemanticHighlights(object.rawLines[index] || line, object.type, object.canonicalFields || {}, (object.fieldOccurrences || []).filter((occurrence) => occurrence.rawLineIndex === index)),
+      semanticField: inferSemanticFieldNameForLineContext(object.rawLines[index] || line, {
+        objectType: object.type,
+        object,
+        rawLines: object.rawLines || object.lines || [],
+        lineIndex: index,
+      }) || Object.keys(extractFieldsFromLine(line, state.profileDraft, object.type))[0] || inferSemanticFieldName(line),
+      highlights: buildScopedLineSemanticHighlights(object.rawLines[index] || line, object.type, object, index, (object.fieldOccurrences || []).filter((occurrence) => occurrence.rawLineIndex === index)),
       ignoredVisual: isVisualIgnoredLine(line, object.type, side),
     }))
     .map((row) => ({
@@ -6098,7 +12157,12 @@ function buildSemanticDiffRows(text, options, source) {
     if (rule?.action === "added" && source === "new") key = `__added__:${index}`;
     if (rule?.action === "missing" && source === "old") key = `__missing__:${index}`;
     if (rule?.action === "required-field") key = `${currentObjectKey}|${extractFieldName(policyMapped || mapped) || buildSemanticLineKey(policyMapped || mapped, currentType)}`;
-    return { number: index + 1, text: rawLine, key, objectKey: currentObjectKey, normalized: canonicalizeComparableLine(policyMapped || mapped) };
+    return {
+      number: "",
+      text: line,
+      objectKey: object.key,
+      semanticField: fieldName,
+      semanticObjectStart: lineIndex === 0, };
   }).filter(Boolean);
 }
 
@@ -6114,6 +12178,9 @@ function buildSemanticLineKey(line, objectType) {
 
   const tagMatch = normalized.match(/\btag\s+([^"\s{}]+)/);
   if (tagMatch) return `tag:${stripTrailingSyntax(tagMatch[1])}`;
+
+  const metricMatch = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+  if (metricMatch) return `metric:${stripTrailingSyntax(metricMatch[1])}`;
 
   if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "state:enabled";
   if (/\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) return "state:disabled";
@@ -6250,13 +12317,309 @@ function renderDiff(rows) {
     clearSelectedDiffTokens();
     selectors.oldDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.oldRow || null, row?.oldState || "placeholder", row?.newRow || null, index, "old")).join("");
     selectors.newDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.newRow || null, row?.newState || "placeholder", row?.oldRow || null, index, "new")).join("");
+    bindSemanticDiffInteractions();
     renderDiffObjectToolbars();
+    syncSemanticObjectBlockWidths();
     if (state.activeDiffObjectKey) highlightObjectLines(state.activeDiffObjectKey);
-    scheduleDiffConnectorRender();
+    renderCompareIssueContextBanner();
+    scheduleSemanticObjectStartAlignment();
   } catch (error) {
     console.error("renderDiff failed", error);
     throw error;
   }
+}
+
+function bindSemanticDiffInteractions() {
+  ensureSemanticPairKeyboardBinding();
+  ensureLineRelationDelegation();
+  const targets = [
+    ...selectors.oldDiffPane.querySelectorAll("[data-semantic-pair-key]"),
+    ...selectors.newDiffPane.querySelectorAll("[data-semantic-pair-key]"),
+  ].filter((element) => element.dataset.semanticPairKey);
+
+  targets.forEach((element) => {
+    element.addEventListener("mouseenter", () => setSemanticPairHover(element.dataset.semanticPairKey, true));
+    element.addEventListener("mouseleave", () => setSemanticPairHover(element.dataset.semanticPairKey, false));
+    element.addEventListener("click", () => setSemanticPairSelected(element.dataset.semanticPairKey));
+  });
+}
+
+function ensureSemanticPairKeyboardBinding() {
+  if (state.semanticPairKeyboardBound) return;
+  state.semanticPairKeyboardBound = true;
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") clearSemanticPairSelection();
+  });
+}
+
+function ensureLineRelationDelegation() {
+  if (state.lineRelationDelegationBound) return;
+  state.lineRelationDelegationBound = true;
+
+  [selectors.oldDiffPane, selectors.newDiffPane].filter(Boolean).forEach((pane) => {
+    pane.addEventListener("mouseover", (event) => {
+      const target = lineRelationEventTarget(event.target);
+      if (!target) return;
+      setLineRelationHover(getLineRelationKey(target), true);
+    });
+
+    pane.addEventListener("mouseout", (event) => {
+      const target = lineRelationEventTarget(event.target);
+      if (!target) return;
+      const nextTarget = lineRelationEventTarget(event.relatedTarget);
+      const relationKey = getLineRelationKey(target);
+      if (nextTarget && getLineRelationKey(nextTarget) === relationKey) return;
+      setLineRelationHover(relationKey, false);
+    });
+
+    pane.addEventListener("click", (event) => {
+      const target = lineRelationEventTarget(event.target);
+      if (!target) return;
+      setLineRelationSelected(getLineRelationKey(target));
+    });
+  });
+}
+
+function lineRelationEventTarget(target) {
+  return target?.closest?.(".diff-token-match[data-line-relation-key], [data-line-relation-key], [data-semantic-line-mapping-key]");
+}
+
+function getLineRelationKey(element) {
+  return element?.dataset?.lineRelationKey || element?.dataset?.semanticLineMappingKey || "";
+}
+
+function setLineRelationHover(relationKey, active) {
+  if (!relationKey) return;
+  applyLineRelationClass(relationKey, "line-relation-hover", active);
+  applySvgLineRelationClass(relationKey, "line-relation-hover", active);
+}
+
+function setLineRelationSelected(relationKey) {
+  if (!relationKey) return;
+  clearLineRelationSelection(false);
+  state.activeLineRelationKey = relationKey;
+  applyLineRelationClass(relationKey, "line-relation-selected", true);
+  applySvgLineRelationClass(relationKey, "line-relation-selected", true);
+  scheduleDiffConnectorRender();
+}
+
+function clearLineRelationSelection(clearState = true) {
+  document.querySelectorAll(".line-relation-selected").forEach((element) => {
+    element.classList.remove("line-relation-selected");
+  });
+  if (clearState) state.activeLineRelationKey = "";
+}
+
+function applyLineRelationClass(relationKey, className, active) {
+  const selector = [
+    `[data-line-relation-key="${cssEscape(relationKey)}"]`,
+    `[data-semantic-line-mapping-key="${cssEscape(relationKey)}"]`,
+  ].join(",");
+  document.querySelectorAll(selector).forEach((element) => {
+    element.classList.toggle(className, active);
+  });
+}
+
+function applySvgLineRelationClass(relationKey, className, active) {
+  selectors.diffConnectorSvg?.querySelectorAll(`[data-line-relation-key="${cssEscape(relationKey)}"]`).forEach((element) => {
+    element.classList.toggle(className, active);
+  });
+}
+
+function setSemanticPairHover(pairKey, active) {
+  if (!pairKey) return;
+  document.querySelectorAll(`[data-semantic-pair-key="${cssEscape(pairKey)}"]`).forEach((element) => {
+    element.classList.toggle("semantic-pair-hover", active);
+  });
+  setSemanticPairLineRelationsHover(pairKey, active);
+}
+
+function setSemanticPairSelected(pairKey) {
+  if (!pairKey) return;
+  clearSemanticPairSelection(false);
+  state.activeSemanticPairKey = pairKey;
+  selectors.diffConnectorSvg?.closest(".editor-grid")?.classList.add("semantic-pair-focus-active");
+  applySemanticPairClass(pairKey, "semantic-pair-selected", true);
+  setSemanticPairLineRelationsHover(pairKey, true);
+  centerSemanticPairInPanes(pairKey);
+  scheduleDiffConnectorRender();
+}
+
+function clearSemanticPairSelection(clearState = true) {
+  document.querySelectorAll(".semantic-pair-selected").forEach((element) => {
+    element.classList.remove("semantic-pair-selected");
+  });
+  selectors.diffConnectorSvg?.closest(".editor-grid")?.classList.remove("semantic-pair-focus-active");
+  if (clearState) state.activeSemanticPairKey = "";
+  clearLineRelationSelection(clearState);
+}
+
+function setSemanticPairLineRelationsHover(pairKey, active) {
+  if (!pairKey) return;
+  const relationKeys = new Set();
+  document.querySelectorAll(`[data-semantic-pair-key="${cssEscape(pairKey)}"] [data-line-relation-key], [data-semantic-pair-key="${cssEscape(pairKey)}"][data-line-relation-key]`).forEach((element) => {
+    const key = element.dataset.lineRelationKey || "";
+    if (key) relationKeys.add(key);
+  });
+  selectors.diffConnectorSvg?.querySelectorAll("[data-line-relation-key]").forEach((element) => {
+    const key = element.dataset.lineRelationKey || "";
+    if (key.includes(pairKey)) relationKeys.add(key);
+  });
+  relationKeys.forEach((key) => {
+    applyLineRelationClass(key, "line-relation-hover", active);
+    applySvgLineRelationClass(key, "line-relation-hover", active);
+  });
+}
+
+function applySemanticPairClass(pairKey, className, active) {
+  if (!pairKey) return;
+  document.querySelectorAll(`[data-semantic-pair-key="${cssEscape(pairKey)}"]`).forEach((element) => {
+    element.classList.toggle(className, active);
+  });
+}
+
+function centerSemanticPairInPanes(pairKey) {
+  const selector = `[data-semantic-pair-key="${cssEscape(pairKey)}"]`;
+  const oldTarget = selectors.oldDiffPane.querySelector(selector);
+  const newTarget = selectors.newDiffPane.querySelector(selector);
+  if (!oldTarget && !newTarget) return;
+  state.syncingDiffScroll = true;
+  scrollPaneToLine(selectors.oldDiffPane, oldTarget);
+  scrollPaneToLine(selectors.newDiffPane, newTarget);
+  state.syncingDiffScroll = false;
+}
+
+function scheduleSemanticObjectWidthSync() {
+  if (state.semanticObjectWidthFrame) return;
+  state.semanticObjectWidthFrame = requestAnimationFrame(() => {
+    state.semanticObjectWidthFrame = null;
+    syncSemanticObjectBlockWidths();
+    scheduleDiffConnectorRender();
+  });
+}
+
+function syncSemanticObjectBlockWidths() {
+  syncSemanticObjectBlockWidthsForPane(selectors.oldDiffPane);
+  syncSemanticObjectBlockWidthsForPane(selectors.newDiffPane);
+}
+
+function syncSemanticObjectBlockWidthsForPane(pane) {
+  if (!pane) return;
+
+  const paneWidth = Math.max(0, pane.clientWidth - 2);
+  pane.querySelectorAll(".semantic-object-block-wrapper").forEach((wrapper) => {
+    const block = wrapper.querySelector(".semantic-diff-object-block");
+    const head = wrapper.querySelector(".semantic-diff-object-head");
+    const body = wrapper.querySelector(".semantic-diff-object-body");
+    const lines = [...wrapper.querySelectorAll(".semantic-diff-config-line")];
+    const measured = [wrapper, block, head, body, ...lines].filter(Boolean);
+
+    measured.forEach(clearSemanticWidthStyle);
+
+    const wrapperStyle = window.getComputedStyle(wrapper);
+    const wrapperPadding =
+      readCssPixelValue(wrapperStyle.paddingLeft) +
+      readCssPixelValue(wrapperStyle.paddingRight);
+    const minBlockWidth = Math.max(0, paneWidth - wrapperPadding);
+    const lineWidths = lines.map(measureSemanticConfigLineWidth);
+    const contentWidth = Math.ceil(Math.max(
+      minBlockWidth,
+      block?.scrollWidth || 0,
+      head?.scrollWidth || 0,
+      body?.scrollWidth || 0,
+      ...lineWidths,
+    ) + 8);
+    const wrapperWidth = Math.ceil(contentWidth + wrapperPadding);
+
+    setImportantWidth(wrapper, wrapperWidth);
+    [block, head, body, ...lines].filter(Boolean).forEach((element) => {
+      setImportantWidth(element, contentWidth);
+    });
+  });
+}
+
+function clearSemanticWidthStyle(element) {
+  if (!element) return;
+  element.style.removeProperty("width");
+  element.style.removeProperty("min-width");
+}
+
+function setImportantWidth(element, width) {
+  if (!element || !Number.isFinite(width) || width <= 0) return;
+  const value = `${Math.ceil(width)}px`;
+  element.style.setProperty("width", value, "important");
+  element.style.setProperty("min-width", value, "important");
+}
+
+function readCssPixelValue(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function measureSemanticConfigLineWidth(line) {
+  if (!line) return 0;
+  const lineRect = line.getBoundingClientRect();
+  const candidates = [line.scrollWidth || 0];
+
+  line.querySelectorAll("code, .semantic-diff-line-field").forEach((element) => {
+    const rect = element.getBoundingClientRect();
+    const offset = Math.max(0, rect.left - lineRect.left);
+    candidates.push(offset + Math.max(element.scrollWidth || 0, rect.width || 0));
+  });
+
+  return Math.ceil(Math.max(...candidates) + 24);
+}
+
+function scheduleSemanticObjectStartAlignment() {
+  if (state.semanticObjectAlignFrame) return;
+  state.semanticObjectAlignFrame = requestAnimationFrame(() => {
+    state.semanticObjectAlignFrame = null;
+    alignSemanticObjectStartLines();
+    scheduleDiffConnectorRender();
+  });
+}
+
+function alignSemanticObjectStartLines() {
+  const oldRows = semanticAlignElementsByPairIndex(selectors.oldDiffPane);
+  const newRows = semanticAlignElementsByPairIndex(selectors.newDiffPane);
+  const pairIndexes = new Set([...oldRows.keys(), ...newRows.keys()]);
+
+  [...oldRows.values(), ...newRows.values()].forEach((element) => {
+    element.style.minHeight = "";
+    element.classList.remove("semantic-height-aligned");
+    delete element.dataset.alignedHeight;
+  });
+
+  pairIndexes.forEach((pairIndex) => {
+    const oldElement = oldRows.get(pairIndex);
+    const newElement = newRows.get(pairIndex);
+    if (!oldElement || !newElement) return;
+
+    const oldHeight = oldElement.getBoundingClientRect().height;
+    const newHeight = newElement.getBoundingClientRect().height;
+    const targetHeight = Math.ceil(Math.max(oldHeight, newHeight));
+    if (!targetHeight || Math.abs(oldHeight - newHeight) < 1) return;
+
+    oldElement.style.minHeight = `${targetHeight}px`;
+    newElement.style.minHeight = `${targetHeight}px`;
+    oldElement.classList.add("semantic-height-aligned");
+    newElement.classList.add("semantic-height-aligned");
+    oldElement.dataset.alignedHeight = String(targetHeight);
+    newElement.dataset.alignedHeight = String(targetHeight);
+  });
+}
+
+function semanticAlignElementsByPairIndex(pane) {
+  const elements = new Map();
+  if (!pane) return elements;
+
+  pane.querySelectorAll(".semantic-object-block-wrapper[data-pair-index], .diff-line[data-pair-index]").forEach((element) => {
+    const pairIndex = element.dataset.pairIndex || "";
+    if (!pairIndex) return;
+    elements.set(pairIndex, element);
+  });
+
+  return elements;
 }
 
 function scheduleDiffConnectorRender() {
@@ -6267,96 +12630,1396 @@ function scheduleDiffConnectorRender() {
   });
 }
 
+function scheduleSettledDiffConnectorRender() {
+  scheduleDiffConnectorRender();
+  if (state.connectorSettleTimer) window.clearTimeout(state.connectorSettleTimer);
+  state.connectorSettleTimer = window.setTimeout(() => {
+    state.connectorSettleTimer = null;
+    scheduleDiffConnectorRender();
+  }, 80);
+}
+
 function renderDiffConnectors() {
   try {
-  const svg = selectors.diffConnectorSvg;
-  const grid = svg?.closest(".editor-grid");
-  if (!svg || !grid?.classList.contains("diff-connectors-active")) return;
+    const svg = selectors.diffConnectorSvg;
+    const grid = svg?.closest(".editor-grid");
+    if (!svg || !grid?.classList.contains("diff-connectors-active")) return;
 
-  const gridRect = grid.getBoundingClientRect();
-  const oldPaneRect = selectors.oldDiffPane.getBoundingClientRect();
-  const newPaneRect = selectors.newDiffPane.getBoundingClientRect();
-  const width = Math.max(0, gridRect.width);
-  const height = Math.max(0, gridRect.height);
+    const gridRect = grid.getBoundingClientRect();
+    const oldPaneRect = selectors.oldDiffPane.getBoundingClientRect();
+    const newPaneRect = selectors.newDiffPane.getBoundingClientRect();
+    const width = Math.max(0, gridRect.width);
+    const height = Math.max(0, gridRect.height);
 
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
 
-  const oldLines = [...selectors.oldDiffPane.querySelectorAll(".diff-line[data-pair-index]")];
-  const paths = oldLines
-    .map((oldLine) => {
-      const pairIndex = oldLine.dataset.pairIndex;
-      const newLine = selectors.newDiffPane.querySelector(`.diff-line[data-pair-index="${pairIndex}"]`);
-      if (!newLine || !shouldDrawConnector(oldLine, newLine, oldPaneRect, newPaneRect)) return "";
-      return buildConnectorPath(oldLine, newLine, gridRect, oldPaneRect, newPaneRect);
-    })
-    .filter(Boolean);
+    const oldGroups = collectVisibleDiffObjectGroups(selectors.oldDiffPane, oldPaneRect);
+    const newGroups = collectVisibleDiffObjectGroups(selectors.newDiffPane, newPaneRect);
+    const objectPaths = [];
+    const debugPaths = [];
 
-  svg.innerHTML = paths.join("");
+    if (isObjectMappingVisible()) {
+      oldGroups.forEach((oldGroup, key) => {
+        const newGroup = newGroups.get(key);
+        if (!newGroup) {
+          mappingDebugWarn("object DOM pair missing", { key, side: "new" });
+          return;
+        }
+        const connector = buildObjectConnectorBand(oldGroup, newGroup, grid, isMappingDebugVisible());
+        objectPaths.push(connector.markup);
+        if (connector.debugMarkup) debugPaths.push(connector.debugMarkup);
+      });
+    }
+
+    state.lineMappingDebugAnchorCount = 0;
+    const fieldPaths = buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect);
+    reportMappingDebugSnapshot({
+      oldGroups,
+      newGroups,
+      objectPathCount: objectPaths.filter(Boolean).length,
+      fieldPathCount: fieldPaths.filter(Boolean).length,
+    });
+
+    svg.innerHTML = renderDiffConnectorLayers({
+      objectPaths,
+      fieldPaths,
+      debugPaths,
+    });
+    if (state.activeSemanticPairKey) {
+      applySemanticPairClass(state.activeSemanticPairKey, "semantic-pair-selected", true);
+    }
+    if (state.activeLineRelationKey) {
+      applyLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
+      applySvgLineRelationClass(state.activeLineRelationKey, "line-relation-selected", true);
+    }
   } catch (error) {
     console.error("renderDiffConnectors failed", error);
   }
 }
 
-function shouldDrawConnector(oldLine, newLine, oldPaneRect, newPaneRect) {
-  if (oldLine.classList.contains("placeholder") || newLine.classList.contains("placeholder")) return false;
-  if (oldLine.dataset.diffKey?.startsWith("__") || newLine.dataset.diffKey?.startsWith("__")) return false;
-  const oldRect = oldLine.getBoundingClientRect();
-  const newRect = newLine.getBoundingClientRect();
-  return oldRect.bottom >= oldPaneRect.top
-    && oldRect.top <= oldPaneRect.bottom
-    && newRect.bottom >= newPaneRect.top
-    && newRect.top <= newPaneRect.bottom;
+function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], debugPaths = [] } = {}) {
+  return `
+    ${renderDiffConnectorDefs()}
+    <g class="object-mapping-overlay" data-overlay-layer="object">
+      ${objectPaths.filter(Boolean).join("")}
+    </g>
+    <g class="semantic-line-overlay" data-overlay-layer="line">
+      ${fieldPaths.filter(Boolean).join("")}
+    </g>
+    <g class="mapping-debug-overlay" data-overlay-layer="debug">
+      ${debugPaths.filter(Boolean).join("")}
+    </g>
+  `;
 }
 
-function buildConnectorPath(oldLine, newLine, gridRect, oldPaneRect, newPaneRect) {
-  const oldAnchor = diffLineTextAnchor(oldLine, oldPaneRect, "right");
-  const newAnchor = diffLineTextAnchor(newLine, newPaneRect, "left");
-  const x1 = oldAnchor.x - gridRect.left;
-  const x2 = newAnchor.x - gridRect.left;
-  const y1 = oldAnchor.y - gridRect.top;
-  const y2 = newAnchor.y - gridRect.top;
+function ensureConnectorSvgDelegation() {
+  const svg = selectors.diffConnectorSvg;
+  if (!svg || state.connectorSvgDelegationBound) return;
+  state.connectorSvgDelegationBound = true;
+
+  svg.addEventListener("mouseover", (event) => {
+    const pairTarget = event.target?.closest?.("[data-semantic-pair-key]");
+    const relationTarget = event.target?.closest?.("[data-line-relation-key]");
+    if (pairTarget?.dataset?.semanticPairKey) {
+      setSemanticPairHover(pairTarget.dataset.semanticPairKey, true);
+    }
+    if (relationTarget?.dataset?.lineRelationKey) {
+      setLineRelationHover(relationTarget.dataset.lineRelationKey, true);
+    }
+  });
+
+  svg.addEventListener("mouseout", (event) => {
+    const pairTarget = event.target?.closest?.("[data-semantic-pair-key]");
+    const relationTarget = event.target?.closest?.("[data-line-relation-key]");
+    const nextPair = event.relatedTarget?.closest?.("[data-semantic-pair-key]");
+    const nextRelation = event.relatedTarget?.closest?.("[data-line-relation-key]");
+
+    if (pairTarget?.dataset?.semanticPairKey && pairTarget.dataset.semanticPairKey !== nextPair?.dataset?.semanticPairKey) {
+      setSemanticPairHover(pairTarget.dataset.semanticPairKey, false);
+    }
+    if (relationTarget?.dataset?.lineRelationKey && relationTarget.dataset.lineRelationKey !== nextRelation?.dataset?.lineRelationKey) {
+      setLineRelationHover(relationTarget.dataset.lineRelationKey, false);
+    }
+  });
+
+  svg.addEventListener("click", (event) => {
+    const relationTarget = event.target?.closest?.("[data-line-relation-key]");
+    const pairTarget = event.target?.closest?.("[data-semantic-pair-key]");
+    if (relationTarget?.dataset?.lineRelationKey) {
+      setLineRelationSelected(relationTarget.dataset.lineRelationKey);
+      return;
+    }
+    if (pairTarget?.dataset?.semanticPairKey) {
+      setSemanticPairSelected(pairTarget.dataset.semanticPairKey);
+    }
+  });
+}
+
+function renderDiffConnectorDefs() {
+  return `
+    <defs>
+      <linearGradient id="lineMappingGloss" x1="-120%" y1="0%" x2="-20%" y2="0%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
+        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.58" />
+        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+        <animate attributeName="x1" values="-120%;100%" dur="3.2s" repeatCount="indefinite" />
+        <animate attributeName="x2" values="-20%;200%" dur="3.2s" repeatCount="indefinite" />
+      </linearGradient>
+      <filter id="objectFlowGlow" x="-20%" y="-40%" width="140%" height="180%">
+        <feGaussianBlur stdDeviation="7" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+  `;
+}
+
+function collectVisibleDiffObjectGroups(pane, paneRect) {
+  const groups = new Map();
+  const lines = [...pane.querySelectorAll(".semantic-object-block-wrapper[data-pair-index], .diff-line[data-pair-index]")];
+
+  lines.forEach((line) => {
+    if (line.classList.contains("semantic-placeholder-line")) return;
+    const pairKey = line.dataset.semanticPairKey || line.dataset.objectKey || "";
+    if (!pairKey) return;
+
+    const rect = line.getBoundingClientRect();
+    if (rect.bottom < paneRect.top || rect.top > paneRect.bottom) return;
+
+    if (!groups.has(pairKey)) {
+      groups.set(pairKey, {
+        key: pairKey,
+        lines: [],
+        type: line.dataset.objectType || "",
+        pairIndex: line.dataset.pairIndex || "",
+        identity: line.dataset.objectIdentity || "",
+        status: line.dataset.objectStatus || "",
+        reason: line.dataset.objectReason || "",
+        score: line.dataset.objectScore || "",
+        pane,
+        paneRect,
+        state: line.classList.contains("changed") ? "changed" : "equal",
+      });
+    }
+
+    const group = groups.get(pairKey);
+    group.lines.push(line);
+    if (!line.classList.contains("equal")) group.state = "changed";
+  });
+
+  return groups;
+}
+
+function groupVisibleRect(group, container) {
+  const base = container.getBoundingClientRect();
+  const paneBounds = group.paneRect
+    ? {
+      left: group.paneRect.left - base.left,
+      right: group.paneRect.right - base.left,
+      top: group.paneRect.top - base.top,
+      bottom: group.paneRect.bottom - base.top,
+    }
+    : null;
+  const rects = group.lines
+    .map((line) => getRelativeRect(line, container))
+    .map((rect) => paneBounds
+      ? ({
+        ...rect,
+        left: Math.max(rect.left, paneBounds.left),
+        right: Math.min(rect.right, paneBounds.right),
+        top: Math.max(rect.top, paneBounds.top),
+        bottom: Math.min(rect.bottom, paneBounds.bottom),
+      })
+      : rect)
+    .filter((rect) => rect.right > rect.left && rect.bottom > rect.top);
+  if (!rects.length) {
+    return getRelativeRect(group.lines[0], container);
+  }
+  const first = rects[0];
+  const merged = rects.reduce((acc, rect) => ({
+    left: Math.min(acc.left, rect.left),
+    right: Math.max(acc.right, rect.right),
+    top: Math.min(acc.top, rect.top),
+    bottom: Math.max(acc.bottom, rect.bottom),
+  }), {
+    left: first.left,
+    right: first.right,
+    top: first.top,
+    bottom: first.bottom,
+  });
+  return {
+    ...merged,
+    x: merged.left,
+    y: merged.top,
+    width: merged.right - merged.left,
+    height: merged.bottom - merged.top,
+    cx: merged.left + (merged.right - merged.left) / 2,
+    cy: merged.top + (merged.bottom - merged.top) / 2,
+  };
+}
+
+function getRelativeRect(element, container) {
+  const rect = element.getBoundingClientRect();
+  const base = container.getBoundingClientRect();
+
+  return {
+    x: rect.left - base.left,
+    y: rect.top - base.top,
+    width: rect.width,
+    height: rect.height,
+    cx: rect.left - base.left + rect.width / 2,
+    cy: rect.top - base.top + rect.height / 2,
+    left: rect.left - base.left,
+    right: rect.right - base.left,
+    top: rect.top - base.top,
+    bottom: rect.bottom - base.top,
+  };
+}
+
+function getRelativePoint(point, container) {
+  const base = container.getBoundingClientRect();
+  return {
+    x: point.x - base.left,
+    y: point.y - base.top,
+  };
+}
+
+function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
+  if (!oldGroup?.lines?.length || !newGroup?.lines?.length) return { markup: "", debugMarkup: "" };
+
+  const oldRect = groupVisibleRect(oldGroup, grid);
+  const newRect = groupVisibleRect(newGroup, grid);
+  const x1 = oldRect.right;
+  const x2 = newRect.left;
+  const y1Top = oldRect.top;
+  const y1Bottom = oldRect.bottom;
+  const y2Top = newRect.top;
+  const y2Bottom = newRect.bottom;
+  const y1Center = oldRect.top + (oldRect.height / 2);
+  const y2Center = newRect.top + (newRect.height / 2);
   const mid = x1 + (x2 - x1) / 2;
-  const state = oldLine.classList.contains("equal") && newLine.classList.contains("equal") ? "equal" : "changed";
-  const objectClass = oldLine.className.split(/\s+/).find((className) => className.startsWith("object-color-")) || "";
-  const path = `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`;
-  return `<path class="diff-connector ${state} ${objectClass}" d="${path}" />`;
+  const state = objectConnectorState(oldGroup, newGroup);
+  const typeClass = objectConnectorTypeClass(oldGroup, newGroup);
+  const connectorWidth = Math.abs(x2 - x1);
+  const controlOffset = Math.max(20, Math.min(140, connectorWidth * 0.5));
+  const ribbonPath = [
+    `M ${x1} ${y1Top}`,
+    `C ${x1 + controlOffset} ${y1Top}, ${x2 - controlOffset} ${y2Top}, ${x2} ${y2Top}`,
+    `L ${x2} ${y2Bottom}`,
+    `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
+    "Z",
+  ].join(" ");
+  const label = connectorLabelText(oldGroup, newGroup);
+  const debugMarkup = debug
+    ? [
+      buildMappingDebugAnchor(x1, y1Center, "object", oldGroup.key, "old"),
+      buildMappingDebugAnchor(x2, y2Center, "object", newGroup.key, "new"),
+      buildMappingDebugLabel(mid, Math.min(y1Top, y2Top) - 8, oldGroup.key),
+    ].join("")
+    : "";
+
+  return {
+    markup: `
+    <g class="diff-object-connector ${state} ${typeClass}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" data-connector-state="${escapeHtml(state)}">
+      <title>${escapeHtml(label)} · ${escapeHtml(state)}</title>
+      <path class="diff-object-flow-glow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+      <path class="diff-object-flow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+    </g>
+  `,
+    debugMarkup,
+  };
 }
 
-function diffLineTextAnchor(line, paneRect, preferredEdge) {
-  const textElement = line.querySelector(".diff-line-text") || line;
-  const textRect = textElement.getBoundingClientRect();
-  const lineRect = line.getBoundingClientRect();
+function objectConnectorTypeClass(oldGroup = {}, newGroup = {}) {
+  return `type-${cssSafeClassName(oldGroup.type || newGroup.type || "object")}`;
+}
+
+function objectConnectorState(oldGroup = {}, newGroup = {}) {
+  const oldStatus = String(oldGroup.status || "").toLowerCase();
+  const newStatus = String(newGroup.status || "").toLowerCase();
+  const status = oldStatus || newStatus;
+  const reason = String(oldGroup.reason || newGroup.reason || "").toLowerCase();
+  const score = Number(oldGroup.score || newGroup.score || 0);
+
+  if (reason === "manual") return "manual";
+  if (status === "partial" || status === "changed") return "partial";
+  if (status === "ambiguous") return "candidate";
+  if (status === "candidate") return "candidate";
+  if (status === "old-only" || status === "new-only" || status === "unmatched") return "unmatched";
+  if (oldStatus === "matched" && newStatus === "matched") return "matched";
+  if (oldGroup.state !== "equal" || newGroup.state !== "equal") return "changed";
+  if (Number.isFinite(score) && score > 0 && score < 100) return "changed";
+  return "matched";
+}
+
+function connectorLabelText(oldGroup = {}, newGroup = {}) {
+  const type = oldGroup.type || newGroup.type || "object";
+  const identity = oldGroup.identity || newGroup.identity || "";
+  const compactIdentity = String(identity).length > 14 ? `${String(identity).slice(0, 13)}...` : identity;
+  const label = compactIdentity ? `${type} ${compactIdentity}` : type;
+  return label.length > 24 ? `${label.slice(0, 23)}...` : label;
+}
+
+function buildMappingDebugAnchor(x, y, kind, key, side = "") {
+  const label = `${side}:${kind}`;
+  return `
+    <g class="mapping-debug-anchor mapping-debug-${escapeHtml(kind)}" data-debug-key="${escapeHtml(key)}">
+      <circle cx="${x}" cy="${y}" r="${kind === "line" ? 3 : 4}" />
+      <text x="${x + 6}" y="${y - 6}">${escapeHtml(label)}</text>
+    </g>
+  `;
+}
+
+function buildMappingDebugLabel(x, y, key) {
+  const label = String(key || "").slice(0, 42);
+  return `<text class="mapping-debug-label" x="${x}" y="${y}">${escapeHtml(label)}</text>`;
+}
+
+function isMappingDebugVisible() {
+  return Boolean(selectors.mappingDebugToggle?.checked);
+}
+
+function mappingDebugWarn(message, payload = null) {
+  if (!isMappingDebugVisible()) return;
+  if (payload) console.warn(`[mapping-debug] ${message}`, payload);
+  else console.warn(`[mapping-debug] ${message}`);
+}
+
+function reportMappingDebugSnapshot({ oldGroups, newGroups, objectPathCount, fieldPathCount }) {
+  if (!isMappingDebugVisible()) return;
+  const signature = [
+    oldGroups?.size || 0,
+    newGroups?.size || 0,
+    objectPathCount || 0,
+    fieldPathCount || 0,
+    selectors.oldDiffPane?.scrollTop || 0,
+    selectors.newDiffPane?.scrollTop || 0,
+  ].join(":");
+  if (state.mappingDebugSignature === signature) return;
+  state.mappingDebugSignature = signature;
+  console.debug("[mapping-debug] connector snapshot", {
+    oldObjects: oldGroups?.size || 0,
+    newObjects: newGroups?.size || 0,
+    objectPaths: objectPathCount,
+    linePaths: fieldPathCount,
+    oldScrollTop: selectors.oldDiffPane?.scrollTop || 0,
+    newScrollTop: selectors.newDiffPane?.scrollTop || 0,
+  });
+}
+
+function compactDebugText(text = "") {
+  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+function reportLineMappingDebugRows(label, rows = []) {
+  if (!isMappingDebugVisible() || !rows.length) return;
+  const signature = `${label}:${rows.length}:${rows.slice(0, 8).map((row) => `${row.pairKey}:${row.field}:${row.state}`).join("|")}`;
+  if (state.lineMappingDebugSignature === signature) return;
+  state.lineMappingDebugSignature = signature;
+  console.debug(`[mapping-debug] line relations: ${label} (${rows.length})`);
+  console.table(rows.slice(0, 60));
+}
+
+function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
+  if (!isLineMappingVisible()) {
+    lineMappingDebug("relations: hidden");
+    return [];
+  }
+
+  const paths = buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect);
+  const newLineMap = new Map();
+
+  [...selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((line) => {
+    const key = line.dataset.semanticLineMappingKey || "";
+    if (key && !line.classList.contains("semantic-placeholder-line")) newLineMap.set(key, line);
+  });
+
+  [...selectors.oldDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((oldLine) => {
+    const key = oldLine.dataset.semanticLineMappingKey || "";
+    if (!key || oldLine.classList.contains("semantic-placeholder-line")) return;
+    const newLine = newLineMap.get(key);
+    if (!newLine) return;
+
+    const oldRect = oldLine.getBoundingClientRect();
+    const newRect = newLine.getBoundingClientRect();
+    if (
+      oldRect.bottom < oldPaneRect.top ||
+      oldRect.top > oldPaneRect.bottom ||
+      newRect.bottom < newPaneRect.top ||
+      newRect.top > newPaneRect.bottom
+    ) {
+      return;
+    }
+
+    paths.push(buildLineMappingConnectorPath({
+      oldElement: oldLine,
+      newElement: newLine,
+      grid,
+      oldPaneRect,
+      newPaneRect,
+      relationKey: key,
+      relationState: lineRelationStateFromElements(oldLine, newLine),
+      oldAnchorFn: diffLineTextAnchor,
+      newAnchorFn: diffLineTextAnchor,
+    }));
+  });
+
+  lineMappingDebug("relations", {
+    paths: paths.length,
+    oldDomRelations: selectors.oldDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
+    newDomRelations: selectors.newDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
+  });
+  if (!paths.length) {
+    mappingDebugWarn("line mapping paths not generated", {
+      oldDomRelations: selectors.oldDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
+      newDomRelations: selectors.newDiffPane.querySelectorAll("[data-line-relation-key], [data-semantic-line-mapping-key]").length,
+      oldBlocks: selectors.oldDiffPane.querySelectorAll(".semantic-object-block-wrapper[data-semantic-pair-key]").length,
+      newBlocks: selectors.newDiffPane.querySelectorAll(".semantic-object-block-wrapper[data-semantic-pair-key]").length,
+      oldFlatLines: selectors.oldDiffPane.querySelectorAll(".diff-line[data-semantic-pair-key][data-semantic-field]").length,
+      newFlatLines: selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-pair-key][data-semantic-field]").length,
+    });
+  }
+
+  return paths;
+}
+
+function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
+  const paths = [];
+  const debugRows = [];
+  const oldElements = collectSemanticRelationElements(selectors.oldDiffPane);
+  const newElements = collectSemanticRelationElements(selectors.newDiffPane);
+  const coveredFieldPairs = new Set();
+
+  oldElements.forEach((oldLine, relationKey) => {
+    const key = oldLine.dataset.lineRelationKey || relationKey || "";
+    if (!key) return;
+    const newLine = newElements.get(key);
+    if (!newLine) return;
+
+    const oldRect = oldLine.getBoundingClientRect();
+    const newRect = newLine.getBoundingClientRect();
+    if (
+      oldRect.bottom < oldPaneRect.top ||
+      oldRect.top > oldPaneRect.bottom ||
+      newRect.bottom < newPaneRect.top ||
+      newRect.top > newPaneRect.bottom
+    ) {
+      return;
+    }
+
+    coveredFieldPairs.add(lineRelationFieldPairKey(oldLine));
+    debugRows.push({
+      pairKey: oldLine.closest?.(".semantic-object-block-wrapper")?.dataset?.semanticPairKey || oldLine.dataset.semanticPairKey || "",
+      field: normalizeRelationField(oldLine.dataset.semanticField || newLine.dataset.semanticField || ""),
+      state: lineRelationStateFromElements(oldLine, newLine),
+      oldLine: compactDebugText(oldLine.textContent || ""),
+      newLine: compactDebugText(newLine.textContent || ""),
+    });
+    paths.push(buildLineMappingConnectorPath({
+      oldElement: oldLine,
+      newElement: newLine,
+      grid,
+      oldPaneRect,
+      newPaneRect,
+      relationKey: key,
+      relationState: lineRelationStateFromElements(oldLine, newLine),
+      oldAnchorFn: semanticConfigLineAnchor,
+      newAnchorFn: semanticConfigLineAnchor,
+    }));
+  });
+
+  paths.push(...buildFallbackSemanticFieldConnectorPaths({
+    grid,
+    oldPaneRect,
+    newPaneRect,
+    coveredFieldPairs,
+  }));
+  paths.push(...buildFallbackFlatSemanticFieldConnectorPaths({
+    grid,
+    oldPaneRect,
+    newPaneRect,
+    coveredFieldPairs,
+  }));
+  reportLineMappingDebugRows("explicit semantic lines", debugRows);
+
+  return paths;
+}
+
+function isObjectMappingVisible() {
+  return selectors.objectMappingVisibleToggle?.checked !== false;
+}
+
+function isLineMappingVisible() {
+  return selectors.lineMappingVisibleToggle?.checked !== false;
+}
+
+function lineMappingDebug(message, payload = null) {
+  if (!selectors.semanticDebugToggle?.checked) return;
+  if (payload) console.debug(`[line-mapping] ${message}:`, payload);
+  else console.debug(`[line-mapping] ${message}`);
+}
+
+function lineRelationFieldPairKey(element) {
+  const wrapper = element?.closest?.(".semantic-object-block-wrapper");
+  const pairKey =
+    wrapper?.dataset?.semanticPairKey ||
+    element?.dataset?.semanticPairKey ||
+    "";
+  const field = normalizeRelationField(element?.dataset?.semanticField || "");
+  return pairKey && field ? `${pairKey}:${field}` : "";
+}
+
+function buildFallbackSemanticFieldConnectorPaths({
+  grid,
+  oldPaneRect,
+  newPaneRect,
+  coveredFieldPairs,
+}) {
+  const paths = [];
+  const debugRows = [];
+  const oldBlocks = collectVisibleSemanticObjectBlocks(selectors.oldDiffPane, oldPaneRect);
+  const newBlocks = collectVisibleSemanticObjectBlocks(selectors.newDiffPane, newPaneRect);
+
+  oldBlocks.forEach((oldBlock, pairKey) => {
+    const newBlock = newBlocks.get(pairKey);
+    if (!newBlock) return;
+
+    const oldLinesByField = collectSemanticConfigLinesByField(oldBlock);
+    const newLinesByField = collectSemanticConfigLinesByField(newBlock);
+    const fields = orderedRelationFields(
+      oldBlock.dataset.objectType || newBlock.dataset.objectType || "",
+      oldLinesByField,
+      newLinesByField
+    );
+
+    fields.forEach((field) => {
+      const fieldPairKey = `${pairKey}:${field}`;
+      if (coveredFieldPairs.has(fieldPairKey)) return;
+
+      const oldLines = oldLinesByField.get(field) || [];
+      const newLines = newLinesByField.get(field) || [];
+      const pairCount = Math.min(oldLines.length, newLines.length);
+
+      for (let index = 0; index < pairCount; index += 1) {
+        const oldLine = oldLines[index];
+        const newLine = newLines[index];
+        if (!oldLine || !newLine) continue;
+
+        const oldRect = oldLine.getBoundingClientRect();
+        const newRect = newLine.getBoundingClientRect();
+        if (
+          oldRect.bottom < oldPaneRect.top ||
+          oldRect.top > oldPaneRect.bottom ||
+          newRect.bottom < newPaneRect.top ||
+          newRect.top > newPaneRect.bottom
+        ) {
+          continue;
+        }
+
+        const relationKey = `field:${pairKey}:${field}:${index}`;
+        const relationState = semanticFieldRelationStateFromLines(oldLine, newLine, field);
+        applyFallbackLineRelation(oldLine, relationKey, relationState, field);
+        applyFallbackLineRelation(newLine, relationKey, relationState, field);
+        debugRows.push({
+          pairKey,
+          field,
+          state: relationState,
+          oldLine: compactDebugText(oldLine.textContent || ""),
+          newLine: compactDebugText(newLine.textContent || ""),
+        });
+        paths.push(buildLineMappingConnectorPath({
+          oldElement: oldLine,
+          newElement: newLine,
+          grid,
+          oldPaneRect,
+          newPaneRect,
+          relationKey,
+          relationState,
+          oldAnchorFn: semanticConfigLineAnchor,
+          newAnchorFn: semanticConfigLineAnchor,
+        }));
+      }
+    });
+  });
+
+  if (paths.length) {
+    lineMappingDebug("fallback paths", {
+      paths: paths.length,
+      oldObjects: oldBlocks.size,
+      newObjects: newBlocks.size,
+    });
+  }
+  reportLineMappingDebugRows("fallback semantic fields", debugRows);
+
+  return paths;
+}
+
+function buildFallbackFlatSemanticFieldConnectorPaths({
+  grid,
+  oldPaneRect,
+  newPaneRect,
+  coveredFieldPairs,
+}) {
+  const paths = [];
+  const debugRows = [];
+  const oldPairs = collectVisibleFlatSemanticLines(selectors.oldDiffPane, oldPaneRect);
+  const newPairs = collectVisibleFlatSemanticLines(selectors.newDiffPane, newPaneRect);
+
+  oldPairs.forEach((oldFields, pairKey) => {
+    const newFields = newPairs.get(pairKey);
+    if (!newFields) return;
+
+    const pairObjectType =
+      oldFields.objectType ||
+      newFields.objectType ||
+      splitObjectKey(pairKey).type ||
+      "";
+    const fields = orderedRelationFields(
+      pairObjectType,
+      oldFields,
+      newFields
+    );
+
+    fields.forEach((field) => {
+      const fieldPairKey = `${pairKey}:${field}`;
+      if (coveredFieldPairs.has(fieldPairKey)) return;
+
+      const oldLines = oldFields.get(field) || [];
+      const newLines = newFields.get(field) || [];
+      const pairCount = Math.min(oldLines.length, newLines.length);
+
+      for (let index = 0; index < pairCount; index += 1) {
+        const oldLine = oldLines[index];
+        const newLine = newLines[index];
+        if (!oldLine || !newLine) continue;
+
+        const relationKey = `flat-field:${pairKey}:${field}:${index}`;
+        const relationState = semanticFieldRelationStateFromLines(oldLine, newLine, field);
+        applyFallbackLineRelation(oldLine, relationKey, relationState, field);
+        applyFallbackLineRelation(newLine, relationKey, relationState, field);
+        debugRows.push({
+          pairKey,
+          field,
+          state: relationState,
+          oldLine: compactDebugText(oldLine.textContent || ""),
+          newLine: compactDebugText(newLine.textContent || ""),
+        });
+        paths.push(buildLineMappingConnectorPath({
+          oldElement: oldLine,
+          newElement: newLine,
+          grid,
+          oldPaneRect,
+          newPaneRect,
+          relationKey,
+          relationState,
+          oldAnchorFn: diffLineTextAnchor,
+          newAnchorFn: diffLineTextAnchor,
+        }));
+      }
+    });
+  });
+
+  reportLineMappingDebugRows("fallback flat fields", debugRows);
+  return paths;
+}
+
+function collectVisibleFlatSemanticLines(pane, paneRect) {
+  const result = new Map();
+  if (!pane) return result;
+
+  pane.querySelectorAll(".diff-line[data-semantic-pair-key][data-semantic-field]").forEach((line) => {
+    const pairKey = line.dataset.semanticPairKey || "";
+    const field = normalizeRelationField(line.dataset.semanticField || "");
+    const relationFields = new Set([
+      field,
+      ...inferRelationFieldsFromRenderedLine(line),
+    ].filter(Boolean));
+    if (!pairKey || !relationFields.size || line.classList.contains("semantic-placeholder-line")) return;
+    if (line.classList.contains("placeholder")) return;
+    if (isSemanticStructuralLine(line.textContent || "")) return;
+    const rect = line.getBoundingClientRect();
+    if (rect.bottom < paneRect.top || rect.top > paneRect.bottom) return;
+    if (!result.has(pairKey)) result.set(pairKey, new Map());
+    const fields = result.get(pairKey);
+    fields.objectType = fields.objectType || line.dataset.objectType || splitObjectKey(line.dataset.objectKey || pairKey).type || "";
+    relationFields.forEach((relationField) => {
+      if (!fields.has(relationField)) fields.set(relationField, []);
+      fields.get(relationField).push(line);
+    });
+  });
+
+  return result;
+}
+
+function collectVisibleSemanticObjectBlocks(pane, paneRect) {
+  const result = new Map();
+  if (!pane) return result;
+
+  pane.querySelectorAll(".semantic-object-block-wrapper[data-semantic-pair-key]").forEach((block) => {
+    const pairKey = block.dataset.semanticPairKey || "";
+    if (!pairKey || block.classList.contains("semantic-placeholder-line")) return;
+    const rect = block.getBoundingClientRect();
+    if (rect.bottom < paneRect.top || rect.top > paneRect.bottom) return;
+    result.set(pairKey, block);
+  });
+
+  return result;
+}
+
+function collectSemanticConfigLinesByField(block) {
+  const result = new Map();
+  block.querySelectorAll(".semantic-diff-config-line[data-semantic-field]").forEach((line) => {
+    if (line.classList.contains("is-structural")) return;
+    const fields = new Set([
+      normalizeRelationField(line.dataset.semanticField || ""),
+      ...inferRelationFieldsFromRenderedLine(line),
+    ].filter(Boolean));
+
+    fields.forEach((field) => {
+      if (!result.has(field)) result.set(field, []);
+      result.get(field).push(line);
+    });
+  });
+  return result;
+}
+
+function inferRelationFieldsFromRenderedLine(line) {
+  const text = canonicalizeComparableLine(
+    line?.querySelector?.("code")?.textContent ||
+    line?.querySelector?.(".diff-line-text")?.textContent ||
+    line?.textContent ||
+    ""
+  );
+  const fields = [];
+
+  if (/^\/?configure\s*\{.*\bstatic-routes\s+route\b/.test(text)) {
+    if (/\bstatic-routes\s+route\b/.test(text)) fields.push("route");
+    if (/\bnext-hop\b/.test(text)) fields.push("next-hop");
+    if (/\bdescription\b/.test(text)) fields.push("description");
+    if (/\btag\b/.test(text)) fields.push("tag");
+    if (/\bmetric\b/.test(text)) fields.push("metric");
+    if (/\badmin-state\b/.test(text)) fields.push("state");
+    return fields;
+  }
+
+  const objectType =
+    line?.dataset?.objectType ||
+    splitObjectKey(line?.dataset?.objectKey || line?.dataset?.semanticPairKey || "").type ||
+    "";
+  if (objectType === "interface") {
+    if (isInterfaceScopeOnlyLine(text)) return [];
+    const datasetField = normalizeRelationField(line?.dataset?.semanticField || "");
+    const interfaceField = normalizeRelationField(inferScopedInterfaceLineField(text, { objectType }));
+    if (interfaceField) return [interfaceField];
+    if (datasetField) return [datasetField];
+    return [];
+  }
+  if (objectType === "lag" || /\blag\s+"?[^"\s{}]+/.test(text) || /^lacp\b|^adapt-qos\b|^port\s+[\w./:-]+/.test(text)) {
+    const lagFields = inferLagLineFields(text);
+    if (lagFields.length) return lagFields;
+  }
+
+  const field = normalizeRelationField(inferSemanticFieldName(text));
+  return field ? [field] : [];
+}
+
+function orderedRelationFields(objectType, oldLinesByField, newLinesByField) {
+  const preferred = {
+    "static-route": ["description", "next-hop", "tag", "state", "route"],
+    lag: ["description", "mode", "access.adapt-qos.mode", "member-port", "lacp-mode", "lacp.administrative-key", "lacp-xmit-interval", "state", "lag"],
+    bgp: ["neighbor", "description", "authentication-key", "group", "state", "peer-as"],
+  }[objectType] || [];
+  const fields = new Set([...oldLinesByField.keys(), ...newLinesByField.keys()]);
+  return [
+    ...preferred.filter((field) => fields.has(field)),
+    ...[...fields].filter((field) => !preferred.includes(field)).sort(),
+  ];
+}
+
+function normalizeRelationField(field = "") {
+  const normalized = String(field || "").trim();
+  const scopedNextHopField = normalized.match(/^next-hop\[[^\]]+\]\.(.+)$/);
+  if (scopedNextHopField) return normalizeRelationField(scopedNextHopField[1]);
+  if (normalized === "admin-state") return "state";
+  return commonFieldAliases[normalized] || normalized;
+}
+
+function applyFallbackLineRelation(line, relationKey, relationState, field) {
+  if (!line || line.dataset.lineRelationKey) return;
+  line.dataset.lineRelationKey = relationKey;
+  line.dataset.lineRelationState = relationState;
+  line.dataset.lineRelationReason = "field-fallback";
+  line.dataset.semanticField = field;
+  line.classList.add("is-line-related", `line-relation-${cssSafeClassName(relationState)}`);
+}
+
+function semanticFieldRelationStateFromLines(oldLine, newLine, field) {
+  if (isCleanMatchedSemanticRelationElement(oldLine) && isCleanMatchedSemanticRelationElement(newLine)) {
+    return "equal";
+  }
+  const oldText = oldLine.querySelector?.("code")?.textContent || oldLine.textContent || "";
+  const newText = newLine.querySelector?.("code")?.textContent || newLine.textContent || "";
+  const oldValue = inferValueForField(oldText, field);
+  const newValue = inferValueForField(newText, field);
+  if (oldValue && newValue) return oldValue === newValue ? "equal" : "changed";
+  return "candidate";
+}
+
+function collectSemanticRelationElements(pane) {
+  const result = new Map();
+  if (!pane) return result;
+
+  pane
+    .querySelectorAll(".semantic-diff-config-line[data-line-relation-key], .diff-token-match[data-line-relation-key]")
+    .forEach((element) => {
+      const key = element.dataset.lineRelationKey || "";
+      if (!key) return;
+      const existing = result.get(key);
+      if (!existing || element.classList.contains("diff-token-match")) {
+        result.set(key, element);
+      }
+    });
+
+  return result;
+}
+
+function lineRelationStateFromElements(oldElement, newElement) {
+  if (isCleanMatchedSemanticRelationElement(oldElement) && isCleanMatchedSemanticRelationElement(newElement)) {
+    return "equal";
+  }
+  const stateValue =
+    oldElement?.dataset?.lineRelationState ||
+    newElement?.dataset?.lineRelationState ||
+    oldElement?.dataset?.semanticLineState ||
+    newElement?.dataset?.semanticLineState ||
+    "";
+  if (["equal", "changed", "candidate", "conflict"].includes(stateValue)) return stateValue;
+  if (oldElement?.classList?.contains("changed") || newElement?.classList?.contains("changed")) return "changed";
+  if (oldElement?.classList?.contains("added") || newElement?.classList?.contains("added")) return "candidate";
+  if (oldElement?.classList?.contains("missing") || newElement?.classList?.contains("missing")) return "candidate";
+  return "equal";
+}
+
+function isCleanMatchedSemanticRelationElement(element) {
+  const line = element?.closest?.(".semantic-diff-config-line, .diff-line") || element;
+  const wrapper = element?.closest?.(".semantic-object-block-wrapper");
+  const status = String(
+    line?.dataset?.objectStatus ||
+    wrapper?.dataset?.objectStatus ||
+    ""
+  ).toLowerCase();
+  return status === "matched";
+}
+
+function currentLineMappingStyle() {
+  const style = selectors.lineMappingStyleSelect?.value || "straight";
+  return ["straight", "chain", "slime"].includes(style) ? style : "straight";
+}
+
+function currentLineMappingBend() {
+  const raw = Number(selectors.lineMappingBendRange?.value ?? 65);
+  if (!Number.isFinite(raw)) return 0.65;
+  return Math.max(0, Math.min(1, raw / 100));
+}
+
+function buildLineMappingConnectorPath({
+  oldElement,
+  newElement,
+  grid,
+  oldPaneRect,
+  newPaneRect,
+  relationKey,
+  relationState,
+  oldAnchorFn,
+  newAnchorFn,
+}) {
+  const oldAnchor = oldAnchorFn(oldElement, oldPaneRect, "right");
+  const newAnchor = newAnchorFn(newElement, newPaneRect, "left");
+  const oldPoint = getRelativePoint(oldAnchor, grid);
+  const newPoint = getRelativePoint(newAnchor, grid);
+  const x1 = oldPoint.x;
+  const x2 = newPoint.x;
+  const y1 = oldPoint.y;
+  const y2 = newPoint.y;
+  const style = currentLineMappingStyle();
+  const active = relationKey && relationKey === state.activeLineRelationKey ? "line-relation-selected" : "";
+  const animated = selectors.lineMappingAnimationToggle?.checked ? "is-animated" : "";
+  const fieldClass = lineRelationFieldClass(oldElement, newElement, relationKey);
+  const cleanMatchedClass = isCleanMatchedSemanticRelationElement(oldElement) && isCleanMatchedSemanticRelationElement(newElement)
+    ? "clean-matched"
+    : "";
+  const laneBounds = getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 });
+  const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds });
+  const railMarkup = style === "slime"
+    ? buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass, active, path })
+    : "";
+  const shineMarkup = style === "slime" && animated && !prefersReducedMotion()
+    ? buildSlimeLineShinePath({ relationKey, relationState, fieldClass, cleanMatchedClass, active, path, x1, y1, x2, y2 })
+    : "";
+  const debugMarkup = isMappingDebugVisible()
+    ? [
+      buildMappingDebugAnchor(x1, y1, "line", relationKey, "old"),
+      buildMappingDebugAnchor(x2, y2, "line", relationKey, "new"),
+    ].join("")
+    : "";
+
+  if (selectors.semanticDebugToggle?.checked && state.lineMappingDebugAnchorCount < 5) {
+    state.lineMappingDebugAnchorCount += 1;
+    lineMappingDebug("anchors", {
+      relationKey,
+      relationState,
+      style,
+      fieldClass,
+      left: { x: Math.round(x1), y: Math.round(y1) },
+      right: { x: Math.round(x2), y: Math.round(y2) },
+    });
+  }
+
+  return `${railMarkup}<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} ${animated}"
+    data-line-relation-key="${escapeHtml(relationKey)}"
+    d="${path}" />${shineMarkup}${debugMarkup}`;
+}
+
+function buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path }) {
+  return `<path class="line-mapping-rail ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active}"
+    data-line-relation-key="${escapeHtml(relationKey)}"
+    d="${path}" />`;
+}
+
+function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path, x1, y1, x2, y2 }) {
+  const glossId = `lineMappingGloss-${cssSafeClassName(relationKey || `${x1}-${y1}-${x2}-${y2}`)}`;
+  const sweep = Math.max(72, Math.min(180, Math.abs(x2 - x1) * 0.22));
+  const startX = Math.min(x1, x2) - sweep;
+  const endX = Math.max(x1, x2) + sweep;
+  const midY = (y1 + y2) / 2;
+  return `<defs>
+      <linearGradient id="${escapeHtml(glossId)}" gradientUnits="userSpaceOnUse" x1="${startX}" y1="${midY}" x2="${startX + sweep}" y2="${midY}">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
+        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.62" />
+        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+        <animate attributeName="x1" values="${startX};${endX}" dur="3.2s" repeatCount="indefinite" />
+        <animate attributeName="x2" values="${startX + sweep};${endX + sweep}" dur="3.2s" repeatCount="indefinite" />
+      </linearGradient>
+    </defs>
+    <path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} is-animated"
+    style="stroke: url(#${escapeHtml(glossId)})"
+    data-line-relation-key="${escapeHtml(relationKey)}"
+    d="${path}" />`;
+}
+
+function lineRelationFieldClass(oldElement, newElement, relationKey = "") {
+  const field = lineRelationFieldName(oldElement, newElement, relationKey);
+  return field ? `field-${cssSafeClassName(field)}` : "field-unknown";
+}
+
+function lineRelationFieldName(oldElement, newElement, relationKey = "") {
+  const direct = normalizeRelationField(
+    oldElement?.dataset?.semanticField ||
+    newElement?.dataset?.semanticField ||
+    ""
+  );
+  if (direct) return direct;
+
+  const knownFields = new Set([
+    ...semanticFieldOrder,
+    ...Object.keys(commonFieldAliases),
+    "address",
+    "state",
+    "port",
+    "lag",
+    "sap",
+  ]);
+  return String(relationKey || "")
+    .split(":")
+    .map((part) => normalizeRelationField(part))
+    .find((part) => knownFields.has(part)) || "";
+}
+
+function getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 }) {
+  const base = grid.getBoundingClientRect();
+  const oldPaneRight = Number(oldPaneRect?.right) - base.left;
+  const newPaneLeft = Number(newPaneRect?.left) - base.left;
+  const hasPaneEdges = Number.isFinite(oldPaneRight) && Number.isFinite(newPaneLeft) && newPaneLeft > oldPaneRight + 8;
+
+  if (hasPaneEdges) {
+    const gutterWidth = newPaneLeft - oldPaneRight;
+    const centerX = oldPaneRight + (gutterWidth / 2);
+    const crossWidth = Math.max(56, Math.min(150, gutterWidth * 0.46));
+    return {
+      leftX: Math.max(x1 + 8, centerX - (crossWidth / 2)),
+      rightX: Math.min(x2 - 8, centerX + (crossWidth / 2)),
+      centerX,
+    };
+  }
+
+  const centerX = x1 + ((x2 - x1) / 2);
+  const halfWidth = Math.max(18, Math.min(46, Math.abs(x2 - x1) * 0.075));
+  return {
+    leftX: centerX - halfWidth,
+    rightX: centerX + halfWidth,
+    centerX,
+  };
+}
+
+function buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass = "", laneBounds = null }) {
+  const bend = currentLineMappingBend();
+  if (style === "straight" || style === "chain") {
+    return buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass, bend, laneBounds });
+  }
+
+  return buildSlimeTubePath({ x1, y1, x2, y2, bend, laneBounds });
+}
+
+function buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
+  if (bend <= 0.02) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
+  return `M ${x1} ${y1} L ${lane.leftX} ${y1} L ${lane.x} ${lane.y} L ${lane.rightX} ${y2} L ${x2} ${y2}`;
+}
+
+function buildFieldLaneCurvePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
+  const distance = Math.abs(x2 - x1);
+  if (bend <= 0.02) {
+    const tension = Math.max(64, Math.min(220, distance * 0.46));
+    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
+  }
+
+  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
+  const middleTension = Math.max(12, Math.min(42, distance * 0.045));
+  return [
+    `M ${x1} ${y1}`,
+    `L ${lane.leftX} ${y1}`,
+    `C ${lane.leftX + middleTension} ${y1}, ${lane.x - middleTension} ${lane.y}, ${lane.x} ${lane.y}`,
+    `C ${lane.x + middleTension} ${lane.y}, ${lane.rightX - middleTension} ${y2}, ${lane.rightX} ${y2}`,
+    `L ${x2} ${y2}`,
+  ].join(" ");
+}
+
+function buildSlimeTubePath({ x1, y1, x2, y2, bend = 0.65, laneBounds = null }) {
+  const distance = Math.abs(x2 - x1);
+  const verticalDistance = Math.abs(y2 - y1);
+  if (distance < 24 || verticalDistance < 3) {
+    const tension = Math.max(36, Math.min(180, distance * (0.28 + bend * 0.22)));
+    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
+  }
+
+  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, "", bend, laneBounds);
+  const laneWidth = Math.max(40, lane.rightX - lane.leftX);
+  const tension = Math.max(28, Math.min(82, laneWidth * 0.36));
+
+  return [
+    `M ${x1} ${y1}`,
+    `L ${lane.leftX} ${y1}`,
+    `C ${lane.leftX + tension} ${y1}, ${lane.rightX - tension} ${y2}, ${lane.rightX} ${y2}`,
+    `L ${x2} ${y2}`,
+  ].join(" ");
+}
+
+function lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null) {
+  const distance = Math.abs(x2 - x1);
+  const leftX = Number.isFinite(laneBounds?.leftX) ? laneBounds.leftX : null;
+  const rightX = Number.isFinite(laneBounds?.rightX) ? laneBounds.rightX : null;
+  const directX = Number.isFinite(laneBounds?.centerX) ? laneBounds.centerX : (x1 + x2) / 2;
+  const directY = (y1 + y2) / 2;
+  const laneHalfWidth = Math.max(18, Math.min(46, distance * 0.075));
+  const verticalDistance = Math.abs(y2 - y1);
+  const laneY = verticalDistance < 4
+    ? directY
+    : directY;
+  return {
+    x: directX,
+    leftX: Number.isFinite(leftX) ? leftX : directX - laneHalfWidth,
+    rightX: Number.isFinite(rightX) ? rightX : directX + laneHalfWidth,
+    y: laneY,
+  };
+}
+
+function clampLineLaneY(value, y1, y2) {
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+  const span = maxY - minY;
+  if (span < 4) return (y1 + y2) / 2;
+
+  const inset = Math.min(6, span * 0.18);
+  return Math.max(minY + inset, Math.min(maxY - inset, value));
+}
+
+function lineRelationFieldLaneYOffset(fieldClass = "") {
+  const offsetByField = {
+    "field-route": -22,
+    "field-neighbor": -22,
+    "field-address": -15,
+    "field-ip-address": -15,
+    "field-next-hop": -11,
+    "field-gateway": -11,
+    "field-state": 9,
+    "field-admin-state": 9,
+    "field-description": 18,
+    "field-tag": 28,
+    "field-interface": 14,
+    "field-sap": 14,
+    "field-port": 14,
+    "field-lag": 14,
+    "field-group": 38,
+    "field-peer-group": 38,
+    "field-authentication-key": 48,
+    "field-peer-as": 48,
+  };
+  return offsetByField[fieldClass] ?? 0;
+}
+
+function buildSmoothLineMappingPath({ x1, y1, x2, y2 }) {
+  const distance = Math.abs(x2 - x1);
+  const tension = Math.max(64, Math.min(220, distance * 0.46));
+  const dy = y2 - y1;
+  const curveY = Math.abs(dy) < 6 ? 0 : dy * 0.18;
+  return `M ${x1} ${y1} C ${x1 + tension} ${y1 + curveY}, ${x2 - tension} ${y2 - curveY}, ${x2} ${y2}`;
+}
+
+function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
+  const lineElement = line.closest?.(".semantic-diff-config-line, .diff-line") || line;
+  const textElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
+  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
+  const lineRect = lineElement.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
   const visibleLeft = Math.max(textRect.left, paneRect.left);
   const visibleRight = Math.min(textRect.right, paneRect.right);
   const hasVisibleWidth = visibleRight > visibleLeft;
   const x = preferredEdge === "left"
-    ? (hasVisibleWidth ? visibleLeft : Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
-    : (hasVisibleWidth ? visibleRight : Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
+    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
+    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
     x,
     y: lineRect.top + (lineRect.height / 2),
   };
 }
 
-function renderReportV2(report) {
-  selectors.summaryCards.innerHTML = [
-    ["차이", report.summary.total],
-    ["비교 객체", report.summary.compared],
-    ["변경", report.summary.changed],
-    ["누락", report.summary.missing],
-    ["추가", report.summary.added],
-    ["필수", report.summary.required],
-  ]
-    .map(([label, value]) => `<div class="summary-card"><strong>${value}</strong><span>${label}</span></div>`)
-    .join("");
+function diffLineTextAnchor(line, paneRect, preferredEdge) {
+  const lineElement = line.closest?.(".diff-line, .semantic-diff-config-line") || line;
+  const textElement = lineElement.querySelector(".diff-line-text") || lineElement.querySelector("code") || lineElement;
+  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
+  const lineRect = lineElement.getBoundingClientRect();
+  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
+  const visibleLeft = Math.max(textRect.left, paneRect.left);
+  const visibleRight = Math.min(textRect.right, paneRect.right);
+  const hasVisibleWidth = visibleRight > visibleLeft;
+  const x = preferredEdge === "left"
+    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
+    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
+  return {
+    x,
+    y: lineRect.top + (lineRect.height / 2),
+  };
+}
 
-  selectors.reportList.innerHTML = renderGroupedReportItems(report.visibleItems);
+function getVisibleSemanticTokenRect(line, paneRect, preferredEdge = "right") {
+  const tokens = [...line.querySelectorAll(".diff-token-match[data-semantic-field]:not([data-semantic-field=''])")];
+  const preferredField = normalizeRelationField(line?.dataset?.semanticField || "");
+  const visible = tokens
+    .map((token) => ({ token, rect: token.getBoundingClientRect() }))
+    .filter((item) => item.rect.right > paneRect.left && item.rect.left < paneRect.right);
+  if (!visible.length) return null;
+
+  const fieldMatched = preferredField
+    ? visible.filter((item) => normalizeRelationField(item.token.dataset.semanticField || "") === preferredField)
+    : [];
+  const visiblePool = fieldMatched.length ? fieldMatched : visible;
+  const candidates = preferredEdge === "right"
+    ? visiblePool.filter((item) => item.token.dataset.tokenKind === "keyword")
+    : visiblePool;
+  const pool = candidates.length ? candidates : visiblePool;
+  const item = preferredEdge === "left"
+    ? pool.reduce((best, candidate) => (candidate.rect.left < best.rect.left ? candidate : best), pool[0])
+    : pool.reduce((best, candidate) => (candidate.rect.right > best.rect.right ? candidate : best), pool[0]);
+  const rect = item.rect;
+
+  return {
+    left: Math.max(rect.left, paneRect.left),
+    right: Math.min(rect.right, paneRect.right),
+  };
+}
+
+function getActualSettingTextRect(element, preferredEdge = "right") {
+  if (!element || !document.createRange || !document.createTreeWalker) return null;
+  const textNodeInfo = preferredEdge === "left"
+    ? findFirstNonWhitespaceTextNode(element)
+    : findLastNonWhitespaceTextNode(element);
+  if (!textNodeInfo) return null;
+
+  const range = document.createRange();
+  range.setStart(textNodeInfo.node, textNodeInfo.offset);
+  range.setEnd(textNodeInfo.node, textNodeInfo.offset + 1);
+  const rect = range.getBoundingClientRect();
+  range.detach?.();
+  return rect && rect.width >= 0 ? rect : null;
+}
+
+function findFirstNonWhitespaceTextNode(element) {
+  const walker = document.createTreeWalker(element, window.NodeFilter?.SHOW_TEXT || 4);
+  let node = walker.nextNode();
+
+  while (node) {
+    const match = String(node.nodeValue || "").match(/\S/);
+    if (match) {
+      return { node, offset: match.index };
+    }
+    node = walker.nextNode();
+  }
+
+  return null;
+}
+
+function findLastNonWhitespaceTextNode(element) {
+  const nodes = [];
+  const walker = document.createTreeWalker(element, window.NodeFilter?.SHOW_TEXT || 4);
+  let node = walker.nextNode();
+
+  while (node) {
+    nodes.push(node);
+    node = walker.nextNode();
+  }
+
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const value = String(nodes[index].nodeValue || "");
+    const match = value.match(/\S(?=\s*$)/);
+    if (match) {
+      return { node: nodes[index], offset: match.index };
+    }
+  }
+
+  return null;
+}
+
+function renderReportV2(report) {
+  renderSummaryCards(report);
+
+  renderReportPolicyList(report);
 
   renderObjectNavigator(false);
   renderOverviewReport(report);
   bindDiffObjectNavigation();
+}
+
+function renderReportPolicyList(report) {
+  if (!selectors.reportList || !report) return;
+  const semanticItems = filterItems(
+    buildSemanticPolicyReportItems(state.lastSemanticPlan || []),
+    getOptions()
+  );
+  const legacyItems = filterLegacyPolicyReportItems(report.visibleItems || [], semanticItems, state.lastSemanticPlan || []);
+  selectors.reportList.innerHTML = renderGroupedReportItems([
+    ...legacyItems,
+    ...semanticItems,
+  ]);
+}
+
+function filterLegacyPolicyReportItems(legacyItems = [], semanticItems = [], semanticPlan = []) {
+  const semanticKeys = new Set(semanticItems.map((item) => item.objectKey).filter(Boolean));
+  const semanticLabels = new Set(semanticItems.map((item) => `${item.objectType}:${item.objectName}`).filter(Boolean));
+  const semanticPlanByKey = buildSemanticPlanLookup(semanticPlan);
+  return legacyItems.filter((item) => {
+    if (!["changed", "required"].includes(item.type)) return true;
+    const itemKey = item.objectKey || `${item.objectType}:${item.objectName}`;
+    const itemLabel = `${item.objectType}:${item.objectName}`;
+    if (semanticKeys.has(itemKey) || semanticLabels.has(itemLabel)) return false;
+    const planItem = semanticPlanByKey.get(canonicalizeComparableLine(itemKey)) ||
+      semanticPlanByKey.get(canonicalizeComparableLine(itemLabel));
+    if (!planItem) return true;
+    return hasLegacyReportActiveSemanticIssue(item, planItem);
+  });
+}
+
+function buildSemanticPolicyReportItems(plan = []) {
+  return (plan || [])
+    .filter((item) => !item.comparisonExcluded && !item.policySuppressed && activeSemanticPolicyViolations(item).length > 0)
+    .map((item) => {
+      const object = item.oldObject || item.newObject || {};
+      const objectType = item.objectType || object.normalizedType || object.type || "object";
+      const oldIdentity = semanticObjectIdentity(item.oldObject);
+      const newIdentity = semanticObjectIdentity(item.newObject);
+      const objectName = oldIdentity && newIdentity && oldIdentity !== newIdentity
+        ? `${oldIdentity} -> ${newIdentity}`
+        : (oldIdentity || newIdentity || "-");
+      const objectKey = item.oldObject
+        ? `${objectType}:${oldIdentity || objectName}`
+        : `${objectType}:${newIdentity || objectName}`;
+      const violations = activeSemanticPolicyViolations(item);
+
+      return {
+        type: "changed",
+        key: `semantic-policy:${item.id || objectKey}`,
+        objectKey,
+        objectType,
+        objectName,
+        oldLine: semanticObjectLineRange(item.oldObject),
+        newLine: semanticObjectLineRange(item.newObject),
+        message: `의미 기반 비교 위반 ${violations.length}건`,
+        details: violations.map((violation) => ({
+          kind: "field-changed",
+          field: violation.field || "-",
+          rule: violation.reason || "field-changed",
+          oldText: semanticPolicyValueText(violation.field, violation.oldValues),
+          newText: semanticPolicyValueText(violation.field, violation.newValues),
+        })),
+      };
+    });
+}
+
+function hasLegacyReportActiveSemanticIssue(legacyItem = {}, semanticItem = {}) {
+  const activeViolations = activeSemanticPolicyViolations(semanticItem);
+  if (activeViolations.length) {
+    const legacyFields = legacyReportItemFields(legacyItem);
+    if (!legacyFields.length) return true;
+    return legacyFields.some((field) =>
+      activeViolations.some((violation) => semanticFieldsEquivalent(field, violation.field))
+    );
+  }
+  return false;
+}
+
+function legacyReportItemFields(item = {}) {
+  const fields = [
+    item.field,
+    ...(Array.isArray(item.details) ? item.details.map((detail) => detail?.field) : []),
+  ];
+  return [...new Set(fields.map((field) => String(field || "").trim()).filter(Boolean))];
+}
+
+function semanticFieldsEquivalent(left = "", right = "") {
+  const rightAliases = semanticFieldAliases(right);
+  return semanticFieldAliases(left).some((field) => rightAliases.includes(field));
+}
+
+function semanticFieldAliases(field = "") {
+  const normalized = canonicalizeComparableLine(field).replace(/\s+/g, "-");
+  if (!normalized) return [];
+  const aliases = new Set([normalized]);
+  if (normalized === "state") aliases.add("admin-state");
+  if (normalized === "admin-state") aliases.add("state");
+  return [...aliases];
+}
+
+function semanticObjectIdentity(object = null) {
+  if (!object) return "";
+  return String(object.normalizedIdentity || object.identity || object.sourceName || object.name || object.id || "").trim();
+}
+
+function semanticObjectLineRange(object = null) {
+  const rawLines = Array.isArray(object?.rawLines) ? object.rawLines : [];
+  return rawLines.length ? `1-${rawLines.length}` : "-";
+}
+
+function semanticPolicyValueText(field = "", values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  const value = list.map((entry) => String(entry ?? "").trim()).filter(Boolean).join(", ");
+  return value ? `${field || "-"} ${value}` : "-";
 }
 
 function renderGroupedReportItems(items = []) {
@@ -6446,11 +14109,13 @@ function objectMatchesSearch(object, query) {
 
 function renderNavigatorObjectItem(object) {
   const fields = objectFieldEntries(object).slice(0, 8);
+  const description = objectDescriptionForDisplay(object);
   return `
     <div class="object-item" data-object-key="${escapeHtml(object.key)}" data-object-source="${escapeHtml(object.source)}">
       <button type="button" class="object-nav-main" data-object-navigate="${escapeHtml(object.key)}">
         <strong>${escapeHtml(object.type)} ${escapeHtml(object.name)}</strong>
         <span class="small-note">${object.source === "old" ? "기존" : "신규"} | 라인 ${object.startLine}-${object.endLine}</span>
+        ${description ? `<span class="object-item-description" title="${escapeHtml(description)}">${escapeHtml(description)}</span>` : ""}
         ${fields.length ? `<span class="object-field-chips">${fields.map(([field, value]) => `<span>${escapeHtml(field)}=${escapeHtml(formatObjectFieldValue(value))}</span>`).join("")}</span>` : ""}
       </button>
       <button type="button" class="object-delete-btn" data-object-delete="${escapeHtml(object.key)}" data-object-source="${escapeHtml(object.source)}">삭제</button>
@@ -6465,18 +14130,50 @@ function objectFieldEntries(object) {
     .sort(([left], [right]) => compareSemanticFieldName(left, right));
 }
 
+function isDescriptionFieldName(field = "") {
+  const normalized = String(field || "").trim().toLowerCase();
+  return normalized === "description" || normalized.endsWith(".description");
+}
+
+function collectObjectDescriptionValues(object) {
+  const values = [];
+  const add = (value) => {
+    const list = Array.isArray(value) ? value : [value];
+    list.forEach((entry) => {
+      const text = String(entry ?? "").trim().replace(/\s+/g, " ");
+      if (text) values.push(text);
+    });
+  };
+  add(object?.description);
+  [object?.fields, object?.canonicalFields].forEach((fields = {}) => {
+    Object.entries(fields || {}).forEach(([field, value]) => {
+      if (isDescriptionFieldName(field)) add(value);
+    });
+  });
+  return [...new Set(values)];
+}
+
+function objectDescriptionForDisplay(object) {
+  return collectObjectDescriptionValues(object).join(" / ");
+}
+
 function formatObjectFieldValue(value) {
   const text = Array.isArray(value) ? value.join(",") : String(value || "");
   return text.length > 42 ? `${text.slice(0, 39)}...` : text;
 }
 
+function formatObjectSearchFieldValue(value) {
+  return Array.isArray(value) ? value.join(",") : String(value || "");
+}
+
 function objectSearchText(object) {
-  const fieldText = objectFieldEntries(object).map(([field, value]) => `${field} ${formatObjectFieldValue(value)}`).join(" ");
+  const fieldText = objectFieldEntries(object).map(([field, value]) => `${field} ${formatObjectSearchFieldValue(value)}`).join(" ");
   return canonicalizeComparableLine([
     object.source,
     object.type,
     object.name,
     object.key,
+    objectDescriptionForDisplay(object),
     fieldText,
     ...(object.rawLines || []),
   ].join(" "));
@@ -6556,18 +14253,68 @@ function renderOverviewReport(report) {
   if (!selectors.overviewReport) return;
   const objects = [...(report.oldObjects || []), ...(report.newObjects || [])].filter((object) => object.type !== "global");
   const byType = groupBy(objects, (object) => object.type);
+  const dashboard = buildCurrentDashboardData(report);
+  const { fieldAnalysis, review, graph, severity, context, lineSummary, audit } = dashboard;
   selectors.overviewReport.innerHTML = `
-    <section class="overview-section">
-      <h3>요약</h3>
-      <div class="overview-grid overview-summary-grid">
-        <div class="overview-card"><strong>${report.summary.total}</strong><span>전체 차이</span></div>
-        <div class="overview-card"><strong>${report.summary.changed}</strong><span>변경 객체</span></div>
-        <div class="overview-card"><strong>${report.summary.missing}</strong><span>누락</span></div>
-        <div class="overview-card"><strong>${report.summary.added}</strong><span>추가</span></div>
+    <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}">
+      <div>
+        <span class="summary-kicker">통합 리포트</span>
+        <h3>${escapeHtml(severity.label)}</h3>
+        <p>${escapeHtml(severity.reason)}</p>
+      </div>
+      <div class="summary-context-row">
+        <span>${escapeHtml(vendorLabel(context.oldVendor))} → ${escapeHtml(vendorLabel(context.newVendor))}</span>
+        <span>${escapeHtml(context.support?.label || "지원 상태 확인")}</span>
+        <span>${escapeHtml(context.profileName || "프로파일 없음")}</span>
       </div>
     </section>
     <section class="overview-section">
-      <h3>객체 수</h3>
+      <h3>운영 요약</h3>
+      <div class="overview-grid overview-summary-grid">
+        <div class="overview-card"><strong>${report.summary.total}</strong><span>전체 차이</span></div>
+        <div class="overview-card"><strong>${report.summary.changed}</strong><span>변경 설정</span></div>
+        <div class="overview-card"><strong>${report.summary.missing}</strong><span>누락</span></div>
+        <div class="overview-card"><strong>${report.summary.added}</strong><span>추가</span></div>
+        <div class="overview-card"><strong>${escapeHtml(lineSummary.changed)}</strong><span>라인 변경</span></div>
+        <div class="overview-card"><strong>${escapeHtml(review.ambiguous.length)}</strong><span>확인 필요 후보</span></div>
+      </div>
+    </section>
+    <section class="overview-section report-review-section">
+      <h3>검토 테이블</h3>
+      ${renderReportReviewTable(review)}
+    </section>
+    <section class="overview-section report-audit-section">
+      <h3>표준 점검 리포트</h3>
+      ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
+        ? renderAuditReportSections(audit)
+        : `<div class="small-note">현재 모드에서는 표시하지 않음. 표준 점검 또는 전환 준비도 모드에서 확인.</div>`}
+    </section>
+    <section class="overview-section report-coverage-section">
+      <h3>분석된 라인 진단</h3>
+      ${context.debugDiagnosticsVisible
+        ? renderCoverageDiagnostics(context.coverageDiagnostics)
+        : `<div class="small-note">고급 진단 숨김. 전체 진단 모드에서 확인.</div>`}
+    </section>
+    <section class="overview-section report-field-section">
+      <h3>공통 필드 분석</h3>
+      ${renderFieldOverlapSummary(fieldAnalysis)}
+    </section>
+    <section class="overview-section report-graph-section">
+      <div class="report-graph-head">
+        <div>
+          <h3>관계 그래프</h3>
+          <p>설정 연결, 직접 연결, 참조 관계를 2D로 표시합니다.</p>
+        </div>
+        <div class="report-graph-tools">
+          <input type="search" class="report-graph-search" placeholder="설정/항목 검색" aria-label="그래프 노드 검색" />
+          <button type="button" data-graph-fit>전체 보기</button>
+          <label><input type="checkbox" data-graph-labels checked /> 라벨</label>
+        </div>
+      </div>
+      ${renderRelationshipGraph(graph)}
+    </section>
+    <section class="overview-section">
+      <h3>설정 수</h3>
       <div class="overview-grid">
         ${[...byType.entries()].sort(([left], [right]) => objectTypeRank(left) - objectTypeRank(right)).map(([type, list]) => {
           const oldCount = list.filter((object) => object.source === "old").length;
@@ -6581,6 +14328,956 @@ function renderOverviewReport(report) {
       ${renderFieldDistributionSummary(objects)}
     </section>
   `;
+  bindReportGraphInteractions();
+}
+
+function renderCoverageDiagnostics(diagnostics = null) {
+  if (!diagnostics) return `<div class="small-note">라인 진단 데이터가 없습니다.</div>`;
+  const rows = [
+    ["분석 비율", diagnostics.coveragePercent == null ? "계산 불가" : `${diagnostics.coveragePercent}%`],
+    ["파싱 객체", diagnostics.parsedObjectCount],
+    ["인식 라인", diagnostics.recognizedLineCount],
+    ["대상 라인", diagnostics.eligibleLineCount],
+    ["예외/숨김 라인", diagnostics.ignoredLineCount],
+    ["미분석 라인", diagnostics.unparsedLineCount],
+    ["router log wrapper", diagnostics.wrapperLineCount],
+    ["라인 매핑 없음", diagnostics.linesWithoutSourceMapping],
+  ];
+  const unparsed = [
+    ...(diagnostics.sides?.old?.unparsedLines || []).map((line) => ({ ...line, side: "기존" })),
+    ...(diagnostics.sides?.new?.unparsedLines || []).map((line) => ({ ...line, side: "신규" })),
+  ].slice(0, 16);
+  return `
+    <div class="coverage-diagnostics">
+      <p>${escapeHtml(diagnostics.reason || "")}</p>
+      <div class="coverage-diagnostic-grid">
+        ${rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
+      </div>
+      <details>
+        <summary>미분석 라인 샘플 ${escapeHtml(unparsed.length)}개</summary>
+        <div class="coverage-unparsed-list">
+          ${unparsed.length ? unparsed.map((line) => `
+            <code>${escapeHtml(line.side)} ${escapeHtml(line.line)}: ${escapeHtml(line.text)}</code>
+          `).join("") : `<span class="small-note">미분석 라인 없음</span>`}
+        </div>
+      </details>
+    </div>
+  `;
+}
+
+function renderReportReviewTable(review = {}) {
+  const rows = buildReportReviewRows(review);
+  const fieldColumns = getReportReviewFieldColumns(rows);
+  const filterOptions = getReportReviewFilterOptions(rows, fieldColumns);
+  const valueOptions = getReportReviewChecklistOptions(rows, fieldColumns);
+
+  return `
+    <div class="report-review-root" data-report-review-root>
+      <div class="report-review-tools">
+        <input type="search" data-report-review-search placeholder="전체 검색" aria-label="검토 테이블 전체 검색" />
+        <button type="button" data-report-review-clear>초기화</button>
+        <span data-report-review-count>${escapeHtml(rows.length)}/${escapeHtml(rows.length)}</span>
+      </div>
+      <div class="report-review-table-wrap">
+      <table class="report-review-field-table">
+        <thead>
+          <tr>
+            <th>${renderReportReviewHeaderSelect("구분", "group", filterOptions.groups, valueOptions.group)}</th>
+            <th>${renderReportReviewHeaderSelect("설정 종류", "type", filterOptions.types, valueOptions.type)}</th>
+            <th>${renderReportReviewHeaderSearch("설정 키", "key", valueOptions.key)}</th>
+            <th>${renderReportReviewHeaderSearch("description", "description", valueOptions.description)}</th>
+            <th>${renderReportReviewHeaderSearch("사유", "reason", valueOptions.reason)}</th>
+            ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses, valueOptions.fields.get(field) || [])}</th>`).join("")}
+            <th>${renderReportReviewHeaderSearch("일치도", "score", valueOptions.score)}</th>
+            <th><div class="report-review-th"><div class="report-review-th-bar"><span>동작</span></div></div></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.map((item) => {
+            const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
+            const meta = getReportReviewRowMeta(item);
+            const objectKey = item.label || item.objectKey || "-";
+            const description = getReportReviewDescription(item);
+            return `
+              <tr
+                data-report-review-row
+                data-review-group="${escapeHtml(item.group || "")}"
+                data-review-type="${escapeHtml(item.objectType || "")}"
+                data-review-key="${escapeHtml(objectKey)}"
+                data-review-description="${escapeHtml(description.searchText)}"
+                data-review-description-option="${escapeHtml(reportReviewOptionValue(description.value))}"
+                data-review-reason="${escapeHtml(item.reason || "")}"
+                data-review-reason-option="${escapeHtml(reportReviewOptionValue(item.reason || ""))}"
+                data-review-score="${escapeHtml(item.score || "")}"
+                data-review-score-option="${escapeHtml(reportReviewOptionValue(item.score || ""))}"
+                data-review-fields="${escapeHtml(meta.fields.join(" "))}"
+                data-review-statuses="${escapeHtml(meta.statuses.join(" "))}"
+                data-review-search="${escapeHtml(meta.searchText)}">
+                <td>${escapeHtml(item.group)}</td>
+                <td>${escapeHtml(item.objectType || "-")}</td>
+                <td><strong>${escapeHtml(objectKey)}</strong></td>
+                ${renderReportReviewDescriptionCell(description)}
+                <td>${escapeHtml(item.reason || "-")}</td>
+                ${fieldColumns.map((field) => renderReportReviewFieldCell(item, field)).join("")}
+                <td>${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>
+                <td>
+                  <div class="report-review-actions">
+                    <button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button>
+                    ${item.group === "비교 제외됨" && item.policyId ? `<button type="button" data-remove-exception="${escapeHtml(item.policyId)}">비교 제외 해제</button>` : ""}
+                    ${item.group === "예외 처리됨" && item.policyId ? `<button type="button" data-remove-exception="${escapeHtml(item.policyId)}">예외 해제</button>` : ""}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join("") : `<tr><td colspan="${fieldColumns.length + 7}" class="report-review-empty">검토 항목 없음</td></tr>`}
+        </tbody>
+      </table>
+      <div class="report-review-filter-empty" data-report-review-filter-empty hidden>조건에 맞는 검토 항목 없음</div>
+      </div>
+    </div>
+  `;
+}
+
+function buildReportReviewRows(review = {}) {
+  const unmatchedOld = (review.unmatchedOld || []).map((item) => ({ ...item, group: "기존 설정에서만 있음" }));
+  const unmatchedNew = (review.unmatchedNew || []).map((item) => ({ ...item, group: "신규 설정에서만 있음" }));
+  const excluded = (review.excluded || []).map((item) => ({ ...item, group: "비교 제외됨" }));
+  const ambiguous = (review.ambiguous || []).map((item) => ({ ...item, group: "매핑 후보 여러 개" }));
+  const lowConfidence = (review.lowConfidence || []).map((item) => ({ ...item, group: "낮은 신뢰도" }));
+  const abnormal = (review.abnormal || []).map((item) => ({ ...item, group: "검토 필요 값" }));
+  const relationshipChanges = (review.relationshipChanges || []).map((item) => ({ ...item, group: "연결/참조 관계" }));
+  const activeKeys = new Set([
+    ...unmatchedOld,
+    ...unmatchedNew,
+    ...excluded,
+    ...ambiguous,
+    ...lowConfidence,
+    ...abnormal,
+    ...relationshipChanges,
+  ].map(reportReviewObjectDedupKey).filter(Boolean));
+  const suppressed = (review.suppressed || [])
+    .map((item) => ({ ...item, group: reportReviewSuppressedGroup(item) }))
+    .filter((item) => !activeKeys.has(reportReviewObjectDedupKey(item)));
+
+  return [
+    ...unmatchedOld,
+    ...unmatchedNew,
+    ...excluded,
+    ...suppressed,
+    ...ambiguous,
+    ...lowConfidence,
+    ...abnormal,
+    ...relationshipChanges,
+  ];
+}
+
+function reportReviewSuppressedGroup(item = {}) {
+  const sources = Array.isArray(item.suppressionSources) ? item.suppressionSources : [];
+  return sources.some((source) => ["profile-exception", "user-exception", "line-exception", "field-exception"].includes(source))
+    ? "예외 처리됨"
+    : "정책 제외됨";
+}
+
+function reportReviewObjectDedupKey(item = {}) {
+  const objectType = item.objectType || "";
+  const oldKey = item.oldKey || "";
+  const newKey = item.newKey || "";
+  const objectKey = item.objectKey || item.label || "";
+  if (!objectType && !oldKey && !newKey && !objectKey) return "";
+  return [objectType, oldKey, newKey, objectKey].join("|");
+}
+
+function renderReportReviewHeaderSearch(title = "", key = "", options = []) {
+  const panelStyle = reportReviewFilterPanelStyle([title, ...options]);
+  return `
+    <div class="report-review-th">
+      ${renderReportReviewHeaderBar(title)}
+      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
+        <input type="search" data-report-column-search="${escapeHtml(key)}" placeholder="검색" aria-label="${escapeHtml(title)} 검색" />
+        ${renderReportReviewValueChecklist(title, key, options)}
+      </div>
+    </div>
+  `;
+}
+
+function renderReportReviewHeaderSelect(title = "", key = "", options = [], valueOptions = options) {
+  const panelStyle = reportReviewFilterPanelStyle([title, ...options, ...valueOptions]);
+  return `
+    <div class="report-review-th">
+      ${renderReportReviewHeaderBar(title)}
+      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
+        <select data-report-column-filter="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 필터">
+          <option value="all">전체</option>
+          ${options.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}
+        </select>
+        ${renderReportReviewValueChecklist(title, key, valueOptions)}
+      </div>
+    </div>
+  `;
+}
+
+function renderReportReviewFieldHeader(field = "", statuses = [], valueOptions = []) {
+  const panelStyle = reportReviewFilterPanelStyle([
+    field,
+    ...statuses.map(reportFieldStatusLabel),
+    ...valueOptions,
+  ]);
+  return `
+    <div class="report-review-th report-review-field-th">
+      ${renderReportReviewHeaderBar(field)}
+      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
+        <input type="search" data-report-field-search="${escapeHtml(field)}" placeholder="값 검색" aria-label="${escapeHtml(field)} 값 검색" />
+        <select data-report-field-status-filter="${escapeHtml(field)}" aria-label="${escapeHtml(field)} 상태 필터">
+          <option value="all">상태 전체</option>
+          ${statuses.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(reportFieldStatusLabel(value))}</option>`).join("")}
+        </select>
+        ${renderReportReviewValueChecklist(field, `field:${field}`, valueOptions)}
+      </div>
+    </div>
+  `;
+}
+
+function reportReviewFilterPanelStyle(values = []) {
+  const longest = values.reduce((max, value) => {
+    const text = reportReviewOptionLabel(value);
+    return Math.max(max, [...text].length);
+  }, 0);
+  const widthCh = Math.min(58, Math.max(24, longest + 8));
+  return `--report-filter-width: ${widthCh}ch;`;
+}
+
+function renderReportReviewValueChecklist(title = "", key = "", options = []) {
+  if (!options.length) return "";
+  return `
+    <div class="report-review-checklist" data-report-checklist="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 값 필터">
+      <input type="search" data-report-check-search placeholder="항목 검색" aria-label="${escapeHtml(title)} 항목 검색" />
+      <label class="report-review-check-option report-review-check-all">
+        <input type="checkbox" data-report-check-all="${escapeHtml(key)}" checked />
+        <span>(모두 선택)</span>
+      </label>
+      <div class="report-review-check-options">
+        ${options.map((value) => {
+          const optionValue = reportReviewOptionValue(value);
+          return `
+            <label class="report-review-check-option" data-report-check-item data-report-check-label="${escapeHtml(reportReviewOptionLabel(value).toLowerCase())}">
+              <input type="checkbox" data-report-check-value="${escapeHtml(key)}" value="${escapeHtml(optionValue)}" checked />
+              <span title="${escapeHtml(reportReviewOptionLabel(value))}">${escapeHtml(reportReviewOptionLabel(value))}</span>
+            </label>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderReportReviewHeaderBar(title = "") {
+  return `
+    <div class="report-review-th-bar">
+      <span>${escapeHtml(title)}</span>
+      <button type="button" class="report-review-filter-toggle" data-report-filter-toggle data-report-filter-title="${escapeHtml(title)}" aria-expanded="false" aria-label="${escapeHtml(title)} 필터 열기">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M2 3h12L9.5 8.2v3.6l-3 1.7V8.2L2 3z" fill="currentColor" />
+        </svg>
+      </button>
+    </div>
+  `;
+}
+
+const REPORT_REVIEW_DEFAULT_FIELDS = [
+  "neighbor",
+  "peerip",
+  "group",
+  "admin-state",
+  "peer-as",
+  "import.policy",
+  "export.policy",
+  "authentication-key",
+];
+
+function getReportReviewFieldColumns(rows = []) {
+  const present = new Set();
+  rows.forEach((item) => {
+    (item.fieldRows || []).forEach((row) => {
+      const field = normalizeReportReviewFieldName(row?.field);
+      if (field && field !== "description") present.add(field);
+    });
+  });
+  const preferred = REPORT_REVIEW_DEFAULT_FIELDS.filter((field) => present.has(field));
+  const extras = [...present]
+    .filter((field) => !REPORT_REVIEW_DEFAULT_FIELDS.includes(field))
+    .sort();
+  return [...preferred, ...extras].slice(0, 14);
+}
+
+function getReportReviewFilterOptions(rows = [], fieldColumns = []) {
+  const groups = new Set();
+  const types = new Set();
+  const fields = new Set(fieldColumns);
+  const statuses = new Set();
+
+  rows.forEach((item) => {
+    if (item.group) groups.add(String(item.group));
+    if (item.objectType) types.add(String(item.objectType));
+    (item.fieldRows || []).forEach((row) => {
+      const field = normalizeReportReviewFieldName(row?.field);
+      if (field) fields.add(field);
+      if (row?.status) statuses.add(String(row.status).toLowerCase());
+    });
+  });
+
+  return {
+    groups: [...groups].sort(),
+    types: [...types].sort(),
+    fields: [...fields].sort(),
+    statuses: [...statuses].sort(),
+  };
+}
+
+const REPORT_REVIEW_EMPTY_OPTION = "__report-review-empty__";
+const REPORT_REVIEW_EMPTY_LABEL = "(필드 값 없음)";
+
+function getReportReviewChecklistOptions(rows = [], fieldColumns = []) {
+  const options = {
+    group: new Set(),
+    type: new Set(),
+    key: new Set(),
+    description: new Set(),
+    reason: new Set(),
+    score: new Set(),
+    fields: new Map(fieldColumns.map((field) => [field, new Set()])),
+  };
+
+  rows.forEach((item) => {
+    const objectKey = item.label || item.objectKey || "-";
+    const description = getReportReviewDescription(item);
+    addReportReviewOption(options.group, item.group || "");
+    addReportReviewOption(options.type, item.objectType || "");
+    addReportReviewOption(options.key, objectKey);
+    addReportReviewOption(options.description, description.value || "");
+    addReportReviewOption(options.reason, item.reason || "");
+    addReportReviewOption(options.score, item.score || "");
+    fieldColumns.forEach((field) => {
+      addReportReviewOption(options.fields.get(field), reportReviewFieldDisplayValue(item, field));
+    });
+  });
+
+  return {
+    group: sortReportReviewOptions(options.group),
+    type: sortReportReviewOptions(options.type),
+    key: sortReportReviewOptions(options.key),
+    description: sortReportReviewOptions(options.description),
+    reason: sortReportReviewOptions(options.reason),
+    score: sortReportReviewOptions(options.score),
+    fields: new Map([...options.fields.entries()].map(([field, values]) => [field, sortReportReviewOptions(values)])),
+  };
+}
+
+function addReportReviewOption(target, value = "") {
+  if (!target) return;
+  target.add(String(value ?? "").trim());
+}
+
+function sortReportReviewOptions(values = new Set()) {
+  return [...values].sort((left, right) => {
+    const leftEmpty = !String(left || "").trim();
+    const rightEmpty = !String(right || "").trim();
+    if (leftEmpty !== rightEmpty) return leftEmpty ? 1 : -1;
+    return String(left).localeCompare(String(right), undefined, { numeric: true });
+  });
+}
+
+function reportReviewOptionValue(value = "") {
+  const text = String(value ?? "").trim();
+  return text ? text : REPORT_REVIEW_EMPTY_OPTION;
+}
+
+function reportReviewOptionLabel(value = "") {
+  const text = String(value ?? "").trim();
+  return text || REPORT_REVIEW_EMPTY_LABEL;
+}
+
+function reportReviewFieldDisplayValue(item = {}, field = "") {
+  const row = findReportReviewFieldRow(item, field);
+  if (!row) return "";
+  const oldValue = maskReportFieldValue(field, row.oldValue);
+  const newValue = maskReportFieldValue(field, row.newValue);
+  const status = String(row.status || "").toLowerCase();
+  return formatReportFieldValue(status, oldValue, newValue);
+}
+
+function getReportReviewRowMeta(item = {}) {
+  const fields = [];
+  const statuses = [];
+  const fieldText = [];
+
+  (item.fieldRows || []).forEach((row) => {
+    const field = normalizeReportReviewFieldName(row.field);
+    const status = String(row.status || "").toLowerCase();
+    if (field) fields.push(field);
+    if (status) statuses.push(status);
+    fieldText.push(field, status, row.oldValue || "", row.newValue || "");
+  });
+
+  return {
+    fields: [...new Set(fields)],
+    statuses: [...new Set(statuses)],
+    searchText: [
+      item.group,
+      item.objectType,
+      item.label,
+      item.objectKey,
+      item.reason,
+      item.score,
+      ...fieldText,
+    ].map((value) => String(value || "").toLowerCase()).join(" "),
+  };
+}
+
+function normalizeReportReviewFieldName(field = "") {
+  const normalized = String(field || "").trim().toLowerCase();
+  const scopedNextHopField = normalized.match(/^next-hop\[[^\]]+\]\.(.+)$/);
+  return scopedNextHopField ? scopedNextHopField[1] : normalized;
+}
+
+function findReportReviewFieldRow(item = {}, field = "") {
+  const target = normalizeReportReviewFieldName(field);
+  return (item.fieldRows || []).find((entry) => normalizeReportReviewFieldName(entry.field) === target);
+}
+
+function getReportReviewDescription(item = {}) {
+  const row = findReportReviewFieldRow(item, "description");
+  if (!row) return { value: "", label: "", searchText: "" };
+  const oldValue = maskReportFieldValue("description", row.oldValue);
+  const newValue = maskReportFieldValue("description", row.newValue);
+  const status = String(row.status || "").toLowerCase();
+  const label = reportFieldStatusLabel(status);
+  const value = formatReportFieldValue(status, oldValue, newValue);
+  const searchText = [value, label, oldValue, newValue, status].map((entry) => String(entry || "").toLowerCase()).join(" ");
+  return { value, label, searchText };
+}
+
+function renderReportReviewDescriptionCell(description = {}) {
+  return `
+    <td class="report-field-cell report-review-description-cell" data-report-description-cell data-field-search="${escapeHtml(description.searchText || "")}">
+      <span title="${escapeHtml(description.value || "")}">${escapeHtml(description.value || "-")}</span>
+    </td>
+  `;
+}
+
+function renderReportReviewFieldCell(item = {}, field = "") {
+  const row = findReportReviewFieldRow(item, field);
+  if (!row) {
+    return `<td class="report-field-empty" data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="" data-field-option="${escapeHtml(REPORT_REVIEW_EMPTY_OPTION)}">-</td>`;
+  }
+
+  const oldValue = maskReportFieldValue(field, row.oldValue);
+  const newValue = maskReportFieldValue(field, row.newValue);
+  const status = String(row.status || "").toLowerCase();
+  const label = reportFieldStatusLabel(status);
+  const value = formatReportFieldValue(status, oldValue, newValue);
+  const searchText = [value, label, oldValue, newValue, status].map((entry) => String(entry || "").toLowerCase()).join(" ");
+
+  return `
+    <td
+      class="report-field-cell report-field-status-${escapeHtml(status || "unknown")}"
+      data-report-field-cell="${escapeHtml(field)}"
+      data-field-status="${escapeHtml(status)}"
+      data-field-search="${escapeHtml(searchText)}"
+      data-field-option="${escapeHtml(reportReviewOptionValue(value))}">
+      <span>${escapeHtml(value || "-")}</span>
+      <small>${escapeHtml(label)}</small>
+    </td>
+  `;
+}
+
+function reportFieldStatusLabel(status = "") {
+  if (["same", "equal", "present"].includes(status)) return "동일";
+  if (["added", "missing-old"].includes(status)) return "신규";
+  if (["missing", "missing-new"].includes(status)) return "기존";
+  if (["changed", "different"].includes(status)) return "변경";
+  if (status === "ignored") return "예외 처리됨";
+  if (status === "structure-converted") return "구조 전환";
+  if (status === "inheritance-unresolved") return "상속 확인";
+  return status || "-";
+}
+
+function formatReportFieldValue(status = "", oldValue = "", newValue = "") {
+  if (["changed", "different"].includes(status) && oldValue && newValue) return `${oldValue} → ${newValue}`;
+  if (newValue) return newValue;
+  if (oldValue) return oldValue;
+  return "";
+}
+
+function maskReportFieldValue(field = "", value = "") {
+  if (!value) return "";
+  if (/auth|password|secret|key|hash|certificate/i.test(field)) return "값 있음";
+  return String(value);
+}
+
+function renderRelationshipGraph(graph = {}) {
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+  const edges = Array.isArray(graph.edges) ? graph.edges : [];
+  if (!nodes.length) return `<div class="report-graph-empty">그래프로 표시할 의미 기반 설정이 없습니다.</div>`;
+
+  const oldNodes = nodes.filter((node) => node.side === "old");
+  const newNodes = nodes.filter((node) => node.side === "new");
+  const relationNodes = nodes.filter((node) => node.side === "relation");
+  const height = Math.max(320, (Math.max(oldNodes.length, newNodes.length, relationNodes.length) + 1) * 58);
+  const positions = new Map();
+  oldNodes.forEach((node, index) => positions.set(node.id, { x: 170, y: 54 + index * 58 }));
+  newNodes.forEach((node, index) => positions.set(node.id, { x: 660, y: 54 + index * 58 }));
+  relationNodes.forEach((node, index) => positions.set(node.id, { x: 880, y: 54 + index * 58 }));
+
+  return `
+    <div class="report-graph" data-graph-root>
+      <svg viewBox="0 0 1040 ${height}" role="img" aria-label="설정 관계 그래프">
+        <defs>
+          <marker id="graph-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"></path>
+          </marker>
+        </defs>
+        <g class="report-graph-lanes">
+          <text x="170" y="24">기존 설정</text>
+          <text x="660" y="24">신규 설정</text>
+          <text x="880" y="24">참조 관계</text>
+        </g>
+        <g class="report-graph-edges">
+          ${edges.map((edge) => {
+            const source = positions.get(edge.source);
+            const target = positions.get(edge.target);
+            if (!source || !target) return "";
+            const mid = Math.max(source.x + 90, Math.min(target.x - 90, (source.x + target.x) / 2));
+            return `
+              <path class="graph-edge graph-edge-${escapeHtml(cssSafeClassName(edge.type || "edge"))} ${edge.changed ? "graph-edge-changed" : ""}"
+                data-graph-edge="${escapeHtml(edge.id)}"
+                data-graph-source="${escapeHtml(edge.source)}"
+                data-graph-target="${escapeHtml(edge.target)}"
+                d="M ${source.x + 72} ${source.y} C ${mid} ${source.y}, ${mid} ${target.y}, ${target.x - 72} ${target.y}">
+                <title>${escapeHtml(edge.label || "연결")} · ${escapeHtml(edge.confidence || 0)}%</title>
+              </path>
+            `;
+          }).join("")}
+        </g>
+        <g class="report-graph-nodes">
+          ${nodes.map((node) => {
+            const point = positions.get(node.id);
+            if (!point) return "";
+            return `
+              <g class="graph-node graph-node-${escapeHtml(cssSafeClassName(node.side || "node"))} graph-node-status-${escapeHtml(cssSafeClassName(node.status || "unknown"))}"
+                data-graph-node="${escapeHtml(node.id)}"
+                data-object-jump="${escapeHtml(node.virtual ? "" : node.key || "")}"
+                data-graph-search="${escapeHtml([node.objectType, node.label, node.key, node.status].join(" ").toLowerCase())}"
+                transform="translate(${point.x}, ${point.y})">
+                <rect x="-72" y="-22" width="144" height="44" rx="8"></rect>
+                <text class="graph-node-type" x="-62" y="-5">${escapeHtml(node.objectType || "설정")}</text>
+                <text class="graph-node-label" x="-62" y="13">${escapeHtml(truncateText(node.label || node.key || "-", 22))}</text>
+                ${node.confidence ? `<text class="graph-node-score" x="60" y="-6">${escapeHtml(node.confidence)}%</text>` : ""}
+                <title>${escapeHtml(node.objectType || "설정")} ${escapeHtml(node.label || "-")} · ${escapeHtml(node.status || "")}</title>
+              </g>
+            `;
+          }).join("")}
+        </g>
+      </svg>
+      ${graph.truncated ? `<p class="small-note">그래프는 성능을 위해 ${escapeHtml(nodes.length)}개 노드까지만 표시했습니다.</p>` : ""}
+    </div>
+  `;
+}
+
+function bindReportGraphInteractions() {
+  if (!selectors.overviewReport) return;
+  bindReportReviewTableInteractions();
+  selectors.overviewReport.querySelectorAll("[data-object-jump]").forEach((item) => {
+    item.addEventListener("click", () => {
+      const objectKey = item.dataset.objectJump;
+      if (objectKey) scrollToDiffObject(objectKey);
+    });
+  });
+  selectors.overviewReport.querySelectorAll("[data-field-type-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
+      renderObjectNavigator();
+      setResultTab("objects");
+    });
+  });
+  selectors.overviewReport.querySelectorAll(".report-audit-section [data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.dataset.addException || "";
+      const scope = selectors.overviewReport?.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+
+  const graphRoot = selectors.overviewReport.querySelector("[data-graph-root]");
+  if (graphRoot) {
+    graphRoot.addEventListener("mouseover", (event) => {
+      const node = event.target.closest?.("[data-graph-node]");
+      if (node) setGraphFocus(graphRoot, node.dataset.graphNode);
+    });
+    graphRoot.addEventListener("mouseout", (event) => {
+      if (!event.relatedTarget || !graphRoot.contains(event.relatedTarget)) setGraphFocus(graphRoot, "");
+    });
+    graphRoot.addEventListener("click", (event) => {
+      const node = event.target.closest?.("[data-object-jump]");
+      const objectKey = node?.dataset.objectJump;
+      if (objectKey) scrollToDiffObject(objectKey);
+    });
+  }
+
+  const search = selectors.overviewReport.querySelector(".report-graph-search");
+  search?.addEventListener("input", () => filterReportGraph(search.value));
+  selectors.overviewReport.querySelector("[data-graph-labels]")?.addEventListener("change", (event) => {
+    graphRoot?.classList.toggle("graph-hide-labels", !event.target.checked);
+  });
+  selectors.overviewReport.querySelector("[data-graph-fit]")?.addEventListener("click", () => {
+    graphRoot?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  });
+}
+
+let reportReviewFilterAbortController = null;
+
+function bindReportReviewTableInteractions() {
+  const root = selectors.overviewReport?.querySelector("[data-report-review-root]");
+  if (!root) return;
+  reportReviewFilterAbortController?.abort();
+  reportReviewFilterAbortController = new AbortController();
+  const filterListenerOptions = { signal: reportReviewFilterAbortController.signal };
+
+  const search = root.querySelector("[data-report-review-search]");
+  const clear = root.querySelector("[data-report-review-clear]");
+  const count = root.querySelector("[data-report-review-count]");
+  const empty = root.querySelector("[data-report-review-filter-empty]");
+  const filters = [...root.querySelectorAll("[data-report-review-filter]")];
+  const columnFilters = [...root.querySelectorAll("[data-report-column-filter]")];
+  const columnSearches = [...root.querySelectorAll("[data-report-column-search]")];
+  const fieldSearches = [...root.querySelectorAll("[data-report-field-search]")];
+  const fieldStatusFilters = [...root.querySelectorAll("[data-report-field-status-filter]")];
+  const checklistInputs = [...root.querySelectorAll("[data-report-check-value]")];
+  const checklistAlls = [...root.querySelectorAll("[data-report-check-all]")];
+  const checklistSearches = [...root.querySelectorAll("[data-report-check-search]")];
+  const filterToggles = [...root.querySelectorAll("[data-report-filter-toggle]")];
+  const rows = [...root.querySelectorAll("[data-report-review-row]")];
+  const tableWrap = root.querySelector(".report-review-table-wrap");
+  const fieldValueFilterFields = [...new Set([...root.querySelectorAll("[data-report-checklist]")]
+    .map((item) => item.dataset.reportChecklist || "")
+    .filter((key) => key.startsWith("field:"))
+    .map((key) => key.slice("field:".length)))];
+  root.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.dataset.addException || "";
+      const scope = root.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+  root.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
+    });
+  });
+
+  const apply = () => {
+    const query = String(search?.value || "").trim().toLowerCase();
+    const values = Object.fromEntries(filters.map((filter) => [
+      filter.dataset.reportReviewFilter,
+      filter.value || "all",
+    ]));
+    const columnValues = Object.fromEntries(columnFilters.map((filter) => [
+      filter.dataset.reportColumnFilter,
+      filter.value || "all",
+    ]));
+    const columnQueries = Object.fromEntries(columnSearches.map((filter) => [
+      filter.dataset.reportColumnSearch,
+      String(filter.value || "").trim().toLowerCase(),
+    ]));
+    const fieldQueries = fieldSearches.map((filter) => ({
+      field: filter.dataset.reportFieldSearch || "",
+      query: String(filter.value || "").trim().toLowerCase(),
+    }));
+    const fieldStatuses = fieldStatusFilters.map((filter) => ({
+      field: filter.dataset.reportFieldStatusFilter || "",
+      value: filter.value || "all",
+    }));
+    const checklistSelections = getReportReviewChecklistSelections(root);
+    let visibleCount = 0;
+    const groupFilter = columnValues.group || values.group || "all";
+    const typeFilter = columnValues.type || values.type || "all";
+    const fieldFilter = values.field || "all";
+    const statusFilter = values.status || "all";
+
+    rows.forEach((row) => {
+      const groupMatch = groupFilter === "all" || row.dataset.reviewGroup === groupFilter;
+      const typeMatch = typeFilter === "all" || row.dataset.reviewType === typeFilter;
+      const fieldMatch = fieldFilter === "all" || splitReportReviewTokens(row.dataset.reviewFields).includes(fieldFilter);
+      const statusMatch = statusFilter === "all" || splitReportReviewTokens(row.dataset.reviewStatuses).includes(statusFilter);
+      const keyMatch = !columnQueries.key || String(row.dataset.reviewKey || "").toLowerCase().includes(columnQueries.key);
+      const descriptionMatch = !columnQueries.description || String(row.dataset.reviewDescription || "").toLowerCase().includes(columnQueries.description);
+      const reasonMatch = !columnQueries.reason || String(row.dataset.reviewReason || "").toLowerCase().includes(columnQueries.reason);
+      const scoreMatch = !columnQueries.score || String(row.dataset.reviewScore || "").toLowerCase().includes(columnQueries.score);
+      const groupValueMatch = reportReviewChecklistMatches(checklistSelections, "group", row.dataset.reviewGroup);
+      const typeValueMatch = reportReviewChecklistMatches(checklistSelections, "type", row.dataset.reviewType);
+      const keyValueMatch = reportReviewChecklistMatches(checklistSelections, "key", row.dataset.reviewKey);
+      const descriptionValueMatch = reportReviewChecklistMatches(checklistSelections, "description", row.dataset.reviewDescriptionOption);
+      const reasonValueMatch = reportReviewChecklistMatches(checklistSelections, "reason", row.dataset.reviewReasonOption);
+      const scoreValueMatch = reportReviewChecklistMatches(checklistSelections, "score", row.dataset.reviewScoreOption);
+      const fieldQueryMatch = fieldQueries.every(({ field, query: fieldQuery }) => {
+        if (!fieldQuery) return true;
+        return String(getReportReviewFieldCell(row, field)?.dataset.fieldSearch || "").includes(fieldQuery);
+      });
+      const fieldStatusMatch = fieldStatuses.every(({ field, value }) => {
+        if (value === "all") return true;
+        return String(getReportReviewFieldCell(row, field)?.dataset.fieldStatus || "") === value;
+      });
+      const fieldValueMatch = fieldValueFilterFields.every((field) => {
+        const cell = getReportReviewFieldCell(row, field);
+        return reportReviewChecklistMatches(checklistSelections, `field:${field}`, cell?.dataset.fieldOption);
+      });
+      const queryMatch = !query || String(row.dataset.reviewSearch || "").includes(query);
+      const visible = groupMatch &&
+        typeMatch &&
+        fieldMatch &&
+        statusMatch &&
+        keyMatch &&
+        descriptionMatch &&
+        reasonMatch &&
+        scoreMatch &&
+        groupValueMatch &&
+        typeValueMatch &&
+        keyValueMatch &&
+        descriptionValueMatch &&
+        reasonValueMatch &&
+        scoreValueMatch &&
+        fieldQueryMatch &&
+        fieldStatusMatch &&
+        fieldValueMatch &&
+        queryMatch;
+      row.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+
+    if (count) count.textContent = `${visibleCount}/${rows.length}`;
+    if (empty) empty.hidden = visibleCount > 0 || rows.length === 0;
+    updateReportReviewFilterIndicators(root);
+    positionOpenReportReviewFilter(root);
+  };
+
+  search?.addEventListener("input", apply);
+  filters.forEach((filter) => filter.addEventListener("change", apply));
+  columnFilters.forEach((filter) => filter.addEventListener("change", apply));
+  columnSearches.forEach((filter) => filter.addEventListener("input", apply));
+  fieldSearches.forEach((filter) => filter.addEventListener("input", apply));
+  fieldStatusFilters.forEach((filter) => filter.addEventListener("change", apply));
+  checklistInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      updateReportChecklistAllState(input.closest("[data-report-checklist]"));
+      apply();
+    });
+  });
+  checklistAlls.forEach((input) => {
+    input.addEventListener("change", () => {
+      const checklist = input.closest("[data-report-checklist]");
+      checklist?.querySelectorAll("[data-report-check-value]").forEach((item) => {
+        item.checked = input.checked;
+      });
+      updateReportChecklistAllState(checklist);
+      apply();
+    });
+  });
+  checklistSearches.forEach((input) => {
+    input.addEventListener("input", () => {
+      const query = String(input.value || "").trim().toLowerCase();
+      input.closest("[data-report-checklist]")?.querySelectorAll("[data-report-check-item]").forEach((item) => {
+        item.hidden = query && !String(item.dataset.reportCheckLabel || "").includes(query);
+      });
+    });
+  });
+  filterToggles.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const panel = button.closest(".report-review-th")?.querySelector("[data-report-filter-panel]");
+      const willOpen = panel?.hidden;
+      closeReportReviewFilterPanels(root);
+      if (panel && willOpen) {
+        panel.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        positionReportReviewFilterPanel(button, panel);
+        panel.querySelector("input, select")?.focus();
+      }
+    });
+  });
+  tableWrap?.addEventListener("scroll", () => positionOpenReportReviewFilter(root), filterListenerOptions);
+  window.addEventListener("scroll", () => positionOpenReportReviewFilter(root), { ...filterListenerOptions, capture: true });
+  window.addEventListener("resize", () => positionOpenReportReviewFilter(root), filterListenerOptions);
+  root.addEventListener("click", (event) => {
+    if (event.target.closest(".report-review-th")) return;
+    closeReportReviewFilterPanels(root);
+  });
+  clear?.addEventListener("click", () => {
+    if (search) search.value = "";
+    [...filters, ...columnFilters, ...fieldStatusFilters].forEach((filter) => {
+      filter.value = "all";
+    });
+    [...columnSearches, ...fieldSearches].forEach((filter) => {
+      filter.value = "";
+    });
+    checklistInputs.forEach((input) => {
+      input.checked = true;
+    });
+    checklistAlls.forEach((input) => {
+      input.checked = true;
+      input.indeterminate = false;
+    });
+    checklistSearches.forEach((input) => {
+      input.value = "";
+    });
+    root.querySelectorAll("[data-report-check-item]").forEach((item) => {
+      item.hidden = false;
+    });
+    closeReportReviewFilterPanels(root);
+    apply();
+  });
+  root.querySelectorAll("[data-report-checklist]").forEach(updateReportChecklistAllState);
+  apply();
+}
+
+function closeReportReviewFilterPanels(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-report-filter-panel]").forEach((item) => {
+    item.hidden = true;
+  });
+  root.querySelectorAll("[data-report-filter-toggle]").forEach((item) => {
+    item.setAttribute("aria-expanded", "false");
+  });
+}
+
+function positionOpenReportReviewFilter(root) {
+  if (!root) return;
+  const button = root.querySelector("[data-report-filter-toggle][aria-expanded='true']");
+  const panel = button?.closest(".report-review-th")?.querySelector("[data-report-filter-panel]");
+  if (button && panel && !panel.hidden) positionReportReviewFilterPanel(button, panel);
+}
+
+function positionReportReviewFilterPanel(button, panel) {
+  if (!button || !panel || panel.hidden) return;
+  const gap = 6;
+  const margin = 8;
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
+  const viewportHeight = document.documentElement.clientHeight || window.innerHeight || 0;
+  const buttonRect = button.getBoundingClientRect();
+  panel.style.maxHeight = `${Math.max(160, viewportHeight - margin * 2)}px`;
+
+  const panelWidth = panel.offsetWidth || 240;
+  const panelHeight = Math.min(panel.offsetHeight || 240, Math.max(160, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  let left = Math.min(Math.max(margin, buttonRect.left), maxLeft);
+  let top = buttonRect.bottom + gap;
+
+  if (top + panelHeight + margin > viewportHeight) {
+    top = Math.max(margin, buttonRect.top - panelHeight - gap);
+  }
+
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+  panel.style.maxHeight = `${Math.max(160, viewportHeight - top - margin)}px`;
+}
+
+function updateReportReviewFilterIndicators(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-report-filter-toggle]").forEach((button) => {
+    const header = button.closest(".report-review-th");
+    const panel = header?.querySelector("[data-report-filter-panel]");
+    const active = isReportReviewFilterPanelActive(panel);
+    const title = button.dataset.reportFilterTitle || "열";
+    button.toggleAttribute("data-filter-active", active);
+    button.setAttribute("aria-label", active ? `${title} 필터 적용됨` : `${title} 필터 열기`);
+  });
+}
+
+function isReportReviewFilterPanelActive(panel) {
+  if (!panel) return false;
+  const hasSearch = [...panel.querySelectorAll("[data-report-column-search], [data-report-field-search]")]
+    .some((input) => String(input.value || "").trim());
+  if (hasSearch) return true;
+  const hasSelectFilter = [...panel.querySelectorAll("select")]
+    .some((select) => (select.value || "all") !== "all");
+  if (hasSelectFilter) return true;
+  return [...panel.querySelectorAll("[data-report-checklist]")].some((checklist) => {
+    const values = [...checklist.querySelectorAll("[data-report-check-value]")];
+    if (!values.length) return false;
+    return values.some((input) => !input.checked);
+  });
+}
+
+function getReportReviewChecklistSelections(root) {
+  const result = new Map();
+  root.querySelectorAll("[data-report-checklist]").forEach((checklist) => {
+    const key = checklist.dataset.reportChecklist || "";
+    const inputs = [...checklist.querySelectorAll("[data-report-check-value]")];
+    if (!key || !inputs.length) return;
+    result.set(key, new Set(inputs.filter((input) => input.checked).map((input) => input.value)));
+  });
+  return result;
+}
+
+function reportReviewChecklistMatches(selections, key = "", value = "") {
+  const selected = selections.get(key);
+  if (!selected) return true;
+  return selected.has(reportReviewOptionValue(value));
+}
+
+function updateReportChecklistAllState(checklist) {
+  if (!checklist) return;
+  const all = checklist.querySelector("[data-report-check-all]");
+  const values = [...checklist.querySelectorAll("[data-report-check-value]")];
+  if (!all || !values.length) return;
+  const checked = values.filter((input) => input.checked).length;
+  all.checked = checked === values.length;
+  all.indeterminate = checked > 0 && checked < values.length;
+}
+
+function splitReportReviewTokens(value = "") {
+  return String(value || "").split(/\s+/).filter(Boolean);
+}
+
+function getReportReviewFieldCell(row, field = "") {
+  return [...row.querySelectorAll("[data-report-field-cell]")]
+    .find((cell) => cell.dataset.reportFieldCell === field);
+}
+
+function setGraphFocus(graphRoot, nodeId = "") {
+  graphRoot.querySelectorAll(".graph-node, .graph-edge").forEach((item) => item.classList.remove("graph-focus", "graph-dim"));
+  if (!nodeId) return;
+  const connected = new Set([nodeId]);
+  graphRoot.querySelectorAll(`[data-graph-source="${cssEscape(nodeId)}"], [data-graph-target="${cssEscape(nodeId)}"]`).forEach((edge) => {
+    edge.classList.add("graph-focus");
+    connected.add(edge.dataset.graphSource);
+    connected.add(edge.dataset.graphTarget);
+  });
+  graphRoot.querySelectorAll("[data-graph-node]").forEach((node) => {
+    if (connected.has(node.dataset.graphNode)) node.classList.add("graph-focus");
+    else node.classList.add("graph-dim");
+  });
+}
+
+function filterReportGraph(query = "") {
+  const normalized = String(query || "").trim().toLowerCase();
+  const graphRoot = selectors.overviewReport?.querySelector("[data-graph-root]");
+  if (!graphRoot) return;
+  const visible = new Set();
+  graphRoot.querySelectorAll("[data-graph-node]").forEach((node) => {
+    const matched = !normalized || String(node.dataset.graphSearch || "").includes(normalized);
+    node.classList.toggle("graph-hidden", !matched);
+    if (matched) visible.add(node.dataset.graphNode);
+  });
+  graphRoot.querySelectorAll("[data-graph-edge]").forEach((edge) => {
+    edge.classList.toggle("graph-hidden", !visible.has(edge.dataset.graphSource) || !visible.has(edge.dataset.graphTarget));
+  });
+}
+
+function truncateText(value = "", limit = 24) {
+  const text = String(value || "");
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
 
 function renderFieldDistributionSummary(objects) {
@@ -6722,6 +15419,7 @@ function scrollToDiffObject(objectKey) {
   scrollPaneToLine(selectors.newDiffPane, pairedNew || newTarget || primary);
   state.syncingDiffScroll = false;
   highlightObjectLines(objectKey);
+  renderCompareIssueContextBanner();
   scheduleDiffConnectorRender();
 }
 
@@ -6751,6 +15449,21 @@ function highlightObjectLines(objectKey) {
   window.setTimeout(() => lines.forEach((line) => line.classList.remove("object-flash")), 1400);
 }
 
+function isUnmatchedRenderRow(row = {}, state = "", counterpart = null) {
+  const status = String(row?.objectStatus || "").toLowerCase();
+  if (isUnmatchedObjectStatus(status)) return true;
+
+  const hasText = Boolean(String(row?.text || "").trim());
+  const counterpartMissing = !counterpart
+    || counterpart.placeholder
+    || counterpart.hidden
+    || !String(counterpart.text || "").trim();
+
+  if (!hasText || !counterpartMissing || row?.objectMatched) return false;
+  return ["missing", "added", "placeholder"].includes(String(state || "").toLowerCase())
+    || Boolean(row?.semanticObjectStart || row?.semanticObjectBlock || row?.rawHtml);
+}
+
 function cssEscape(value) {
   if (window.CSS?.escape) return window.CSS.escape(value);
   return String(value).replace(/["\\]/g, "\\$&");
@@ -6759,16 +15472,116 @@ function cssEscape(value) {
 function renderDiffLine(row, state, counterpart, pairIndex, side) {
   const key = row?.key || "";
   const objectType = row?.objectKey ? splitObjectKey(row.objectKey).type : "";
-  const counterpartType = counterpart?.objectKey ? splitObjectKey(counterpart.objectKey).type : objectType;
+  const counterpartType = counterpart?.objectKey
+    ? splitObjectKey(counterpart.objectKey).type
+    : objectType;
+  const renderUnmatched = isUnmatchedRenderRow(row, state, counterpart);
+  const effectiveObjectStatus = row?.objectStatus
+    || (renderUnmatched ? (side === "old" ? "old-only" : "new-only") : "");
+
+  if (row?.semanticObjectBlock || row?.rawHtml) {
+    const wrapperClasses = [
+      "semantic-object-block-wrapper",
+      state,
+      objectType ? `object-type-${cssSafeClassName(objectType)}` : "",
+      row?.objectMatched ? "object-matched" : "",
+      effectiveObjectStatus ? `object-status-${cssSafeClassName(effectiveObjectStatus)}` : "",
+      renderUnmatched ? "object-unmatched-row" : "",
+      row?.objectReason ? `object-reason-${cssSafeClassName(row.objectReason)}` : "",
+      row?.semanticObjectStart ? "semantic-object-start" : "",
+      row?.semanticObjectEnd ? "semantic-object-end" : "",
+      row?.placeholder || row?.hidden ? "semantic-placeholder-line" : "",
+    ].filter(Boolean).join(" ");
+
+    return `
+      <div class="${wrapperClasses}"
+        data-pair-index="${pairIndex}"
+        data-side="${side}"
+        data-object-type="${escapeHtml(objectType)}"
+        data-object-key="${escapeHtml(row?.objectKey || "")}"
+        data-object-identity="${escapeHtml(row?.objectIdentity || "")}"
+        data-semantic-object-index="${escapeHtml(row?.semanticObjectIndex ?? "")}"
+        data-object-status="${escapeHtml(effectiveObjectStatus || "")}"
+        data-object-score="${escapeHtml(row?.objectScore || "")}"
+        data-object-reason="${escapeHtml(row?.objectReason || "")}"
+        data-semantic-pair-key="${escapeHtml(row?.semanticPairKey || "")}"
+        data-diff-key="${escapeHtml(key)}">
+        ${String(row?.text || "")}
+      </div>
+    `;
+  }
+
   const classes = ["diff-line", state];
-  if (row?.objectMatched) classes.push("object-matched", `object-color-${objectColorIndex(row.objectKey)}`);
+  if (objectType) classes.push(`object-type-${cssSafeClassName(objectType)}`);
+  if (effectiveObjectStatus) classes.push(`object-status-${cssSafeClassName(effectiveObjectStatus)}`);
+  if (renderUnmatched) classes.push("object-unmatched-row");
+  if (row?.objectReason) classes.push(`object-reason-${cssSafeClassName(row.objectReason)}`);
+
+  if (row?.objectMatched) {
+    classes.push(
+      "object-matched",
+      getSemanticStateClass({
+        status: row?.objectStatus || "matched",
+        reason: row.semanticReason || "",
+        score: row?.objectScore || null,
+      })
+    );
+  }
+
+  if (row?.semanticLineMappingKey) {
+    classes.push("semantic-line-mapped");
+  }
+
+  if (row?.semanticObjectStart) classes.push("semantic-object-start");
+  if (row?.semanticObjectEnd) classes.push("semantic-object-end");
+
   if (row?.ignoredVisual) classes.push("ignored-visual");
-  return `<div class="${classes.join(" ")}" data-pair-index="${pairIndex}" data-side="${side}" data-object-type="${escapeHtml(objectType)}" data-object-key="${escapeHtml(row?.objectKey || "")}" data-diff-key="${escapeHtml(key)}" data-semantic-field="${escapeHtml(row?.semanticField || "")}"><div class="diff-line-number">${row ? row.number : ""}</div><div class="diff-line-text">${row ? highlightSharedTokens(row.text || "", counterpart?.text || "", objectType, counterpartType, row.semanticField || "", counterpart?.semanticField || "", row.highlights || []) : "&nbsp;"}</div></div>`;
+
+  if (row?.placeholder || row?.hidden || !String(row?.text || "").trim()) {
+    classes.push("semantic-placeholder-line");
+  }
+
+  const textHtml =
+    row && !row.placeholder && !row.hidden && String(row.text || "").trim()
+      ? (selectors.fieldHighlightToggle?.checked === false
+        ? escapeHtml(row.text || "")
+        : highlightSharedTokens(
+          row.text || "",
+          counterpart?.text || "",
+          objectType,
+          counterpartType,
+          row.semanticField || "",
+          counterpart?.semanticField || "",
+          row.highlights || []
+        ))
+      : "&nbsp;";
+
+  return `<div class="${classes.join(" ")}"
+    data-pair-index="${pairIndex}"
+    data-side="${side}"
+    data-object-type="${escapeHtml(objectType)}"
+    data-object-key="${escapeHtml(row?.objectKey || "")}"
+    data-object-identity="${escapeHtml(row?.objectIdentity || "")}"
+    data-object-status="${escapeHtml(effectiveObjectStatus || "")}"
+    data-object-score="${escapeHtml(row?.objectScore || "")}"
+    data-object-reason="${escapeHtml(row?.objectReason || "")}"
+    data-semantic-object-index="${escapeHtml(row?.semanticObjectIndex ?? "")}"
+    data-semantic-pair-key="${escapeHtml(row?.semanticPairKey || "")}"
+    data-diff-key="${escapeHtml(key)}"
+    data-semantic-field="${escapeHtml(row?.semanticField || "")}"
+    data-semantic-line-mapping-key="${escapeHtml(row?.semanticLineMappingKey || "")}"
+    data-semantic-object-start="${row?.semanticObjectStart ? "true" : "false"}">
+      <div class="diff-line-number">${row && !row.placeholder && !row.hidden ? row.number : ""}</div>
+      <div class="diff-line-text">${textHtml}</div>
+    </div>`;
 }
 
 function renderDiffObjectToolbars() {
-  renderDiffObjectToolbar("old");
-  renderDiffObjectToolbar("new");
+  [selectors.oldDiffObjectToolbar, selectors.newDiffObjectToolbar].forEach((toolbar) => {
+    if (!toolbar) return;
+    toolbar.hidden = true;
+    toolbar.innerHTML = "";
+  });
 }
 
 function renderDiffObjectToolbar(source) {
@@ -6857,10 +15670,87 @@ function highlightSharedTokens(text, counterpartText, objectType = "", counterpa
 
   let html = escapeHtml(temp);
   placeholders.forEach(({ marker, item }) => {
-    const colorIndex = tokenColorIndex(item.colorSeed || item.token);
-    html = html.replaceAll(marker, `<span class="diff-token-match token-color-${colorIndex}" data-token-kind="${item.kind}" data-token-match="${item.match}" data-semantic-field="${escapeHtml(item.field || "")}" data-token="${escapeHtml(item.token)}">${escapeHtml(item.token)}</span>`);
+    const field = normalizeRelationField(item.field || "");
+    const colorIndex = tokenColorIndex(field || item.colorSeed || item.token);
+    const fieldClass = field ? ` field-${cssSafeClassName(field)}` : "";
+    html = html.replaceAll(marker, `<span class="diff-token-match token-color-${colorIndex}${fieldClass}" data-token-kind="${item.kind}" data-token-match="${item.match}" data-semantic-field="${escapeHtml(field)}" data-token="${escapeHtml(item.token)}">${escapeHtml(item.token)}</span>`);
   });
   return html;
+}
+
+function renderAuditReportSections(audit = {}) {
+  const findings = audit.findings || [];
+  if (!findings.length) return `<div class="small-note">표준 점검 항목 없음</div>`;
+  const active = findings.filter((finding) => !finding.suppressed);
+  const suppressed = findings.filter((finding) => finding.suppressed);
+  const sections = [
+    ["QoS 분석", "qos"],
+    ["Filter/ACL 분석", "filter-acl"],
+    ["Routing/BGP Policy 분석", "routing-bgp"],
+    ["Subscriber/Service 분석", "subscriber-service"],
+    ["Management/Security 분석", "management-security"],
+    ["전환 위험 분석", "migration"],
+    ["수동 검토 목록", "manual-review"],
+    ["미지원 설정 목록", "unsupported"],
+  ];
+
+  return `
+    <div class="audit-report-grid">
+      ${sections.map(([title, key]) => renderAuditFindingSection(title, filterAuditFindings(active, key))).join("")}
+      ${renderAuditFindingSection("예외 처리 목록", suppressed)}
+    </div>
+  `;
+}
+
+function filterAuditFindings(findings = [], key = "") {
+  if (key === "migration") {
+    return findings.filter((finding) => finding.migrationImpact && finding.migrationImpact !== "no-impact");
+  }
+  if (key === "manual-review" || key === "unsupported") {
+    return findings.filter((finding) => finding.severity === key);
+  }
+  return findings.filter((finding) => finding.category === key);
+}
+
+function renderAuditFindingSection(title, findings = []) {
+  return `
+    <section class="audit-report-section">
+      <h4>${escapeHtml(title)} (${escapeHtml(findings.length)})</h4>
+      ${findings.length ? findings.slice(0, 20).map(renderAuditFindingDetail).join("") : `<div class="small-note">항목 없음</div>`}
+    </section>
+  `;
+}
+
+function renderAuditFindingDetail(finding = {}) {
+  const severity = finding.suppressed ? "suppressed" : finding.severity || "info";
+  const exceptionTargetId = registerAuditExceptionTarget(finding, "report-audit");
+  const source = (finding.sourceLines || []).slice(0, 6).map((line) =>
+    `<code>${escapeHtml(line.line || "-")}: ${escapeHtml(line.text || "")}</code>`
+  ).join("");
+  return `
+    <details class="audit-detail audit-severity-${escapeHtml(cssSafeClassName(severity))}" data-audit-detail-id="${escapeHtml(finding.id || "")}">
+      <summary>
+        <span>${escapeHtml(AUDIT_SEVERITY_LABELS_KO[severity] || severity)}</span>
+        <strong>${escapeHtml(finding.titleKo || "검토 항목")}</strong>
+        <em>${escapeHtml(finding.objectType || "-")} ${escapeHtml(finding.objectKey || "-")}</em>
+      </summary>
+      <div class="audit-detail-body">
+        <p>${escapeHtml(finding.descriptionKo || "")}</p>
+        <div class="audit-detail-grid">
+          <div><span>규칙</span><strong>${escapeHtml(finding.ruleId || "-")}</strong></div>
+          <div><span>필드</span><strong>${escapeHtml(finding.fieldPath || "-")}</strong></div>
+          <div><span>현재값</span><strong>${escapeHtml(finding.actualValue || "-")}</strong></div>
+          <div><span>표준값</span><strong>${escapeHtml(finding.expectedValue || "-")}</strong></div>
+          <div><span>전환 영향</span><strong>${escapeHtml(MIGRATION_IMPACT_LABELS_KO[finding.migrationImpact] || finding.migrationImpact || "-")}</strong></div>
+          <div><span>프로파일</span><strong>${escapeHtml(finding.policyProfile || "-")}</strong></div>
+        </div>
+        <p><strong>권장 조치:</strong> ${escapeHtml(finding.recommendationKo || "-")}</p>
+        ${finding.suppressed ? `<p><strong>예외:</strong> ${escapeHtml(finding.suppressionReason || "-")}</p>` : ""}
+        ${!finding.suppressed ? renderExceptionActionControls(exceptionTargetId) : ""}
+        <div class="audit-source-lines">${source || `<span class="small-note">소스 라인 없음</span>`}</div>
+      </div>
+    </details>
+  `;
 }
 
 function buildTokenHighlightRegex(token) {
@@ -6894,6 +15784,49 @@ function buildLineSemanticHighlights(text, objectType, canonicalFields = {}, fie
 
 function buildForcedSemanticTokens(text, field) {
   const normalized = canonicalizeComparableLine(text);
+  const normalizedField = normalizeRelationField(field);
+  if (["mode", "member-port", "lacp-mode", "lacp.administrative-key", "lacp-xmit-interval", "access.adapt-qos.mode"].includes(normalizedField)) {
+    const tokens = extractSemanticVisualTokens(text, "lag").filter((item) => normalizeRelationField(item.field) === normalizedField);
+    if (tokens.length) return tokens;
+  }
+  if ((field === "ingress-filter" || field === "egress-filter") && /\bfilter\s+ip\s+"?([^"\s{}]+)"?/.test(normalized)) {
+    const match = normalized.match(/\bfilter\s+ip\s+"?([^"\s{}]+)"?/);
+    return [
+      { token: "filter", field, colorSeed: field, kind: "keyword" },
+      { token: "ip", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: tokenHighlightKind(match?.[1] || "") },
+    ];
+  }
+  if ((field === "ingress-qos" || field === "egress-qos") && /\bqos\b/.test(normalized)) {
+    const policy = normalized.match(/\bpolicy-name\s+"?([^"\s{}]+)"?/);
+    const classic = normalized.match(/^qos\s+"?([^"\s{}]+)"?/);
+    const value = stripTrailingSyntax(policy?.[1] || classic?.[1] || "");
+    return [
+      { token: "qos", field, colorSeed: field, kind: "keyword" },
+      ...(value ? [{ token: value, field, colorSeed: field, kind: tokenHighlightKind(value) }] : []),
+    ];
+  }
+  if (field && field !== "state" && /\b(?:no\s+shutdown|shutdown|admin-state\s+\S+)\b/.test(normalized)) {
+    const stateToken = normalized.match(/\bno\s+shutdown\b/)?.[0]
+      || normalized.match(/\badmin-state\s+\S+\b/)?.[0]
+      || normalized.match(/^shutdown$/)?.[0]
+      || normalized.match(/\bshutdown\b/)?.[0];
+    if (stateToken) return [{ token: stateToken, field, colorSeed: field, kind: "keyword" }];
+  }
+  if (field === "dhcp.filter" && /^filter\s+(.+)$/.test(normalized)) {
+    const match = normalized.match(/^filter\s+(.+)$/);
+    return [
+      { token: "filter", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: "number" },
+    ];
+  }
+  if (field === "dhcp.server" && /^server\s+(.+)$/.test(normalized)) {
+    const match = normalized.match(/^server\s+(.+)$/);
+    return [
+      { token: "server", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: "address" },
+    ];
+  }
   if (field === "next-hop") {
     const match = normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/);
     if (match) {
@@ -6912,6 +15845,13 @@ function buildForcedSemanticTokens(text, field) {
     const match = normalized.match(/\badmin-state\s+\S+/);
     return [{ token: match[0], field, colorSeed: field, kind: "keyword" }];
   }
+  if (field === "metric" && /\bmetric\s+[^"\s{}]+/.test(normalized)) {
+    const match = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+    return [
+      { token: "metric", field, colorSeed: field, kind: "keyword" },
+      { token: stripTrailingSyntax(match?.[1] || ""), field, colorSeed: field, kind: "number" },
+    ];
+  }
   return [];
 }
 
@@ -6926,14 +15866,36 @@ function dedupeVisualTokens(tokens) {
 }
 
 function extractSemanticVisualTokens(text, objectType) {
+  const source = String(text || "");
   const normalized = canonicalizeComparableLine(text);
   const tokens = [];
   const add = (field, value, kind = tokenHighlightKind(value)) => {
     if (!field || !value) return;
     tokens.push({ token: field, field, colorSeed: field, kind: "keyword" });
     tokens.push({ token: value, field, colorSeed: field, kind });
-    if (normalized.includes(`"${value}"`)) tokens.push({ token: `"${value}"`, field, colorSeed: field, kind });
+    if (source.toLowerCase().includes(`"${String(value).toLowerCase()}"`)) {
+      tokens.push({ token: `"${value}"`, field, colorSeed: field, kind });
+    }
   };
+
+  const neighbor = normalized.match(/\bneighbor\s+"?([^"\s{}]+)"?/);
+  if (neighbor) {
+    add("neighbor", stripTrailingSyntax(neighbor[1]), "address");
+  }
+
+  if (/\bno\s+shutdown\b/.test(normalized)) {
+    add("state", "no shutdown", "keyword");
+  }
+
+  if (/\badmin-state\s+enable\b/.test(normalized)) {
+    add("state", "admin-state", "keyword");
+    add("state", "enable", "keyword");
+  }
+
+  if (/\badmin-state\s+disable\b/.test(normalized)) {
+    add("state", "admin-state", "keyword");
+    add("state", "disable", "keyword");
+  }
 
   if (objectType === "static-route") {
     const route = normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?([^"\s{}]+)"?/);
@@ -6942,6 +15904,12 @@ function extractSemanticVisualTokens(text, objectType) {
     if (nextHop) add("next-hop", stripTrailingSyntax(nextHop[1]), "address");
     const tag = normalized.match(/\btag\s+([^"\s{}]+)/);
     if (tag) add("tag", stripTrailingSyntax(tag[1]), "number");
+    const metric = normalized.match(/\bmetric\s+([^"\s{}]+)/);
+    if (metric) add("metric", stripTrailingSyntax(metric[1]), "number");
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "quoted");
+    }
     if (/\bno\s+shutdown\b/.test(normalized)) {
       add("state", "no shutdown", "keyword");
       add("state", "shutdown", "keyword");
@@ -6956,6 +15924,116 @@ function extractSemanticVisualTokens(text, objectType) {
     }
     return tokens;
   }
+
+  if (objectType === "interface") {
+    const interfaceName = normalized.match(/\binterface\s+"?([^"\s{}]+)"?/);
+    if (interfaceName) add("interface", stripTrailingSyntax(interfaceName[1]), "keyword");
+
+    const address =
+      normalized.match(/(?:^|\s)address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/) ||
+      normalized.match(/\bipv4\s+primary\s+address\s+(\d{1,3}(?:\.\d{1,3}){3})\b/) ||
+      normalized.match(/\bipv4\s+address\s+(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/);
+    if (address) add("address", stripTrailingSyntax(address[1]), "address");
+
+    const prefixLength = normalized.match(/\bprefix-length\s+(\d{1,3})\b/);
+    if (prefixLength) add("prefix-length", stripTrailingSyntax(prefixLength[1]), "number");
+
+    const classicIcmp = normalized.match(/^no\s+(mask-reply|redirects|ttl-expired|unreachables)$/);
+    if (classicIcmp) {
+      add(`icmp.${classicIcmp[1]}`, "no", "keyword");
+      add(`icmp.${classicIcmp[1]}`, classicIcmp[1], "keyword");
+    }
+
+    const mdIcmpBoolean = normalized.match(/\bicmp\s+(mask-reply)\s+(true|false)\b/);
+    if (mdIcmpBoolean) {
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[1], "keyword");
+      add(`icmp.${mdIcmpBoolean[1]}`, mdIcmpBoolean[2], "keyword");
+    }
+
+    const mdIcmpAdminState = normalized.match(/\bicmp\s+(redirects|ttl-expired|unreachables)\s+admin-state\s+(enable|disable)\b/);
+    if (mdIcmpAdminState) {
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[1], "keyword");
+      add(`icmp.${mdIcmpAdminState[1]}`, "admin-state", "keyword");
+      add(`icmp.${mdIcmpAdminState[1]}`, mdIcmpAdminState[2], "keyword");
+    }
+
+    if (tokens.length) return tokens;
+  }
+
+  if (objectType === "lag") {
+    const lagName = extractLagNameFromLine(normalized);
+    if (lagName) add("lag", lagName, "keyword");
+
+    const description = extractDescriptionValue(source);
+    if (description) add("description", description, "quoted");
+
+    const mode =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^mode\s+([^"\s{}]+)/);
+    if (mode && !/\badapt-qos\b|\blacp\b/.test(normalized)) {
+      add("mode", stripTrailingSyntax(mode[1]), "keyword");
+    }
+
+    const memberPort =
+      normalized.match(/\blag\s+"?[^"\s{}]+"?\s+port\s+([^"\s{}]+)/) ||
+      normalized.match(/^port\s+([^"\s{}]+)/);
+    if (memberPort) add("member-port", stripTrailingSyntax(memberPort[1]), "keyword");
+
+    const xmitInterval = normalized.match(/\blacp-xmit-interval\s+([^"\s{}]+)/);
+    if (xmitInterval) add("lacp-xmit-interval", stripTrailingSyntax(xmitInterval[1]), "keyword");
+
+    const lacpMode =
+      normalized.match(/\blacp\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+([^"\s{}]+)(?:\s+administrative-key\b|$)/);
+    if (lacpMode) {
+      tokens.push({ token: "lacp", field: "lacp-mode", colorSeed: "lacp-mode", kind: "keyword" });
+      tokens.push({ token: stripTrailingSyntax(lacpMode[1]), field: "lacp-mode", colorSeed: "lacp-mode", kind: "keyword" });
+      if (/\blacp\s+mode\s+/.test(normalized)) tokens.push({ token: "mode", field: "lacp-mode", colorSeed: "lacp-mode", kind: "keyword" });
+    }
+
+    const lacpKey =
+      normalized.match(/\blacp\s+administrative-key\s+([^"\s{}]+)/) ||
+      normalized.match(/^lacp\s+[^"\s{}]+\s+administrative-key\s+([^"\s{}]+)/);
+    if (lacpKey) {
+      tokens.push({ token: "administrative-key", field: "lacp.administrative-key", colorSeed: "lacp.administrative-key", kind: "keyword" });
+      tokens.push({ token: stripTrailingSyntax(lacpKey[1]), field: "lacp.administrative-key", colorSeed: "lacp.administrative-key", kind: "number" });
+    }
+
+    const adaptQos =
+      normalized.match(/\baccess\s+adapt-qos\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^adapt-qos\s+([^"\s{}]+)/);
+    if (adaptQos) {
+      tokens.push({ token: "adapt-qos", field: "access.adapt-qos.mode", colorSeed: "access.adapt-qos.mode", kind: "keyword" });
+      tokens.push({ token: stripTrailingSyntax(adaptQos[1]), field: "access.adapt-qos.mode", colorSeed: "access.adapt-qos.mode", kind: "keyword" });
+      if (/\badapt-qos\s+mode\s+/.test(normalized)) tokens.push({ token: "mode", field: "access.adapt-qos.mode", colorSeed: "access.adapt-qos.mode", kind: "keyword" });
+    }
+
+    if (/\bno\s+shutdown\b/.test(normalized)) add("state", "no shutdown", "keyword");
+    if (/\badmin-state\s+enable\b/.test(normalized)) {
+      add("state", "admin-state", "keyword");
+      add("state", "enable", "keyword");
+    }
+    if (/\badmin-state\s+disable\b/.test(normalized)) {
+      add("state", "admin-state", "keyword");
+      add("state", "disable", "keyword");
+    }
+
+    if (tokens.length) return tokens;
+  }
+
+  const description = extractDescriptionValue(source);
+  if (description) add("description", description, "quoted");
+
+  const authKey = normalized.match(/\bauthentication-key\s+"?([^"\s{}]+)"?/);
+  if (authKey) add("authentication-key", stripTrailingSyntax(authKey[1]), "quoted");
+
+  const group = normalized.match(/\b(?:group|peer-group)\s+"?([^"\s{}]+)"?/);
+  if (group) add("group", stripTrailingSyntax(group[1]), "keyword");
+
+  const peerAs = normalized.match(/\b(?:peer-as|remote-as)\s+"?([^"\s{}]+)"?/);
+  if (peerAs) add("peer-as", stripTrailingSyntax(peerAs[1]), "number");
+
+  if (tokens.length) return tokens;
 
   const field = extractFieldName(normalized);
   const value = field ? extractFieldValue(normalized, field) : "";
@@ -6984,9 +16062,39 @@ function isLowValueHighlightToken(token) {
 }
 
 function tokenColorIndex(token) {
-  const normalized = canonicalizeComparableLine(token).replace(/^"|"$/g, "");
-  const fieldIndex = semanticFieldOrder.indexOf(normalized);
-  if (fieldIndex >= 0) return (fieldIndex % 8) + 1;
+  const normalized = normalizeRelationField(canonicalizeComparableLine(token).replace(/^"|"$/g, ""));
+  const fieldColor = {
+    route: 6,
+    neighbor: 6,
+    "next-hop": 7,
+    gateway: 7,
+    address: 1,
+    "ip-address": 1,
+    description: 4,
+    tag: 3,
+    metric: 4,
+    state: 2,
+    "admin-state": 2,
+    group: 8,
+    "peer-group": 8,
+    "authentication-key": 5,
+    "peer-as": 5,
+    interface: 3,
+    "icmp.mask-reply": 2,
+    "icmp.redirects": 2,
+    "icmp.ttl-expired": 2,
+    "icmp.unreachables": 2,
+    sap: 3,
+    port: 3,
+    "member-port": 3,
+    lag: 3,
+    mode: 4,
+    "lacp-mode": 5,
+    "lacp.administrative-key": 5,
+    "lacp-xmit-interval": 5,
+    "access.adapt-qos.mode": 4,
+  }[normalized];
+  if (fieldColor) return fieldColor;
   let hash = 0;
   for (let index = 0; index < normalized.length; index += 1) {
     hash = (hash * 31 + normalized.charCodeAt(index)) % 9973;
@@ -7053,10 +16161,11 @@ function alignNewConfigToOldOrder() {
 
 function createNewEmptyProfile() {
   if (!confirmUnsavedProfileAction("신규 프로파일 생성")) return;
-  const vendor = selectors.vendorSelect.value || state.profileDraft?.vendor || "nokia";
+  const vendorPair = getProfileVendorPairFromControls();
+  const vendor = state.profileDraft?.vendor || legacyVendorFromParserId(vendorPair.oldVendor);
   state.activeProfileId = null;
   state.selectedProfileLibraryId = null;
-  state.profileDraft = createEmptyProfile(vendor);
+  state.profileDraft = createEmptyProfile(vendor, vendorPair);
   state.selectedProfileObjectType = "static-route";
   ensureProfileExamples(state.profileDraft);
   renderProfileEditor();
@@ -7100,9 +16209,13 @@ async function saveSession() {
     oldConfig: selectors.oldInput.value,
     newConfig: selectors.newInput.value,
     profileId: state.activeProfileId,
+    manualMap: state.profileDraft?.manualMap || loadManualMapFromLocalStorage(),
+    profileSnapshot: deepClone(state.profileDraft),
     updatedAt: Date.now(),
   };
   await saveRecord("sessions", session, "configWorkbenchSessions");
+  state.lastSessionName = name;
+  selectors.compareStatus.textContent = "세션 저장 완료";
   await refreshHistorySelect();
 }
 
@@ -7110,21 +16223,71 @@ async function loadSelectedSession() {
   const sessions = await readRecords("sessions", "configWorkbenchSessions");
   const session = sessions.find((item) => item.id === selectors.historySelect.value);
   if (!session) return;
+  state.lastSessionName = session.name || "";
   selectors.oldInput.value = session.oldConfig;
   selectors.newInput.value = session.newConfig;
+
+  let loadedProfile = null;
+  let loadedFromLibrary = false;
+  const profiles = await readRecords("profiles", "configWorkbenchProfiles");
+  if (session.profileId) {
+    loadedProfile = profiles.find((item) => item.id === session.profileId) || null;
+    loadedFromLibrary = Boolean(loadedProfile);
+  }
+
+  if (!loadedProfile && session.profileSnapshot) {
+    const snapshot = session.profileSnapshot;
+    loadedProfile = profiles.find((item) =>
+      (snapshot.id && item.id === snapshot.id) ||
+      (snapshot.name && item.name === snapshot.name)
+    ) || null;
+    loadedFromLibrary = Boolean(loadedProfile);
+  }
+
+  if (!loadedProfile && session.profileSnapshot) {
+    loadedProfile = session.profileSnapshot;
+  }
+
+  if (loadedProfile) {
+    state.profileDraft = normalizeProfile(loadedProfile);
+    state.activeProfileId = loadedFromLibrary
+      ? loadedProfile.id
+      : (state.profileDraft.id || session.profileId || state.activeProfileId);
+    state.selectedProfileLibraryId = loadedFromLibrary ? loadedProfile.id : state.selectedProfileLibraryId;
+    state.profileDraft.manualMap = {
+      ...(session.manualMap || {}),
+      ...(state.profileDraft.manualMap || {}),
+    };
+    saveManualMapToLocalStorage(state.profileDraft.manualMap || {});
+    commitProfileSnapshot();
+    renderProfileEditor();
+    await refreshProfileSelect();
+    if (selectors.profileSelect && state.activeProfileId) selectors.profileSelect.value = state.activeProfileId;
+    setProfileStatus(
+      loadedFromLibrary
+        ? "세션 로드: 최신 저장 프로파일 적용"
+        : "세션 로드: 저장 시점 프로파일 스냅샷 적용",
+      loadedFromLibrary ? "applied" : "info"
+    );
+  } else if (session.manualMap) {
+    state.profileDraft.manualMap = session.manualMap;
+    saveManualMapToLocalStorage(session.manualMap);
+  }
   captureInitialConfigSnapshot(true);
   updateLineNumbers();
-  if (session.profileId) {
-    const profiles = await readRecords("profiles", "configWorkbenchProfiles");
-    const profile = profiles.find((item) => item.id === session.profileId);
-    if (profile) {
-      state.activeProfileId = profile.id;
-      state.profileDraft = normalizeProfile(profile);
-      renderProfileEditor();
-      await refreshProfileSelect();
-    }
-  }
+
   markCompareStale();
+}
+
+async function deleteSelectedSession() {
+  const id = selectors.historySelect.value;
+  if (!id) return;
+  const sessions = await readRecords("sessions", "configWorkbenchSessions");
+  const session = sessions.find((item) => item.id === id);
+  if (!session) return;
+  if (!window.confirm?.(`'${session.name}' 세션을 삭제할까요?`)) return;
+  await deleteRecord("sessions", id, "configWorkbenchSessions");
+  await refreshHistorySelect();
 }
 
 async function refreshHistorySelect() {
@@ -7143,13 +16306,15 @@ async function refreshProfileSelect() {
 }
 
 async function saveProfile() {
+  state.profileDraft = ensureVendorPresetFields(state.profileDraft);
+  const vendorPair = getProfileVendorPairFromControls();
+  Object.assign(state.profileDraft, buildProfileVendorState(vendorPair.oldVendor, vendorPair.newVendor));
   saveCurrentProfileExamples();
   const targetId = state.profileDraft.id || state.activeProfileId || null;
   const record = {
     ...state.profileDraft,
     id: targetId || createId(),
     name: selectors.profileNameInput.value.trim() || "이름 없는 프로파일",
-    vendor: selectors.vendorSelect.value,
     updatedAt: Date.now(),
   };
   state.activeProfileId = record.id;
@@ -7163,13 +16328,30 @@ async function saveProfile() {
   setProfileStatus(`프로파일 저장 완료: ${record.name} / ${formatDate(record.updatedAt)}`, "saved");
 }
 
+async function syncActiveSessionProfileReference() {
+  const sessionId = selectors.historySelect?.value || "";
+  if (!sessionId || !state.profileDraft?.id) return;
+  const sessions = await readRecords("sessions", "configWorkbenchSessions");
+  const session = sessions.find((item) => item.id === sessionId);
+  if (!session) return;
+  await saveRecord("sessions", {
+    ...session,
+    profileId: state.profileDraft.id,
+    manualMap: state.profileDraft.manualMap || session.manualMap || {},
+    profileSnapshot: deepClone(state.profileDraft),
+    updatedAt: Date.now(),
+  }, "configWorkbenchSessions");
+}
+
 async function saveProfileAs() {
+  state.profileDraft = ensureVendorPresetFields(state.profileDraft);
+  const vendorPair = getProfileVendorPairFromControls();
+  Object.assign(state.profileDraft, buildProfileVendorState(vendorPair.oldVendor, vendorPair.newVendor));
   saveCurrentProfileExamples();
   const record = {
     ...state.profileDraft,
     id: createId(),
     name: selectors.profileNameInput.value.trim() || `${state.profileDraft.name || "이름 없는 프로파일"} 복사본`,
-    vendor: selectors.vendorSelect.value,
     updatedAt: Date.now(),
   };
   state.activeProfileId = record.id;
@@ -7278,10 +16460,17 @@ function selectSavedProfile(id) {
 }
 
 function normalizeProfile(profile) {
+  const legacyPreset = getVendorPresetByLegacyVendor(profile.vendor || "");
+  const vendorState = buildProfileVendorState(
+    profile.oldVendor || profile.vendorPreset?.oldVendor || legacyPreset.oldVendor,
+    profile.newVendor || profile.vendorPreset?.newVendor || legacyPreset.newVendor,
+  );
+
   return {
     id: profile.id || null,
     name: profile.name || "이름 없는 프로파일",
-    vendor: profile.vendor || "nokia",
+    ...vendorState,
+    vendor: (profile.oldVendor || profile.vendorPreset?.oldVendor) ? vendorState.vendor : (profile.vendor || vendorState.vendor),
     mappings: Array.isArray(profile.mappings) ? profile.mappings : objectTypes.map((type) => ({ oldType: type, newType: type })),
     objects: normalizeSemanticObjects(profile.objects),
     normalize: normalizeNormalizeRules(profile.normalize),
@@ -7289,6 +16478,7 @@ function normalizeProfile(profile) {
       ignore: Array.isArray(profile.rules?.ignore) ? profile.rules.ignore : [],
       required: Array.isArray(profile.rules?.required) ? profile.rules.required : [],
     },
+    exceptions: normalizeProfileExceptions(profile.exceptions),
     examples: normalizeExamples(profile.examples),
     identityRules: normalizeIdentityRules(profile.identityRules),
     lineMappings: normalizeLineMappings(profile.lineMappings),
@@ -7302,6 +16492,104 @@ function normalizeProfile(profile) {
     semanticLineGroups: normalizeSemanticLineGroups(profile.semanticLineGroups),
     parserRules: normalizeParserRules(profile.parserRules),
   };
+}
+
+function normalizeProfileExceptions(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const target = item.target && typeof item.target === "object" ? item.target : {};
+      const match = item.match && typeof item.match === "object" ? item.match : {};
+      const type = item.type || "";
+      const comparisonExclusion = type === "comparison-exclusion" || ["exact-setting", "profile-setting-status"].includes(String(match.mode || "").toLowerCase());
+      const scope = item.scope === "profile" ? "profile" : (comparisonExclusion && item.scope === "setting" ? "setting" : "object");
+      const targetChangeType = target.changeType || item.changeType || target.status || item.status || "";
+      const targetFindingType = normalizeProfileScopeFindingType(
+        target.findingType || item.findingType || "",
+        targetChangeType,
+        scope
+      );
+      const matchFindingType = normalizeProfileScopeFindingType(
+        match.findingType || target.findingType || item.findingType || "",
+        match.changeType || targetChangeType,
+        scope
+      );
+      return {
+        id: item.id || createId(),
+        type,
+        scope,
+        createdAt: item.createdAt || new Date().toISOString(),
+        createdBy: item.createdBy || "user",
+        createdFromIssueId: item.createdFromIssueId || target.createdFromIssueId || "",
+        reasonKo: item.reasonKo || item.reason || target.reasonKo || (comparisonExclusion ? "비교 제외 규칙" : "사용자 예외"),
+        target: {
+          ruleId: target.ruleId || item.ruleId || "",
+          category: target.category || item.category || "",
+          vendorPair: target.vendorPair || item.vendorPair || match.vendorPair || "",
+          objectType: target.settingType || target.objectType || item.settingType || item.objectType || "",
+          settingType: target.settingType || target.objectType || item.settingType || item.objectType || "",
+          objectKey: scope !== "profile" ? (target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
+          settingKey: scope !== "profile" ? (target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
+          createdFromObjectKey: target.createdFromObjectKey || item.createdFromObjectKey || (scope === "profile" ? (target.objectKey || item.objectKey || "") : ""),
+          displayName: target.displayName || item.displayName || "",
+          fieldPath: target.fieldPath || item.fieldPath || item.field || "",
+          side: normalizeExceptionSide(target.side || item.side || "both"),
+          oldValue: target.oldValue ?? item.oldValue ?? "",
+          newValue: target.newValue ?? item.newValue ?? "",
+          sourceLineIds: Array.isArray(target.sourceLineIds) ? target.sourceLineIds : [],
+          targetLineIds: Array.isArray(target.targetLineIds) ? target.targetLineIds : [],
+          findingType: targetFindingType,
+          issueType: target.issueType || item.issueType || "",
+          matchStatus: target.matchStatus || item.matchStatus || "",
+          status: target.status || item.status || "",
+          changeType: targetChangeType,
+        },
+        match: {
+          mode: comparisonExclusion
+            ? (scope === "profile" ? "profile-setting-status" : "exact-setting")
+            : (scope === "profile" ? "profile-field-rule" : (match.mode || "exact-object-field-rule")),
+          objectType: match.settingType || match.objectType || target.settingType || target.objectType || item.settingType || item.objectType || "",
+          settingType: match.settingType || match.objectType || target.settingType || target.objectType || item.settingType || item.objectType || "",
+          objectKey: scope !== "profile" ? (match.settingKey || match.objectKey || target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
+          settingKey: scope !== "profile" ? (match.settingKey || match.objectKey || target.settingKey || target.objectKey || item.settingKey || item.objectKey || "") : "",
+          fieldPath: match.fieldPath || target.fieldPath || item.fieldPath || item.field || "",
+          ruleId: match.ruleId || target.ruleId || item.ruleId || "",
+          category: match.category || target.category || item.category || "",
+          findingType: matchFindingType,
+          issueType: match.issueType || target.issueType || item.issueType || "",
+          matchStatus: match.matchStatus || target.matchStatus || item.matchStatus || "",
+          changeType: match.changeType || targetChangeType,
+          changeTypes: Array.isArray(match.changeTypes) ? match.changeTypes : [],
+          valueMode: match.valueMode || item.valueMode || "",
+          valuePattern: match.valuePattern || item.valuePattern || "",
+          oldValuePattern: match.oldValuePattern || item.oldValuePattern || "",
+          newValuePattern: match.newValuePattern || item.newValuePattern || "",
+          vendorPair: match.vendorPair || item.vendorPair || "",
+        },
+        enabled: item.enabled !== false,
+      };
+    });
+}
+
+function normalizeProfileScopeFindingType(findingType = "", changeType = "", scope = "object") {
+  if (scope !== "profile") return findingType || "";
+  const normalized = canonicalizeComparableLine(findingType || "");
+  const broadReviewTypes = new Set([
+    "abnormal",
+    "relationship",
+    "unmatched-old",
+    "unmatched-new",
+    "low-confidence",
+    "ambiguous",
+    "summary-review",
+    "review",
+    "semantic-field",
+  ]);
+  if (!normalized || broadReviewTypes.has(normalized)) {
+    return normalizeExceptionChangeType(changeType || "");
+  }
+  return findingType;
 }
 
 function normalizeSemanticObjects(value) {
@@ -7456,11 +16744,20 @@ function normalizeSemanticMappings(value) {
           newNodes,
           cardinality: semanticMappingCardinality(oldNodes, newNodes),
           groupId: item.groupId || item.id || createId(),
+          policy: normalizeSemanticMappingPolicy(item.policy),
         };
       })
       .filter(Boolean);
   });
   return base;
+}
+
+function normalizeSemanticMappingPolicy(policy = "") {
+  const value = canonicalizeComparableLine(policy || "compare");
+  if (value === "변경") return "changed";
+  return ["compare", "changed", "presence", "required", "conditional", "ignore", "normalize"].includes(value)
+    ? value
+    : "compare";
 }
 
 function normalizeSemanticNodes(nodes) {
@@ -7646,14 +16943,59 @@ function saveTextFile(filename, content) {
 function saveUiPreferences() {
   document.body.dataset.theme = selectors.themeSelect.value;
   document.documentElement.style.setProperty("--editor-font", `${selectors.fontSelect.value}, monospace`);
-  localStorage.setItem("configWorkbenchUi", JSON.stringify({ theme: selectors.themeSelect.value, font: selectors.fontSelect.value }));
+  document.body.dataset.fieldHighlight = selectors.fieldHighlightToggle?.checked === false ? "off" : "on";
+  document.body.dataset.objectMappingVisible = selectors.objectMappingVisibleToggle?.checked === false ? "off" : "on";
+  document.body.dataset.mappingDebug = selectors.mappingDebugToggle?.checked ? "on" : "off";
+  document.body.dataset.lineMappingStyle = selectors.lineMappingStyleSelect?.value || "straight";
+  document.body.dataset.lineMappingVisible = selectors.lineMappingVisibleToggle?.checked === false ? "off" : "on";
+  document.body.dataset.lineMappingAnimation = selectors.lineMappingAnimationToggle?.checked ? "on" : "off";
+  localStorage.setItem("configWorkbenchUi", JSON.stringify({
+    theme: selectors.themeSelect.value,
+    font: selectors.fontSelect.value,
+    fieldHighlight: selectors.fieldHighlightToggle?.checked !== false,
+    semanticDebug: Boolean(selectors.semanticDebugToggle?.checked),
+    objectMappingVisible: selectors.objectMappingVisibleToggle?.checked !== false,
+    mappingDebug: Boolean(selectors.mappingDebugToggle?.checked),
+    lineMappingStyle: selectors.lineMappingStyleSelect?.value || "straight",
+    lineMappingBend: selectors.lineMappingBendRange?.value || "65",
+    lineMappingVisible: selectors.lineMappingVisibleToggle?.checked !== false,
+    lineMappingAnimation: Boolean(selectors.lineMappingAnimationToggle?.checked),
+  }));
 }
 
 function loadUiPreferences() {
   try {
-    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas" };
+    const prefs = JSON.parse(localStorage.getItem("configWorkbenchUi")) || { theme: "light", font: "Consolas", lineMappingStyle: "straight" };
     selectors.themeSelect.value = prefs.theme;
     selectors.fontSelect.value = prefs.font;
+    if (selectors.fieldHighlightToggle) {
+      selectors.fieldHighlightToggle.checked = prefs.fieldHighlight !== false;
+    }
+    if (selectors.semanticDebugToggle) {
+      selectors.semanticDebugToggle.checked = Boolean(prefs.semanticDebug);
+    }
+    if (selectors.objectMappingVisibleToggle) {
+      selectors.objectMappingVisibleToggle.checked = prefs.objectMappingVisible !== false;
+    }
+    if (selectors.mappingDebugToggle) {
+      selectors.mappingDebugToggle.checked = Boolean(prefs.mappingDebug);
+    }
+    if (selectors.lineMappingStyleSelect) {
+      selectors.lineMappingStyleSelect.value = ["straight", "chain", "slime"].includes(prefs.lineMappingStyle)
+        ? prefs.lineMappingStyle
+        : "chain";
+    }
+    if (selectors.lineMappingBendRange) {
+      selectors.lineMappingBendRange.value = String(
+        Math.max(0, Math.min(100, Number(prefs.lineMappingBend ?? 65) || 65))
+      );
+    }
+    if (selectors.lineMappingVisibleToggle) {
+      selectors.lineMappingVisibleToggle.checked = prefs.lineMappingVisible !== false;
+    }
+    if (selectors.lineMappingAnimationToggle) {
+      selectors.lineMappingAnimationToggle.checked = Boolean(prefs.lineMappingAnimation);
+    }
   } catch {}
   saveUiPreferences();
 }
@@ -7695,7 +17037,7 @@ function formatDate(value) {
 }
 
 function escapeHtml(value) {
-  return String(value || "")
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")

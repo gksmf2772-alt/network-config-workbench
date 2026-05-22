@@ -1,0 +1,396 @@
+{
+  "command": "validate:audit",
+  "mode": "audit",
+  "generatedAt": "2026-05-18T12:20:25.876Z",
+  "status": "passed",
+  "pass": true,
+  "counts": {
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "blocked": 1
+  },
+  "juniperRealValidationStatus": "blocked",
+  "searchedPaths": [
+    "examples",
+    "example",
+    "samples",
+    "sample",
+    "fixtures",
+    "fixture",
+    "tests",
+    "test",
+    "validation",
+    "configs",
+    "config",
+    "profiles",
+    "presets",
+    "sessions",
+    "data",
+    "public",
+    "src",
+    "scripts",
+    "예제 및 테스트 설정",
+    "."
+  ],
+  "missingInputs": [
+    {
+      "id": "juniper-source-config",
+      "messageKo": "Juniper 원본 설정 파일이 없어 실제 비교 검증을 수행할 수 없습니다.",
+      "searchedPatterns": [
+        "Juniper",
+        "juniper",
+        "JUNOS",
+        "junos",
+        "set interfaces",
+        "set routing-options",
+        "set protocols bgp",
+        "set policy-options"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "id": "juniper-to-nokia-mdcli-22",
+      "status": "blocked",
+      "synthetic": false,
+      "reason": "missing-source-config",
+      "messageKo": "현재 레포지토리 내 Juniper 원본 설정이 없어 실제 Juniper → Nokia MD-CLI 22 검증은 보류합니다.",
+      "requiredInputs": [
+        "real Juniper source config",
+        "target Nokia MD-CLI 22 config or expected generated/converted config",
+        "vendor/profile settings if applicable",
+        "exception/advanced compare policy if applicable"
+      ]
+    },
+    {
+      "id": "synthetic-juniper-set-smoke",
+      "status": "passed",
+      "synthetic": true,
+      "productionValidation": false,
+      "mode": "audit",
+      "sourcePath": "validation/fixtures/synthetic/juniper-set-smoke.conf",
+      "targetPaths": [
+        "validation/fixtures/synthetic/nokia-mdcli22-smoke.conf"
+      ],
+      "sourceVendor": "juniper-set",
+      "targetVendor": "nokia-md-cli",
+      "parser": {
+        "oldObjects": 5,
+        "newObjects": 3,
+        "oldEligibleLines": 5,
+        "newEligibleLines": 5,
+        "recognizedLines": 9,
+        "unsupportedLines": 1,
+        "routerLogWrapperLines": 0,
+        "sourceLineMappingStatus": "ok"
+      },
+      "semantic": {
+        "planItems": 5,
+        "matched": 3,
+        "unmatchedOld": 2,
+        "unmatchedNew": 0,
+        "ambiguous": 0,
+        "lowConfidence": 0,
+        "fieldOverlapPercent": 57,
+        "coveragePercent": 90,
+        "suppressedLines": 0
+      },
+      "policy": {
+        "ignoredPolicyFields": 0,
+        "suppressedAuditFindings": 2,
+        "activeAuditFindings": 7
+      },
+      "audit": {
+        "summary": {
+          "total": 9,
+          "active": 7,
+          "suppressed": 2,
+          "bySeverity": {
+            "manual-review": 7,
+            "suppressed": 2
+          },
+          "byCategory": {
+            "filter-acl": 1,
+            "routing-bgp": 4,
+            "management-security": 4
+          },
+          "byMigrationImpact": {
+            "target-default-risk": 3,
+            "review-before-migration": 6
+          }
+        },
+        "categories": {
+          "filter-acl": 1,
+          "routing-bgp": 4,
+          "management-security": 4
+        },
+        "migrationImpact": {
+          "target-default-risk": 3,
+          "review-before-migration": 6
+        },
+        "findingCount": 9
+      },
+      "report": {
+        "summaryCounts": {
+          "matched": 3,
+          "oldOnly": 2,
+          "newOnly": 0,
+          "excluded": 0,
+          "suppressed": 0,
+          "ambiguous": 0,
+          "lowConfidence": 0,
+          "relationshipDiffs": 0,
+          "abnormal": 3,
+          "manual": 0,
+          "auditActive": 7,
+          "auditSuppressed": 2,
+          "auditCritical": 0,
+          "auditWarning": 0,
+          "auditManual": 7,
+          "auditUnsupported": 0,
+          "unmatchedPartialTargetScope": 0,
+          "unmatchedMatcherIssue": 0,
+          "unmatchedParserGap": 1,
+          "unmatchedRealMissingTarget": 1
+        },
+        "reviewCounts": {
+          "unmatchedOld": 2,
+          "unmatchedNew": 0,
+          "ambiguous": 0,
+          "lowConfidence": 0,
+          "abnormal": 3,
+          "relationshipChanges": 0
+        },
+        "severity": {
+          "level": "critical",
+          "label": "검토 우선순위 높음",
+          "reason": "핵심 객체 누락 또는 낮은 분석 비율"
+        }
+      },
+      "graph": {
+        "nodes": 20,
+        "edges": 10,
+        "invalidEdges": []
+      },
+      "migrationReadiness": {
+        "generationImplemented": false,
+        "generationValidationStatus": "not-applicable",
+        "status": "ready-with-review",
+        "impact": {
+          "target-default-risk": 3,
+          "review-before-migration": 6
+        },
+        "unsupportedObjects": 0,
+        "manualReviewObjects": 6,
+        "targetDefaultRisk": 3,
+        "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
+      },
+      "compare": {
+        "htmlLength": 27885,
+        "hasUndefined": false,
+        "hasNaN": false
+      },
+      "diagnostics": {
+        "coverageReason": "의미 기반 분석 라인 매핑 정상",
+        "oldUnparsedSample": [],
+        "newUnparsedSample": [
+          {
+            "line": 1,
+            "text": "/configure { router \"Base\" interface \"xe-0/0/0.100\" ipv4 primary address 192.0.2.1 prefix-length 31 }",
+            "reason": "parser-unmapped"
+          }
+        ]
+      },
+      "notesKo": "Juniper 실제 설정 기반 검증은 수행되지 않았습니다. Synthetic smoke fixture만 사용했습니다.",
+      "signature": "9aae405005bd323c6c9430ff647db18dd702ccd8e5067effeb1fd66f83a8f5a0"
+    },
+    {
+      "id": "nokia-classic15-to-nokia-mdcli-22",
+      "status": "passed",
+      "synthetic": false,
+      "productionValidation": true,
+      "mode": "audit",
+      "sourcePath": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "targetPaths": [
+        "예제 및 테스트 설정/New_bgp_1.txt",
+        "예제 및 테스트 설정/New_static_1.txt",
+        "예제 및 테스트 설정/New_interface_1.txt",
+        "예제 및 테스트 설정/New_lag_1.txt",
+        "예제 및 테스트 설정/New_port_1.txt",
+        "예제 및 테스트 설정/New_PIM_1.txt"
+      ],
+      "sourceVendor": "nokia-classic",
+      "targetVendor": "nokia-md-cli",
+      "parser": {
+        "oldObjects": 549,
+        "newObjects": 349,
+        "oldEligibleLines": 9466,
+        "newEligibleLines": 2375,
+        "recognizedLines": 11084,
+        "unsupportedLines": 757,
+        "routerLogWrapperLines": 123,
+        "sourceLineMappingStatus": "ok"
+      },
+      "semantic": {
+        "planItems": 705,
+        "matched": 118,
+        "unmatchedOld": 351,
+        "unmatchedNew": 156,
+        "ambiguous": 20,
+        "lowConfidence": 62,
+        "fieldOverlapPercent": 40,
+        "coveragePercent": 94,
+        "suppressedLines": 62
+      },
+      "policy": {
+        "ignoredPolicyFields": 288,
+        "suppressedAuditFindings": 60,
+        "activeAuditFindings": 572
+      },
+      "audit": {
+        "summary": {
+          "total": 632,
+          "active": 572,
+          "suppressed": 60,
+          "bySeverity": {
+            "manual-review": 466,
+            "warning": 106,
+            "suppressed": 60
+          },
+          "byCategory": {
+            "qos": 214,
+            "filter-acl": 190,
+            "routing-bgp": 224,
+            "management-security": 4
+          },
+          "byMigrationImpact": {
+            "manual-conversion-required": 396,
+            "target-default-risk": 116,
+            "review-before-migration": 120
+          }
+        },
+        "categories": {
+          "qos": 214,
+          "filter-acl": 190,
+          "routing-bgp": 224,
+          "management-security": 4
+        },
+        "migrationImpact": {
+          "manual-conversion-required": 396,
+          "target-default-risk": 116,
+          "review-before-migration": 120
+        },
+        "findingCount": 632
+      },
+      "report": {
+        "summaryCounts": {
+          "matched": 118,
+          "oldOnly": 351,
+          "newOnly": 156,
+          "excluded": 0,
+          "suppressed": 0,
+          "ambiguous": 20,
+          "lowConfidence": 62,
+          "relationshipDiffs": 68,
+          "abnormal": 559,
+          "manual": 0,
+          "auditActive": 572,
+          "auditSuppressed": 60,
+          "auditCritical": 0,
+          "auditWarning": 106,
+          "auditManual": 466,
+          "auditUnsupported": 0,
+          "unmatchedPartialTargetScope": 295,
+          "unmatchedMatcherIssue": 32,
+          "unmatchedParserGap": 24,
+          "unmatchedRealMissingTarget": 0
+        },
+        "reviewCounts": {
+          "unmatchedOld": 351,
+          "unmatchedNew": 156,
+          "ambiguous": 20,
+          "lowConfidence": 62,
+          "abnormal": 559,
+          "relationshipChanges": 68
+        },
+        "severity": {
+          "level": "critical",
+          "label": "검토 우선순위 높음",
+          "reason": "핵심 객체 누락 또는 낮은 분석 비율"
+        }
+      },
+      "graph": {
+        "nodes": 415,
+        "edges": 308,
+        "invalidEdges": []
+      },
+      "migrationReadiness": {
+        "generationImplemented": false,
+        "generationValidationStatus": "not-applicable",
+        "status": "manual-review",
+        "impact": {
+          "manual-conversion-required": 396,
+          "target-default-risk": 116,
+          "review-before-migration": 120
+        },
+        "unsupportedObjects": 0,
+        "manualReviewObjects": 516,
+        "targetDefaultRisk": 116,
+        "messageKo": "Config 생성 기능은 아직 구현되지 않아 migration-readiness만 검증했습니다."
+      },
+      "compare": {
+        "htmlLength": 8862521,
+        "hasUndefined": false,
+        "hasNaN": false
+      },
+      "diagnostics": {
+        "coverageReason": "의미 기반 분석 라인 매핑 정상",
+        "oldUnparsedSample": [
+          {
+            "line": 4,
+            "text": "        name \"Gangbuk-SEA028\"",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 5,
+            "text": "        load-balancing",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 6,
+            "text": "            l4-load-balancing",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 7,
+            "text": "            mc-enh-load-balancing",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 9,
+            "text": "        management cli",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 10,
+            "text": "            configuration",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 11,
+            "text": "                no immediate",
+            "reason": "parser-unmapped"
+          },
+          {
+            "line": 14,
+            "text": "        netconf",
+            "reason": "parser-unmapped"
+          }
+        ],
+        "newUnparsedSample": []
+      },
+      "signature": "2f9eae15de300a90ddbe11622e326c243c61d02500d52fa85a6710e4e2f7aef3"
+    }
+  ]
+}

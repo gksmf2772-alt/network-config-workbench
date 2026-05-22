@@ -1,0 +1,126 @@
+{
+  "generatedAt": "2026-05-18T12:20:20.544Z",
+  "activeProfileName": "object-review-grouping-fixture",
+  "loadedProfileExceptionsCount": 1,
+  "before": {
+    "objectReviewGroupCount": 2,
+    "averageIssuesPerObject": 3,
+    "activeIssueCount": 6,
+    "suppressedIssueCount": 0,
+    "suppressedByProfileExceptionCount": 0,
+    "suppressedByObjectExceptionCount": 0,
+    "topIssueFields": [
+      {
+        "field": "description",
+        "count": 2
+      },
+      {
+        "field": "group",
+        "count": 2
+      },
+      {
+        "field": "state",
+        "count": 2
+      }
+    ],
+    "groups": [
+      {
+        "objectKey": "bgp:112.188.30.19",
+        "displayName": "## Dobong-TOU-FK66 ## - 112.188.30.19",
+        "activeIssueCount": 3,
+        "suppressedIssueCount": 0,
+        "issueFields": [
+          "description",
+          "group",
+          "state"
+        ],
+        "activeFields": [
+          "description",
+          "group",
+          "state"
+        ],
+        "suppressedFields": [],
+        "representativeReason": "값 변경 확인 외 2개"
+      },
+      {
+        "objectKey": "bgp:112.188.30.64",
+        "displayName": "## Nowon-TOU-FN14 ## - 112.188.30.64",
+        "activeIssueCount": 3,
+        "suppressedIssueCount": 0,
+        "issueFields": [
+          "description",
+          "group",
+          "state"
+        ],
+        "activeFields": [
+          "description",
+          "group",
+          "state"
+        ],
+        "suppressedFields": [],
+        "representativeReason": "값 변경 확인 외 2개"
+      }
+    ]
+  },
+  "after": {
+    "objectReviewGroupCount": 2,
+    "averageIssuesPerObject": 3,
+    "activeIssueCount": 4,
+    "suppressedIssueCount": 2,
+    "suppressedByProfileExceptionCount": 2,
+    "suppressedByObjectExceptionCount": 0,
+    "topIssueFields": [
+      {
+        "field": "description",
+        "count": 2
+      },
+      {
+        "field": "state",
+        "count": 2
+      }
+    ],
+    "groups": [
+      {
+        "objectKey": "bgp:112.188.30.19",
+        "displayName": "## Dobong-TOU-FK66 ## - 112.188.30.19",
+        "activeIssueCount": 2,
+        "suppressedIssueCount": 1,
+        "issueFields": [
+          "description",
+          "state"
+        ],
+        "activeFields": [
+          "description",
+          "state"
+        ],
+        "suppressedFields": [
+          "group"
+        ],
+        "representativeReason": "값 변경 확인 외 1개"
+      },
+      {
+        "objectKey": "bgp:112.188.30.64",
+        "displayName": "## Nowon-TOU-FN14 ## - 112.188.30.64",
+        "activeIssueCount": 2,
+        "suppressedIssueCount": 1,
+        "issueFields": [
+          "description",
+          "state"
+        ],
+        "activeFields": [
+          "description",
+          "state"
+        ],
+        "suppressedFields": [
+          "group"
+        ],
+        "representativeReason": "값 변경 확인 외 1개"
+      }
+    ]
+  },
+  "invariants": {
+    "oneRowPerObjectBefore": true,
+    "groupSuppressedAcrossObjects": true,
+    "stateDescriptionRemainActive": true
+  }
+}

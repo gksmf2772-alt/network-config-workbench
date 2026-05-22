@@ -1,0 +1,38 @@
+{
+  "command": "validate:field-dedupe",
+  "status": "passed",
+  "object": "## Dobong-TOU-FK66 ## · 112.188.30.19",
+  "duplicateFieldRowsBefore": 1,
+  "duplicateFieldRowsAfter": 0,
+  "descriptionDuplicateCountBefore": 2,
+  "descriptionDuplicateCountAfter": 1,
+  "activeFieldRows": [
+    {
+      "fieldPath": "description",
+      "activeCount": 1,
+      "suppressedCount": 1,
+      "displayStatus": "active-and-suppressed"
+    },
+    {
+      "fieldPath": "state",
+      "activeCount": 1,
+      "suppressedCount": 0,
+      "displayStatus": "active"
+    }
+  ],
+  "suppressedOnlyFieldRows": [
+    {
+      "fieldPath": "group",
+      "activeCount": 0,
+      "suppressedCount": 1,
+      "displayStatus": "suppressed"
+    }
+  ],
+  "checks": {
+    "descriptionMerged": true,
+    "descriptionActiveCount": 1,
+    "descriptionSuppressedCount": 1,
+    "suppressedOnlyGroupExcludedFromActiveRows": true,
+    "suppressedOnlyGroupVisibleInSuppressedRows": true
+  }
+}

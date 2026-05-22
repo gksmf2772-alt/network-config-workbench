@@ -1,0 +1,18 @@
+{
+  "name": "synthetic-juniper-smoke-validation",
+  "vendorPresetId": "juniper-set-to-md-cli",
+  "oldVendor": "juniper-set",
+  "newVendor": "nokia-md-cli",
+  "rules": {
+    "ignore": []
+  },
+  "validationPolicies": {},
+  "standardsAudit": {
+    "profileId": "default-network-standard",
+    "rules": {
+      "managementPlaneManualReview": true,
+      "bgpRequiresImportPolicy": true,
+      "bgpRequiresExportPolicy": true
+    }
+  }
+}

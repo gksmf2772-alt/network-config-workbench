@@ -1,2 +1,9 @@
-// Transitional module. Parser functions currently live in legacyCore.js and will be extracted here incrementally.
-export {};
+// src/core/parser.js
+
+export {
+  PARSER_IDS,
+  createParserContext,
+  createNormalizedObject,
+  createParserResult,
+  parseConfigByVendor,
+} from "./parsers/index.js";

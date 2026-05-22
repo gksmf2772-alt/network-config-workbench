@@ -1,0 +1,43 @@
+{
+  "name": "classic15-mdcli22-field-aliases",
+  "kind": "field-alias-policy",
+  "fieldAliases": {
+    "gateway": "next-hop",
+    "nextHop": "next-hop",
+    "nexthop": "next-hop",
+    "remote-as": "peer-as",
+    "peerAs": "peer-as",
+    "admin-state": "state",
+    "shutdown": "state",
+    "no shutdown": "state",
+    "ip-address": "address",
+    "prefix-length": "address",
+    "ipv4 primary address": "address"
+  },
+  "semanticAliases": [
+    {
+      "from": "gateway",
+      "to": "next-hop",
+      "scope": "static-route"
+    },
+    {
+      "from": "address + prefix-length",
+      "to": "address",
+      "scope": "interface"
+    },
+    {
+      "from": "admin-state enable/disable",
+      "to": "state enabled/disabled",
+      "scope": "all"
+    }
+  ],
+  "objectAliases": [],
+  "staticRouteConversionPolicy": {
+    "allowedNextHopRewrites": [],
+    "allowedMetricDifference": false,
+    "allowedTagDifference": false,
+    "allowAdminStateDefault": true,
+    "defaultRouteRequiresReview": true,
+    "notesKo": "next-hop 변경은 명시된 rewrite 정책 없이는 후보/수동 검토로 유지한다."
+  }
+}

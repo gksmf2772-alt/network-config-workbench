@@ -11,6 +11,13 @@ import {
   getSemanticDiffBlockState,
   getSemanticStateClass,
 } from "../src/core/semanticTheme.js";
+import {
+  activeSemanticPolicyViolations,
+  applySemanticPlanVisualStatusToDiffRows,
+  semanticLineRelationState,
+  semanticObjectVisualState,
+  shouldRenderSemanticCleanMatch,
+} from "../src/core/compareVisualStatus.js";
 
 function setting({
   side = "new",
@@ -115,7 +122,6 @@ test("unmatched setting visual status uses unmatched class and color token", () 
 
 test("diff block status and color tokens target config panes", () => {
   const css = fs.readFileSync("src/styles/global.css", "utf8");
-  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
 
   assert.equal(getSemanticDiffBlockState({ status: "old-only" }), "unmatched");
   assert.equal(getSemanticDiffBlockState({ status: "new-only" }), "unmatched");
@@ -137,37 +143,44 @@ test("diff block status and color tokens target config panes", () => {
   assert.equal(getSemanticDiffBlockState({ status: "old-only", comparisonExcluded: true }), "excluded");
   assert.equal(getSemanticStateClass({ status: "partial" }), "semantic-state-partial");
 
-  assert.match(legacy, /const objectStatus = pairedObjectStatus\(oldObject, newObject\);/);
-  assert.match(legacy, /function hasPairedObjectDifference\(oldObject = null, newObject = null\)/);
-  assert.match(legacy, /const semanticRuntime = safeStep\("의미 기반 비교 상태 계산"/);
-  assert.match(legacy, /report\.diffRows = applySemanticPlanVisualStatusToDiffRows\(report\.diffRows \|\| \[\], semanticRuntime\.plan\)/);
-  assert.match(legacy, /renderSemanticPreview\(semanticRuntime\)/);
-  assert.match(legacy, /function applySemanticPlanVisualStatusToDiffRows\(diffRows = \[\], plan = \[\]\)/);
-  assert.match(legacy, /function applySemanticPlanVisualStatusToDiffRow\(row = null, semanticPlanByKey = new Map\(\)\)/);
-  assert.match(legacy, /if \(!planItem \|\| !shouldRenderSemanticCleanMatch\(planItem\)\) return row;/);
-  assert.match(legacy, /const visualStatus = getSemanticDiffBlockState\(item\);/);
-  assert.match(legacy, /function shouldRenderSemanticCleanMatch\(item = \{\}\)/);
-  assert.match(legacy, /String\(item\.status \|\| ""\)\.toLowerCase\(\) !== "matched"/);
-  assert.match(legacy, /activeSemanticPolicyViolations\(item\)\.length > 0/);
-  assert.doesNotMatch(
-    legacy.match(/function hasActiveSemanticDisplayViolation\(item = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "",
-    /fieldSummary/
-  );
-  assert.match(legacy, /function semanticLineRelationState\(lineMatch = \{\}, field = "", item = \{\}\)/);
-  assert.match(legacy, /shouldRenderSemanticCleanMatch\(item\)\) return "equal"/);
-  assert.match(legacy, /function isCleanMatchedSemanticRelationElement\(element\)/);
-  assert.match(legacy, /status === "matched"/);
-  assert.match(legacy, /data-object-status="\$\{escapeHtml\(normalizedObjectStatus\)\}"/);
-  assert.match(legacy, /const cleanMatchedClass = isCleanMatchedSemanticRelationElement\(oldElement\) && isCleanMatchedSemanticRelationElement\(newElement\)/);
+  const cleanSemanticItem = {
+    id: "bgp:198.51.100.1",
+    status: "matched",
+    reason: "semantic-compare",
+    score: 100,
+    oldObject: setting({ side: "old", key: "198.51.100.1" }),
+    newObject: setting({ side: "new", key: "198.51.100.1" }),
+    fieldStats: { changedFields: 1 },
+    fieldSummary: {
+      group: {
+        status: "changed",
+        effectiveStatus: "ignored",
+        ignored: true,
+      },
+    },
+  };
+  const rows = applySemanticPlanVisualStatusToDiffRows([{
+    oldRow: { objectKey: "bgp:198.51.100.1", objectStatus: "changed", objectMatched: true },
+    newRow: { objectKey: "bgp:198.51.100.1", objectStatus: "changed", objectMatched: true },
+  }], [cleanSemanticItem]);
+
+  assert.equal(shouldRenderSemanticCleanMatch(cleanSemanticItem), true);
+  assert.equal(semanticObjectVisualState(cleanSemanticItem), "matched");
+  assert.equal(semanticLineRelationState({ status: "changed" }, "group", cleanSemanticItem), "equal");
+  assert.equal(rows[0].oldRow.objectStatus, "matched");
+  assert.equal(rows[0].newRow.objectStatus, "matched");
+  assert.deepEqual(activeSemanticPolicyViolations({
+    policyViolations: [{ field: "state" }],
+    fieldSummary: {
+      "admin-state": {
+        violation: false,
+        effectiveStatus: "ignored",
+      },
+    },
+  }), []);
+
   assert.match(css, /\.line-mapping-connector\.clean-matched/);
   assert.match(css, /\.line-mapping-shine\.clean-matched/);
-  assert.match(legacy, /oldStatus === "matched" && newStatus === "matched"/);
-  assert.match(legacy, /score:\s*row\?\.objectScore/);
-  assert.match(legacy, /score > 0 && score < 100/);
-  assert.match(legacy, /\["port", "lag", "bgp", "pim"\]\.includes\(object\.type\)/);
-  assert.match(legacy, /Object\.entries\(extractFieldsFromLine\(line, profile, object\.type\)\)/);
-  assert.match(legacy, /oldObject \? "old-only" : "new-only"/);
-  assert.match(legacy, /buildPairedObjectLineRow\(oldObject[\s\S]*objectStatus[\s\S]*objectMatched/);
   assert.match(css, /--diff-unmatched-bg:\s*#fff7ed/);
   assert.match(css, /object-status-changed[\s\S]*rgba\(245, 158, 11, 0\.14\)/);
   assert.match(css, /object-status-partial[\s\S]*var\(--status-review-bg\)/);

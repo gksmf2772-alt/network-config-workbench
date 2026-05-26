@@ -53,6 +53,9 @@
 .semantic-object-details {
   display: grid;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 10px 12px 12px;
   border-top: 1px solid var(--color-border);
   background: #fbfdff;

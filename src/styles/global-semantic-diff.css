@@ -604,10 +604,17 @@
 }
 
 .semantic-compare-result {
-  max-width: 1080px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .semantic-object-card {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
   margin-bottom: 8px;
 }
 

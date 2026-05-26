@@ -5,6 +5,7 @@ import {
   createComparisonPlan,
   matchNormalizedObjects,
   normalizeConfig,
+  renderComparisonPlanHtml,
 } from "../src/core/comparator.js";
 
 function object(type, identity, fields = {}) {
@@ -23,6 +24,71 @@ function object(type, identity, fields = {}) {
 
 function firstMatch(oldObjects, newObjects, profile = {}) {
   return matchNormalizedObjects({ oldObjects, newObjects, profile })[0];
+}
+
+function buildNokiaPortSemanticFixture() {
+  const oldConfig = [
+    "port 9/1/4",
+    "    description \"## Ulsan-TOD-FN77 ge13/1(ACT) ##\"",
+    "    ethernet",
+    "        mode access",
+    "        egress-scheduler-policy \"qos\"",
+    "        crc-monitor",
+    "            sd-threshold 9",
+    "        exit",
+    "        access",
+    "            egress",
+    "                queue-group \"Queue_Group\" instance 1 create",
+    "                    host-match dest \"PQ_3WFQ\" create",
+    "                exit",
+    "            exit",
+    "        exit",
+    "        down-on-internal-error",
+    "    exit",
+    "    no shutdown",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    "port 7/1/c12/1 {",
+    "    admin-state enable",
+    "    description \"## TO, lag-A-7112(7/1/c12/1), Ulsan-TOD-FN77, Po10(xe13/1), ACT, 02688875-0610, Direct ##\"",
+    "    ethernet {",
+    "        mode access",
+    "        down-on-internal-error {",
+    "        }",
+    "        crc-monitor {",
+    "            signal-degrade {",
+    "                threshold 9",
+    "            }",
+    "        }",
+    "        access {",
+    "            egress {",
+    "                queue-group \"Queue_Group\" instance-id 1 {",
+    "                    host-match {",
+    "                        int-dest-id \"PQ_3WFQ\" { }",
+    "                    }",
+    "                }",
+    "            }",
+    "        }",
+    "        egress {",
+    "            port-scheduler-policy {",
+    "                policy-name \"qos\"",
+    "            }",
+    "        }",
+    "    }",
+    "}",
+  ].join("\n");
+
+  const oldObjects = normalizeConfig({ vendor: "nokia-classic", side: "old", configText: oldConfig }).objects;
+  const newObjects = normalizeConfig({ vendor: "nokia-md-cli", side: "new", configText: newConfig }).objects;
+  const matches = matchNormalizedObjects({ oldObjects, newObjects });
+
+  return {
+    oldObjects,
+    newObjects,
+    matches,
+    plan: createComparisonPlan(matches),
+  };
 }
 
 test("port renamed but physically same maps strongly", () => {
@@ -321,6 +387,96 @@ test("Classic LAG maps MD-CLI block LAG by description endpoint as one object", 
   assert.equal(planItem.fieldSummary["admin-state"].status, "equal");
   assert.equal(planItem.fieldSummary["member-port"].status, "changed");
   assert.equal(planItem.fieldSummary["lacp.administrative-key"].status, "changed");
+});
+
+test("Nokia Classic and MD-CLI port block semantic fields remain matched", () => {
+  const { oldObjects, newObjects, matches, plan } = buildNokiaPortSemanticFixture();
+  const oldPort = oldObjects[0];
+  const newPort = newObjects[0];
+  const [match] = matches;
+  const [planItem] = plan;
+  const expectedEqualFields = {
+    "admin-state": "enabled",
+    "ethernet.mode": "access",
+    "ethernet.egress.scheduler-policy": "qos",
+    "ethernet.crc-monitor.signal-degrade.threshold": "9",
+    "ethernet.down-on-internal-error": "true",
+    "ethernet.access.egress.queue-group.name": "Queue_Group",
+    "ethernet.access.egress.queue-group.instance": "1",
+    "ethernet.access.egress.queue-group.host-match.destination": "PQ_3WFQ",
+  };
+
+  assert.equal(oldObjects.length, 1);
+  assert.equal(newObjects.length, 1);
+  assert.equal(oldPort.normalizedType, "port");
+  assert.equal(newPort.normalizedType, "port");
+  assert.equal(match.status, "matched");
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+
+  for (const [field, value] of Object.entries(expectedEqualFields)) {
+    assert.equal(oldPort.fields[field], value);
+    assert.equal(newPort.fields[field], value);
+    assert.equal(planItem.fieldSummary[field].status, "equal");
+  }
+
+  assert.equal(planItem.fieldSummary.description.status, "changed");
+});
+
+test("Nokia port semantic line comparison avoids missing and added rows for equivalent settings", () => {
+  const { plan } = buildNokiaPortSemanticFixture();
+  const [planItem] = plan;
+  const expectedFields = [
+    "admin-state",
+    "ethernet.mode",
+    "ethernet.egress.scheduler-policy",
+    "ethernet.crc-monitor.signal-degrade.threshold",
+    "ethernet.down-on-internal-error",
+    "ethernet.access.egress.queue-group.name",
+    "ethernet.access.egress.queue-group.instance",
+    "ethernet.access.egress.queue-group.host-match.destination",
+  ];
+  const lineByField = new Map(
+    planItem.lineMatches.map((lineMatch) => [lineMatch.fieldMatches?.[0]?.field, lineMatch])
+  );
+
+  for (const field of expectedFields) {
+    assert.equal(lineByField.get(field)?.status, "equal");
+    assert.notEqual(lineByField.get(field)?.reason, "no-line-match");
+    assert.notEqual(lineByField.get(field)?.reason, "new-line-unmatched");
+  }
+
+  assert.equal(planItem.lineMatches.filter((lineMatch) => ["missing", "added"].includes(lineMatch.status)).length, 0);
+});
+
+test("Nokia port semantic line comparison displays source config lines", () => {
+  const { plan } = buildNokiaPortSemanticFixture();
+  const [planItem] = plan;
+  const lineByField = new Map(
+    planItem.lineMatches.map((lineMatch) => [lineMatch.canonicalField, lineMatch])
+  );
+  const sourceText = (lineMatch, side) =>
+    (side === "old" ? lineMatch.oldSourceLines : lineMatch.newSourceLines).join("\n");
+  const html = renderComparisonPlanHtml(plan);
+
+  assert.match(sourceText(lineByField.get("admin-state"), "old"), /no shutdown/);
+  assert.match(sourceText(lineByField.get("admin-state"), "new"), /admin-state enable/);
+
+  assert.match(sourceText(lineByField.get("ethernet.egress.scheduler-policy"), "old"), /egress-scheduler-policy "qos"/);
+  assert.match(sourceText(lineByField.get("ethernet.egress.scheduler-policy"), "new"), /policy-name "qos"/);
+
+  assert.match(sourceText(lineByField.get("ethernet.crc-monitor.signal-degrade.threshold"), "old"), /sd-threshold 9/);
+  assert.match(sourceText(lineByField.get("ethernet.crc-monitor.signal-degrade.threshold"), "new"), /threshold 9/);
+
+  assert.match(sourceText(lineByField.get("ethernet.access.egress.queue-group.name"), "old"), /queue-group "Queue_Group" instance 1 create/);
+  assert.match(sourceText(lineByField.get("ethernet.access.egress.queue-group.name"), "new"), /queue-group "Queue_Group" instance-id 1/);
+
+  assert.match(sourceText(lineByField.get("ethernet.access.egress.queue-group.host-match.destination"), "old"), /host-match dest "PQ_3WFQ" create/);
+  assert.match(sourceText(lineByField.get("ethernet.access.egress.queue-group.host-match.destination"), "new"), /int-dest-id "PQ_3WFQ"/);
+
+  assert.doesNotMatch(html, /<pre class="semantic-line-cell old">ethernet\.access\.egress\.queue-group\.host-match\.destination PQ_3WFQ<\/pre>/);
+  assert.doesNotMatch(html, /<pre class="semantic-line-cell new">ethernet\.access\.egress\.queue-group\.host-match\.destination PQ_3WFQ<\/pre>/);
+  assert.match(html, /host-match dest &quot;PQ_3WFQ&quot; create/);
+  assert.match(html, /int-dest-id &quot;PQ_3WFQ&quot;/);
 });
 
 test("MD-CLI BGP one-line parser extracts import and export policy references", () => {

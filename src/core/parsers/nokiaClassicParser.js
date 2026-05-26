@@ -131,6 +131,11 @@ function flushCurrent(current, objects) {
           ...current.fields,
           ...collectClassicInterfaceServiceFields(current.rawLines),
         }
+    : current.type === "port"
+      ? {
+          ...current.fields,
+          ...collectClassicPortFields(current.rawLines, current.name),
+        }
     : current.fields;
 
   const normalizedIdentity =
@@ -171,6 +176,98 @@ function buildStaticRouteAggregateFields(current) {
       collectStaticRouteNextHopEntriesFromLines(current.rawLines)
     ),
   };
+}
+
+function setPortSemanticField(fields, field, value) {
+  const cleanValue = stripQuotes(value);
+  if (!field || !cleanValue) return;
+  fields[field] = cleanValue;
+}
+
+function collectClassicPortFields(rawLines = [], portName = "") {
+  const fields = { port: portName };
+  const stack = [];
+
+  rawLines.forEach((rawLine) => {
+    const text = String(rawLine || "").trim();
+    if (!text) return;
+
+    if (/^exit$/i.test(text)) {
+      stack.pop();
+      return;
+    }
+
+    let match = text.match(/^description\s+(.+)$/i);
+    if (match) {
+      setPortSemanticField(fields, "description", match[1]);
+      return;
+    }
+
+    if (/^(no\s+shutdown|shutdown|admin-state\s+enable|admin-state\s+disable)$/i.test(text)) {
+      const state = normalizeState(text);
+      fields.state = state;
+      fields["admin-state"] = state;
+      return;
+    }
+
+    match = text.match(/^mode\s+(\S+)/i);
+    if (match && stack.includes("ethernet")) {
+      setPortSemanticField(fields, "ethernet.mode", match[1]);
+      return;
+    }
+
+    match = text.match(/^egress-scheduler-policy\s+(.+)$/i);
+    if (match && stack.includes("ethernet")) {
+      setPortSemanticField(fields, "ethernet.egress.scheduler-policy", match[1]);
+      return;
+    }
+
+    match = text.match(/^sd-threshold\s+(\S+)/i);
+    if (match && stack.includes("crc-monitor")) {
+      setPortSemanticField(fields, "ethernet.crc-monitor.signal-degrade.threshold", match[1]);
+      return;
+    }
+
+    if (/^down-on-internal-error$/i.test(text) && stack.includes("ethernet")) {
+      fields["ethernet.down-on-internal-error"] = "true";
+      return;
+    }
+
+    match = text.match(/^queue-group\s+(?:"([^"]+)"|(\S+))\s+instance\s+(\S+)/i);
+    if (match && stack.includes("access") && stack.includes("egress")) {
+      setPortSemanticField(fields, "ethernet.access.egress.queue-group.name", match[1] || match[2]);
+      setPortSemanticField(fields, "ethernet.access.egress.queue-group.instance", match[3]);
+      stack.push("queue-group");
+      return;
+    }
+
+    match = text.match(/^host-match\s+dest\s+(?:"([^"]+)"|(\S+))/i);
+    if (match && stack.includes("queue-group")) {
+      setPortSemanticField(fields, "ethernet.access.egress.queue-group.host-match.destination", match[1] || match[2]);
+      return;
+    }
+
+    if (/^ethernet$/i.test(text)) {
+      stack.push("ethernet");
+      return;
+    }
+
+    if (/^crc-monitor$/i.test(text) && stack.includes("ethernet")) {
+      stack.push("crc-monitor");
+      return;
+    }
+
+    if (/^access$/i.test(text) && stack.includes("ethernet")) {
+      stack.push("access");
+      return;
+    }
+
+    if (/^egress$/i.test(text) && stack.includes("access")) {
+      stack.push("egress");
+    }
+  });
+
+  return fields;
 }
 
 function appendCsvField(fields, field, value) {

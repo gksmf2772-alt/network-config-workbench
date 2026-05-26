@@ -439,12 +439,66 @@ function findMdCliBlockLines(lines = [], startIndex = 0) {
   return block;
 }
 
+function extractMdCliPortBlockFields(lines = [], portName = "") {
+  const fields = { port: portName };
+  const description = extractDescription(lines);
+  const stack = [];
+
+  if (description) fields.description = description;
+
+  lines.forEach((line) => {
+    const text = String(line || "").trim();
+    if (!text) return;
+
+    let match = text.match(/^admin-state\s+(enable|disable|enabled|disabled)$/i);
+    if (match) {
+      const state = normalizeState(match[1]);
+      fields.state = state;
+      fields["admin-state"] = state;
+    }
+
+    match = text.match(/^mode\s+(\S+)/i);
+    if (match && stack.includes("ethernet")) {
+      setField(fields, "ethernet.mode", match[1]);
+    }
+
+    if (/^down-on-internal-error\b/i.test(text) && stack.includes("ethernet")) {
+      fields["ethernet.down-on-internal-error"] = "true";
+    }
+
+    match = text.match(/^threshold\s+(\S+)/i);
+    if (match && stack.includes("signal-degrade")) {
+      setField(fields, "ethernet.crc-monitor.signal-degrade.threshold", match[1]);
+    }
+
+    match = text.match(/^policy-name\s+(.+)$/i);
+    if (match && stack.includes("port-scheduler-policy")) {
+      setField(fields, "ethernet.egress.scheduler-policy", match[1]);
+    }
+
+    match = text.match(/^queue-group\s+(?:"([^"]+)"|(\S+))\s+instance-id\s+(\S+)/i);
+    if (match && stack.includes("access") && stack.includes("egress")) {
+      setField(fields, "ethernet.access.egress.queue-group.name", match[1] || match[2]);
+      setField(fields, "ethernet.access.egress.queue-group.instance", match[3]);
+    }
+
+    match = text.match(/^int-dest-id\s+(?:"([^"]+)"|(\S+))/i);
+    if (match && stack.includes("host-match")) {
+      setField(fields, "ethernet.access.egress.queue-group.host-match.destination", match[1] || match[2]);
+    }
+
+    updateMdCliBraceScope(stack, text);
+  });
+
+  return normalizeNokiaSemanticFields(fields);
+}
+
 function parseMdCliPorts(lines) {
   const blocks = collectBraceBlocks(lines, /^port\s+"?([^"\s{]+)"?\s*\{/i)
     .filter((block) => !isMdCliLineInsideScope(lines, block.startIndex, "lag"));
 
   return blocks.map((block, index) => {
-    const description = extractDescription(block.lines);
+    const fields = extractMdCliPortBlockFields(block.lines, block.name);
     const identity = block.name;
 
     const object = createNormalizedObject({
@@ -455,13 +509,10 @@ function parseMdCliPorts(lines) {
       normalizedType: "port",
       normalizedIdentity: identity,
       rawLines: block.lines,
-      fields: {
-        port: block.name,
-        description,
-      },
+      fields,
     });
 
-    object.description = description;
+    object.description = fields.description || null;
 
     return object;
   });
@@ -1196,14 +1247,14 @@ const PORT_ONE_LINE_FIELDS = [
   { path: ["admin-state"], field: "state", normalize: normalizeState },
   { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
   { path: ["description"], field: "description" },
-  { path: ["ethernet", "mode"], field: "mode" },
+  { path: ["ethernet", "mode"], field: "ethernet.mode" },
   { path: ["ethernet", "mtu"], field: "mtu" },
   { path: ["mtu"], field: "mtu" },
-  { path: ["ethernet", "crc-monitor", "signal-degrade", "threshold"], field: "crc-monitor.signal-degrade.threshold" },
-  { path: ["ethernet", "egress", "port-scheduler-policy", "policy-name"], field: "egress.port-scheduler-policy" },
-  { path: ["ethernet", "access", "egress", "queue-group"], field: "egress.queue-group" },
-  { path: ["instance-id"], field: "egress.queue-group.instance-id" },
-  { path: ["int-dest-id"], field: "egress.queue-group.int-dest-id" },
+  { path: ["ethernet", "crc-monitor", "signal-degrade", "threshold"], field: "ethernet.crc-monitor.signal-degrade.threshold" },
+  { path: ["ethernet", "egress", "port-scheduler-policy", "policy-name"], field: "ethernet.egress.scheduler-policy" },
+  { path: ["ethernet", "access", "egress", "queue-group"], field: "ethernet.access.egress.queue-group.name" },
+  { path: ["instance-id"], field: "ethernet.access.egress.queue-group.instance" },
+  { path: ["int-dest-id"], field: "ethernet.access.egress.queue-group.host-match.destination" },
 ];
 
 const LAG_ONE_LINE_FIELDS = [
@@ -1337,7 +1388,7 @@ function parseMdCliOneLinePort(tokens, rawLine, index) {
   const portId = stripQuotes(tokens[1]);
   const fields = mapLeafFields({ port: portId }, tokens, 2, PORT_ONE_LINE_FIELDS);
   if (pathExists(tokens, ["ethernet", "down-on-internal-error"], 2)) {
-    fields["down-on-internal-error"] = "true";
+    fields["ethernet.down-on-internal-error"] = "true";
   }
   return createMdCliOneLineObject({
     type: "port",

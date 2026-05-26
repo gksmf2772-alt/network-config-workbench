@@ -127,6 +127,18 @@ test("unmatched setting visual status uses unmatched class and color token", () 
   assert.match(css, /semantic-object-card\.semantic-state-unmatched/);
 });
 
+test("semantic line comparison layout prevents source text overflow", () => {
+  const css = readGlobalStyles();
+
+  assert.match(css, /\.semantic-compare-result\s*\{[\s\S]*width:\s*100%/);
+  assert.match(css, /\.semantic-compare-result\s*\{[\s\S]*max-width:\s*none/);
+  assert.match(css, /\.semantic-object-card\s*\{[\s\S]*max-width:\s*none/);
+  assert.match(css, /\.semantic-line-row\s*\{[\s\S]*grid-template-columns:\s*72px minmax\(0,\s*1fr\) 24px minmax\(0,\s*1fr\)/);
+  assert.match(css, /\.semantic-line-cell\s*\{[\s\S]*white-space:\s*pre-wrap/);
+  assert.match(css, /\.semantic-line-cell\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.semantic-line-reason\s*\{[\s\S]*max-width:\s*150px/);
+});
+
 test("diff block status and color tokens target config panes", () => {
   const css = readGlobalStyles();
 

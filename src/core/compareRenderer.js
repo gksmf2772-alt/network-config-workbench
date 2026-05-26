@@ -163,6 +163,32 @@ function formatLineText(lines = []) {
   return lines.map((line) => escapeHtml(line)).join("<br />");
 }
 
+function splitDisplayLine(value = "") {
+  return String(value || "")
+    .split(/\r?\n/)
+    .filter((line) => line !== "");
+}
+
+function getLineMatchDisplayLines(lineMatch = {}, side = "old") {
+  const sourceKey = side === "old" ? "oldSourceLines" : "newSourceLines";
+  const displayKey = side === "old" ? "oldDisplayLine" : "newDisplayLine";
+  const fallbackKey = side === "old" ? "oldLines" : "newLines";
+  const sourceLines = Array.isArray(lineMatch[sourceKey]) ? lineMatch[sourceKey].filter((line) => line !== "") : [];
+  if (sourceLines.length) return sourceLines;
+
+  const displayLines = splitDisplayLine(lineMatch[displayKey]);
+  if (displayLines.length) return displayLines;
+
+  return Array.isArray(lineMatch[fallbackKey]) ? lineMatch[fallbackKey] : [];
+}
+
+function getLineReasonText(lineMatch = {}) {
+  const reason = lineMatch.reason || "";
+  const canonical = lineMatch.canonicalField || lineMatch.matchKey || "";
+  if (reason && canonical) return `${reason} · ${canonical}`;
+  return reason || canonical;
+}
+
 function renderLineMatches(lineMatches = []) {
   if (!Array.isArray(lineMatches) || lineMatches.length === 0) {
     return `<div class="semantic-empty">라인 비교 없음</div>`;
@@ -175,10 +201,10 @@ function renderLineMatches(lineMatches = []) {
         ${lineMatches.map((lineMatch) => `
           <div class="semantic-line-row semantic-line-${escapeHtml(lineMatch.status)} ${lineMatch.semanticCovered ? "semantic-line-covered" : ""}">
             <div class="semantic-line-status">${escapeHtml(getLineDisplayStatus(lineMatch))}</div>
-            <pre class="semantic-line-cell old">${formatLineText(lineMatch.oldLines) || "&nbsp;"}</pre>
+            <pre class="semantic-line-cell old">${formatLineText(getLineMatchDisplayLines(lineMatch, "old")) || "&nbsp;"}</pre>
             <div class="semantic-line-arrow">-></div>
-            <pre class="semantic-line-cell new">${formatLineText(lineMatch.newLines) || "&nbsp;"}</pre>
-            <div class="semantic-line-reason">${escapeHtml(lineMatch.reason || "")}</div>
+            <pre class="semantic-line-cell new">${formatLineText(getLineMatchDisplayLines(lineMatch, "new")) || "&nbsp;"}</pre>
+            <div class="semantic-line-reason">${escapeHtml(getLineReasonText(lineMatch))}</div>
           </div>
         `).join("")}
       </div>

@@ -88,14 +88,47 @@ test("profile exception overview lists saved exceptions and exclusions", () => {
   assert.match(html, /class="collapsible-summary">비교 실행 전 현재 프로파일에 적용될 규칙을 확인합니다\./);
   assert.match(html, /id="profile-exception-overview-content" class="collapsible-content"/);
   assert.doesNotMatch(html, /profile-exception-overview-summary/);
-  assert.match(html, /<section class="profile-exception-rule-group">/);
+  assert.match(html, /<details class="profile-exception-rule-group" open>/);
   assert.match(html, /profile-exception-rule-group-head/);
-  assert.match(html, /<details class="profile-exception-setting-group">/);
+  assert.match(html, /profile-exception-rule-group-body/);
+  assert.doesNotMatch(html, /profile-exception-setting-group/);
+  assert.doesNotMatch(html, /<details class="profile-exception-setting-group"/);
+  assert.match(html, /<div>설정<\/div>/);
+  assert.match(html, /<div>규칙 구분<\/div>/);
+  assert.doesNotMatch(html, /<div>범위<\/div>/);
+  assert.doesNotMatch(html, /<div>설정 종류<\/div>/);
+  assert.match(html, /전체 설정/);
   assert.match(html, /라인\/항목 예외/);
   assert.match(html, /객체 비교 제외/);
   assert.match(html, /data-profile-exception-overview-remove="field-exception"/);
   assert.match(html, /data-profile-exception-overview-remove="setting-exclusion"/);
   assert.match(html, /static-route:192\.0\.2\.0\/24/);
+});
+
+test("profile exception overview renders one table per setting type", () => {
+  const html = renderProfileExceptionOverview([
+    {
+      id: "bgp-profile-exception",
+      scope: "profile",
+      target: { objectType: "bgp", fieldPath: "admin-state", ruleId: "rule", changeType: "added", displayName: "## to-Dobong ## · 112.188.30.19" },
+    },
+    {
+      id: "bgp-setting-exclusion",
+      type: "comparison-exclusion",
+      scope: "setting",
+      target: { settingType: "bgp", settingKey: "61.78.43.28", matchStatus: "old-only" },
+    },
+  ]);
+
+  assert.match(html, /<details class="profile-exception-rule-group" open>/);
+  assert.match(html, /<strong>bgp<\/strong>/);
+  assert.match(html, /## to-Dobong ## · 112\.188\.30\.19/);
+  assert.match(html, /61\.78\.43\.28/);
+  assert.equal((html.match(/class="profile-exception-overview-table"/g) || []).length, 1);
+  assert.equal((html.match(/<div>설정<\/div>/g) || []).length, 1);
+  assert.equal((html.match(/<div>규칙 구분<\/div>/g) || []).length, 1);
+  assert.doesNotMatch(html, /<details class="profile-exception-setting-group"/);
+  assert.doesNotMatch(html, /<section class="profile-exception-setting-group"/);
 });
 
 test("profile exception grouped rules can use summary tab removal action", () => {

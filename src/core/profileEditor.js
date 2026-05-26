@@ -193,39 +193,28 @@ export function renderProfileExceptionRuleGroups(exceptions = [], {
         const exclusionCount = rows.filter((item) => item.type === "comparison-exclusion").length;
         const exceptionCount = rows.length - exclusionCount;
         return `
-          <section class="profile-exception-rule-group">
-            <div class="profile-exception-rule-group-head">
+          <details class="profile-exception-rule-group" open>
+            <summary class="profile-exception-rule-group-head">
               <strong>${escapeHtml(settingType)}</strong>
               <span>전체 ${escapeHtml(rows.length)} · 라인/항목 예외 ${escapeHtml(exceptionCount)} · 객체 비교 제외 ${escapeHtml(exclusionCount)}</span>
+            </summary>
+            <div class="profile-exception-rule-group-body">
+              <div class="profile-exception-overview-scroll">
+                <div class="profile-exception-overview-table">
+                  <div>설정</div>
+                  <div>규칙 구분</div>
+                  <div>항목</div>
+                  <div>규칙/상태</div>
+                  <div>사유</div>
+                  <div>동작</div>
+                  ${groupProfileExceptionsBySetting(rows)
+                    .flatMap(([, settingRows]) => settingRows)
+                    .map((exception) => renderProfileExceptionOverviewRow(exception, { actionAttribute, actionLabel }))
+                    .join("")}
+                </div>
+              </div>
             </div>
-            <div class="profile-exception-setting-groups">
-              ${groupProfileExceptionsBySetting(rows).map(([setting, settingRows]) => {
-                const settingExclusionCount = settingRows.filter((item) => item.type === "comparison-exclusion").length;
-                const settingExceptionCount = settingRows.length - settingExclusionCount;
-                return `
-                  <details class="profile-exception-setting-group">
-                    <summary>
-                      <strong>${escapeHtml(setting)}</strong>
-                      <span>전체 ${escapeHtml(settingRows.length)} · 라인/항목 예외 ${escapeHtml(settingExceptionCount)} · 객체 비교 제외 ${escapeHtml(settingExclusionCount)}</span>
-                    </summary>
-                    <div class="profile-exception-overview-scroll">
-                      <div class="profile-exception-overview-table">
-                        <div>구분</div>
-                        <div>범위</div>
-                        <div>설정 종류</div>
-                        <div>설정</div>
-                        <div>항목</div>
-                        <div>규칙/상태</div>
-                        <div>사유</div>
-                        <div>동작</div>
-                        ${settingRows.map((exception) => renderProfileExceptionOverviewRow(exception, { actionAttribute, actionLabel })).join("")}
-                      </div>
-                    </div>
-                  </details>
-                `;
-              }).join("")}
-            </div>
-          </section>
+          </details>
         `;
       }).join("")}
     </div>
@@ -255,19 +244,16 @@ function groupProfileExceptionsBySetting(exceptions = []) {
 function renderProfileExceptionOverviewRow(exception = {}, { actionAttribute = "data-profile-exception-overview-remove", actionLabel = "삭제" } = {}) {
   const target = exception.target || {};
   const match = exception.match || {};
-  const objectType = profileExceptionSettingType(exception);
   const setting = profileExceptionSettingLabel(exception);
-  const field = target.fieldPath || match.fieldPath || "-";
+  const field = target.fieldPath || match.fieldPath || "전체 설정";
   const rule = target.ruleId || match.ruleId || match.findingType || target.findingType || "-";
   const status = target.changeType || match.changeType || target.matchStatus || match.matchStatus || target.status || "-";
   const buttonLabel = actionLabel === "auto"
     ? exception.type === "comparison-exclusion" ? "비교 제외 해제" : "예외 해제"
     : actionLabel;
   return `
-    <div><strong>${escapeHtml(profileExceptionKindLabel(exception))}</strong></div>
-    <div>${exception.scope === "profile" ? "프로파일" : exception.scope === "setting" ? "이 설정" : "객체"}</div>
-    <div>${escapeHtml(objectType)}</div>
     <div><strong>${escapeHtml(setting)}</strong></div>
+    <div><strong>${escapeHtml(profileExceptionKindLabel(exception))}</strong></div>
     <div>${escapeHtml(field)}</div>
     <div>${escapeHtml(rule)}<br /><small>${escapeHtml(status)}</small></div>
     <div>${escapeHtml(exception.reasonKo || exception.reason || "-")}</div>

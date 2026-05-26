@@ -140,40 +140,43 @@ export function renderProfileExceptionOverview(exceptions = []) {
   const active = (Array.isArray(exceptions) ? exceptions : []).filter((item) => item && item.enabled !== false);
   const exclusionCount = active.filter((item) => item.type === "comparison-exclusion").length;
   const exceptionCount = active.length - exclusionCount;
+  const header = renderProfileExceptionOverviewHeader(exceptionCount, exclusionCount);
 
   if (!active.length) {
     return `
-      <details class="profile-exception-overview-details" open>
-        <summary>
-          <div>
-            <strong>저장된 예외/비교 제외 규칙</strong>
-            <span>비교 실행 전 현재 프로파일에 적용될 규칙을 확인합니다.</span>
-          </div>
-          <div class="profile-exception-overview-counts">
-            <span>예외 0</span>
-            <span>비교 제외 0</span>
-          </div>
-        </summary>
+      ${header}
+      <div id="profile-exception-overview-content" class="collapsible-content">
         <div class="profile-exception-overview-empty">저장된 예외/비교 제외 규칙 없음.</div>
-      </details>
+      </div>
     `;
   }
 
   return `
-    <details class="profile-exception-overview-details" open>
-      <summary>
-        <div>
-          <strong>저장된 예외/비교 제외 규칙</strong>
-          <span>비교 실행 전 현재 프로파일에 적용될 규칙을 확인합니다.</span>
-        </div>
-        <div class="profile-exception-overview-counts">
-          <span>예외 ${escapeHtml(exceptionCount)}</span>
-          <span>비교 제외 ${escapeHtml(exclusionCount)}</span>
-        </div>
-      </summary>
+    ${header}
+    <div id="profile-exception-overview-content" class="collapsible-content">
       ${renderProfileExceptionRuleGroups(active)}
-    </details>
+    </div>
   `;
+}
+
+function renderProfileExceptionOverviewHeader(exceptionCount = 0, exclusionCount = 0) {
+  return `
+    <button type="button" class="app-button app-button--ghost collapsible-header" aria-expanded="true" aria-controls="profile-exception-overview-content" data-profile-exception-overview-toggle>
+      <span class="collapsible-icon" aria-hidden="true">${renderProfileExceptionOverviewChevron(true)}</span>
+      <span class="collapsible-title">저장된 예외/비교 제외 규칙</span>
+      <span class="collapsible-summary">비교 실행 전 현재 프로파일에 적용될 규칙을 확인합니다.</span>
+      <span class="profile-exception-overview-counts" aria-label="저장된 규칙 수">
+        <span>예외 ${escapeHtml(exceptionCount)}</span>
+        <span>비교 제외 ${escapeHtml(exclusionCount)}</span>
+      </span>
+    </button>
+  `;
+}
+
+export function renderProfileExceptionOverviewChevron(open = true) {
+  return open
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>`
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>`;
 }
 
 export function renderProfileExceptionRuleGroups(exceptions = [], {

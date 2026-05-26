@@ -902,7 +902,7 @@
 
 .profile-exception-overview-counts {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 

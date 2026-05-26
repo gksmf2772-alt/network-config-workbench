@@ -81,7 +81,13 @@ test("profile exception overview lists saved exceptions and exclusions", () => {
 
   assert.match(html, /예외 1/);
   assert.match(html, /비교 제외 1/);
-  assert.match(html, /<details class="profile-exception-overview-details" open>/);
+  assert.match(html, /class="app-button app-button--ghost collapsible-header"/);
+  assert.match(html, /data-profile-exception-overview-toggle/);
+  assert.match(html, /class="collapsible-icon"/);
+  assert.match(html, /class="collapsible-title">저장된 예외\/비교 제외 규칙/);
+  assert.match(html, /class="collapsible-summary">비교 실행 전 현재 프로파일에 적용될 규칙을 확인합니다\./);
+  assert.match(html, /id="profile-exception-overview-content" class="collapsible-content"/);
+  assert.doesNotMatch(html, /profile-exception-overview-summary/);
   assert.match(html, /<section class="profile-exception-rule-group">/);
   assert.match(html, /profile-exception-rule-group-head/);
   assert.match(html, /<details class="profile-exception-setting-group">/);

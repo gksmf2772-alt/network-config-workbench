@@ -96,6 +96,7 @@ import {
   parseNormalizeMap,
   renderProfileExceptionEditorTable,
   renderProfileExceptionOverview,
+  renderProfileExceptionOverviewChevron,
   renderProfileExceptionRuleGroups,
   renderSemanticMappingRow,
   semanticMappingCardinality,
@@ -900,10 +901,11 @@ function renderProfileEditor() {
 }
 
 function renderProfileExceptionOverviewSection() {
-  const container = ensureProfileExceptionOverviewContainer();
-  if (!container) return;
-  container.innerHTML = renderProfileExceptionOverview(state.profileDraft.exceptions || []);
-  container.querySelectorAll("[data-profile-exception-overview-remove]").forEach((button) => {
+  const section = ensureProfileExceptionOverviewContainer();
+  if (!section) return;
+  section.innerHTML = renderProfileExceptionOverview(state.profileDraft.exceptions || []);
+  bindProfileExceptionOverviewToggle(section);
+  section.querySelectorAll("[data-profile-exception-overview-remove]").forEach((button) => {
     button.addEventListener("click", () => {
       const exceptionId = button.dataset.profileExceptionOverviewRemove || "";
       if (!exceptionId) return;
@@ -915,6 +917,27 @@ function renderProfileExceptionOverviewSection() {
   });
 }
 
+function bindProfileExceptionOverviewToggle(section) {
+  const header = section.querySelector("[data-profile-exception-overview-toggle]");
+  const content = section.querySelector("#profile-exception-overview-content");
+  if (!header || !content) return;
+  setProfileExceptionOverviewOpen(section, header, section.classList.contains("is-open"), { persist: false });
+  header.addEventListener("click", () => {
+    setProfileExceptionOverviewOpen(section, header, !section.classList.contains("is-open"));
+  });
+}
+
+function setProfileExceptionOverviewOpen(section, header, open, { persist = true } = {}) {
+  section.classList.toggle("is-open", open);
+  section.classList.toggle("is-closed", !open);
+  header.setAttribute("aria-expanded", open ? "true" : "false");
+  const icon = header.querySelector(".collapsible-icon");
+  if (icon) icon.innerHTML = renderProfileExceptionOverviewChevron(open);
+  if (persist) {
+    window.localStorage?.setItem("profile-section-open:profile-exception-overview", open ? "open" : "closed");
+  }
+}
+
 function ensureProfileExceptionOverviewContainer() {
   let container = document.querySelector("#profileExceptionOverview");
   if (container) return container;
@@ -922,13 +945,12 @@ function ensureProfileExceptionOverviewContainer() {
   const changesSection = selectors.profileChangesList?.closest?.(".profile-section");
   if (!changesSection?.parentElement) return null;
 
-  const section = document.createElement("div");
-  section.className = "profile-section profile-exception-overview-section collapsible-section";
-  section.innerHTML = `
-    <div id="profileExceptionOverview" class="profile-exception-overview"></div>
-  `;
+  const section = document.createElement("section");
+  section.id = "profileExceptionOverview";
+  const saved = window.localStorage?.getItem("profile-section-open:profile-exception-overview");
+  section.className = `profile-section collapsible-section ${saved === "open" ? "is-open" : "is-closed"}`;
   changesSection.parentElement.insertBefore(section, changesSection);
-  return section.querySelector("#profileExceptionOverview");
+  return section;
 }
 
 function renderReactProfileMappingPanel() {

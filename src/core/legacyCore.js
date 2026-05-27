@@ -2934,6 +2934,14 @@ function inferSemanticFieldNameForLineContext(line, context = {}) {
     return inferLagLineFields(line)[0] || "";
   }
 
+  const portField = inferPortLineField(line, {
+    objectType,
+    rawLines,
+    lineIndex,
+  });
+
+  if (portField) return portField;
+
   const scopedField = inferScopedInterfaceLineField(line, {
     objectType,
     rawLines,
@@ -2946,6 +2954,26 @@ function inferSemanticFieldNameForLineContext(line, context = {}) {
   }
 
   return inferSemanticFieldName(line);
+}
+
+function inferPortLineField(line, {
+  objectType = "",
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  if (canonicalizeComparableLine(objectType) !== "port") return "";
+
+  const normalized = canonicalizeComparableLine(line);
+  if (!normalized) return "";
+  if (/^egress-scheduler-policy\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
+  if (/^port-scheduler-policy\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
+
+  if (/^policy-name\b/.test(normalized)) {
+    const scope = getMdCliBraceLineScope(rawLines, lineIndex);
+    if (scope.includes("port-scheduler-policy")) return "ethernet.egress.scheduler-policy";
+  }
+
+  return "";
 }
 
 function inferScopedInterfaceLineField(line, {
@@ -10027,18 +10055,74 @@ function semanticBlockState(item = {}, side = "") {
   return "changed";
 }
 
+function lineMatchComparableLinesForSide(lineMatch = {}, side = "") {
+  lineMatch = lineMatch || {};
+  return side === "old" ? (lineMatch.oldLines || []) : (lineMatch.newLines || []);
+}
+
+function lineMatchSourceLinesForSide(lineMatch = {}, side = "") {
+  lineMatch = lineMatch || {};
+  return side === "old" ? (lineMatch.oldSourceLines || []) : (lineMatch.newSourceLines || []);
+}
+
+function lineMatchValueForSide(lineMatch = {}, side = "") {
+  lineMatch = lineMatch || {};
+  const fieldMatch = Array.isArray(lineMatch.fieldMatches) ? lineMatch.fieldMatches[0] : null;
+  return side === "old"
+    ? (lineMatch.oldValue ?? fieldMatch?.oldValue ?? fieldMatch?.oldRawValue ?? "")
+    : (lineMatch.newValue ?? fieldMatch?.newValue ?? fieldMatch?.newRawValue ?? "");
+}
+
+function isSemanticClosingSourceLine(line = "") {
+  const text = String(line || "").trim();
+  return text === "exit" || text === "}";
+}
+
+function sourceLineContainsSemanticValue(line = "", value = "") {
+  const normalizedLine = canonicalizeComparableLine(line);
+  const normalizedValue = canonicalizeComparableLine(value).replace(/^"|"$/g, "");
+  if (!normalizedLine || !normalizedValue || normalizedValue === "true" || normalizedValue === "false") return false;
+  return normalizedLine.includes(normalizedValue);
+}
+
+function lineMatchSourceAnchorLinesForSide(lineMatch = {}, side = "") {
+  const sourceLines = lineMatchSourceLinesForSide(lineMatch, side)
+    .filter((line) => canonicalizeComparableLine(line))
+    .filter((line) => !isSemanticClosingSourceLine(line));
+  if (!sourceLines.length) return [];
+
+  const value = lineMatchValueForSide(lineMatch, side);
+  const valueMatched = sourceLines.filter((line) => sourceLineContainsSemanticValue(line, value));
+  if (valueMatched.length) return valueMatched;
+
+  return [sourceLines[sourceLines.length - 1]];
+}
+
+function lineMatchIndexLinesForSide(lineMatch = {}, side = "") {
+  const seen = new Set();
+  return [
+    ...lineMatchComparableLinesForSide(lineMatch, side),
+    ...lineMatchSourceAnchorLinesForSide(lineMatch, side),
+  ].filter((line) => {
+    const key = canonicalizeComparableLine(line);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function buildSemanticLineMatchIndex(lineMatches = [], side = "", item = {}) {
   const index = new Map();
 
   lineMatches.forEach((lineMatch, matchIndex) => {
-    const lines = side === "old" ? lineMatch.oldLines : lineMatch.newLines;
+    const lines = lineMatchIndexLinesForSide(lineMatch, side);
     const field =
       lineMatch.field ||
       lineMatch.semanticField ||
       inferSemanticFieldFromLineMatch(lineMatch);
     const relationKey = `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(lineMatch, matchIndex)}`;
 
-    (Array.isArray(lines) ? lines : []).forEach((line) => {
+    lines.forEach((line) => {
       const key = canonicalizeComparableLine(line);
       if (!key) return;
       index.set(key, {
@@ -10552,28 +10636,43 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
   const oldMatchedByNormalized = new Map();
   const newMatchedByNormalized = new Map();
 
-  (item.lineMatches || []).forEach((lineMatch, matchIndex) => {
-    (lineMatch.oldLines || []).forEach((line) => {
-      const key = canonicalizeComparableLine(line);
-      if (key) oldMatchedByNormalized.set(key, { lineMatch, matchIndex });
-    });
+  function setMatchedLine(map, line, payload) {
+    const key = canonicalizeComparableLine(line);
+    if (key && !map.has(key)) map.set(key, payload);
+  }
 
-    (lineMatch.newLines || []).forEach((line) => {
-      const key = canonicalizeComparableLine(line);
-      if (key) newMatchedByNormalized.set(key, { lineMatch, matchIndex });
-    });
+  (item.lineMatches || []).forEach((lineMatch, matchIndex) => {
+    lineMatchIndexLinesForSide(lineMatch, "old").forEach((line) =>
+      setMatchedLine(oldMatchedByNormalized, line, { lineMatch, matchIndex })
+    );
+
+    lineMatchIndexLinesForSide(lineMatch, "new").forEach((line) =>
+      setMatchedLine(newMatchedByNormalized, line, { lineMatch, matchIndex })
+    );
   });
+
+  function findRawLineIndexForCandidates(rawLines = [], consumed = new Set(), candidates = []) {
+    const candidateKeys = new Set(
+      candidates
+        .map((line) => canonicalizeComparableLine(line))
+        .filter(Boolean)
+    );
+    if (!candidateKeys.size) return -1;
+
+    return rawLines.findIndex((line, index) =>
+      !consumed.has(index) && candidateKeys.has(canonicalizeComparableLine(line))
+    );
+  }
 
   function findOldLineIndexForNewLine(newLine) {
     const newKey = canonicalizeComparableLine(newLine);
     const matched = newMatchedByNormalized.get(newKey);
     if (!matched) return -1;
 
-    const oldCandidate = matched.lineMatch.oldLines?.[0];
-    const oldKey = canonicalizeComparableLine(oldCandidate);
-
-    return oldRawLines.findIndex((line, index) =>
-      !oldConsumed.has(index) && canonicalizeComparableLine(line) === oldKey
+    return findRawLineIndexForCandidates(
+      oldRawLines,
+      oldConsumed,
+      lineMatchIndexLinesForSide(matched.lineMatch, "old")
     );
   }
 
@@ -10582,11 +10681,10 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
     const matched = oldMatchedByNormalized.get(oldKey);
     if (!matched) return -1;
 
-    const newCandidate = matched.lineMatch.newLines?.[0];
-    const newKey = canonicalizeComparableLine(newCandidate);
-
-    return newRawLines.findIndex((line, index) =>
-      !newConsumed.has(index) && canonicalizeComparableLine(line) === newKey
+    return findRawLineIndexForCandidates(
+      newRawLines,
+      newConsumed,
+      lineMatchIndexLinesForSide(matched.lineMatch, "new")
     );
   }
 
@@ -10608,10 +10706,10 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
     const sourceOnly = Boolean(oldLine && !newLine);
     const targetOnly = Boolean(newLine && !oldLine);
     const rowObjectStatus = sourceOnly ? "old-only" : targetOnly ? "new-only" : "";
-    const oldMatched = Boolean(lineMatch?.oldLines?.some((line) =>
+    const oldMatched = Boolean(lineMatchIndexLinesForSide(lineMatch, "old").some((line) =>
       canonicalizeComparableLine(line) === canonicalizeComparableLine(oldLine)
     ));
-    const newMatched = Boolean(lineMatch?.newLines?.some((line) =>
+    const newMatched = Boolean(lineMatchIndexLinesForSide(lineMatch, "new").some((line) =>
       canonicalizeComparableLine(line) === canonicalizeComparableLine(newLine)
     ));
 
@@ -13414,9 +13512,10 @@ function getLineMappingAnchorBounds(element, paneRect) {
 }
 
 function getLineTextAnchorRect(sourceElement, lineElement, bounds) {
-  return getRelationTokenGroupRect(sourceElement, lineElement, bounds)
-    || getVisibleLineTokenGroupRect(lineElement, bounds)
+  return getVisibleLineTextGroupRect(lineElement, bounds)
     || getLineContentTextRect(lineElement, bounds)
+    || getRelationTokenGroupRect(sourceElement, lineElement, bounds)
+    || getVisibleLineTokenGroupRect(lineElement, bounds)
     || clippedRect(lineElement.getBoundingClientRect(), bounds)
     || lineElement.getBoundingClientRect();
 }
@@ -13454,10 +13553,17 @@ function getVisibleLineTokenGroupRect(lineElement, bounds) {
   return unionVisibleRects(tokenRects, bounds);
 }
 
+function getVisibleLineTextGroupRect(lineElement, bounds) {
+  const contentElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
+  const textRect = getActualLineTextRect(contentElement);
+  const tokenRects = [...contentElement.querySelectorAll(".diff-token-match")]
+    .map((token) => token.getBoundingClientRect());
+  return unionVisibleRects([textRect, ...tokenRects], bounds);
+}
+
 function getLineContentTextRect(lineElement, bounds) {
   const contentElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
-  const rect = getActualLineTextRect(contentElement);
-  return rect ? clippedRect(rect, bounds) : null;
+  return clippedRect(contentElement.getBoundingClientRect(), bounds);
 }
 
 function getActualLineTextRect(element) {

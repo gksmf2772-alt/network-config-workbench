@@ -479,6 +479,30 @@ test("Nokia port semantic line comparison displays source config lines", () => {
   assert.match(html, /int-dest-id &quot;PQ_3WFQ&quot;/);
 });
 
+test("Nokia port scheduler policy line relation keeps source anchors", () => {
+  const { oldObjects, newObjects, plan } = buildNokiaPortSemanticFixture();
+  const [oldPort] = oldObjects;
+  const [newPort] = newObjects;
+  const [planItem] = plan;
+  const field = "ethernet.egress.scheduler-policy";
+  const lineMatch = planItem.lineMatches.find((item) => item.canonicalField === field);
+
+  assert.equal(oldPort.fields[field], "qos");
+  assert.equal(newPort.fields[field], "qos");
+  assert.ok(lineMatch);
+  assert.equal(lineMatch.status, "equal");
+  assert.equal(lineMatch.reason, "canonical-field-align");
+  assert.equal(lineMatch.fieldMatches?.[0]?.field, field);
+  assert.equal(lineMatch.oldLines?.[0], `${field} qos`);
+  assert.equal(lineMatch.newLines?.[0], `${field} qos`);
+  assert.match(lineMatch.oldSourceLines.join("\n"), /egress-scheduler-policy "qos"/);
+  assert.match(lineMatch.newSourceLines.join("\n"), /egress\s*\{/);
+  assert.match(lineMatch.newSourceLines.join("\n"), /port-scheduler-policy\s*\{/);
+  assert.match(lineMatch.newSourceLines.join("\n"), /policy-name "qos"/);
+  assert.match(lineMatch.oldDisplayLine, /egress-scheduler-policy "qos"/);
+  assert.match(lineMatch.newDisplayLine, /policy-name "qos"/);
+});
+
 test("MD-CLI BGP one-line parser extracts import and export policy references", () => {
   const result = normalizeConfig({
     vendor: "nokia-md-cli",

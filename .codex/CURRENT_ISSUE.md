@@ -55,3 +55,37 @@ This is test data absence, not a confirmed feature regression. Suggested future
 improvement only: make quality analysis handle missing primary fixtures the same
 way manifest validation handles blocked cases, so `validate:all` can report
 blocked/missing-fixture instead of crashing. Do not implement this unless asked.
+
+## Current scheduler policy line mapping fix
+
+Affected stability-map boundary:
+- Diff row and line relation model.
+
+Allowed edit scope:
+- Reuse existing `oldSourceLines` / `newSourceLines` from line comparison data
+  when building semantic line row mapping indexes.
+- Infer Nokia port scheduler-policy raw lines as the existing canonical field
+  only for compare-pane line relation rendering.
+- Adjust line connector anchor measurement to use full visible command text
+  bounds before relation-token bounds.
+- Add characterization tests for Nokia Classic to MD-CLI scheduler-policy line
+  source relation and anchor measurement contract.
+
+Forbidden:
+- Semantic object match behavior.
+- Manual mapping behavior.
+- Profile exception behavior.
+- Comparison exclusion behavior.
+- Summary/report/graph counts.
+- Diff scroll sync behavior.
+- Connector path routing, bridge structure, visual styling, and relation key format.
+
+Post-edit checklist:
+- Semantic match checked: no matcher logic change.
+- Manual mapping checked: no storage/merge code touched.
+- Profile exception checked: no exception save/delete/match code touched.
+- Comparison exclusion checked: no exclusion save/delete/match code touched.
+- Summary/report/graph count checked: no count code touched.
+- Diff scroll sync checked: no scroll sync code touched.
+- Line connector rendering checked: anchor measurement only; no SVG path/style change.
+- Tests run: npm.cmd run guard:legacy-core pass; npm.cmd test pass; npm.cmd run build pass.

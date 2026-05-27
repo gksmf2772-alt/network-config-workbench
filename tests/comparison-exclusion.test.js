@@ -171,15 +171,27 @@ test("compare object mapping background uses separate under-text layer", () => {
   assert.match(legacy, /newRegionRight/);
 });
 
-test("line mapping anchors use visible token text bounds instead of pane rails", () => {
+test("line mapping anchors use full visible command text bounds before token fallback", () => {
   const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
 
   assert.match(legacy, /const LINE_MAPPING_TEXT_OFFSET = 6/);
   assert.match(legacy, /function getLineTextAnchorRect/);
-  assert.match(legacy, /getRelationTokenGroupRect\(sourceElement, lineElement, bounds\)[\s\S]*getVisibleLineTokenGroupRect\(lineElement, bounds\)[\s\S]*getLineContentTextRect\(lineElement, bounds\)/);
+  assert.match(legacy, /getVisibleLineTextGroupRect\(lineElement, bounds\)[\s\S]*getLineContentTextRect\(lineElement, bounds\)[\s\S]*getRelationTokenGroupRect\(sourceElement, lineElement, bounds\)[\s\S]*getVisibleLineTokenGroupRect\(lineElement, bounds\)/);
+  assert.match(legacy, /function getVisibleLineTextGroupRect/);
+  assert.match(legacy, /getActualLineTextRect\(contentElement\)[\s\S]*querySelectorAll\("\.diff-token-match"\)/);
   assert.match(legacy, /function lineTextAnchorX/);
   assert.match(legacy, /edge \+ offset/);
   assert.doesNotMatch(legacy, /function lineMappingRailX/);
+});
+
+test("compare pane line relation infers Nokia port scheduler policy source lines", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /function inferPortLineField/);
+  assert.match(legacy, /\^egress-scheduler-policy\\b[\s\S]*ethernet\.egress\.scheduler-policy/);
+  assert.match(legacy, /\^port-scheduler-policy\\b[\s\S]*ethernet\.egress\.scheduler-policy/);
+  assert.match(legacy, /\^policy-name\\b[\s\S]*port-scheduler-policy[\s\S]*ethernet\.egress\.scheduler-policy/);
+  assert.match(legacy, /buildSemanticLineMatchIndex[\s\S]*lineMatchIndexLinesForSide\(lineMatch, side\)/);
 });
 
 test("diff block status and color tokens target config panes", () => {

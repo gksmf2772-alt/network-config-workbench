@@ -697,6 +697,160 @@
   color: #475569 !important;
 }
 
+#compareTab.active .editor-grid.diff-connectors-active {
+  background: #f7fbff;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .diff-gutter {
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .ncw-editor-card {
+  position: relative;
+  z-index: 10;
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active article.ncw-editor-card:first-of-type {
+  border-right-color: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active article.ncw-editor-card:nth-of-type(2) {
+  border-left-color: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .editor-header {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .code-frame,
+#compareTab.active .editor-grid.diff-connectors-active .app-code-editor-frame,
+#compareTab.active .editor-grid.diff-connectors-active .embedded-diff {
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .embedded-diff {
+  scrollbar-gutter: stable;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .semantic-object-block-wrapper,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line {
+  border-left: 0 !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .semantic-object-block-wrapper,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-object-block,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-object-head,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-object-body {
+  background: transparent !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .semantic-object-block-wrapper {
+  border-left: 0 !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-object-block,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-object-unmatched,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-object-excluded,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-object-suppressed {
+  border: 0 !important;
+  border-left: 0 !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-config-line {
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-config-line.is-matched,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-config-line.is-covered {
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-config-line.is-unmatched,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-config-line.object-status-old-only,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-config-line.object-status-new-only,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-config-line.object-status-unmatched {
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-old-only,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-new-only,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-unmatched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-candidate,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-ambiguous,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-changed,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-partial {
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.semantic-state-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.semantic-state-manual,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.semantic-state-partial,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.semantic-state-ambiguous,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-bgp.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-static-route.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-interface.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-subscriber-interface.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-group-interface.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-sap.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-port.object-matched,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-type-lag.object-matched {
+  background: transparent !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.semantic-object-start,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-old-only.semantic-object-start,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-new-only.semantic-object-start,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-unmatched.semantic-object-start,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-candidate.semantic-object-start,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-ambiguous.semantic-object-start,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-changed.semantic-object-start,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-partial.semantic-object-start {
+  box-shadow: none !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.semantic-object-start::before {
+  display: none !important;
+}
+
+#compareTab.active .editor-grid.diff-connectors-active .diff-line-number,
+#compareTab.active .editor-grid.diff-connectors-active .semantic-diff-line-no,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line-text,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-unmatched-row .diff-line-number,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-old-only .diff-line-number,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-new-only .diff-line-number,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line.object-status-unmatched .diff-line-number,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line[data-object-status="old-only"] .diff-line-number,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line[data-object-status="new-only"] .diff-line-number,
+#compareTab.active .editor-grid.diff-connectors-active .diff-line[data-object-status="unmatched"] .diff-line-number {
+  border-left: 0 !important;
+}
+
+#compareTab.active .diff-object-flow,
+#compareTab.active .diff-object-flow-glow {
+  display: none !important;
+  fill: none !important;
+  filter: none !important;
+}
+
+#compareTab.active .diff-object-flow-spine {
+  display: block !important;
+  fill: none !important;
+  opacity: 0.72 !important;
+  pointer-events: stroke;
+  stroke: transparent !important;
+  stroke-width: 12 !important;
+}
+
+#compareTab.active .diff-object-flow-spine.semantic-pair-hover,
+#compareTab.active .diff-object-flow-spine.semantic-pair-selected {
+  stroke: transparent !important;
+  stroke-width: 12 !important;
+}
+
 @media (max-width: 980px) {
   .report-review-tools {
     grid-template-columns: 1fr 1fr;

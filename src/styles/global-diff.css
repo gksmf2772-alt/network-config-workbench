@@ -29,15 +29,24 @@
   display: none;
 }
 
+.diff-object-background-overlay,
 .diff-connector-overlay {
   display: none;
   position: absolute;
   inset: 0;
-  z-index: 30;
   pointer-events: none;
   overflow: visible;
 }
 
+.diff-object-background-overlay {
+  z-index: 4;
+}
+
+.diff-connector-overlay {
+  z-index: 30;
+}
+
+.editor-grid.diff-connectors-active .diff-object-background-overlay,
 .editor-grid.diff-connectors-active .diff-connector-overlay {
   display: block;
 }
@@ -72,6 +81,10 @@
 }
 
 .object-mapping-overlay {
+  pointer-events: none;
+}
+
+.object-mapping-background-overlay {
   pointer-events: none;
 }
 
@@ -284,6 +297,60 @@
 .diff-object-flow-spine.semantic-pair-selected {
   opacity: 0.68;
   stroke-width: 2;
+}
+
+.diff-object-region {
+  fill: rgba(20, 184, 166, 0.075);
+  stroke: none;
+  stroke-linejoin: round;
+  stroke-width: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+.diff-object-region.type-bgp {
+  fill: rgba(22, 163, 74, 0.075);
+}
+
+.diff-object-region.type-static-route {
+  fill: rgba(2, 132, 199, 0.075);
+}
+
+.diff-object-region.type-interface,
+.diff-object-region.type-subscriber-interface,
+.diff-object-region.type-group-interface,
+.diff-object-region.type-sap {
+  fill: rgba(234, 88, 12, 0.07);
+}
+
+.diff-object-region.type-port,
+.diff-object-region.type-lag {
+  fill: rgba(8, 145, 178, 0.07);
+}
+
+.diff-object-region.matched {
+  fill: rgba(34, 197, 94, 0.075);
+}
+
+.diff-object-region.changed,
+.diff-object-region.partial,
+.diff-object-region.ambiguous,
+.diff-object-region.candidate {
+  fill: rgba(245, 158, 11, 0.095);
+}
+
+.diff-object-region.unmatched {
+  fill: rgba(249, 115, 22, 0.10);
+}
+
+.diff-object-region.manual {
+  fill: rgba(139, 92, 246, 0.08);
+}
+
+.diff-object-region.semantic-pair-hover,
+.diff-object-region.semantic-pair-selected {
+  opacity: 1;
+  filter: drop-shadow(0 8px 14px rgba(20, 184, 166, 0.12));
 }
 
 .diff-object-link,

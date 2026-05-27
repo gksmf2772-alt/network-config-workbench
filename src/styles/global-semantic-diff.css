@@ -324,12 +324,12 @@
   background: #f7fbff !important;
 }
 
-.editor-grid.diff-connectors-active .ncw-editor-card:first-child {
+.editor-grid.diff-connectors-active article.ncw-editor-card:first-of-type {
   border-top-right-radius: 8px;
   border-bottom-right-radius: 8px;
 }
 
-.editor-grid.diff-connectors-active .ncw-editor-card:nth-child(3) {
+.editor-grid.diff-connectors-active article.ncw-editor-card:nth-of-type(2) {
   border-top-left-radius: 8px;
   border-bottom-left-radius: 8px;
 }

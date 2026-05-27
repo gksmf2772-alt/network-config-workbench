@@ -139,6 +139,38 @@ test("semantic line comparison layout prevents source text overflow", () => {
   assert.match(css, /\.semantic-line-reason\s*\{[\s\S]*max-width:\s*150px/);
 });
 
+test("compare object mapping background uses separate under-text layer", () => {
+  const css = readGlobalStyles();
+  const shell = fs.readFileSync("src/components/ConfigInputPanel.jsx", "utf8");
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(shell, /id="diffObjectBackgroundSvg" className="diff-object-background-overlay"/);
+  assert.match(legacy, /renderDiffObjectBackgroundLayers/);
+  assert.match(legacy, /backgroundMarkup:\s*`<path class="diff-object-region/);
+  assert.match(legacy, /class="diff-object-flow-spine/);
+  assert.match(css, /\.diff-object-background-overlay\s*\{[\s\S]*z-index:\s*4/);
+  assert.match(css, /\.diff-object-region\s*\{[\s\S]*stroke:\s*none/);
+  assert.match(css, /\.diff-object-region\s*\{[\s\S]*stroke-width:\s*0/);
+  assert.match(css, /\.diff-connector-overlay\s*\{[\s\S]*z-index:\s*30/);
+  assert.match(css, /editor-grid\.diff-connectors-active article\.ncw-editor-card:first-of-type/);
+  assert.match(css, /editor-grid\.diff-connectors-active article\.ncw-editor-card:nth-of-type\(2\)/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.ncw-editor-card\s*\{[\s\S]*z-index:\s*10/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-object-block[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-config-line\.is-matched,[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-config-line\.is-unmatched,[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.diff-line\.object-matched,[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-object-block[\s\S]*border:\s*0 !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.diff-line-number,[\s\S]*border-left:\s*0 !important/);
+  assert.match(css, /#compareTab\.active \.diff-object-flow,[\s\S]*display:\s*none !important/);
+  assert.match(css, /#compareTab\.active \.diff-object-flow-spine\s*\{[\s\S]*display:\s*block !important/);
+  assert.match(css, /#compareTab\.active \.diff-object-flow-spine\s*\{[\s\S]*stroke:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-object-block-wrapper,[\s\S]*border-left:\s*0 !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.embedded-diff\s*\{[\s\S]*scrollbar-gutter:\s*stable/);
+  assert.match(legacy, /function paneClientBounds/);
+  assert.match(legacy, /oldRegionLeft/);
+  assert.match(legacy, /newRegionRight/);
+});
+
 test("diff block status and color tokens target config panes", () => {
   const css = readGlobalStyles();
 

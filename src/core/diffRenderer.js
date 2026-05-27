@@ -13,6 +13,14 @@ export function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], d
   `;
 }
 
+export function renderDiffObjectBackgroundLayers({ objectBackgroundPaths = [] } = {}) {
+  return `
+    <g class="object-mapping-background-overlay" data-overlay-layer="object-background">
+      ${objectBackgroundPaths.filter(Boolean).join("")}
+    </g>
+  `;
+}
+
 export function renderDiffConnectorDefs() {
   return `
     <defs>

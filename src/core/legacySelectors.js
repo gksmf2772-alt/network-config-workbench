@@ -72,6 +72,7 @@ export function createLegacySelectors(doc = document) {
     newDiffPane: doc.querySelector("#newDiffPane"),
     oldDiffObjectToolbar: doc.querySelector("#oldDiffObjectToolbar"),
     newDiffObjectToolbar: doc.querySelector("#newDiffObjectToolbar"),
+    diffObjectBackgroundSvg: doc.querySelector("#diffObjectBackgroundSvg"),
     diffConnectorSvg: doc.querySelector("#diffConnectorSvg"),
     profileNameInput: doc.querySelector("#profileNameInput"),
     vendorSelect: doc.querySelector("#vendorSelect"),

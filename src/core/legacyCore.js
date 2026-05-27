@@ -84,6 +84,7 @@ import {
   objectConnectorState,
   objectConnectorTypeClass,
   renderDiffConnectorLayers,
+  renderDiffObjectBackgroundLayers,
 } from "./diffRenderer.js";
 import {
   defaultObjectFieldForType,
@@ -4001,6 +4002,7 @@ function showEditMode() {
   selectors.oldInput.closest(".code-frame").classList.remove("diff-mode");
   selectors.newInput.closest(".code-frame").classList.remove("diff-mode");
   selectors.diffConnectorSvg.closest(".editor-grid").classList.remove("diff-connectors-active");
+  if (selectors.diffObjectBackgroundSvg) selectors.diffObjectBackgroundSvg.innerHTML = "";
   selectors.diffConnectorSvg.innerHTML = "";
   clearSelectedDiffTokens();
 }
@@ -12393,6 +12395,7 @@ function scheduleSettledDiffConnectorRender() {
 function renderDiffConnectors() {
   try {
     const svg = selectors.diffConnectorSvg;
+    const backgroundSvg = selectors.diffObjectBackgroundSvg;
     const grid = svg?.closest(".editor-grid");
     if (!svg || !grid?.classList.contains("diff-connectors-active")) return;
 
@@ -12402,12 +12405,15 @@ function renderDiffConnectors() {
     const width = Math.max(0, gridRect.width);
     const height = Math.max(0, gridRect.height);
 
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.setAttribute("width", width);
-    svg.setAttribute("height", height);
+    [backgroundSvg, svg].filter(Boolean).forEach((targetSvg) => {
+      targetSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      targetSvg.setAttribute("width", width);
+      targetSvg.setAttribute("height", height);
+    });
 
     const oldGroups = collectVisibleDiffObjectGroups(selectors.oldDiffPane, oldPaneRect);
     const newGroups = collectVisibleDiffObjectGroups(selectors.newDiffPane, newPaneRect);
+    const objectBackgroundPaths = [];
     const objectPaths = [];
     const debugPaths = [];
 
@@ -12419,6 +12425,7 @@ function renderDiffConnectors() {
           return;
         }
         const connector = buildObjectConnectorBand(oldGroup, newGroup, grid, isMappingDebugVisible());
+        objectBackgroundPaths.push(connector.backgroundMarkup);
         objectPaths.push(connector.markup);
         if (connector.debugMarkup) debugPaths.push(connector.debugMarkup);
       });
@@ -12433,6 +12440,11 @@ function renderDiffConnectors() {
       fieldPathCount: fieldPaths.filter(Boolean).length,
     });
 
+    if (backgroundSvg) {
+      backgroundSvg.innerHTML = renderDiffObjectBackgroundLayers({
+        objectBackgroundPaths,
+      });
+    }
     svg.innerHTML = renderDiffConnectorLayers({
       objectPaths,
       fieldPaths,
@@ -12531,12 +12543,24 @@ function collectVisibleDiffObjectGroups(pane, paneRect) {
 
 function groupVisibleRect(group, container) {
   const base = container.getBoundingClientRect();
+  const paneClientLeft = group.paneRect
+    ? group.paneRect.left + (group.pane?.clientLeft || 0)
+    : null;
+  const paneClientTop = group.paneRect
+    ? group.paneRect.top + (group.pane?.clientTop || 0)
+    : null;
+  const paneClientRight = group.paneRect
+    ? paneClientLeft + (group.pane?.clientWidth || group.paneRect.width)
+    : null;
+  const paneClientBottom = group.paneRect
+    ? paneClientTop + (group.pane?.clientHeight || group.paneRect.height)
+    : null;
   const paneBounds = group.paneRect
     ? {
-      left: group.paneRect.left - base.left,
-      right: group.paneRect.right - base.left,
-      top: group.paneRect.top - base.top,
-      bottom: group.paneRect.bottom - base.top,
+      left: paneClientLeft - base.left,
+      right: paneClientRight - base.left,
+      top: paneClientTop - base.top,
+      bottom: paneClientBottom - base.top,
     }
     : null;
   const rects = group.lines
@@ -12603,13 +12627,30 @@ function getRelativePoint(point, container) {
   };
 }
 
+function paneClientBounds(group, container) {
+  if (!group?.pane || !group?.paneRect) return null;
+  const base = container.getBoundingClientRect();
+  const left = group.paneRect.left + (group.pane.clientLeft || 0) - base.left;
+  const top = group.paneRect.top + (group.pane.clientTop || 0) - base.top;
+  return {
+    left,
+    right: left + (group.pane.clientWidth || group.paneRect.width),
+    top,
+    bottom: top + (group.pane.clientHeight || group.paneRect.height),
+  };
+}
+
 function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
   if (!oldGroup?.lines?.length || !newGroup?.lines?.length) return { markup: "", debugMarkup: "" };
 
   const oldRect = groupVisibleRect(oldGroup, grid);
   const newRect = groupVisibleRect(newGroup, grid);
+  const oldPaneBounds = paneClientBounds(oldGroup, grid);
+  const newPaneBounds = paneClientBounds(newGroup, grid);
   const x1 = oldRect.right;
   const x2 = newRect.left;
+  const oldRegionLeft = (oldPaneBounds?.left ?? oldRect.left) - 8;
+  const newRegionRight = newPaneBounds?.right ?? newRect.right;
   const y1Top = oldRect.top;
   const y1Bottom = oldRect.bottom;
   const y2Top = newRect.top;
@@ -12621,6 +12662,17 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
   const typeClass = objectConnectorTypeClass(oldGroup, newGroup);
   const connectorWidth = Math.abs(x2 - x1);
   const controlOffset = Math.max(20, Math.min(140, connectorWidth * 0.5));
+  const objectRegionPath = [
+    `M ${oldRegionLeft} ${y1Top}`,
+    `L ${x1} ${y1Top}`,
+    `C ${x1 + controlOffset} ${y1Top}, ${x2 - controlOffset} ${y2Top}, ${x2} ${y2Top}`,
+    `L ${newRegionRight} ${y2Top}`,
+    `L ${newRegionRight} ${y2Bottom}`,
+    `L ${x2} ${y2Bottom}`,
+    `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
+    `L ${oldRegionLeft} ${y1Bottom}`,
+    "Z",
+  ].join(" ");
   const ribbonPath = [
     `M ${x1} ${y1Top}`,
     `C ${x1 + controlOffset} ${y1Top}, ${x2 - controlOffset} ${y2Top}, ${x2} ${y2Top}`,
@@ -12628,6 +12680,7 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
     `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
     "Z",
   ].join(" ");
+  const spinePath = `M ${x1} ${y1Center} C ${x1 + controlOffset} ${y1Center}, ${x2 - controlOffset} ${y2Center}, ${x2} ${y2Center}`;
   const label = connectorLabelText(oldGroup, newGroup);
   const debugMarkup = debug
     ? [
@@ -12638,11 +12691,13 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
     : "";
 
   return {
+    backgroundMarkup: `<path class="diff-object-region ${state} ${typeClass}" d="${objectRegionPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />`,
     markup: `
     <g class="diff-object-connector ${state} ${typeClass}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" data-connector-state="${escapeHtml(state)}">
       <title>${escapeHtml(label)} · ${escapeHtml(state)}</title>
       <path class="diff-object-flow-glow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
       <path class="diff-object-flow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+      <path class="diff-object-flow-spine ${state} ${typeClass}" d="${spinePath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
     </g>
   `,
     debugMarkup,

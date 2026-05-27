@@ -9,6 +9,7 @@ import {
   objectConnectorState,
   objectConnectorTypeClass,
   renderDiffConnectorLayers,
+  renderDiffObjectBackgroundLayers,
 } from "../src/core/diffRenderer.js";
 
 test("object connector state preserves existing status mapping", () => {
@@ -46,6 +47,17 @@ test("connector layer renderer keeps svg groups and defs", () => {
   assert.match(html, /data-kind="object"/);
   assert.match(html, /data-kind="field"/);
   assert.match(html, /<text>debug<\/text>/);
+});
+
+test("object mapping background renderer keeps background group separate from connector strokes", () => {
+  const html = renderDiffObjectBackgroundLayers({
+    objectBackgroundPaths: ["<path class=\"diff-object-region\" />"],
+  });
+
+  assert.match(html, /class="object-mapping-background-overlay"/);
+  assert.match(html, /data-overlay-layer="object-background"/);
+  assert.match(html, /diff-object-region/);
+  assert.doesNotMatch(html, /semantic-line-overlay/);
 });
 
 test("line connector renderer helpers preserve path variants", () => {

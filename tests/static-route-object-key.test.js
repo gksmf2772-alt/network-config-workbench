@@ -385,7 +385,7 @@ test("legacy main compare parser keeps static route blocks as route-level object
   assert.match(source, /renderSemanticLineTokens\(line, objectType, fields, relationByField, field\)/);
   assert.match(source, /lineIndex: oldRawIndex >= 0 \? oldRawIndex : visualLineIndex/);
   assert.match(source, /lineIndex: newRawIndex >= 0 \? newRawIndex : visualLineIndex/);
-  assert.match(source, /preferredField = normalizeRelationField\(line\?\.dataset\?\.semanticField \|\| ""\)/);
+  assert.match(source, /function getLineTextAnchorRect\(sourceElement, lineElement, bounds\)/);
   assert.match(source, /field === "ingress-filter" \|\| field === "egress-filter"/);
   assert.match(source, /function getMdCliBraceLineScope\(rawLines = \[\], lineIndex = -1\)/);
   assert.match(source, /function isInterfaceScopeOnlyLine\(line = ""\)/);

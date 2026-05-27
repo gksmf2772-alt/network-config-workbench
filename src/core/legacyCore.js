@@ -13266,6 +13266,8 @@ function currentLineMappingBend() {
   return Math.max(0, Math.min(1, raw / 100));
 }
 
+const LINE_MAPPING_TEXT_OFFSET = 6;
+
 function buildLineMappingConnectorPath({
   oldElement,
   newElement,
@@ -13380,77 +13382,93 @@ function getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 }) {
 
 function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
   const lineElement = line.closest?.(".semantic-diff-config-line, .diff-line") || line;
-  const textElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
-  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
+  const anchorBounds = getLineMappingAnchorBounds(lineElement, paneRect);
+  const anchorRect = getLineTextAnchorRect(line, lineElement, anchorBounds);
   const lineRect = lineElement.getBoundingClientRect();
-  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
-  const visibleLeft = Math.max(textRect.left, paneRect.left);
-  const visibleRight = Math.min(textRect.right, paneRect.right);
-  const hasVisibleWidth = visibleRight > visibleLeft;
-  const x = preferredEdge === "left"
-    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
-    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
-    x,
+    x: lineTextAnchorX(anchorRect, preferredEdge, anchorBounds),
     y: lineRect.top + (lineRect.height / 2),
   };
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
   const lineElement = line.closest?.(".diff-line, .semantic-diff-config-line") || line;
-  const textElement = lineElement.querySelector(".diff-line-text") || lineElement.querySelector("code") || lineElement;
-  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
+  const anchorBounds = getLineMappingAnchorBounds(lineElement, paneRect);
+  const anchorRect = getLineTextAnchorRect(line, lineElement, anchorBounds);
   const lineRect = lineElement.getBoundingClientRect();
-  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
-  const visibleLeft = Math.max(textRect.left, paneRect.left);
-  const visibleRight = Math.min(textRect.right, paneRect.right);
-  const hasVisibleWidth = visibleRight > visibleLeft;
-  const x = preferredEdge === "left"
-    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
-    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
-    x,
+    x: lineTextAnchorX(anchorRect, preferredEdge, anchorBounds),
     y: lineRect.top + (lineRect.height / 2),
   };
 }
 
-function getVisibleSemanticTokenRect(line, paneRect, preferredEdge = "right") {
-  const tokens = [...line.querySelectorAll(".diff-token-match[data-semantic-field]:not([data-semantic-field=''])")];
-  const preferredField = normalizeRelationField(line?.dataset?.semanticField || "");
-  const visible = tokens
-    .map((token) => ({ token, rect: token.getBoundingClientRect() }))
-    .filter((item) => item.rect.right > paneRect.left && item.rect.left < paneRect.right);
-  if (!visible.length) return null;
-
-  const fieldMatched = preferredField
-    ? visible.filter((item) => normalizeRelationField(item.token.dataset.semanticField || "") === preferredField)
-    : [];
-  const visiblePool = fieldMatched.length ? fieldMatched : visible;
-  const candidates = preferredEdge === "right"
-    ? visiblePool.filter((item) => item.token.dataset.tokenKind === "keyword")
-    : visiblePool;
-  const pool = candidates.length ? candidates : visiblePool;
-  const item = preferredEdge === "left"
-    ? pool.reduce((best, candidate) => (candidate.rect.left < best.rect.left ? candidate : best), pool[0])
-    : pool.reduce((best, candidate) => (candidate.rect.right > best.rect.right ? candidate : best), pool[0]);
-  const rect = item.rect;
-
+function getLineMappingAnchorBounds(element, paneRect) {
+  const pane = element?.closest?.(".embedded-diff");
+  if (!pane) return paneRect;
+  const rect = pane.getBoundingClientRect();
+  const left = rect.left + (pane.clientLeft || 0);
   return {
-    left: Math.max(rect.left, paneRect.left),
-    right: Math.min(rect.right, paneRect.right),
+    left,
+    right: left + (pane.clientWidth || rect.width),
   };
 }
 
-function getActualSettingTextRect(element, preferredEdge = "right") {
+function getLineTextAnchorRect(sourceElement, lineElement, bounds) {
+  return getRelationTokenGroupRect(sourceElement, lineElement, bounds)
+    || getVisibleLineTokenGroupRect(lineElement, bounds)
+    || getLineContentTextRect(lineElement, bounds)
+    || clippedRect(lineElement.getBoundingClientRect(), bounds)
+    || lineElement.getBoundingClientRect();
+}
+
+function getRelationTokenGroupRect(sourceElement, lineElement, bounds) {
+  const directToken = sourceElement?.classList?.contains("diff-token-match") ? sourceElement : null;
+  const relationKey = sourceElement?.dataset?.lineRelationKey || lineElement?.dataset?.lineRelationKey || "";
+  const semanticField = normalizeRelationField(
+    sourceElement?.dataset?.semanticField ||
+    lineElement?.dataset?.semanticField ||
+    ""
+  );
+  const tokens = new Set();
+
+  if (directToken) tokens.add(directToken);
+  if (relationKey) {
+    lineElement
+      .querySelectorAll(`.diff-token-match[data-line-relation-key="${cssEscape(relationKey)}"]`)
+      .forEach((token) => tokens.add(token));
+  }
+  if (semanticField) {
+    lineElement.querySelectorAll(".diff-token-match[data-semantic-field]").forEach((token) => {
+      if (normalizeRelationField(token.dataset.semanticField || "") === semanticField) {
+        tokens.add(token);
+      }
+    });
+  }
+
+  return unionVisibleRects([...tokens].map((token) => token.getBoundingClientRect()), bounds);
+}
+
+function getVisibleLineTokenGroupRect(lineElement, bounds) {
+  const tokenRects = [...lineElement.querySelectorAll(".diff-token-match")]
+    .map((token) => token.getBoundingClientRect());
+  return unionVisibleRects(tokenRects, bounds);
+}
+
+function getLineContentTextRect(lineElement, bounds) {
+  const contentElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
+  const rect = getActualLineTextRect(contentElement);
+  return rect ? clippedRect(rect, bounds) : null;
+}
+
+function getActualLineTextRect(element) {
   if (!element || !document.createRange || !document.createTreeWalker) return null;
-  const textNodeInfo = preferredEdge === "left"
-    ? findFirstNonWhitespaceTextNode(element)
-    : findLastNonWhitespaceTextNode(element);
-  if (!textNodeInfo) return null;
+  const first = findFirstNonWhitespaceTextNode(element);
+  const last = findLastNonWhitespaceTextNode(element);
+  if (!first || !last) return null;
 
   const range = document.createRange();
-  range.setStart(textNodeInfo.node, textNodeInfo.offset);
-  range.setEnd(textNodeInfo.node, textNodeInfo.offset + 1);
+  range.setStart(first.node, first.offset);
+  range.setEnd(last.node, last.offset + 1);
   const rect = range.getBoundingClientRect();
   range.detach?.();
   return rect && rect.width >= 0 ? rect : null;
@@ -13462,9 +13480,7 @@ function findFirstNonWhitespaceTextNode(element) {
 
   while (node) {
     const match = String(node.nodeValue || "").match(/\S/);
-    if (match) {
-      return { node, offset: match.index };
-    }
+    if (match) return { node, offset: match.index };
     node = walker.nextNode();
   }
 
@@ -13484,12 +13500,42 @@ function findLastNonWhitespaceTextNode(element) {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
     const value = String(nodes[index].nodeValue || "");
     const match = value.match(/\S(?=\s*$)/);
-    if (match) {
-      return { node: nodes[index], offset: match.index };
-    }
+    if (match) return { node: nodes[index], offset: match.index };
   }
 
   return null;
+}
+
+function unionVisibleRects(rects = [], bounds) {
+  const visible = rects
+    .map((rect) => clippedRect(rect, bounds))
+    .filter(Boolean);
+  if (!visible.length) return null;
+  return visible.reduce((acc, rect) => ({
+    left: Math.min(acc.left, rect.left),
+    right: Math.max(acc.right, rect.right),
+    top: Math.min(acc.top, rect.top),
+    bottom: Math.max(acc.bottom, rect.bottom),
+  }), visible[0]);
+}
+
+function clippedRect(rect, bounds) {
+  if (!rect || !bounds) return null;
+  const left = Math.max(rect.left, bounds.left);
+  const right = Math.min(rect.right, bounds.right);
+  if (right <= left || rect.bottom <= rect.top) return null;
+  return {
+    left,
+    right,
+    top: rect.top,
+    bottom: rect.bottom,
+  };
+}
+
+function lineTextAnchorX(rect, preferredEdge, bounds) {
+  const edge = preferredEdge === "left" ? rect.left : rect.right;
+  const offset = preferredEdge === "left" ? -LINE_MAPPING_TEXT_OFFSET : LINE_MAPPING_TEXT_OFFSET;
+  return Math.max(bounds.left, Math.min(edge + offset, bounds.right));
 }
 
 function renderReportV2(report) {

@@ -171,6 +171,17 @@ test("compare object mapping background uses separate under-text layer", () => {
   assert.match(legacy, /newRegionRight/);
 });
 
+test("line mapping anchors use visible token text bounds instead of pane rails", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /const LINE_MAPPING_TEXT_OFFSET = 6/);
+  assert.match(legacy, /function getLineTextAnchorRect/);
+  assert.match(legacy, /getRelationTokenGroupRect\(sourceElement, lineElement, bounds\)[\s\S]*getVisibleLineTokenGroupRect\(lineElement, bounds\)[\s\S]*getLineContentTextRect\(lineElement, bounds\)/);
+  assert.match(legacy, /function lineTextAnchorX/);
+  assert.match(legacy, /edge \+ offset/);
+  assert.doesNotMatch(legacy, /function lineMappingRailX/);
+});
+
 test("diff block status and color tokens target config panes", () => {
   const css = readGlobalStyles();
 

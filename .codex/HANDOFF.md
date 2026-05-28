@@ -1,60 +1,104 @@
 # Handoff
 
-## 이번 작업
-- 미연결 설정(old-only/new-only/unmatched 계열) 배경을 orange/yellow token으로 통일.
-- `profile.exceptions` 안에 `type: comparison-exclusion` 규칙을 추가해 설정 비교 제외를 canonical plan 상태에 반영.
-- `activeIssues`에서 제외하고 `excludedIssues`/`review.excluded`/`counts.excluded`로 분리.
-- 비교 탭 하단 기존/신규 객체 위/아래/삭제 수동 정렬 패널 기본 렌더링 제거.
-- 일반 UI 용어를 객체/필드 중심에서 설정/설정 항목 중심으로 변경.
+## 현재 목표
 
-## 원인
-- unmatched 상태 token은 있었지만 일부 CSS가 old-only/new-only를 분홍/빨강 계열 또는 matched와 비슷한 배경으로 덮음.
-- 프로파일 예외는 field/line suppression에만 적용되고, 반대편 설정이 없는 plan item 자체를 excluded canonical 상태로 옮기는 규칙이 없었음.
-- Summary/Report/Graph/common field analysis가 `policySuppressed` 중심으로만 필터링해 별도 비교 제외 상태를 표현하지 못함.
-- 비교 탭 하단 수동 정렬 toolbar가 기본 UI에서 계속 렌더링됨.
+개발 방향을 MVP로 재정렬했다.
 
-## 수정 파일
-- `src/core/policyEvaluator.js`
+제품 목표:
+- Nokia Classic -> Nokia MD-CLI migration config를 의미 기준으로 비교한다.
+- 실제 누락 설정을 정상으로 판단하지 않는 것이 최우선이다.
+- MVP 핵심 section은 Interface, Static-route, BGP neighbor다.
+
+기준 문서:
+- `docs/mvp-product-definition.md`
+- `docs/mvp-development-priority.md`
+- `docs/legacy-core-stability-map.md`
+
+## 이번 커밋에 포함된 작업
+
+문서:
+- MVP 제품 정의 추가
+- MVP 개발 우선순위 추가
+- 집/다른 환경에서 이어받기 위한 구현 handoff 추가
+
+테스트:
+- `tests/mvp-core-scope.test.js` 추가
+- Interface / Static-route / BGP neighbor 핵심 계약을 테스트로 고정
+
+코드:
 - `src/core/comparisonPlan.js`
-- `src/core/summaryAnalytics.js`
-- `src/core/objectReviewGroups.js`
-- `src/core/compareRenderer.js`
-- `src/core/legacyCore.js`
-- `src/styles/global.css`
-- `src/components/ConfigInputPanel.jsx`
-- `src/components/HeaderBar.jsx`
-- `src/components/SemanticSummaryPanel.jsx`
-- `src/components/ObjectMatchTable.jsx`
-- `src/components/PolicyViolationPanel.jsx`
-- `src/components/ProfileEditor.jsx`
-- `src/components/ProfileMappingWorkbench.jsx`
-- `tests/comparison-exclusion.test.js`
+- visible compare field에 `interface` 추가
+- address/prefix로 매칭된 interface에서도 interface name 변경이 fieldSummary에 `changed`로 표시됨
 
-## 테스트
-- unmatched visual status/class/token
-- new-only 설정 단건 비교 제외
-- old-only 설정 단건 비교 제외
-- profile-wide BGP new-only 비교 제외
-- 비교 제외 해제 후 active 복원
-- common field analysis/graph excluded 반영
-- 하단 수동 정렬 패널 제거
-- 주요 렌더러 용어 설정/연결 안 됨 확인
+## 실제 사용 시 변경점
+
+Interface:
+- 기존 interface name과 신규 interface name이 달라도 IP/prefix가 같으면 같은 interface로 매칭된다.
+- 동시에 interface 이름 변경이 비교 결과에 표시된다.
+- 예: `to-Dobong-MNC#1` -> `Te1/1/1` 이 `interface changed`로 남는다.
+
+Static-route:
+- 같은 prefix인데 next-hop이 바뀌면 자동 동일 처리하지 않는다.
+- candidate / 검토 필요 경로로 남긴다.
+
+BGP neighbor:
+- peer IP 기준으로 같은 neighbor를 매칭한다.
+- import/export policy 차이는 changed로 노출된다.
+
+MD-CLI:
+- block config와 full-context one-line config가 같은 interface identity로 정규화되는 계약을 테스트로 고정했다.
+
+전체 입력:
+- 하나의 config 안에 Interface / Static-route / BGP / Port가 섞여 있어도 MVP 핵심 객체 3종이 같이 추출되고 매칭되는 테스트를 추가했다.
+
+## 다음 개발 우선순위
+
+1. MVP 핵심 section별 실제 대형 config 샘플로 parser gap 확인
+2. Interface parser 보강
+   - VRF/routing context 반영
+   - service/router context 보존
+   - address/prefix 누락 케이스 확인
+3. Static-route parser/matcher 보강
+   - routing context + prefix 기준 확정
+   - next-hop 변경/증감은 검토 필요로 명확히 표시
+4. BGP neighbor parser/matcher 보강
+   - peer IP 기준 매칭 유지
+   - group inheritance와 import/export 차이 표시 안정화
+5. 상태 분류 라벨 정리
+   - 동일 / 변경 / 검토 필요 / 누락 / 추가 / 미매칭
+6. 이후 section 요약 UI
+7. 이후 Excel export
+
+## 지금 하지 말 것
+
+- 관계 그래프 고도화
+- 라인 연결선/anchor/bridge UI 수정
+- 색상/박스 미세 수정
+- 수동 매핑 재설계
+- 사용자 정의 alias/rule 구현
+- Juniper/Cisco/Arista 확장
+- C 전환
+- legacyCore.js 대규모 수정
 
 ## 검증 결과
-- `npm.cmd test`: 통과, 74개
-- `npm.cmd run build`: 통과
-- `npm.cmd run validate:all`: 통과
-- `npm.cmd run validate:stress`: 통과, 1000/1000
-- Browser 플러그인 IAB 연결 실패. Chrome CDP 실제 브라우저로 대체 확인:
-  - unmatched 카드 배경 `rgb(255, 237, 213)`, left border `rgb(249, 115, 22)`
-  - `이 설정만 비교 제외` 클릭 후 excluded 카드 1개 생성, active unmatched 2 -> 1
-  - 하단 기존 객체/신규 객체 toolbar title 없음
-  - visible text에서 일반 `객체` 용어 없음, `설정` 용어 표시
-  - `비교 제외 해제` 버튼 DOM 확인
 
-## 남은 문제
-- Browser 플러그인 IAB 백엔드가 현재 환경에서 발견되지 않아 in-app Browser가 아니라 Chrome CDP로 확인함.
-- 기존 코드 내부 변수/클래스명 `object`는 유지.
+- `npm.cmd run guard:legacy-core` pass
+- `npm.cmd test` pass: 144 pass, 1 skip
+- `npm.cmd run build` pass
 
-## 다음 작업
-- 사용자가 실제 운영 config로 profile-wide 제외 범위를 추가할 때 예상 적용 개수 확인 UX를 더 다듬을 수 있음.
+## 집에서 이어받는 절차
+
+```powershell
+git pull
+npm.cmd install
+npm.cmd test
+npm.cmd run build
+```
+
+그 다음 작업은 코드 수정 전에 이 순서로 진행한다.
+
+1. `docs/mvp-product-definition.md` 확인
+2. `docs/mvp-development-priority.md` 확인
+3. `tests/mvp-core-scope.test.js` 확인
+4. Interface / Static-route / BGP 중 하나만 골라 테스트 먼저 추가
+5. 테스트 실패 지점을 최소 코드로 수정

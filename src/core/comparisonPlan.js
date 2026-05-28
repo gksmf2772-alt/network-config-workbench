@@ -298,6 +298,7 @@ function getObjectFieldSource(object = {}, field = "") {
 
 const VISIBLE_COMPARE_FIELDS = new Set([
   "description",
+  "interface",
   "address",
   "admin-state",
   "state",

@@ -68,6 +68,12 @@ const FIELD_ALIASES = {
   "auth-key": "authentication-key",
 };
 
+const MVP_SECTION_TYPES = [
+  { objectType: "interface", label: "Interface" },
+  { objectType: "static-route", label: "Static-route" },
+  { objectType: "bgp", label: "BGP neighbor" },
+];
+
 export function buildLineSummary(report = {}) {
   const rows = Array.isArray(report.diffRows) ? report.diffRows : [];
   const metrics = {
@@ -118,6 +124,7 @@ export function buildSummaryDashboardData({
   const suppressedPlan = plan.filter((item) => item.policySuppressed && !isExcludedPlanItem(item));
   const lineSummary = buildLineSummary(report);
   const fieldAnalysis = buildFieldOverlapAnalysis(reviewablePlan);
+  const sectionSummary = buildSectionSummary(reviewablePlan, fieldAnalysis);
   const review = buildReviewItems(plan);
   const analysisContext = buildAnalysisContext({
     mode: analysisMode,
@@ -176,6 +183,7 @@ export function buildSummaryDashboardData({
   return {
     lineSummary,
     fieldAnalysis,
+    sectionSummary,
     review,
     excludedIssues: buildExcludedReviewItems(excludedPlan),
     graph,
@@ -302,6 +310,54 @@ function buildFixtureScopeAnalysis(plan = [], fixtureScope = null) {
     unmatchedDueParserGap: parserGapUnmatched.length,
     unmatchedDueRealMissingTarget: realMissingUnmatched.length,
   };
+}
+
+export function buildSectionSummary(plan = [], fieldAnalysis = {}) {
+  const activePlan = plan.filter(isActivePlanItem);
+  const overlapByType = new Map((fieldAnalysis.aggregateByType || []).map((row) => [row.objectType, row]));
+
+  return MVP_SECTION_TYPES.map(({ objectType, label }) => {
+    const items = activePlan.filter((item) => planItemObjectType(item) === objectType);
+    const overlap = overlapByType.get(objectType) || {};
+    const missing = items.filter((item) => item.status === "old-only").length;
+    const added = items.filter((item) => item.status === "new-only").length;
+    const changed = items.filter(sectionItemHasActiveChange).length;
+    const reviewNeeded = items.filter(isSectionReviewNeeded).length;
+
+    return {
+      objectType,
+      label,
+      total: items.length,
+      matched: items.filter((item) => item.status === "matched").length,
+      candidate: items.filter((item) => item.status === "candidate").length,
+      changed,
+      reviewNeeded,
+      missing,
+      added,
+      suppressed: items.filter((item) => item.policySuppressed).length,
+      averageOverlap: overlap.averageOverlap || 0,
+      changedFields: overlap.changedFields || 0,
+      missingFields: (overlap.missingOldFields || 0) + (overlap.missingNewFields || 0),
+    };
+  });
+}
+
+function planItemObjectType(item = {}) {
+  return item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || "object";
+}
+
+function sectionItemHasActiveChange(item = {}) {
+  return hasChangedFields(item) ||
+    hasRelationshipChange(item) ||
+    Number(item.policyViolationCount || 0) > 0 ||
+    Number(item.auditFindingCount || 0) > 0;
+}
+
+function isSectionReviewNeeded(item = {}) {
+  if (isSuppressedOnlyPlanItem(item)) return false;
+  if (item.status === "old-only" || item.status === "new-only" || item.status === "candidate") return true;
+  if (Number(item.score || 0) > 0 && Number(item.score || 0) < 80 && item.oldObject && item.newObject) return true;
+  return sectionItemHasActiveChange(item);
 }
 
 export function buildFieldOverlapAnalysis(plan = []) {
@@ -544,7 +600,9 @@ function isSuppressedOnlyPlanItem(item = {}) {
   const fieldSummaries = Object.values(item.fieldSummary || {});
   const hasActiveField = fieldSummaries.some((summary) => {
     const status = String(summary?.effectiveStatus || summary?.status || "").toLowerCase();
-    return status && !summary?.ignored && !summary?.suppressed && !["equal", "same", "present", "ignored"].includes(status);
+    return policyAppliedFieldState(summary) === "active" &&
+      status &&
+      !["equal", "same", "present", "ignored"].includes(status);
   });
   const hasActiveLine = lineMatches.some((lineMatch) => {
     const status = String(lineMatch?.status || "").toLowerCase();
@@ -566,7 +624,8 @@ function hasSuppressedPolicyEvidence(item = {}) {
   const fieldSummaries = Object.values(item.fieldSummary || {});
   if (fieldSummaries.some((summary) => {
     const status = String(summary?.effectiveStatus || summary?.status || "").toLowerCase();
-    return summary?.ignored ||
+    return policyAppliedFieldState(summary) === "suppressed" ||
+      summary?.ignored ||
       summary?.suppressed ||
       status === "ignored" ||
       (Array.isArray(summary?.policyHits) && summary.policyHits.some((hit) => hit?.ignored || hit?.suppressed));
@@ -608,7 +667,7 @@ function suppressedPolicySources(item = {}) {
   };
 
   for (const summary of Object.values(item.fieldSummary || {})) {
-    if (summary?.ignored || summary?.suppressed || String(summary?.effectiveStatus || "").toLowerCase() === "ignored") {
+    if (policyAppliedFieldState(summary) === "suppressed" || summary?.ignored || summary?.suppressed || String(summary?.effectiveStatus || "").toLowerCase() === "ignored") {
       addSource(summary.sourcePolicy || summary.policySource);
       for (const hit of summary.policyHits || []) {
         addSource(hit?.sourcePolicy || hit?.policySource || hit?.source);
@@ -957,9 +1016,9 @@ function reviewObjectLabel(item = {}, fallbackObject = {}) {
 function buildReviewTableFieldRows(item = {}, overlap = null, options = {}) {
   const includeIgnored = Boolean(options.includeIgnored);
   const summaryRows = Object.entries(item.fieldSummary || {})
-    .filter(([field, value]) => includeIgnored || isDescriptionFieldName(field) || !(value?.ignored || value?.effectiveStatus === "ignored"))
+    .filter(([field, value]) => includeIgnored || isDescriptionFieldName(field) || policyAppliedFieldState(value) === "active")
     .map(([field, value]) => ({
-      field: normalizeFieldName(field),
+      field: normalizeReviewFieldName(field, value),
       status: String(value?.effectiveStatus || value?.status || "").toLowerCase(),
       oldValue: compactFieldValues(value?.oldValues),
       newValue: compactFieldValues(value?.newValues),
@@ -1074,6 +1133,12 @@ function normalizeFields(fields = {}) {
 function normalizeFieldName(field = "") {
   const normalized = String(field || "").trim().toLowerCase().replace(/\s+/g, "-");
   return FIELD_ALIASES[normalized] || normalized;
+}
+
+function normalizeReviewFieldName(field = "", summary = {}) {
+  const preferred = String(summary?.field || field || "").trim().toLowerCase().replace(/\s+/g, "-");
+  if (preferred === "admin-state") return "admin-state";
+  return normalizeFieldName(field);
 }
 
 function isDescriptionFieldName(field = "") {

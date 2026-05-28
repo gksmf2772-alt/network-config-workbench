@@ -107,7 +107,13 @@ import {
   renderFieldHotList,
   renderHiddenDiagnosticsLinks,
   renderMetricCard,
+  renderSectionSummaryCards,
 } from "./summaryRenderer.js";
+import {
+  buildExcelReportCsv,
+  buildExcelReportFilename,
+  buildExcelReportRows,
+} from "./reportExport.js";
 import { syncPairedPaneScroll } from "./diffScrollSync.js";
 
 const objectTypes = [
@@ -4825,6 +4831,8 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
           : ""}
       </div>
     </section>
+
+    ${renderSectionSummaryCards(dashboard.sectionSummary || [])}
 
     ${alerts.length ? `
       <section class="summary-alert-panel summary-risk-${escapeHtml(risk)}" data-review-panel="critical">
@@ -16982,24 +16990,19 @@ function normalizeLineRules(value) {
 
 function exportReport() {
   if (!state.lastReport) return;
-  const lines = [
-    "Network Config Workbench Report",
-    `생성: ${formatDate(Date.now())}`,
-    `프로파일: ${state.profileDraft.name}`,
-    "",
-    `비교 객체: ${state.lastReport.summary.compared}`,
-    `변경: ${state.lastReport.summary.changed}`,
-    `누락: ${state.lastReport.summary.missing}`,
-    `추가: ${state.lastReport.summary.added}`,
-    `필수 규칙: ${state.lastReport.summary.required}`,
-    "",
-    ...state.lastReport.items.map((item) => `[${item.type}] ${item.objectType} ${item.objectName} | 기존 ${item.oldLine} | 신규 ${item.newLine} | ${item.message}`),
-  ];
-  saveTextFile("config-compare-report.txt", lines.join("\n"));
+  const dashboard = state.lastDashboardData || buildCurrentDashboardData(state.lastReport, state.lastSemanticSummary);
+  const comparedAt = Date.now();
+  const rows = buildExcelReportRows({
+    plan: state.lastSemanticPlan || [],
+    auditFindings: dashboard.audit?.findings || state.lastStandardsAudit?.findings || [],
+  });
+  const csv = buildExcelReportCsv(rows);
+  saveTextFile(buildExcelReportFilename({ comparedAt }), csv, "text/csv;charset=utf-8");
+  selectors.compareStatus.textContent = `Excel 리포트 ${rows.length}행 저장`;
 }
 
-function saveTextFile(filename, content) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+function saveTextFile(filename, content, type = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = filename;

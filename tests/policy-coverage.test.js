@@ -388,7 +388,7 @@ test("profile admin-state exception keeps static route visible as suppressed rev
   assert.equal(suppressedRow.objectType, "static-route");
   assert.equal(suppressedRow.objectKey, "static-route:112.188.30.19/32");
   assert.equal(suppressedRow.policyId, "ex-profile-static-admin-state-changed");
-  assert.ok(suppressedRow.fieldRows.some((row) => row.field === "state" && row.status === "ignored"));
+  assert.ok(suppressedRow.fieldRows.some((row) => row.field === "admin-state" && row.status === "ignored"));
 });
 
 test("profile field exception is limited to originating object type", () => {
@@ -877,9 +877,66 @@ test("object review grouping keeps one row per object with multiple issues", () 
   });
 
   assert.equal(groups.length, 1);
-  assert.equal(groups[0].activeIssueCount, 3);
-  assert.deepEqual(groups[0].issueFields, ["group", "state", "description"]);
-  assert.match(groups[0].representativeReason, /group .*전환/);
+  assert.equal(groups[0].activeIssueCount, 2);
+  assert.deepEqual(groups[0].issueFields, ["state", "description"]);
+  assert.equal(groups[0].activeIssues.some((issue) => issue.fieldPath === "group"), false);
+});
+
+test("object review grouping keeps unresolved BGP inheritance suppressed", () => {
+  const profile = {
+    oldVendor: VENDOR_IDS.NOKIA_CLASSIC,
+    newVendor: VENDOR_IDS.NOKIA_MD_CLI,
+  };
+  const oldResult = normalizeConfig({
+    vendor: VENDOR_IDS.NOKIA_CLASSIC,
+    profile,
+    side: "old",
+    configText: [
+      "neighbor 210.183.28.162",
+      "    peer-as 4766",
+      "    export SER-PEER",
+    ].join("\n"),
+  });
+  const newResult = normalizeConfig({
+    vendor: VENDOR_IDS.NOKIA_MD_CLI,
+    profile,
+    side: "new",
+    configText: [
+      '/configure { router "Base" bgp neighbor "210.183.28.162" group "ACCESS-PEER" }',
+      '/configure { router "Base" bgp neighbor "210.183.28.162" admin-state disable }',
+    ].join("\n"),
+  });
+  const plan = createComparisonPlan(
+    matchNormalizedObjects({
+      oldObjects: oldResult.objects,
+      newObjects: newResult.objects,
+      manualMap: {},
+      profile,
+    }),
+    profile,
+  );
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan,
+    semanticSummary: {},
+  });
+  const groups = buildObjectReviewGroups({
+    review: dashboard.review,
+    plan,
+  });
+  const group = groups.find((item) => item.objectKey === "bgp:210.183.28.162");
+
+  assert.ok(group);
+  assert.deepEqual(group.activeIssues.map((issue) => issue.fieldPath), ["admin-state"]);
+  assert.equal(group.suppressedIssues.some((issue) =>
+    issue.fieldPath === "group" && issue.status === "structure-converted"
+  ), true);
+  assert.equal(group.suppressedIssues.some((issue) =>
+    issue.fieldPath === "peer-as" && issue.status === "inheritance-unresolved"
+  ), true);
+  assert.equal(group.suppressedIssues.some((issue) =>
+    issue.fieldPath === "export.policy" && issue.status === "inheritance-unresolved"
+  ), true);
 });
 
 test("profile exception applies to same BGP field rule across objects only", () => {

@@ -51,6 +51,107 @@ test("MVP interface match uses address even when interface names change", () => 
   assert.equal(planItem.fieldSummary.interface.status, "changed");
 });
 
+test("MVP interface identity preserves router context when duplicate addresses exist", () => {
+  const oldConfig = [
+    'configure router "Base" interface "old-base"',
+    "    address 10.10.10.1/30",
+    "exit",
+    'configure router "Blue" interface "old-blue"',
+    "    address 10.10.10.1/30",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Base" interface "Te1/1/1" ipv4 primary address 10.10.10.1 prefix-length 30 }',
+    '/configure { router "Blue" interface "Te1/1/2" ipv4 primary address 10.10.10.1 prefix-length 30 }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const oldInterfaces = result.oldResult.objects.filter((item) => item.normalizedType === "interface");
+  const newInterfaces = result.newResult.objects.filter((item) => item.normalizedType === "interface");
+  const interfaceMatches = result.matches.filter((item) => item.oldObject?.normalizedType === "interface");
+
+  assert.equal(oldInterfaces.length, 2);
+  assert.equal(newInterfaces.length, 2);
+  assert.equal(interfaceMatches.length, 2);
+  assert.deepEqual(
+    interfaceMatches.map((item) => item.status).sort(),
+    ["matched", "matched"]
+  );
+  assert.equal(new Set(oldInterfaces.map((item) => item.normalizedIdentity)).size, 2);
+  assert.equal(new Set(newInterfaces.map((item) => item.normalizedIdentity)).size, 2);
+});
+
+test("MVP interface matching does not auto-match duplicate address across router contexts", () => {
+  const oldConfig = [
+    'configure router "Blue" interface "old-blue"',
+    "    address 10.10.10.1/30",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Red" interface "Te1/1/2" ipv4 primary address 10.10.10.1 prefix-length 30 }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const interfaceMatches = result.matches.filter((item) =>
+    item.oldObject?.normalizedType === "interface" ||
+    item.newObject?.normalizedType === "interface"
+  );
+
+  assert.equal(interfaceMatches.some((item) => item.status === "matched"), false);
+});
+
+test("MVP MD-CLI block interface identity preserves router context with duplicate addresses", () => {
+  const block = parse("nokia-md-cli", [
+    'router "Base" {',
+    '    interface "Te1/1/1" {',
+    "        ipv4 {",
+    "            primary {",
+    "                address 10.10.10.1",
+    "                prefix-length 30",
+    "            }",
+    "        }",
+    "    }",
+    "}",
+    'router "Blue" {',
+    '    interface "Te1/1/2" {',
+    "        ipv4 {",
+    "            primary {",
+    "                address 10.10.10.1",
+    "                prefix-length 30",
+    "            }",
+    "        }",
+    "    }",
+    "}",
+  ].join("\n"), "new");
+
+  const interfaces = block.objects.filter((item) => item.normalizedType === "interface");
+
+  assert.equal(interfaces.length, 2);
+  assert.equal(new Set(interfaces.map((item) => item.normalizedIdentity)).size, 2);
+});
+
+test("MVP MD-CLI one-line service interfaces with duplicate addresses remain separate objects", () => {
+  const result = parse("nokia-md-cli", [
+    '/configure { service ies "100" interface "To-MNC#2-1" description "## Dobong-MNC162D, hu0/4/0/43 ##" }',
+    '/configure { service ies "100" interface "To-MNC#2-1" sap 2/2/c17/1 ingress qos sap-ingress policy-name "SEA_IN" }',
+    '/configure { service ies "100" interface "To-MNC#2-1" ipv4 primary address 112.188.17.106 }',
+    '/configure { service ies "100" interface "To-MNC#2-1" ipv4 primary prefix-length 30 }',
+    '/configure { service ies "100" interface "To-MNC#2-2" description "## Dobong-MNC162D, hu0/12/0/43 ##" }',
+    '/configure { service ies "100" interface "To-MNC#2-2" sap 4/2/c17/1 ingress qos sap-ingress policy-name "SEA_IN" }',
+    '/configure { service ies "100" interface "To-MNC#2-2" ipv4 primary address 112.188.17.106 }',
+    '/configure { service ies "100" interface "To-MNC#2-2" ipv4 primary prefix-length 30 }',
+  ].join("\n"), "new");
+
+  const interfaces = result.objects.filter((item) => item.normalizedType === "interface");
+
+  assert.equal(interfaces.length, 2);
+  assert.deepEqual(
+    interfaces.map((item) => item.fields.interface).sort(),
+    ["to-mnc#2-1", "to-mnc#2-2"]
+  );
+  assert.equal(new Set(interfaces.map((item) => item.fields.sap)).size, 2);
+});
+
 test("MVP static route same prefix with changed next-hop stays review candidate", () => {
   const oldConfig = [
     "static-route-entry 10.20.30.0/24",
@@ -71,6 +172,83 @@ test("MVP static route same prefix with changed next-hop stays review candidate"
   assert.equal(match.status, "candidate");
   assert.ok(match.scoreReasons.includes("static-route-next-hop-mismatch"));
   assert.equal(planItem.status, "candidate");
+});
+
+test("MVP static route identity preserves router context when duplicate prefixes exist", () => {
+  const oldConfig = [
+    'configure router "Base" static-routes route 10.20.30.0/24',
+    "    next-hop 192.0.2.1",
+    "exit",
+    'configure router "Blue" static-routes route 10.20.30.0/24',
+    "    next-hop 192.0.2.1",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Base" static-routes route 10.20.30.0/24 route-type unicast next-hop 192.0.2.1 admin-state enable }',
+    '/configure { router "Blue" static-routes route 10.20.30.0/24 route-type unicast next-hop 192.0.2.1 admin-state enable }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const oldRoutes = result.oldResult.objects.filter((item) => item.normalizedType === "static-route");
+  const newRoutes = result.newResult.objects.filter((item) => item.normalizedType === "static-route");
+  const routeMatches = result.matches.filter((item) => item.oldObject?.normalizedType === "static-route");
+
+  assert.equal(oldRoutes.length, 2);
+  assert.equal(newRoutes.length, 2);
+  assert.equal(routeMatches.length, 2);
+  assert.deepEqual(
+    routeMatches.map((item) => item.status).sort(),
+    ["matched", "matched"]
+  );
+  assert.equal(new Set(oldRoutes.map((item) => item.normalizedIdentity)).size, 2);
+  assert.equal(new Set(newRoutes.map((item) => item.normalizedIdentity)).size, 2);
+});
+
+test("MVP static route matching does not auto-match same prefix across router contexts", () => {
+  const oldConfig = [
+    'configure router "Blue" static-routes route 10.20.30.0/24',
+    "    next-hop 192.0.2.1",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { router "Red" static-routes route 10.20.30.0/24 route-type unicast next-hop 192.0.2.1 admin-state enable }',
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const routeMatches = result.matches.filter((item) =>
+    item.oldObject?.normalizedType === "static-route" ||
+    item.newObject?.normalizedType === "static-route"
+  );
+
+  assert.equal(routeMatches.some((item) => item.status === "matched"), false);
+});
+
+test("MVP MD-CLI block static route identity preserves router context with duplicate prefixes", () => {
+  const block = parse("nokia-md-cli", [
+    'router "Base" {',
+    "    static-routes {",
+    "        route 10.20.30.0/24 route-type unicast {",
+    '            next-hop "192.0.2.1" {',
+    "                admin-state enable",
+    "            }",
+    "        }",
+    "    }",
+    "}",
+    'router "Blue" {',
+    "    static-routes {",
+    "        route 10.20.30.0/24 route-type unicast {",
+    '            next-hop "192.0.2.1" {',
+    "                admin-state enable",
+    "            }",
+    "        }",
+    "    }",
+    "}",
+  ].join("\n"), "new");
+
+  const routes = block.objects.filter((item) => item.normalizedType === "static-route");
+
+  assert.equal(routes.length, 2);
+  assert.equal(new Set(routes.map((item) => item.normalizedIdentity)).size, 2);
 });
 
 test("MVP BGP neighbor matches by peer IP and exposes policy differences", () => {

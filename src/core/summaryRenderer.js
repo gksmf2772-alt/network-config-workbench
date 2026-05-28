@@ -14,6 +14,46 @@ export function renderMetricCard({ label, value, detail = "", state = "", action
   `;
 }
 
+export function renderSectionSummaryCards(sections = []) {
+  const rows = Array.isArray(sections) ? sections.filter((row) => row && row.objectType) : [];
+  if (!rows.length) return "";
+
+  return `
+    <section class="summary-section summary-core-section-overview" data-review-panel="section-summary">
+      <div class="summary-section-head">
+        <h3>핵심 섹션 요약</h3>
+      </div>
+      <div class="summary-core-section-grid">
+        ${rows.map((row) => renderSectionSummaryCard(row)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderSectionSummaryCard(row = {}) {
+  const state = Number(row.reviewNeeded || 0) > 0 ? "warning" : "ok";
+  const detail = [
+    `연결 ${row.matched || 0}`,
+    `검토 필요 ${row.reviewNeeded || 0}`,
+    `변경 ${row.changed || 0}`,
+    `누락 ${row.missing || 0}`,
+    `추가 ${row.added || 0}`,
+  ].join(" · ");
+  return `
+    <button type="button" class="summary-core-section-card summary-core-section-${escapeHtml(state)}" data-field-type-filter="${escapeHtml(row.objectType)}" title="${escapeHtml(detail)}">
+      <span>${escapeHtml(row.label || row.objectType)}</span>
+      <strong>${escapeHtml(row.total || 0)}</strong>
+      <small>연결 ${escapeHtml(row.matched || 0)} · 검토 필요 ${escapeHtml(row.reviewNeeded || 0)}</small>
+      <div class="summary-core-section-meta">
+        <span>변경 ${escapeHtml(row.changed || 0)}</span>
+        <span>누락 ${escapeHtml(row.missing || 0)}</span>
+        <span>추가 ${escapeHtml(row.added || 0)}</span>
+        <span>공통률 ${escapeHtml(row.averageOverlap || 0)}%</span>
+      </div>
+    </button>
+  `;
+}
+
 export function buildOperatorAlerts({ dashboard, semanticSummary, report }) {
   const { review, counts, context } = dashboard;
   return [

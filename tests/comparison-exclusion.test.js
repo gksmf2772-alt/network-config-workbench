@@ -10,6 +10,7 @@ import { buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
 import {
   getSemanticDiffBlockState,
   getSemanticStateClass,
+  getSemanticStateLabel,
 } from "../src/core/semanticTheme.js";
 import {
   activeSemanticPolicyViolations,
@@ -298,6 +299,41 @@ test("diff block status and color tokens target config panes", () => {
   assert.doesNotMatch(css, /summary-issue-row\.summary-issue-old-only[\s\S]{0,160}var\(--status-unmatched-bg\)/);
 });
 
+test("semantic state labels use MVP operator taxonomy", () => {
+  assert.equal(getSemanticStateLabel({ status: "matched" }), "동일");
+  assert.equal(getSemanticStateLabel({
+    status: "matched",
+    fieldSummary: {
+      "admin-state": { status: "changed", effectiveStatus: "changed" },
+    },
+  }), "변경");
+  assert.equal(getSemanticStateLabel({ status: "candidate" }), "검토 필요");
+  assert.equal(getSemanticStateLabel({ status: "old-only" }), "누락");
+  assert.equal(getSemanticStateLabel({ status: "new-only" }), "추가");
+  assert.equal(getSemanticStateLabel({ status: "unmatched" }), "미매칭");
+  assert.equal(getSemanticStateLabel({ status: "ignored", suppressed: true }), "예외 처리");
+  assert.equal(getSemanticStateLabel({ status: "comparison-excluded", excluded: true }), "비교 제외");
+
+  const html = renderComparisonPlanHtml([
+    { status: "candidate", reason: "ambiguous-candidates", oldObject: setting({ side: "old", key: "192.0.2.10" }), newObject: setting({ side: "new", key: "192.0.2.11" }) },
+    { status: "old-only", reason: "unmatched", oldObject: setting({ side: "old", key: "192.0.2.12" }), newObject: null },
+    { status: "new-only", reason: "unmatched", oldObject: null, newObject: setting({ side: "new", key: "192.0.2.13" }) },
+    {
+      status: "matched",
+      oldObject: setting({ side: "old", key: "192.0.2.14" }),
+      newObject: setting({ side: "new", key: "192.0.2.14" }),
+      fieldSummary: {
+        "admin-state": { status: "changed", effectiveStatus: "changed" },
+      },
+    },
+  ]);
+
+  assert.match(html, />검토 필요<\/span>/);
+  assert.match(html, />누락<\/span>/);
+  assert.match(html, />추가<\/span>/);
+  assert.match(html, />변경<\/span>/);
+});
+
 test("legacy compare aligns migrated objects by description endpoint before diff rows", () => {
   const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
   const alignCallIndex = legacy.indexOf('alignObjectMapsByDescriptionEndpoint(oldMap, newMap, ["lag", "port", "interface"]);');
@@ -451,7 +487,11 @@ test("main comparison renderer uses operator terminology", () => {
   const html = renderComparisonPlanHtml(plan);
 
   assert.match(html, /설정/);
-  assert.match(html, /연결 안 됨/);
+  assert.match(html, />추가<\/span>/);
+  assert.match(html, /누락\/추가/);
   assert.doesNotMatch(html, /객체/);
-  assert.doesNotMatch(html, /미매칭/);
+  assert.doesNotMatch(html, /연결 안 됨/);
+  assert.doesNotMatch(html, /후보/);
+  assert.doesNotMatch(html, /불명확/);
+  assert.doesNotMatch(html, />ADDED</);
 });

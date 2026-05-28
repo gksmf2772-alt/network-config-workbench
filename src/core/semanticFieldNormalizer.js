@@ -2,9 +2,21 @@ function clean(value = "") {
   return String(value || "").trim().replace(/^["']|["']$/g, "");
 }
 
+function canonicalRoutingContext(fields = {}, { includeRouter = false } = {}) {
+  const explicitContext = clean(fields["routing-context"] || fields.vrf || fields.vprn || "").toLowerCase();
+  if (explicitContext) return explicitContext;
+
+  if (includeRouter) {
+    const router = clean(fields.router || "").toLowerCase();
+    if (router && router !== "base") return router;
+  }
+
+  return "";
+}
+
 export function canonicalStaticRouteIdentity(fields = {}) {
   const route = clean(fields.route || fields.prefix || fields.address || "").toLowerCase();
-  const routingContext = clean(fields["routing-context"] || fields.vrf || fields.vprn || "").toLowerCase();
+  const routingContext = canonicalRoutingContext(fields, { includeRouter: true });
   return route && routingContext ? `${routingContext}|${route}` : route;
 }
 
@@ -12,7 +24,7 @@ export function canonicalInterfaceIdentity(fields = {}, fallback = "") {
   const address = clean(fields.address || fields.prefix || "").toLowerCase();
   const service = clean(fields.service || "").toLowerCase();
   const serviceId = clean(fields["service-id"] || fields.serviceId || "").toLowerCase();
-  const routingContext = clean(fields["routing-context"] || fields.vrf || fields.vprn || "").toLowerCase();
+  const routingContext = canonicalRoutingContext(fields, { includeRouter: true });
 
   if (address) {
     if (routingContext) return `${routingContext}|${address}`;

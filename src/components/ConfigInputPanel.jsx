@@ -201,7 +201,7 @@ export default function ConfigInputPanel() {
               <AppButton id="compareBtn" type="button"><GitCompare />비교 실행</AppButton>
               <AppButton id="alignBtn" type="button" variant="secondary">설정 정렬</AppButton>
               <AppIconButton id="restoreInitialBtn" type="button" title="초기 입력 원복"><RotateCcw /></AppIconButton>
-              <AppIconButton id="exportReportBtn" type="button" title="리포트 저장"><Download /></AppIconButton>
+              <AppButton id="exportReportBtn" type="button" variant="secondary"><Download />Excel 저장</AppButton>
               <AppIconButton id="clearAllBtn" type="button" title="전체 비우기"><Eraser /></AppIconButton>
             </AppToolbar>
           </motion.div>

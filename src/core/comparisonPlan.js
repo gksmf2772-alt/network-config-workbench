@@ -1152,7 +1152,7 @@ function applyBgpInheritanceStatusToFieldPolicy({
         violation: false,
         violationReason: null,
         effectiveStatus: "structure-converted",
-        status: summary.status === "added" ? "structure-converted" : summary.status,
+        status: summary.status === "equal" ? "equal" : "structure-converted",
         policyReason: "MD-CLI 그룹 구조",
         newSourceLabels: summary.newSourceLabels?.length
           ? summary.newSourceLabels

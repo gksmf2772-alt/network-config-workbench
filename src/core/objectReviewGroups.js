@@ -218,9 +218,10 @@ function suppressedIssuesFromPlan(plan = []) {
       fieldRows: [],
     };
     return Object.entries(item.fieldSummary || {})
-      .filter(([, summary]) => summary?.ignored || summary?.effectiveStatus === "ignored")
+      .filter(([, summary]) => isSuppressedFieldSummary(summary))
       .map(([field, summary]) => {
         const hit = Array.isArray(summary.policyHits) ? summary.policyHits[0] : null;
+        const status = suppressedFieldStatus(summary);
         return {
           id: `${item.id || objectKey(object, objectType)}:${normalizeField(field)}:suppressed`,
           panelKey: "suppressed",
@@ -232,18 +233,18 @@ function suppressedIssuesFromPlan(plan = []) {
           newKey: itemSeed.newKey,
           displayName: displayNameFromPlanObject(object, objectType),
           fieldPath: normalizeField(field),
-          status: "ignored",
-          statusLabel: "예외 처리",
-          reason: summary.policyReason || hit?.reason || "예외/정책으로 제외",
+          status,
+          statusLabel: statusLabel(status),
+          reason: summary.policyReason || hit?.reason || reasonForSuppressedField(field, summary, objectType),
           oldValue: compactValues(summary.oldValues),
           newValue: compactValues(summary.newValues),
           ruleId: hit?.rule?.match?.ruleId || hit?.rule?.target?.ruleId || hit?.ruleId || semanticRuleId(objectType, field, summary.status),
           issueType: "field-difference",
-          classification: "예외 처리됨",
+          classification: classificationForSuppressedField(field, status),
           suppressed: true,
-          sourcePolicy: hit?.sourcePolicy || "",
+          sourcePolicy: hit?.sourcePolicy || summary.sourcePolicy || summary.policySource || sourceForSuppressedField(status),
           policyId: hit?.policyId || "",
-          policySource: hit?.source || "",
+          policySource: hit?.source || summary.policySource || "",
         };
       });
   });
@@ -441,7 +442,51 @@ function objectKey(object = {}, objectType = "") {
 
 function isActionableFieldRow(row = {}) {
   const status = normalizeChangeType(row.status);
-  return Boolean(row.field) && !["same", "equal", "present", "ignored"].includes(status);
+  return Boolean(row.field) && !["same", "equal", "present", "ignored", "inheritance-unresolved", "structure-converted", "comparison-excluded", "suppressed"].includes(status);
+}
+
+function isSuppressedFieldSummary(summary = {}) {
+  const status = normalizeChangeType(summary.effectiveStatus || summary.status || "");
+  const sourcePolicy = stringify(summary.sourcePolicy || summary.policySource).toLowerCase();
+  const policyHitSources = (summary.policyHits || [])
+    .map((hit) => stringify(hit?.sourcePolicy || hit?.policySource || hit?.source).toLowerCase());
+  return Boolean(
+    summary.ignored ||
+    summary.suppressed ||
+    ["ignored", "inheritance-unresolved", "structure-converted"].includes(status) ||
+    ["profile-exception", "user-exception", "advanced-policy"].includes(sourcePolicy) ||
+    policyHitSources.some((source) => ["profile-exception", "user-exception", "advanced-policy"].includes(source))
+  );
+}
+
+function suppressedFieldStatus(summary = {}) {
+  const status = normalizeChangeType(summary.effectiveStatus || summary.status || "");
+  if (["ignored", "inheritance-unresolved", "structure-converted", "comparison-excluded"].includes(status)) return status;
+  return "ignored";
+}
+
+function reasonForSuppressedField(field = "", summary = {}, objectType = "") {
+  const status = suppressedFieldStatus(summary);
+  if (objectType === "bgp" && normalizeField(field) === "group" && status === "structure-converted") {
+    return "MD-CLI BGP group 참조 구조 전환";
+  }
+  if (status === "structure-converted") return "구조 전환";
+  if (status === "inheritance-unresolved") return "MD-CLI group 정의 미확인으로 상속값 비교 보류";
+  return "예외/정책으로 제외";
+}
+
+function classificationForSuppressedField(field = "", status = "") {
+  const normalizedStatus = normalizeChangeType(status);
+  if (normalizeField(field) === "group" && normalizedStatus === "structure-converted") return "단순 구조 전환";
+  if (normalizedStatus === "inheritance-unresolved") return "상속 해석 보류";
+  if (normalizedStatus === "comparison-excluded") return "비교 제외됨";
+  return "예외 처리됨";
+}
+
+function sourceForSuppressedField(status = "") {
+  return ["inheritance-unresolved", "structure-converted"].includes(normalizeChangeType(status))
+    ? "semantic-normalization"
+    : "";
 }
 
 function representativeReason(issues = []) {
@@ -555,6 +600,8 @@ function statusLabel(status = "") {
     different: "차이",
     changed: "차이",
     "structure-converted": "구조 전환",
+    "inheritance-unresolved": "상속 미확인",
+    "comparison-excluded": "비교 제외",
     "missing-old": "기존 누락",
     "missing-new": "신규 누락",
     added: "추가",

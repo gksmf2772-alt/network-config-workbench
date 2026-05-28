@@ -68,6 +68,59 @@ test("classic direct BGP neighbor equals MD-CLI group inherited neighbor", () =>
   assert.equal(result.matches.some((match) => match.status === "new-only" && match.newObject?.normalizedType === "bgp-group"), false);
 });
 
+test("classic BGP group context is applied to nested neighbors", () => {
+  const result = compare(
+    [
+      "router bgp",
+      '    group "ACCESS-PEER"',
+      '        export "SER-PEER"',
+      "        peer-as 4766",
+      "        neighbor 210.183.28.162",
+      '            authentication-key "KEY" hash2',
+      "        exit",
+      "    exit",
+    ].join("\n"),
+    [
+      '/configure { router "Base" bgp neighbor "210.183.28.162" group "ACCESS-PEER" }',
+      '/configure { router "Base" bgp neighbor "210.183.28.162" authentication-key "KEY" hash2 }',
+    ].join("\n"),
+  );
+
+  const item = result.plan.find((entry) => entry.objectType === "bgp");
+
+  assert.equal(result.oldResult.objects.find((object) => object.normalizedType === "bgp").fields.group, "ACCESS-PEER");
+  assert.equal(result.oldResult.objects.find((object) => object.normalizedType === "bgp").fields["peer-as"], "4766");
+  assert.equal(result.oldResult.objects.find((object) => object.normalizedType === "bgp").fields["export.policy"], "SER-PEER");
+  assert.equal(item.status, "matched");
+  assert.equal(item.fieldSummary.group.status, "equal");
+  assert.equal(item.fieldSummary["peer-as"].effectiveStatus, "inheritance-unresolved");
+  assert.equal(item.fieldSummary["export.policy"].effectiveStatus, "inheritance-unresolved");
+  assert.equal(item.policyViolationCount, 0);
+});
+
+test("BGP group reference rename is classified as structure conversion", () => {
+  const result = compare(
+    [
+      "router bgp",
+      '    group "UP-PEER"',
+      '        export "UP-PEER"',
+      "        peer-as 4766",
+      "        neighbor 210.183.28.161",
+      "        exit",
+      "    exit",
+    ].join("\n"),
+    '/configure { router "Base" bgp neighbor "210.183.28.161" group "KORNET-PEER" }',
+  );
+
+  const item = result.plan.find((entry) => entry.objectType === "bgp");
+
+  assert.equal(item.status, "matched");
+  assert.equal(item.fieldSummary.group.status, "structure-converted");
+  assert.equal(item.fieldSummary.group.effectiveStatus, "structure-converted");
+  assert.equal(item.fieldSummary.group.violation, false);
+  assert.equal(item.policyViolationCount, 0);
+});
+
 test("BGP admin-state comparison does not duplicate state alias", () => {
   const result = compare(
     [

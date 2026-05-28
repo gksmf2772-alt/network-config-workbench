@@ -243,6 +243,10 @@ function findIdentityMatch(oldObject, candidates) {
     if (!isSameType(oldObject, newObject)) continue;
 
     if (oldObject.normalizedType === "interface") {
+      if (!hasCompatibleInterfaceContext(oldObject, newObject)) {
+        continue;
+      }
+
       if (
         oldObject.prefix &&
         newObject.prefix &&
@@ -277,6 +281,10 @@ function findIdentityMatch(oldObject, candidates) {
     }
 
     if (oldObject.normalizedType === "static-route") {
+      if (!hasCompatibleStaticRouteContext(oldObject, newObject)) {
+        continue;
+      }
+
       const oldPrefix = getStaticRoutePrefix(oldObject);
       const newPrefix = getStaticRoutePrefix(newObject);
       const oldNextHop = getStaticRouteNextHop(oldObject);
@@ -432,8 +440,48 @@ function getStaticRouteRoutingContext(object = {}) {
   return normalizeIdentityToken(
     getFieldValue(object, "routing-context") ||
     getFieldValue(object, "vrf") ||
+    getFieldValue(object, "vprn") ||
+    nonDefaultRouterContext(getFieldValue(object, "router"))
+  );
+}
+
+function nonDefaultRouterContext(value = "") {
+  const router = normalizeIdentityToken(value);
+  return router && router !== "base" ? router : "";
+}
+
+function getInterfaceRoutingContext(object = {}) {
+  const explicitContext = normalizeIdentityToken(
+    getFieldValue(object, "routing-context") ||
+    getFieldValue(object, "vrf") ||
     getFieldValue(object, "vprn")
   );
+  if (explicitContext) return explicitContext;
+
+  const service = normalizeIdentityToken(getFieldValue(object, "service"));
+  const serviceId = normalizeIdentityToken(
+    getFieldValue(object, "service-id") ||
+    getFieldValue(object, "serviceId")
+  );
+  if (service === "vprn" && serviceId) return `vprn:${serviceId}`;
+
+  return nonDefaultRouterContext(getFieldValue(object, "router"));
+}
+
+function hasCompatibleInterfaceContext(oldObject = {}, newObject = {}) {
+  const oldContext = getInterfaceRoutingContext(oldObject);
+  const newContext = getInterfaceRoutingContext(newObject);
+
+  if (!oldContext && !newContext) return true;
+  return Boolean(oldContext && newContext && oldContext === newContext);
+}
+
+function hasCompatibleStaticRouteContext(oldObject = {}, newObject = {}) {
+  const oldContext = getStaticRouteRoutingContext(oldObject);
+  const newContext = getStaticRouteRoutingContext(newObject);
+
+  if (!oldContext && !newContext) return true;
+  return Boolean(oldContext && newContext && oldContext === newContext);
 }
 
 function getStaticRoutePolicy(profile = {}) {
@@ -727,6 +775,11 @@ function scoreSemanticObjectPair(oldObject, newObject, profile = {}) {
   if (!isSameType(oldObject, newObject)) return result;
 
   const objectType = oldObject.normalizedType;
+
+  if (objectType === "interface" && !hasCompatibleInterfaceContext(oldObject, newObject)) {
+    result.scoreReasons.push("interface-routing-context-mismatch");
+    return result;
+  }
 
   if (objectType === "static-route") {
     return scoreStaticRoutePair(oldObject, newObject, profile);

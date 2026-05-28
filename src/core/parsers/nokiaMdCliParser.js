@@ -342,6 +342,7 @@ function collectBraceBlocks(lines, startRegex) {
   const blocks = [];
   let current = null;
   let depth = 0;
+  const contextStack = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
@@ -355,6 +356,7 @@ function collectBraceBlocks(lines, startRegex) {
         lines: [line],
         startIndex: index,
         startIndent: line.match(/^\s*/)?.[0]?.length || 0,
+        context: currentMdCliRoutingContext(contextStack),
       };
 
       depth += (line.match(/\{/g) || []).length;
@@ -380,12 +382,91 @@ function collectBraceBlocks(lines, startRegex) {
         current = null;
         depth = 0;
       }
+
+      continue;
     }
+
+    updateMdCliContextStack(contextStack, trimmed);
   }
 
   if (current) blocks.push(current);
 
   return blocks;
+}
+
+function updateMdCliContextStack(stack, text = "") {
+  if (!text) return;
+
+  const openCount = (text.match(/\{/g) || []).length;
+  if (openCount) {
+    const match = text.match(/^([a-z0-9-]+)(?:\s+"?([^"\s{}]+)"?)?\s*\{/i);
+    const scope = match?.[1]?.toLowerCase() || "";
+    const name = stripQuotes(match?.[2] || "");
+    stack.push({ scope, name });
+
+    for (let count = 1; count < openCount; count += 1) {
+      stack.push({ scope: "", name: "" });
+    }
+  }
+
+  const closeCount = (text.match(/\}/g) || []).length;
+  for (let count = 0; count < closeCount; count += 1) {
+    stack.pop();
+  }
+}
+
+function currentMdCliRoutingContext(stack = []) {
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const entry = stack[index];
+    if (entry?.scope === "vprn" && entry.name) {
+      return { type: "vprn", name: entry.name };
+    }
+    if (entry?.scope === "router" && entry.name) {
+      return { type: "router", name: entry.name };
+    }
+  }
+
+  return null;
+}
+
+function mdCliRoutingContextFields(context = null) {
+  if (!context?.name) return {};
+  if (context.type === "vprn") {
+    return {
+      service: "vprn",
+      "service-id": context.name,
+      "routing-context": `vprn:${context.name.toLowerCase()}`,
+    };
+  }
+
+  if (context.type === "router") {
+    const router = context.name;
+    return router.toLowerCase() === "base"
+      ? { router }
+      : { router, "routing-context": router };
+  }
+
+  return {};
+}
+
+function mdCliStaticRouteRoutingContextFields(context = null) {
+  if (!context?.name) return {};
+  if (context.type === "vprn") {
+    return {
+      service: "vprn",
+      "service-id": context.name,
+      "routing-context": `vprn:${context.name.toLowerCase()}`,
+    };
+  }
+
+  if (context.type === "router" && context.name.toLowerCase() !== "base") {
+    return {
+      router: context.name,
+      "routing-context": context.name,
+    };
+  }
+
+  return {};
 }
 
 function updateMdCliBraceScope(stack, rawLine = "") {
@@ -627,7 +708,10 @@ function parseMdCliInterfaces(lines) {
 
   return blocks
     .map((block, index) => {
-      const fields = extractMdCliInterfaceBlockFields(block.lines, block.name);
+      const fields = normalizeNokiaSemanticFields({
+        ...mdCliRoutingContextFields(block.context),
+        ...extractMdCliInterfaceBlockFields(block.lines, block.name),
+      });
 
       // L3 address가 없는 interface wrapper는 semantic interface 객체로 만들지 않는다.
       // 예: interface "ge-0/0/0" { ... } 는 port/physical wrapper 성격이므로 제외
@@ -635,7 +719,7 @@ function parseMdCliInterfaces(lines) {
         return null;
       }
 
-      const identity = fields.address;
+      const identity = canonicalInterfaceIdentity(fields, block.name);
 
       const object = createNormalizedObject({
         id: `nokia-md-interface-${index}-${block.name}`,
@@ -743,13 +827,14 @@ function parseMdCliStaticRoutes(lines) {
   );
 
   return blocks.map((block, index) =>
-    createMdCliStaticRouteBlockObject(block.name, block.lines, index)
+    createMdCliStaticRouteBlockObject(block.name, block.lines, index, mdCliStaticRouteRoutingContextFields(block.context))
   );
 }
 
-function createMdCliStaticRouteBlockObject(prefixName, rawLines, index) {
+function createMdCliStaticRouteBlockObject(prefixName, rawLines, index, contextFields = {}) {
   const prefix = stripQuotes(prefixName);
   const fields = {
+    ...contextFields,
     route: prefix,
   };
 
@@ -1752,8 +1837,12 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
   ) {
     const route = stripQuotes(tokens[staticRoutesIndex + 2]);
     const routingContext = getStaticRouteRoutingContext(tokens);
+    const routingFields =
+      routingContext
+        ? { "routing-context": routingContext }
+        : mdCliStaticRouteRoutingContextFields({ type: "router", name: routerName });
     const fields = mapLeafFields(
-      routingContext ? { route, prefix: route, "routing-context": routingContext } : { route, prefix: route },
+      { route, prefix: route, ...routingFields },
       tokens,
       staticRoutesIndex + 3,
       STATIC_ROUTE_ONE_LINE_FIELDS
@@ -1771,7 +1860,7 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
     });
   }
 
-  if (interfaceIndex >= 0 && tokens[interfaceIndex + 1]) {
+  if (interfaceIndex >= 0 && (pimIndex < 0 || interfaceIndex < pimIndex) && tokens[interfaceIndex + 1]) {
     const interfaceName = canonicalInterfaceName(tokens[interfaceIndex + 1]);
     const fields = withPrefix(mapLeafFields(
       { router: routerName, interface: interfaceName },
@@ -1868,6 +1957,15 @@ function mergeFinalizedObjectsBySemanticIdentity(objects = []) {
     }
 
     const target = merged.get(key);
+    if (shouldKeepSeparateFinalObject(target, object)) {
+      setUniqueMergedObject(
+        merged,
+        `${key}:source:${canonicalServiceName(object.fields?.interface || object.sourceName || object.id)}`,
+        object
+      );
+      return;
+    }
+
     target.fields = normalizeNokiaSemanticFields(
       target.normalizedType === "static-route"
         ? mergeStaticRouteFields(target.fields, object.fields)
@@ -1881,6 +1979,42 @@ function mergeFinalizedObjectsBySemanticIdentity(objects = []) {
   });
 
   return [...merged.values()];
+}
+
+function setUniqueMergedObject(merged, key, object) {
+  let nextKey = key;
+  let suffix = 2;
+  while (merged.has(nextKey)) {
+    nextKey = `${key}:${suffix}`;
+    suffix += 1;
+  }
+
+  merged.set(nextKey, { ...object, fields: { ...(object.fields || {}) }, rawLines: [...(object.rawLines || [])] });
+}
+
+function shouldKeepSeparateFinalObject(left = {}, right = {}) {
+  if (left.normalizedType !== "interface" || right.normalizedType !== "interface") return false;
+
+  const leftInterface = canonicalServiceName(left.fields?.interface || left.sourceName || "");
+  const rightInterface = canonicalServiceName(right.fields?.interface || right.sourceName || "");
+  if (!leftInterface || !rightInterface || leftInterface === rightInterface) return false;
+
+  return interfaceContextKey(left) === interfaceContextKey(right);
+}
+
+function interfaceContextKey(object = {}) {
+  const fields = object.fields || {};
+  return [
+    fields.service,
+    fields["service-id"],
+    fields.router,
+    fields["routing-context"],
+    fields.vrf,
+    fields.vprn,
+  ]
+    .map(canonicalServiceName)
+    .filter(Boolean)
+    .join("|");
 }
 
 function mergeRawLines(base = [], next = []) {

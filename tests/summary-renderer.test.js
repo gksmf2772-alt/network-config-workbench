@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 import {
   buildOperatorAlerts,
   renderFieldHotList,
   renderHiddenDiagnosticsLinks,
   renderMetricCard,
+  renderSectionSummaryCards,
 } from "../src/core/summaryRenderer.js";
 
 test("summary metric card keeps action and escaping contract", () => {
@@ -51,4 +53,59 @@ test("summary renderer keeps hidden diagnostics and hotlist markup", () => {
   assert.match(diagnostics, /예외\/숨김 항목 4개/);
   assert.match(hotlist, /summary-field-hotlist/);
   assert.match(hotlist, /state <strong>6<\/strong>/);
+});
+
+test("summary renderer builds MVP section summary cards", () => {
+  const html = renderSectionSummaryCards([
+    {
+      objectType: "interface",
+      label: "Interface",
+      total: 4,
+      matched: 3,
+      reviewNeeded: 1,
+      changed: 1,
+      missing: 0,
+      added: 0,
+      averageOverlap: 92,
+    },
+    {
+      objectType: "static-route",
+      label: "Static-route",
+      total: 3,
+      matched: 2,
+      reviewNeeded: 2,
+      changed: 1,
+      missing: 1,
+      added: 0,
+      averageOverlap: 71,
+    },
+    {
+      objectType: "bgp",
+      label: "BGP neighbor",
+      total: 5,
+      matched: 5,
+      reviewNeeded: 0,
+      changed: 0,
+      missing: 0,
+      added: 0,
+      averageOverlap: 100,
+    },
+  ]);
+
+  assert.match(html, /summary-core-section-overview/);
+  assert.match(html, /data-field-type-filter="interface"/);
+  assert.match(html, /Interface/);
+  assert.match(html, /Static-route/);
+  assert.match(html, /BGP neighbor/);
+  assert.match(html, /검토 필요 2/);
+  assert.match(html, /누락 1/);
+});
+
+test("summary section cards are bound to object list filtering", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /selectors\.summaryCards\?\.querySelectorAll\("\[data-field-type-filter\]"\)/);
+  assert.match(legacy, /selectors\.objectSearchInput\.value = button\.dataset\.fieldTypeFilter \|\| ""/);
+  assert.match(legacy, /renderObjectNavigator\(\);/);
+  assert.match(legacy, /setResultTab\("objects"\);/);
 });

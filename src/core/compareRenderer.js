@@ -1,5 +1,6 @@
 // src/core/compareRenderer.js
 import {
+  getSemanticMatchState,
   getSemanticStateClass,
   getSemanticStateLabel,
 } from "./semanticTheme.js";
@@ -14,33 +15,40 @@ function escapeHtml(value) {
 }
 
 function getStatusLabel(status) {
-  if (status === "matched") return "매칭";
-  if (status === "candidate") return "후보";
-  if (status === "old-only") return "기존 설정에만 있음";
-  if (status === "new-only") return "신규 설정에만 있음";
-  if (status === "excluded") return "비교 제외됨";
-  return String(status || "알 수 없음").toUpperCase();
+  return ({
+    matched: "동일",
+    candidate: "검토 필요",
+    changed: "변경",
+    partial: "변경",
+    "old-only": "누락",
+    "new-only": "추가",
+    unmatched: "미매칭",
+    excluded: "비교 제외",
+    "comparison-excluded": "비교 제외",
+    ignored: "예외 처리",
+    suppressed: "예외 처리",
+  })[status] || String(status || "상태 없음").toUpperCase();
 }
 
 function getFieldDisplayStatus(fieldSummary) {
   if (fieldSummary?.violation) return fieldSummary.violationReason || "정책 위반";
-  if (Array.isArray(fieldSummary?.policyHits) && fieldSummary.policyHits.some((hit) => hit?.sourcePolicy === "comparison-exclusion")) return "비교 제외됨";
-  if (fieldSummary?.ignored || fieldSummary?.effectiveStatus === "ignored") return "예외 처리됨";
+  if (Array.isArray(fieldSummary?.policyHits) && fieldSummary.policyHits.some((hit) => hit?.sourcePolicy === "comparison-exclusion")) return "비교 제외";
+  if (fieldSummary?.ignored || fieldSummary?.effectiveStatus === "ignored") return "예외 처리";
   const status = fieldSummary?.effectiveStatus || fieldSummary?.status || "unknown";
   if (status === "structure-converted") return "구조 전환";
   if (status === "group-inherited") return "그룹 상속";
   if (status === "inheritance-unresolved") return "상속 확인 필요";
   return ({
     equal: "동일",
-    matched: "매칭",
+    matched: "동일",
     changed: "변경",
-    present: "존재",
+    present: "동일",
     missing: "누락",
     added: "추가",
-    candidate: "후보",
-    conflict: "충돌",
-    ambiguous: "불명확",
-    unknown: "알 수 없음",
+    candidate: "검토 필요",
+    conflict: "검토 필요",
+    ambiguous: "검토 필요",
+    unknown: "검토 필요",
   })[status] || status;
 }
 
@@ -144,17 +152,20 @@ function renderFieldSourceBadges(field = {}) {
 }
 
 function getLineDisplayStatus(lineMatch) {
-  if (lineMatch?.semanticCovered) return "의미 동일";
+  if (lineMatch?.semanticCovered) return "동일";
   const status = String(lineMatch?.status || "unknown").toLowerCase();
   return ({
     equal: "동일",
+    matched: "동일",
     changed: "변경",
-    candidate: "후보",
-    "old-only": "기존 설정에만 있음",
-    "new-only": "신규 설정에만 있음",
-    conflict: "충돌",
-    ambiguous: "불명확",
-    unknown: "알 수 없음",
+    candidate: "검토 필요",
+    "old-only": "누락",
+    "new-only": "추가",
+    missing: "누락",
+    added: "추가",
+    conflict: "검토 필요",
+    ambiguous: "검토 필요",
+    unknown: "검토 필요",
   })[status] || status.toUpperCase();
 }
 
@@ -322,11 +333,13 @@ function renderSettingExclusionActions(item = {}, options = {}) {
 
 function getStateDisplayLabel(state) {
   return ({
-    matched: "매칭",
-    partial: "부분 일치",
-    ambiguous: "불명확",
-    unmatched: "연결 안 됨",
-    manual: "수동",
+    matched: "동일",
+    partial: "변경",
+    ambiguous: "검토 필요",
+    unmatched: "미매칭",
+    manual: "수동 매칭",
+    excluded: "비교 제외",
+    suppressed: "예외 처리",
   })[state] || state || "-";
 }
 
@@ -482,7 +495,7 @@ function summarizePlan(plan = []) {
       acc.excluded += 1;
       return acc;
     }
-    const state = getSemanticStateLabel(item);
+    const state = getSemanticMatchState(item);
     if (state === "matched" || state === "manual") acc.matched += 1;
     else if (state === "ambiguous") acc.ambiguous += 1;
     else acc.unmatched += 1;
@@ -501,19 +514,21 @@ export function renderComparisonPlanHtml(plan = [], options = {}) {
   return `
     <div class="semantic-compare-result">
       <div class="semantic-state-legend">
-        <span class="semantic-status-badge semantic-state-matched">매칭</span>
-        <span class="semantic-status-badge semantic-state-partial">부분 일치</span>
-        <span class="semantic-status-badge semantic-state-ambiguous">불명확</span>
-        <span class="semantic-status-badge semantic-state-unmatched">연결 안 됨</span>
-        <span class="semantic-status-badge semantic-state-manual">수동</span>
+        <span class="semantic-status-badge semantic-state-matched">동일</span>
+        <span class="semantic-status-badge semantic-state-partial">변경</span>
+        <span class="semantic-status-badge semantic-state-ambiguous">검토 필요</span>
+        <span class="semantic-status-badge semantic-state-unmatched">누락</span>
+        <span class="semantic-status-badge semantic-state-unmatched">추가</span>
+        <span class="semantic-status-badge semantic-state-unmatched">미매칭</span>
+        <span class="semantic-status-badge semantic-state-manual">수동 매칭</span>
       </div>
       <div class="semantic-preview-summary">
         <div class="semantic-summary-item"><div class="semantic-summary-label">설정</div><div class="semantic-summary-value">${summary.total}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">매칭</div><div class="semantic-summary-value">${summary.matched}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">연결 안 됨</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">동일</div><div class="semantic-summary-value">${summary.matched}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">누락/추가</div><div class="semantic-summary-value">${summary.unmatched}</div></div>
         <div class="semantic-summary-item"><div class="semantic-summary-label">비교 제외</div><div class="semantic-summary-value">${summary.excluded}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">불명확</div><div class="semantic-summary-value">${summary.ambiguous}</div></div>
-        <div class="semantic-summary-item"><div class="semantic-summary-label">위반</div><div class="semantic-summary-value">${summary.violations}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">검토 필요</div><div class="semantic-summary-value">${summary.ambiguous}</div></div>
+        <div class="semantic-summary-item"><div class="semantic-summary-label">정책 위반</div><div class="semantic-summary-value">${summary.violations}</div></div>
       </div>
 
       ${plan.map((item) => {

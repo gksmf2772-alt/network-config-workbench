@@ -444,6 +444,61 @@ test("Nokia Classic parser closes major objects on same-indent exit", () => {
   assert.equal(port.rawLines.some((line) => line.trim().startsWith("lag ")), false);
 });
 
+test("Nokia Classic PIM block interfaces parse as PIM objects", () => {
+  const result = parse("nokia-classic", [
+    "configure router",
+    "    pim",
+    '        interface "to-Dobong-TOU-FB03"',
+    "            no shutdown",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n"));
+
+  const pimObjects = result.objects.filter((object) => object.normalizedType === "pim");
+  const interfaceObjects = result.objects.filter((object) => object.normalizedType === "interface");
+
+  assert.equal(pimObjects.length, 1);
+  assert.equal(interfaceObjects.length, 0);
+  assert.equal(pimObjects[0].normalizedIdentity, "to-dobong-tou-fb03");
+  assert.equal(pimObjects[0].fields.interface, "to-dobong-tou-fb03");
+  assert.equal(pimObjects[0].fields["admin-state"], "enabled");
+});
+
+test("Nokia MD-CLI one-line router PIM interface parses as PIM object", () => {
+  const result = parse(
+    "nokia-md-cli",
+    '/configure { router "Base" pim interface "g-to-Dobong-TOU-FB03" }',
+    "new"
+  );
+
+  const pimObjects = result.objects.filter((object) => object.normalizedType === "pim");
+  const interfaceObjects = result.objects.filter((object) => object.normalizedType === "interface");
+
+  assert.equal(pimObjects.length, 1);
+  assert.equal(interfaceObjects.length, 0);
+  assert.equal(pimObjects[0].normalizedIdentity, "g-to-dobong-tou-fb03");
+  assert.equal(pimObjects[0].fields.interface, "g-to-dobong-tou-fb03");
+});
+
+test("PIM interface identity auto-matches across Classic and MD-CLI case differences", () => {
+  const { plan } = compare([
+    "configure router",
+    "    pim",
+    '        interface "g-to-Dobong-TOU-FB03"',
+    "            no shutdown",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n"), '/configure { router "Base" pim interface "g-to-Dobong-TOU-FB03" }');
+
+  const pimItem = plan.find((item) => item.objectType === "pim");
+
+  assert.equal(pimItem.status, "matched");
+  assert.equal(pimItem.reason, "normalized-identity");
+  assert.equal(pimItem.score, 95);
+});
+
 test("Nokia Classic indirect static route preserves next-hop for audit and migration review", () => {
   const config = [
     "static-route-entry 125.144.253.0/24",

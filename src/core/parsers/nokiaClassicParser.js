@@ -39,6 +39,82 @@ function normalizeState(value = "") {
   return text;
 }
 
+function routerContextFields(routerName = "") {
+  const router = stripQuotes(routerName || "Base");
+  if (!router) return {};
+  return router.toLowerCase() === "base"
+    ? { router }
+    : { router, "routing-context": router };
+}
+
+function nonBaseRouterContextFields(routerName = "") {
+  const router = stripQuotes(routerName || "Base");
+  if (!router || router.toLowerCase() === "base") return {};
+  return { router, "routing-context": router };
+}
+
+function parseClassicBgpGroupHeader(text = "") {
+  const match = String(text || "").match(/^group\s+(?:"([^"]+)"|(\S+))/i);
+  if (!match) return null;
+  return stripQuotes(match[1] || match[2]);
+}
+
+function applyClassicBgpGroupFieldLine(groupContext, text = "") {
+  if (!groupContext) return;
+
+  let match = String(text || "").match(/^description\s+(.+)$/i);
+  if (match) {
+    groupContext.fields.description = stripQuotes(match[1]);
+    return;
+  }
+
+  match = String(text || "").match(/^remote-as\s+(\S+)/i) || String(text || "").match(/^peer-as\s+(\S+)/i);
+  if (match) {
+    groupContext.fields["peer-as"] = stripQuotes(match[1]);
+    groupContext.fields.peerAs = stripQuotes(match[1]);
+    return;
+  }
+
+  match = String(text || "").match(/^authentication-key\s+(.+)$/i);
+  if (match) {
+    groupContext.fields["authentication-key"] = stripQuotes(match[1]);
+    return;
+  }
+
+  match = String(text || "").match(/^import\s+(.+)$/i);
+  if (match) {
+    groupContext.fields["import.policy"] = stripQuotes(match[1]);
+    return;
+  }
+
+  match = String(text || "").match(/^export\s+(.+)$/i);
+  if (match) {
+    groupContext.fields["export.policy"] = stripQuotes(match[1]);
+    return;
+  }
+
+  if (/^(no\s+shutdown|shutdown|admin-state\s+enable|admin-state\s+disable)$/i.test(text)) {
+    const state = normalizeState(text);
+    groupContext.fields.state = state;
+    groupContext.fields["admin-state"] = state;
+  }
+}
+
+function closeClassicBgpGroupContexts(groupContexts = [], line) {
+  if (!line?.text) return;
+  const indent = indentationOf(line.raw);
+  while (groupContexts.length && indent <= groupContexts[groupContexts.length - 1].indent) {
+    groupContexts.pop();
+  }
+}
+
+function activeClassicBgpGroupFields(groupContexts = []) {
+  return groupContexts.reduce((fields, context) => ({
+    ...fields,
+    ...(context.fields || {}),
+  }), {});
+}
+
 function ipAddressFromPrefix(value = "") {
   const cleanValue = stripQuotes(value);
   if (!cleanValue) return null;
@@ -83,6 +159,8 @@ function createObject({
     normalizedIdentity:
       normalizedType === "interface"
         ? canonicalInterfaceIdentity(normalizedFields, normalizedIdentity)
+        : normalizedType === "pim"
+          ? canonicalServiceName(normalizedFields.interface || normalizedIdentity)
         : normalizedIdentity,
 
     description: null,
@@ -97,8 +175,8 @@ function createObject({
   });
 }
 
-function createCurrentObject(type, name, rawLine) {
-  const baseFields = {};
+function createCurrentObject(type, name, rawLine, initialFields = {}) {
+  const baseFields = { ...initialFields };
 
   if (type === "port") baseFields.port = name;
   if (type === "lag") baseFields.lag = name;
@@ -165,6 +243,7 @@ function flushCurrent(current, objects) {
 
 function buildStaticRouteAggregateFields(current) {
   const fields = {
+    ...current.fields,
     route: current.fields.route || current.name,
     address: current.fields.address || current.fields.route || current.name,
   };
@@ -910,8 +989,15 @@ function parseHeaderLine(text) {
   match = text.match(/^lag\s+(\S+)/i);
   if (match) return { type: "lag", name: stripQuotes(match[1]) };
 
-  match = text.match(/^configure\s+router\s+(?:\S+\s+)?interface\s+"?([^"]+)"?/i);
-  if (match) return { type: "interface", name: stripQuotes(match[1]) };
+  match = text.match(/^configure\s+router\s+(?:(?:"([^"]+)"|(\S+))\s+)?interface\s+"?([^"]+)"?/i);
+  if (match) {
+    const routerName = match[1] || match[2] || "Base";
+    return {
+      type: "interface",
+      name: stripQuotes(match[3]),
+      fields: routerContextFields(routerName),
+    };
+  }
 
   match = text.match(/^interface\s+"?([^"{]+)"?/i);
   if (match) return { type: "interface", name: stripQuotes(match[1]) };
@@ -922,8 +1008,15 @@ function parseHeaderLine(text) {
   match = text.match(/^route\s+"?([^"\s{}]+)"?(?:\s+route-type\b|\s+create\b|\s*\{|$)/i);
   if (match) return { type: "static-route", name: stripQuotes(match[1]) };
 
-  match = text.match(/^configure\s+router\s+(?:\S+\s+)?static-routes\s+route\s+"?(\S+)"?/i);
-  if (match) return { type: "static-route", name: stripQuotes(match[1]) };
+  match = text.match(/^configure\s+router\s+(?:(?:"([^"]+)"|(\S+))\s+)?static-routes\s+route\s+"?(\S+)"?/i);
+  if (match) {
+    const routerName = match[1] || match[2] || "Base";
+    return {
+      type: "static-route",
+      name: stripQuotes(match[3]),
+      fields: nonBaseRouterContextFields(routerName),
+    };
+  }
 
   match = text.match(/^configure\s+router\s+(?:\S+\s+)?bgp\s+neighbor\s+"?([^"\s]+)"?/i);
   if (match) return { type: "bgp", name: stripQuotes(match[1]) };
@@ -950,7 +1043,9 @@ function shouldTerminateCurrentObject(current, line) {
   if (!current || !/^(exit|})$/i.test(line.text)) return false;
   if (!INDENT_TERMINATED_OBJECT_TYPES.has(current.type)) return false;
 
-  const startIndent = indentationOf(current.rawLines?.[0] || "");
+  const startIndent = Number.isFinite(current.blockIndent)
+    ? current.blockIndent
+    : indentationOf(current.rawLines?.[0] || "");
   const exitIndent = indentationOf(line.raw);
   return exitIndent <= startIndent;
 }
@@ -1189,6 +1284,8 @@ export function parseNokiaClassicConfig(configText = "", { side = "old" } = {}) 
   const errors = [];
 
   let current = null;
+  const bgpGroupContexts = [];
+  let pimContext = null;
 
   for (const line of lines) {
     const text = line.text;
@@ -1206,18 +1303,62 @@ export function parseNokiaClassicConfig(configText = "", { side = "old" } = {}) 
       continue;
     }
 
+    if (pimContext && /^(exit|})$/i.test(text) && indentationOf(line.raw) <= pimContext.indent) {
+      pimContext = null;
+      continue;
+    }
+
+    if (/^pim$/i.test(text)) {
+      current = flushCurrent(current, objects);
+      pimContext = { indent: indentationOf(line.raw) };
+      continue;
+    }
+
+    if (pimContext && !current) {
+      const pimInterface = text.match(/^interface\s+"?([^"{]+)"?/i);
+      if (pimInterface) {
+        current = createCurrentObject("pim", stripQuotes(pimInterface[1]), line.raw);
+        current.blockIndent = Math.max(indentationOf(line.raw), pimContext.indent + 4);
+      }
+      continue;
+    }
+
+    const bgpGroupName = parseClassicBgpGroupHeader(text);
+    if (bgpGroupName && !current) {
+      closeClassicBgpGroupContexts(bgpGroupContexts, line);
+      bgpGroupContexts.push({
+        name: bgpGroupName,
+        indent: indentationOf(line.raw),
+        fields: { group: bgpGroupName },
+      });
+      continue;
+    }
+
+    if (!bgpGroupName) {
+      closeClassicBgpGroupContexts(bgpGroupContexts, line);
+    }
+
     const header = parseHeaderLine(text);
 
     if (header) {
       current = flushCurrent(current, objects);
-      current = createCurrentObject(header.type, header.name, line.raw);
+      const initialFields = header.type === "bgp"
+        ? {
+            ...activeClassicBgpGroupFields(bgpGroupContexts),
+            ...(header.fields || {}),
+          }
+        : header.fields || {};
+      current = createCurrentObject(header.type, header.name, line.raw, initialFields);
       if (header.type === "static-route" && isStaticRouteBlockHeader(text)) {
         current.blockDepth = 1;
       }
       continue;
     }
 
-    if (!current) continue;
+    if (!current) {
+      applyClassicBgpGroupFieldLine(bgpGroupContexts[bgpGroupContexts.length - 1], text);
+      continue;
+    }
 
     if (appendLineToCurrentObject(current, line)) {
       current = flushCurrent(current, objects);

@@ -19,13 +19,13 @@ export const SEMANTIC_STATE_CLASS = {
 };
 
 export const SEMANTIC_STATE_LABEL = {
-  [SEMANTIC_MATCH_STATES.MATCHED]: "matched",
-  [SEMANTIC_MATCH_STATES.PARTIAL]: "partial",
-  [SEMANTIC_MATCH_STATES.AMBIGUOUS]: "ambiguous",
-  [SEMANTIC_MATCH_STATES.UNMATCHED]: "unmatched",
-  [SEMANTIC_MATCH_STATES.MANUAL]: "manual",
-  [SEMANTIC_MATCH_STATES.EXCLUDED]: "excluded",
-  [SEMANTIC_MATCH_STATES.SUPPRESSED]: "suppressed",
+  [SEMANTIC_MATCH_STATES.MATCHED]: "동일",
+  [SEMANTIC_MATCH_STATES.PARTIAL]: "변경",
+  [SEMANTIC_MATCH_STATES.AMBIGUOUS]: "검토 필요",
+  [SEMANTIC_MATCH_STATES.UNMATCHED]: "미매칭",
+  [SEMANTIC_MATCH_STATES.MANUAL]: "수동 매칭",
+  [SEMANTIC_MATCH_STATES.EXCLUDED]: "비교 제외",
+  [SEMANTIC_MATCH_STATES.SUPPRESSED]: "예외 처리",
 };
 
 export const SEMANTIC_FIELD_COLOR_CLASS = {
@@ -180,7 +180,77 @@ export function getSemanticStateClass(input = {}) {
 }
 
 export function getSemanticStateLabel(input = {}) {
-  return SEMANTIC_STATE_LABEL[getSemanticMatchState(input)] || "unmatched";
+  const normalizedStatus = String(input?.status || "").toLowerCase();
+  const normalizedReason = String(input?.reason || input?.suppressionReason || "").toLowerCase();
+
+  if (
+    input?.comparisonExcluded ||
+    input?.excluded ||
+    normalizedStatus === "excluded" ||
+    normalizedStatus === "comparison-excluded"
+  ) {
+    return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.EXCLUDED];
+  }
+  if (
+    input?.policySuppressed ||
+    input?.suppressed ||
+    normalizedStatus === "suppressed" ||
+    normalizedStatus === "ignored" ||
+    normalizedReason.includes("suppressed") ||
+    normalizedReason.includes("exception")
+  ) {
+    return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.SUPPRESSED];
+  }
+  if (normalizedReason === "manual") return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.MANUAL];
+  if (isSourceMissingStatus(normalizedStatus)) return "누락";
+  if (isTargetAddedStatus(normalizedStatus)) return "추가";
+  if (
+    normalizedStatus === "candidate" ||
+    normalizedStatus === "manual-review" ||
+    normalizedStatus === "low-confidence" ||
+    normalizedReason.includes("ambiguous")
+  ) {
+    return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.AMBIGUOUS];
+  }
+  if (normalizedStatus === "matched" && input?.score != null && Number(input.score) < 90) {
+    return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.AMBIGUOUS];
+  }
+  if (normalizedStatus === "matched" && hasActiveSemanticDifference(input)) {
+    return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.PARTIAL];
+  }
+  if (normalizedStatus === "partial" || normalizedStatus === "changed") {
+    return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.PARTIAL];
+  }
+  if (normalizedStatus === "matched") return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.MATCHED];
+  if (isGenericUnmatchedStatus(normalizedStatus)) return SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.UNMATCHED];
+  return SEMANTIC_STATE_LABEL[getSemanticMatchState(input)] || SEMANTIC_STATE_LABEL[SEMANTIC_MATCH_STATES.UNMATCHED];
+}
+
+function isSourceMissingStatus(status = "") {
+  return [
+    "old-only",
+    "source-only",
+    "no-target",
+    "unmatched-old",
+    "unmatched-source",
+  ].includes(status);
+}
+
+function isTargetAddedStatus(status = "") {
+  return [
+    "new-only",
+    "target-only",
+    "no-source",
+    "unmatched-new",
+    "unmatched-target",
+  ].includes(status);
+}
+
+function isGenericUnmatchedStatus(status = "") {
+  return [
+    "unmatched",
+    "unmatched-setting",
+  ].includes(status);
 }
 
 export function getSemanticFieldColorClass(field = "") {

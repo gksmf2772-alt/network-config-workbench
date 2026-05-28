@@ -725,6 +725,76 @@ textarea[id$="ConfigInput"],
   white-space: nowrap;
 }
 
+.summary-core-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.summary-core-section-card {
+  display: grid;
+  gap: 6px;
+  min-height: 118px;
+  padding: 12px;
+  border: 1px solid #dbe6f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.summary-core-section-card:hover,
+.summary-core-section-card:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(8, 145, 178, 0.54);
+  box-shadow: 0 10px 24px rgba(8, 145, 178, 0.12);
+}
+
+.summary-core-section-card > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summary-core-section-card > strong {
+  color: #0f172a;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.summary-core-section-card > small {
+  color: #475569;
+  font-size: 12px;
+}
+
+.summary-core-section-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.summary-core-section-meta span {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.summary-core-section-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.summary-core-section-ok {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
 .summary-metric-ok {
   border-color: #bbf7d0 !important;
   background: #f0fdf4 !important;

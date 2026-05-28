@@ -74,6 +74,11 @@ BGP neighbor:
 - 전체 요약을 먼저 보여준다.
 - Interface / Static-route / BGP neighbor 상세로 들어갈 수 있게 한다.
 
+진행:
+- Summary dashboard에 Interface / Static-route / BGP neighbor card 추가 완료
+- total / matched / review-needed / changed / missing / added / average overlap 표시 완료
+- card click은 기존 object type filter 재사용
+
 주의:
 - UI 대개편 금지.
 - 기존 비교 화면을 가능한 재사용한다.
@@ -93,6 +98,19 @@ BGP neighbor:
 - action needed
 
 `변경`과 `검토 필요`는 반드시 분리한다.
+
+진행:
+- Excel-compatible UTF-8 CSV export 완료
+- ignored / structure-converted / inheritance-unresolved noise는 active export에서 제외
+- 실제 fixture 기준 CSV row 생성 확인 완료
+
+## P6. 실제 fixture matrix 검증
+
+진행:
+- `network-config-workbench-home\예제 및 테스트 설정` 자동 탐색 완료
+- case mapping 완료: 027 -> New_*_1, 028 -> New_*_2, 029 -> New_*_3, 030 -> New_*_4
+- scope별 검증 완료: full, bgp, static, interface, lag, port, pim
+- PIM identity 매칭 gap 수정 완료
 
 ## 보류 항목
 
@@ -115,5 +133,6 @@ BGP neighbor:
 2. Nokia Classic/MD-CLI static-route fixture 테스트
 3. Nokia Classic/MD-CLI BGP neighbor fixture 테스트
 4. block MD-CLI와 one-line MD-CLI 결과가 같은 canonical object/field로 정규화되는지 검증
+5. 실제 fixture matrix에서 lowConfidence/matcherIssue가 남는 영역만 다음 parser/matcher 작업으로 선정
 
 테스트로 실패 지점을 고정한 뒤 parser/normalizer/matcher를 최소 수정한다.

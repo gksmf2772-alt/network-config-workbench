@@ -111,6 +111,28 @@ test("field overlap aggregates aliases and changed fields", () => {
   assert.equal(analysis.aggregateByType.some((row) => row.objectType === "interface"), true);
 });
 
+test("summary dashboard exposes MVP section counts", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan,
+    semanticSummary: {},
+  });
+
+  assert.deepEqual(dashboard.sectionSummary.map((row) => row.objectType), ["interface", "static-route", "bgp"]);
+
+  const byType = Object.fromEntries(dashboard.sectionSummary.map((row) => [row.objectType, row]));
+
+  assert.equal(byType.interface.total, 1);
+  assert.equal(byType.interface.reviewNeeded, 1);
+  assert.equal(byType.interface.changed, 1);
+  assert.equal(byType["static-route"].total, 1);
+  assert.equal(byType["static-route"].reviewNeeded, 1);
+  assert.equal(byType["static-route"].changed, 1);
+  assert.equal(byType.bgp.total, 1);
+  assert.equal(byType.bgp.missing, 1);
+  assert.equal(byType.bgp.reviewNeeded, 1);
+});
+
 test("common field analysis excludes suppressed fields from policy-applied rate", () => {
   const oldFields = {};
   const newFields = {};
@@ -207,7 +229,7 @@ test("profile exception changes common field analysis and type breakdown", () =>
     review.abnormal[0].fieldRows
       .filter((row) => !["same", "equal", "present"].includes(row.status))
       .map((row) => row.field),
-    ["state"]
+    ["admin-state"]
   );
 });
 

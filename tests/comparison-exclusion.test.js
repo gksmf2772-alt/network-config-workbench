@@ -212,6 +212,22 @@ test("legacy compare path merges MD-CLI one-line port settings before paired row
   assert.match(legacy, /newSourceLineCount/);
 });
 
+test("diff connector overlay is clipped to current compare viewport", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const css = readGlobalStyles();
+  const renderer = fs.readFileSync("src/core/diffRenderer.js", "utf8");
+
+  assert.match(legacy, /function buildDiffConnectorViewportClipRect/);
+  assert.match(legacy, /function paneViewportClientRect/);
+  assert.match(legacy, /const connectorClipRect = buildDiffConnectorViewportClipRect/);
+  assert.match(legacy, /buildVisibleLineConnectorPaths\(grid, oldPaneRect, newPaneRect, connectorClipRect\)/);
+  assert.match(legacy, /function lineMappingConnectorIntersectsClip/);
+  assert.match(legacy, /clipRect: connectorClipRect/);
+  assert.match(renderer, /clipPath id="\$\{escapeHtml\(id\)\}"/);
+  assert.match(renderer, /clip-path="url\(#\$\{clipId\}\)"/);
+  assert.match(css, /\.diff-object-background-overlay,[\s\S]*\.diff-connector-overlay\s*\{[\s\S]*overflow:\s*hidden/);
+});
+
 test("diff block status and color tokens target config panes", () => {
   const css = readGlobalStyles();
 

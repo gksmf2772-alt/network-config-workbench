@@ -1,23 +1,46 @@
-export function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], debugPaths = [] } = {}) {
+export function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], debugPaths = [], clipRect = null } = {}) {
+  const clipId = "diffConnectorViewportClip";
+  const clipPath = renderSvgClipPath(clipId, clipRect);
+  const clipAttr = clipPath ? ` clip-path="url(#${clipId})"` : "";
   return `
     ${renderDiffConnectorDefs()}
-    <g class="object-mapping-overlay" data-overlay-layer="object">
+    ${clipPath}
+    <g class="object-mapping-overlay" data-overlay-layer="object"${clipAttr}>
       ${objectPaths.filter(Boolean).join("")}
     </g>
-    <g class="semantic-line-overlay" data-overlay-layer="line">
+    <g class="semantic-line-overlay" data-overlay-layer="line"${clipAttr}>
       ${fieldPaths.filter(Boolean).join("")}
     </g>
-    <g class="mapping-debug-overlay" data-overlay-layer="debug">
+    <g class="mapping-debug-overlay" data-overlay-layer="debug"${clipAttr}>
       ${debugPaths.filter(Boolean).join("")}
     </g>
   `;
 }
 
-export function renderDiffObjectBackgroundLayers({ objectBackgroundPaths = [] } = {}) {
+export function renderDiffObjectBackgroundLayers({ objectBackgroundPaths = [], clipRect = null } = {}) {
+  const clipId = "diffObjectViewportClip";
+  const clipPath = renderSvgClipPath(clipId, clipRect);
+  const clipAttr = clipPath ? ` clip-path="url(#${clipId})"` : "";
   return `
-    <g class="object-mapping-background-overlay" data-overlay-layer="object-background">
+    ${clipPath}
+    <g class="object-mapping-background-overlay" data-overlay-layer="object-background"${clipAttr}>
       ${objectBackgroundPaths.filter(Boolean).join("")}
     </g>
+  `;
+}
+
+function renderSvgClipPath(id, rect = null) {
+  const x = Number(rect?.x);
+  const y = Number(rect?.y);
+  const width = Number(rect?.width);
+  const height = Number(rect?.height);
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return "";
+  return `
+    <defs>
+      <clipPath id="${escapeHtml(id)}" clipPathUnits="userSpaceOnUse">
+        <rect x="${x}" y="${y}" width="${width}" height="${height}" />
+      </clipPath>
+    </defs>
   `;
 }
 

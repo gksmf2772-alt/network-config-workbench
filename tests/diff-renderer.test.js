@@ -38,9 +38,12 @@ test("connector layer renderer keeps svg groups and defs", () => {
     objectPaths: ["<path data-kind=\"object\" />", ""],
     fieldPaths: ["<path data-kind=\"field\" />"],
     debugPaths: ["<text>debug</text>"],
+    clipRect: { x: 10, y: 20, width: 300, height: 400 },
   });
 
   assert.match(html, /<defs>/);
+  assert.match(html, /clipPath id="diffConnectorViewportClip"/);
+  assert.match(html, /clip-path="url\(#diffConnectorViewportClip\)"/);
   assert.match(html, /class="object-mapping-overlay"/);
   assert.match(html, /class="semantic-line-overlay"/);
   assert.match(html, /class="mapping-debug-overlay"/);
@@ -52,8 +55,11 @@ test("connector layer renderer keeps svg groups and defs", () => {
 test("object mapping background renderer keeps background group separate from connector strokes", () => {
   const html = renderDiffObjectBackgroundLayers({
     objectBackgroundPaths: ["<path class=\"diff-object-region\" />"],
+    clipRect: { x: 0, y: 44, width: 640, height: 520 },
   });
 
+  assert.match(html, /clipPath id="diffObjectViewportClip"/);
+  assert.match(html, /clip-path="url\(#diffObjectViewportClip\)"/);
   assert.match(html, /class="object-mapping-background-overlay"/);
   assert.match(html, /data-overlay-layer="object-background"/);
   assert.match(html, /diff-object-region/);

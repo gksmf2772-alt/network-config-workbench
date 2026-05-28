@@ -1,5 +1,40 @@
 # Current Issue
 
+## Current connector scroll clipping fix
+
+영향 boundary:
+- `legacyCore.js` DOM rendering and connector path control.
+- `diffRenderer.js` SVG layer wrapper.
+- `global-diff.css` connector overlay clipping.
+
+허용 범위:
+- connector SVG clipPath 적용.
+- connector wrapper overflow clipping.
+- visible viewport 기준 line connector path filtering.
+- characterization test 추가.
+
+금지 범위:
+- parser/normalizer 변경 금지.
+- semantic compare/object match 변경 금지.
+- line relation 데이터 의미 변경 금지.
+- manual mapping/profile exception/comparison exclusion 변경 금지.
+- summary/report/graph count 변경 금지.
+- scroll sync 로직 변경 금지.
+
+테스트 결과:
+- npm.cmd run guard:legacy-core pass
+- npm.cmd test pass
+- npm.cmd run build pass
+
+수정 후 영향 받은 기능 체크리스트:
+- Semantic match: 변경 없음.
+- Manual mapping: 변경 없음.
+- Profile exception: 변경 없음.
+- Comparison exclusion: 변경 없음.
+- Summary/report/graph count: 변경 없음.
+- Diff scroll sync: 스크롤 동기화 로직 변경 없음.
+- Line connector rendering: viewport clip/filter만 변경.
+
 ## Current MD-CLI one-line port legacyCore fix
 
 영향 boundary:

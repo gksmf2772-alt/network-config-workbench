@@ -12772,6 +12772,7 @@ function renderDiffConnectors() {
     const newPaneRect = selectors.newDiffPane.getBoundingClientRect();
     const width = Math.max(0, gridRect.width);
     const height = Math.max(0, gridRect.height);
+    const connectorClipRect = buildDiffConnectorViewportClipRect(grid, selectors.oldDiffPane, selectors.newDiffPane);
 
     [backgroundSvg, svg].filter(Boolean).forEach((targetSvg) => {
       targetSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -12800,7 +12801,7 @@ function renderDiffConnectors() {
     }
 
     state.lineMappingDebugAnchorCount = 0;
-    const fieldPaths = buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect);
+    const fieldPaths = buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect);
     reportMappingDebugSnapshot({
       oldGroups,
       newGroups,
@@ -12811,12 +12812,14 @@ function renderDiffConnectors() {
     if (backgroundSvg) {
       backgroundSvg.innerHTML = renderDiffObjectBackgroundLayers({
         objectBackgroundPaths,
+        clipRect: connectorClipRect,
       });
     }
     svg.innerHTML = renderDiffConnectorLayers({
       objectPaths,
       fieldPaths,
       debugPaths,
+      clipRect: connectorClipRect,
     });
     if (state.activeSemanticPairKey) {
       applySemanticPairClass(state.activeSemanticPairKey, "semantic-pair-selected", true);
@@ -13008,6 +13011,37 @@ function paneClientBounds(group, container) {
   };
 }
 
+function buildDiffConnectorViewportClipRect(grid, oldPane, newPane) {
+  const base = grid?.getBoundingClientRect?.();
+  const oldViewport = paneViewportClientRect(oldPane);
+  const newViewport = paneViewportClientRect(newPane);
+  if (!base || !oldViewport || !newViewport) return null;
+
+  const left = Math.min(oldViewport.left, newViewport.left) - base.left;
+  const right = Math.max(oldViewport.right, newViewport.right) - base.left;
+  const top = Math.max(oldViewport.top, newViewport.top) - base.top;
+  const bottom = Math.min(oldViewport.bottom, newViewport.bottom) - base.top;
+  const x = Math.max(0, left);
+  const y = Math.max(0, top);
+  const width = Math.max(0, Math.min(base.width, right) - x);
+  const height = Math.max(0, Math.min(base.height, bottom) - y);
+
+  return { x, y, width, height, right: x + width, bottom: y + height };
+}
+
+function paneViewportClientRect(pane) {
+  const rect = pane?.getBoundingClientRect?.();
+  if (!rect) return null;
+  const left = rect.left + (pane.clientLeft || 0);
+  const top = rect.top + (pane.clientTop || 0);
+  return {
+    left,
+    top,
+    right: left + (pane.clientWidth || rect.width),
+    bottom: top + (pane.clientHeight || rect.height),
+  };
+}
+
 function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
   if (!oldGroup?.lines?.length || !newGroup?.lines?.length) return { markup: "", debugMarkup: "" };
 
@@ -13132,13 +13166,13 @@ function reportLineMappingDebugRows(label, rows = []) {
   console.table(rows.slice(0, 60));
 }
 
-function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
+function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect = null) {
   if (!isLineMappingVisible()) {
     lineMappingDebug("relations: hidden");
     return [];
   }
 
-  const paths = buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect);
+  const paths = buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect);
   const newLineMap = new Map();
 
   [...selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((line) => {
@@ -13173,6 +13207,7 @@ function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
       relationState: lineRelationStateFromElements(oldLine, newLine),
       oldAnchorFn: diffLineTextAnchor,
       newAnchorFn: diffLineTextAnchor,
+      clipRect: connectorClipRect,
     }));
   });
 
@@ -13195,7 +13230,7 @@ function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
   return paths;
 }
 
-function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
+function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect = null) {
   const paths = [];
   const debugRows = [];
   const oldElements = collectSemanticRelationElements(selectors.oldDiffPane);
@@ -13237,6 +13272,7 @@ function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPane
       relationState: lineRelationStateFromElements(oldLine, newLine),
       oldAnchorFn: semanticConfigLineAnchor,
       newAnchorFn: semanticConfigLineAnchor,
+      clipRect: connectorClipRect,
     }));
   });
 
@@ -13245,12 +13281,14 @@ function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPane
     oldPaneRect,
     newPaneRect,
     coveredFieldPairs,
+    connectorClipRect,
   }));
   paths.push(...buildFallbackFlatSemanticFieldConnectorPaths({
     grid,
     oldPaneRect,
     newPaneRect,
     coveredFieldPairs,
+    connectorClipRect,
   }));
   reportLineMappingDebugRows("explicit semantic lines", debugRows);
 
@@ -13286,6 +13324,7 @@ function buildFallbackSemanticFieldConnectorPaths({
   oldPaneRect,
   newPaneRect,
   coveredFieldPairs,
+  connectorClipRect = null,
 }) {
   const paths = [];
   const debugRows = [];
@@ -13349,6 +13388,7 @@ function buildFallbackSemanticFieldConnectorPaths({
           relationState,
           oldAnchorFn: semanticConfigLineAnchor,
           newAnchorFn: semanticConfigLineAnchor,
+          clipRect: connectorClipRect,
         }));
       }
     });
@@ -13371,6 +13411,7 @@ function buildFallbackFlatSemanticFieldConnectorPaths({
   oldPaneRect,
   newPaneRect,
   coveredFieldPairs,
+  connectorClipRect = null,
 }) {
   const paths = [];
   const debugRows = [];
@@ -13426,6 +13467,7 @@ function buildFallbackFlatSemanticFieldConnectorPaths({
           relationState,
           oldAnchorFn: diffLineTextAnchor,
           newAnchorFn: diffLineTextAnchor,
+          clipRect: connectorClipRect,
         }));
       }
     });
@@ -13646,6 +13688,7 @@ function buildLineMappingConnectorPath({
   relationState,
   oldAnchorFn,
   newAnchorFn,
+  clipRect = null,
 }) {
   const oldAnchor = oldAnchorFn(oldElement, oldPaneRect, "right");
   const newAnchor = newAnchorFn(newElement, newPaneRect, "left");
@@ -13655,6 +13698,8 @@ function buildLineMappingConnectorPath({
   const x2 = newPoint.x;
   const y1 = oldPoint.y;
   const y2 = newPoint.y;
+  if (!lineMappingConnectorIntersectsClip({ x1, y1, x2, y2, clipRect })) return "";
+
   const style = currentLineMappingStyle();
   const active = relationKey && relationKey === state.activeLineRelationKey ? "line-relation-selected" : "";
   const animated = selectors.lineMappingAnimationToggle?.checked ? "is-animated" : "";
@@ -13692,6 +13737,18 @@ function buildLineMappingConnectorPath({
   return `${railMarkup}<path class="line-mapping-connector ${escapeHtml(relationState)} style-${escapeHtml(style)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} ${animated}"
     data-line-relation-key="${escapeHtml(relationKey)}"
     d="${path}" />${shineMarkup}${debugMarkup}`;
+}
+
+function lineMappingConnectorIntersectsClip({ x1, y1, x2, y2, clipRect = null, buffer = 48 }) {
+  if (!clipRect) return true;
+  const left = Math.min(x1, x2) - buffer;
+  const right = Math.max(x1, x2) + buffer;
+  const top = Math.min(y1, y2) - buffer;
+  const bottom = Math.max(y1, y2) + buffer;
+  return right >= clipRect.x &&
+    left <= clipRect.right &&
+    bottom >= clipRect.y &&
+    top <= clipRect.bottom;
 }
 
 function lineRelationFieldClass(oldElement, newElement, relationKey = "") {

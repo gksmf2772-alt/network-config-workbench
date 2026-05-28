@@ -1,0 +1,865 @@
+.editor-header span,
+.diff-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.editor-grid,
+.result-layout {
+  display: grid;
+  gap: 14px;
+}
+
+.editor-grid {
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+  position: relative;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.diff-gutter {
+  position: relative;
+  min-width: 64px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0), rgba(226, 232, 240, 0.32), rgba(226, 232, 240, 0));
+  overflow: hidden;
+}
+
+.diff-gutter__rail {
+  display: none;
+}
+
+.diff-object-background-overlay,
+.diff-connector-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.diff-object-background-overlay {
+  z-index: 4;
+}
+
+.diff-connector-overlay {
+  z-index: 30;
+}
+
+.editor-grid.diff-connectors-active .diff-object-background-overlay,
+.editor-grid.diff-connectors-active .diff-connector-overlay {
+  display: block;
+}
+
+.diff-connector-overlay [data-semantic-pair-key],
+.diff-connector-overlay [data-line-relation-key] {
+  pointer-events: visiblePainted;
+  cursor: pointer;
+}
+
+.diff-connector {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 9;
+  opacity: 0.34;
+}
+
+.diff-connector.equal {
+  stroke: rgba(5, 150, 105, 0.32);
+}
+
+.diff-connector.changed {
+  stroke: rgba(217, 119, 6, 0.36);
+}
+
+.diff-object-band {
+  stroke-width: 1;
+  pointer-events: none;
+  opacity: 0.44;
+  filter: drop-shadow(0 8px 14px rgba(14, 116, 144, 0.08));
+  transition: opacity 120ms ease, filter 120ms ease;
+}
+
+.object-mapping-overlay {
+  pointer-events: none;
+}
+
+.object-mapping-background-overlay {
+  pointer-events: none;
+}
+
+.semantic-line-overlay {
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.08));
+}
+
+.mapping-debug-overlay {
+  pointer-events: none;
+}
+
+.diff-object-band-glow {
+  stroke: none;
+  pointer-events: none;
+  opacity: 0.26;
+  filter: url("#objectBridgeGlow");
+}
+
+.diff-object-bridge-spine {
+  display: none;
+}
+
+.diff-object-band.matched {
+  fill: url("#objectBridgeMatched");
+  stroke: rgba(22, 163, 74, 0.28);
+}
+
+.diff-object-band.changed,
+.diff-object-band.partial {
+  fill: url("#objectBridgeChanged");
+  stroke: rgba(202, 138, 4, 0.28);
+}
+
+.diff-object-band.candidate {
+  fill: url("#objectBridgeCandidate");
+  stroke: rgba(234, 88, 12, 0.26);
+}
+
+.diff-object-band.manual {
+  fill: url("#objectBridgeManual");
+  stroke: rgba(124, 58, 237, 0.28);
+}
+
+.diff-object-band-glow.matched {
+  fill: rgba(34, 197, 94, 0.28);
+}
+
+.diff-object-band-glow.changed,
+.diff-object-band-glow.partial {
+  fill: rgba(234, 179, 8, 0.24);
+}
+
+.diff-object-band-glow.candidate {
+  fill: rgba(249, 115, 22, 0.22);
+}
+
+.diff-object-band-glow.manual {
+  fill: rgba(139, 92, 246, 0.22);
+}
+
+.diff-object-bridge-spine.matched {
+  stroke: rgba(22, 163, 74, 0.58);
+}
+
+.diff-object-bridge-spine.changed,
+.diff-object-bridge-spine.partial {
+  stroke: rgba(202, 138, 4, 0.56);
+}
+
+.diff-object-bridge-spine.candidate {
+  stroke: rgba(234, 88, 12, 0.52);
+}
+
+.diff-object-bridge-spine.manual {
+  stroke: rgba(124, 58, 237, 0.52);
+}
+
+.diff-field-connector {
+  fill: none;
+  stroke: rgba(37, 99, 235, 0.22);
+  stroke-linecap: round;
+  stroke-width: 1.25;
+  pointer-events: none;
+}
+
+.diff-object-flow,
+.diff-object-flow-glow {
+  stroke-linejoin: round;
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+.diff-object-flow {
+  fill: rgba(20, 184, 166, 0.09);
+  stroke: transparent;
+  opacity: 1;
+  stroke-width: 0;
+}
+
+.diff-object-flow-glow {
+  fill: rgba(20, 184, 166, 0.045);
+  opacity: 0.22;
+  stroke: none;
+  filter: url("#objectFlowGlow");
+}
+
+.diff-object-flow-spine {
+  display: none;
+  pointer-events: none;
+}
+
+.diff-object-flow.type-bgp {
+  fill: rgba(22, 163, 74, 0.09);
+  stroke: transparent;
+}
+
+.diff-object-flow-glow.type-bgp {
+  fill: rgba(22, 163, 74, 0.045);
+}
+
+.diff-object-flow-spine.type-bgp {
+  stroke: rgba(22, 163, 74, 0.48);
+}
+
+.diff-object-flow.type-static-route {
+  fill: rgba(2, 132, 199, 0.09);
+  stroke: transparent;
+}
+
+.diff-object-flow-glow.type-static-route {
+  fill: rgba(2, 132, 199, 0.045);
+}
+
+.diff-object-flow-spine.type-static-route {
+  stroke: rgba(2, 132, 199, 0.46);
+}
+
+.diff-object-flow.type-interface,
+.diff-object-flow.type-subscriber-interface,
+.diff-object-flow.type-group-interface,
+.diff-object-flow.type-sap {
+  fill: rgba(234, 88, 12, 0.085);
+  stroke: transparent;
+}
+
+.diff-object-flow-glow.type-interface,
+.diff-object-flow-glow.type-subscriber-interface,
+.diff-object-flow-glow.type-group-interface,
+.diff-object-flow-glow.type-sap {
+  fill: rgba(234, 88, 12, 0.085);
+}
+
+.diff-object-flow-spine.type-interface,
+.diff-object-flow-spine.type-subscriber-interface,
+.diff-object-flow-spine.type-group-interface,
+.diff-object-flow-spine.type-sap {
+  stroke: rgba(234, 88, 12, 0.44);
+}
+
+.diff-object-flow.type-port,
+.diff-object-flow.type-lag {
+  fill: rgba(8, 145, 178, 0.085);
+  stroke: transparent;
+}
+
+.diff-object-flow-glow.type-port,
+.diff-object-flow-glow.type-lag {
+  fill: rgba(8, 145, 178, 0.085);
+}
+
+.diff-object-flow-spine.type-port,
+.diff-object-flow-spine.type-lag {
+  stroke: rgba(8, 145, 178, 0.44);
+}
+
+.diff-object-flow.matched {
+  fill: rgba(34, 197, 94, 0.08);
+}
+
+.diff-object-flow-glow.matched {
+  fill: rgba(34, 197, 94, 0.08);
+}
+
+.diff-object-flow.changed,
+.diff-object-flow.partial,
+.diff-object-flow.ambiguous,
+.diff-object-flow.candidate {
+  fill: rgba(245, 158, 11, 0.14);
+}
+
+.diff-object-flow-glow.changed,
+.diff-object-flow-glow.partial,
+.diff-object-flow-glow.ambiguous,
+.diff-object-flow-glow.candidate {
+  fill: rgba(245, 158, 11, 0.14);
+}
+
+.diff-object-flow.semantic-pair-hover,
+.diff-object-flow.semantic-pair-selected {
+  opacity: 1;
+  filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.10));
+}
+
+.diff-object-flow-glow.semantic-pair-hover,
+.diff-object-flow-glow.semantic-pair-selected {
+  opacity: 0.28;
+}
+
+.diff-object-flow-spine.semantic-pair-hover,
+.diff-object-flow-spine.semantic-pair-selected {
+  opacity: 0.68;
+  stroke-width: 2;
+}
+
+.diff-object-region {
+  fill: rgba(20, 184, 166, 0.075);
+  stroke: none;
+  stroke-linejoin: round;
+  stroke-width: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+.diff-object-region.type-bgp {
+  fill: rgba(22, 163, 74, 0.075);
+}
+
+.diff-object-region.type-static-route {
+  fill: rgba(2, 132, 199, 0.075);
+}
+
+.diff-object-region.type-interface,
+.diff-object-region.type-subscriber-interface,
+.diff-object-region.type-group-interface,
+.diff-object-region.type-sap {
+  fill: rgba(234, 88, 12, 0.07);
+}
+
+.diff-object-region.type-port,
+.diff-object-region.type-lag {
+  fill: rgba(8, 145, 178, 0.07);
+}
+
+.diff-object-region.matched {
+  fill: rgba(34, 197, 94, 0.075);
+}
+
+.diff-object-region.changed,
+.diff-object-region.partial,
+.diff-object-region.ambiguous,
+.diff-object-region.candidate {
+  fill: rgba(245, 158, 11, 0.095);
+}
+
+.diff-object-region.unmatched {
+  fill: rgba(249, 115, 22, 0.10);
+}
+
+.diff-object-region.manual {
+  fill: rgba(139, 92, 246, 0.08);
+}
+
+.diff-object-region.semantic-pair-hover,
+.diff-object-region.semantic-pair-selected {
+  opacity: 1;
+  filter: drop-shadow(0 8px 14px rgba(20, 184, 166, 0.12));
+}
+
+.diff-object-link,
+.diff-object-link-glow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.diff-object-link {
+  stroke-width: 3.25;
+  opacity: 0.82;
+  filter: drop-shadow(0 1px 3px rgba(15, 23, 42, 0.14));
+  transition: opacity 120ms ease, stroke-width 120ms ease, filter 120ms ease;
+}
+
+.diff-object-link-glow {
+  stroke-width: 10;
+  opacity: 0.18;
+  filter: url("#objectLineGlow");
+}
+
+.diff-object-anchor {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.diff-object-link.type-bgp,
+.diff-object-link-glow.type-bgp {
+  stroke: #16a34a;
+}
+
+.diff-object-anchor.type-bgp {
+  fill: #16a34a;
+}
+
+.diff-object-link.type-static-route,
+.diff-object-link-glow.type-static-route {
+  stroke: #0284c7;
+}
+
+.diff-object-anchor.type-static-route {
+  fill: #0284c7;
+}
+
+.diff-object-link.type-interface,
+.diff-object-link-glow.type-interface,
+.diff-object-link.type-subscriber-interface,
+.diff-object-link-glow.type-subscriber-interface,
+.diff-object-link.type-group-interface,
+.diff-object-link-glow.type-group-interface,
+.diff-object-link.type-sap,
+.diff-object-link-glow.type-sap {
+  stroke: #ea580c;
+}
+
+.diff-object-anchor.type-interface,
+.diff-object-anchor.type-subscriber-interface,
+.diff-object-anchor.type-group-interface,
+.diff-object-anchor.type-sap {
+  fill: #ea580c;
+}
+
+.diff-object-link.type-port,
+.diff-object-link-glow.type-port,
+.diff-object-link.type-lag,
+.diff-object-link-glow.type-lag {
+  stroke: #0891b2;
+}
+
+.diff-object-anchor.type-port,
+.diff-object-anchor.type-lag {
+  fill: #0891b2;
+}
+
+.diff-object-link.semantic-pair-hover,
+.diff-object-link.semantic-pair-selected {
+  opacity: 1;
+  stroke-width: 3.25;
+  filter: drop-shadow(0 0 7px currentColor);
+}
+
+.diff-object-link-glow.semantic-pair-hover,
+.diff-object-link-glow.semantic-pair-selected {
+  opacity: 0.24;
+}
+
+.line-mapping-connector {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
+  opacity: 0.84;
+  transition: opacity 140ms ease, stroke-width 140ms ease, filter 140ms ease;
+}
+
+.line-mapping-rail {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 11;
+  stroke: rgba(15, 23, 42, 0.08);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0.76;
+}
+
+.line-mapping-rail.equal {
+  stroke: rgba(22, 101, 52, 0.12);
+}
+
+.line-mapping-rail.changed {
+  stroke: rgba(161, 98, 7, 0.14);
+}
+
+.line-mapping-rail.candidate {
+  stroke: rgba(194, 65, 12, 0.13);
+}
+
+.line-mapping-rail.conflict {
+  stroke: rgba(185, 28, 28, 0.16);
+}
+
+.line-mapping-connector.equal {
+  stroke: rgba(22, 101, 52, 0.62);
+}
+
+.line-mapping-connector.changed {
+  stroke: rgba(161, 98, 7, 0.66);
+}
+
+.line-mapping-connector.candidate {
+  stroke: rgba(194, 65, 12, 0.60);
+}
+
+.line-mapping-connector.conflict {
+  stroke: rgba(185, 28, 28, 0.68);
+}
+
+.line-mapping-connector.field-route,
+.line-mapping-connector.field-neighbor {
+  stroke: rgba(37, 99, 235, 0.84);
+}
+
+.line-mapping-connector.field-next-hop,
+.line-mapping-connector.field-gateway {
+  stroke: rgba(13, 148, 136, 0.88);
+}
+
+.line-mapping-connector.field-description {
+  stroke: rgba(124, 58, 237, 0.82);
+}
+
+.line-mapping-connector.field-tag {
+  stroke: rgba(202, 138, 4, 0.9);
+}
+
+.line-mapping-connector.field-metric {
+  stroke: rgba(2, 132, 199, 0.88);
+}
+
+.line-mapping-connector.field-state,
+.line-mapping-connector.field-admin-state {
+  stroke: rgba(22, 163, 74, 0.86);
+}
+
+.line-mapping-connector.field-group,
+.line-mapping-connector.field-peer-group {
+  stroke: rgba(219, 39, 119, 0.82);
+}
+
+.line-mapping-connector.field-authentication-key,
+.line-mapping-connector.field-peer-as {
+  stroke: rgba(220, 38, 38, 0.82);
+}
+
+.line-mapping-connector.field-interface,
+.line-mapping-connector.field-sap,
+.line-mapping-connector.field-port,
+.line-mapping-connector.field-lag {
+  stroke: rgba(234, 88, 12, 0.84);
+}
+
+.line-mapping-connector.field-address,
+.line-mapping-connector.field-ip-address {
+  stroke: rgba(8, 145, 178, 0.86);
+}
+
+.line-mapping-connector.clean-matched {
+  stroke: rgba(22, 101, 52, 0.62);
+}
+
+.line-mapping-rail.clean-matched {
+  stroke: rgba(22, 101, 52, 0.12);
+}
+
+.line-mapping-connector.style-straight {
+  stroke-width: 3.4;
+}
+
+.line-mapping-connector.style-chain {
+  stroke-width: 3.4;
+  stroke-dasharray: 5 4;
+}
+
+.line-mapping-connector.style-slime {
+  stroke-width: 8;
+  stroke-opacity: 0.30;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.20))
+    drop-shadow(0 1px 2px rgba(15, 23, 42, 0.08));
+}
+
+.line-mapping-shine {
+  fill: none;
+  stroke: url("#lineMappingGloss");
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 7.2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0.92;
+  mix-blend-mode: screen;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(20, 184, 166, 0.10));
+}
+
+.line-mapping-shine.field-authentication-key,
+.line-mapping-shine.field-peer-as {
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(220, 38, 38, 0.10));
+}
+
+.line-mapping-shine.field-description {
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(124, 58, 237, 0.10));
+}
+
+.line-mapping-shine.field-tag {
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(202, 138, 4, 0.10));
+}
+
+.line-mapping-shine.clean-matched {
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 5px rgba(22, 163, 74, 0.10));
+}
+
+.line-mapping-connector.line-relation-hover,
+.line-mapping-connector.line-relation-selected {
+  opacity: 1;
+  stroke-width: 5.2;
+  filter: drop-shadow(0 0 8px rgba(14, 116, 144, 0.18));
+}
+
+.mapping-debug-anchor circle {
+  fill: #0ea5e9;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+.mapping-debug-anchor.mapping-debug-line circle {
+  fill: #f59e0b;
+}
+
+.mapping-debug-anchor text,
+.mapping-debug-label {
+  fill: #0f172a;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  font-family: Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.line-mapping-connector.style-slime.line-relation-hover,
+.line-mapping-connector.style-slime.line-relation-selected {
+  stroke-width: 10;
+  stroke-opacity: 0.38;
+}
+
+.line-mapping-rail.line-relation-hover,
+.line-mapping-rail.line-relation-selected {
+  stroke-width: 13;
+  opacity: 0.92;
+}
+
+.line-mapping-shine.line-relation-hover,
+.line-mapping-shine.line-relation-selected {
+  stroke-width: 8.4;
+  opacity: 0.96;
+}
+
+.line-mapping-connector.is-animated {
+  animation: line-flow-pulse 1.9s linear infinite;
+}
+
+.line-mapping-connector.style-chain.is-animated {
+  animation: line-chain-flow 1.2s linear infinite;
+}
+
+@keyframes line-flow-pulse {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 0.78; }
+}
+
+@keyframes line-chain-flow {
+  to { stroke-dashoffset: -26; }
+}
+
+.semantic-diff-config-line.is-line-related {
+  position: relative;
+}
+
+.semantic-diff-config-line.line-relation-hover,
+.diff-line.line-relation-hover {
+  background: rgba(236, 253, 245, 0.86) !important;
+  box-shadow: inset 3px 0 0 rgba(22, 163, 74, 0.42);
+}
+
+.semantic-diff-config-line.line-relation-selected,
+.diff-line.line-relation-selected {
+  background: rgba(240, 253, 250, 0.96) !important;
+  outline: 1px solid rgba(13, 148, 136, 0.42);
+  outline-offset: -1px;
+}
+
+.diff-token-match.line-relation-hover,
+.diff-token-match.line-relation-selected {
+  border-color: rgba(13, 148, 136, 0.58);
+  background: rgba(204, 251, 241, 0.86);
+}
+
+.result-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.result-layout.compact {
+  gap: 0;
+}
+
+.top-result-tabs {
+  order: -1;
+}
+
+.result-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 0;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: var(--panel);
+}
+
+.result-tab {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.result-tab.active {
+  border-color: var(--line);
+  border-bottom-color: var(--panel);
+  background: var(--panel);
+  color: var(--primary-strong);
+}
+
+.editor-card {
+  overflow: hidden;
+}
+
+.editor-header,
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.header-actions,
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drop-zone {
+  margin: 12px;
+  padding: 10px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.drop-zone.drag-over {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.editor-card > .drop-zone {
+  display: none;
+}
+
+.code-frame {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  height: calc(100vh - 220px);
+  min-height: 620px;
+  border-top: 1px solid var(--line);
+  background: var(--code-bg);
+}
+
+.config-drop-editor {
+  position: relative;
+  outline: none;
+}
+
+.config-drop-editor.drag-over {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 2px rgba(8, 145, 178, 0.22);
+}
+
+.config-drop-editor.drag-over::after {
+  content: "파일을 놓으면 입력됨";
+  position: absolute;
+  inset: 10px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--primary);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.88);
+  color: var(--primary-strong);
+  font-size: 13px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.code-frame.diff-mode {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.code-frame.diff-mode .line-numbers,
+.code-frame.diff-mode textarea {
+  display: none;
+}
+
+.line-numbers,
+textarea {
+  margin: 0;
+  border: 0;
+  padding: 10px;
+  font-family: var(--editor-font);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.line-numbers {
+  overflow: hidden;
+  padding-right: 8px;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+
+textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  outline: none;
+  background: transparent;
+  white-space: pre;
+  overflow: auto;
+}
+
+textarea::placeholder {
+  color: var(--muted);
+}
+
+.action-bar {
+  background: var(--panel);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px;
+}

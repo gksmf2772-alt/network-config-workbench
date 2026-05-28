@@ -17,6 +17,7 @@
     "validate:field-dedupe": "node scripts/validate-field-issue-dedupe.mjs",
     "validate:all": "node scripts/validate-all.mjs",
     "validate:compare:fixtures": "node scripts/validateCompareFixtures.js",
+    "guard:legacy-core": "node scripts/check-legacy-core-guardrail.js",
     "build": "vite build",
     "preview": "vite preview"
   },

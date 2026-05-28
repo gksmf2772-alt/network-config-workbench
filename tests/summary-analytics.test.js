@@ -94,6 +94,13 @@ const plan = [
   },
 ];
 
+function readGlobalStyles() {
+  const entry = fs.readFileSync("src/styles/global.css", "utf8");
+  return entry.replace(/^@import "\.\/(.+)";$/gm, (_, file) =>
+    fs.readFileSync(`src/styles/${file}`, "utf8")
+  );
+}
+
 test("field overlap aggregates aliases and changed fields", () => {
   const analysis = buildFieldOverlapAnalysis(plan);
   const route = analysis.pairs.find((pair) => pair.objectType === "static-route");
@@ -241,7 +248,7 @@ test("profile policy ignored field is not labelled as user exception", () => {
   assert.deepEqual(review.suppressed[0].suppressionSources, ["field-policy"]);
 });
 
-test("integrated report uses summary field analysis object", () => {
+test("summary dashboard computes raw and effective field overlap", () => {
   const dashboard = buildSummaryDashboardData({
     report: { summary: {}, diffRows: [] },
     plan: [{
@@ -264,11 +271,8 @@ test("integrated report uses summary field analysis object", () => {
     }],
     semanticSummary: {},
   });
-  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
-
   assert.equal(dashboard.fieldAnalysis.aggregate.rawOverlapPercent, 50);
   assert.equal(dashboard.fieldAnalysis.aggregate.overlapPercent, 100);
-  assert.equal((source.match(/renderFieldOverlapSummary\(fieldAnalysis\)/g) || []).length >= 2, true);
 });
 
 test("review table label shows both identities for migrated matched objects", () => {
@@ -289,12 +293,49 @@ test("review table label shows both identities for migrated matched objects", ()
   assert.equal(review.abnormal[0].newKey, "lag:lag-B-7216");
 });
 
-test("integrated report rebuilds dashboard instead of reusing stale exception cache", () => {
-  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
-  const body = source.match(/function renderOverviewReport\(report\) \{([\s\S]*?)\n\}/)?.[1] || "";
+test("summary dashboard rebuild reflects changed exception state", () => {
+  const activeDashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [{
+      id: "fresh-active",
+      status: "matched",
+      objectType: "bgp",
+      score: 100,
+      oldObject: { normalizedType: "bgp", normalizedIdentity: "192.0.2.1", fields: { neighbor: "192.0.2.1", group: "old" } },
+      newObject: { normalizedType: "bgp", normalizedIdentity: "192.0.2.1", fields: { neighbor: "192.0.2.1", group: "new" } },
+      fieldSummary: {
+        neighbor: { field: "neighbor", status: "equal" },
+        group: { field: "group", status: "changed" },
+      },
+    }],
+    semanticSummary: {},
+  });
+  const suppressedDashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [{
+      id: "fresh-suppressed",
+      status: "matched",
+      objectType: "bgp",
+      score: 100,
+      oldObject: { normalizedType: "bgp", normalizedIdentity: "192.0.2.1", fields: { neighbor: "192.0.2.1", group: "old" } },
+      newObject: { normalizedType: "bgp", normalizedIdentity: "192.0.2.1", fields: { neighbor: "192.0.2.1", group: "new" } },
+      fieldSummary: {
+        neighbor: { field: "neighbor", status: "equal" },
+        group: {
+          field: "group",
+          status: "changed",
+          ignored: true,
+          effectiveStatus: "ignored",
+          policyHits: [{ sourcePolicy: "user-exception" }],
+        },
+      },
+    }],
+    semanticSummary: {},
+  });
 
-  assert.match(body, /const dashboard = buildCurrentDashboardData\(report\);/);
-  assert.doesNotMatch(body, /lastDashboardData\s*\|\|/);
+  assert.equal(activeDashboard.fieldAnalysis.aggregate.reviewNeeded, 1);
+  assert.equal(suppressedDashboard.fieldAnalysis.aggregate.reviewNeeded, 0);
+  assert.equal(suppressedDashboard.fieldAnalysis.aggregate.suppressedFields, 1);
 });
 
 test("integrated report table hides suppressed duplicate rows for active review objects", () => {
@@ -321,7 +362,7 @@ test("policy violation panel includes semantic field policy violations", () => {
 
 test("integrated report table exposes checkbox value filters", () => {
   const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
-  const styles = fs.readFileSync("src/styles/global.css", "utf8");
+  const styles = readGlobalStyles();
 
   assert.match(source, /data-report-check-value/);
   assert.match(source, /reportReviewChecklistMatches/);

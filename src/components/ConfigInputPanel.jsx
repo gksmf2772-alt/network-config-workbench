@@ -207,6 +207,7 @@ export default function ConfigInputPanel() {
           </motion.div>
 
           <div className="editor-grid">
+            <svg id="diffObjectBackgroundSvg" className="diff-object-background-overlay" aria-hidden="true" />
             <ConfigEditor side="old" title="기존 Config" icon={FileCode2} />
             <div className="diff-gutter" aria-hidden="true">
               <div className="diff-gutter__rail" />

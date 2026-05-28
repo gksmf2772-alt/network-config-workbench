@@ -100,6 +100,13 @@ function dashboard(plan) {
   });
 }
 
+function readGlobalStyles() {
+  const entry = fs.readFileSync("src/styles/global.css", "utf8");
+  return entry.replace(/^@import "\.\/(.+)";$/gm, (_, file) =>
+    fs.readFileSync(`src/styles/${file}`, "utf8")
+  );
+}
+
 test("unmatched setting visual status uses unmatched class and color token", () => {
   assert.equal(getSemanticStateClass({ status: "old-only" }), "semantic-state-unmatched");
   assert.equal(getSemanticStateClass({ status: "new-only" }), "semantic-state-unmatched");
@@ -111,7 +118,7 @@ test("unmatched setting visual status uses unmatched class and color token", () 
     { status: "new-only", reason: "unmatched", oldObject: null, newObject: setting({ side: "new", key: "192.0.2.2" }) },
   ]);
   const html = renderComparisonPlanHtml(plan);
-  const css = fs.readFileSync("src/styles/global.css", "utf8");
+  const css = readGlobalStyles();
 
   assert.match(html, /semantic-state-unmatched/);
   assert.match(html, /data-match-status="old-only"/);
@@ -120,8 +127,109 @@ test("unmatched setting visual status uses unmatched class and color token", () 
   assert.match(css, /semantic-object-card\.semantic-state-unmatched/);
 });
 
+test("semantic line comparison layout prevents source text overflow", () => {
+  const css = readGlobalStyles();
+
+  assert.match(css, /\.semantic-compare-result\s*\{[\s\S]*width:\s*100%/);
+  assert.match(css, /\.semantic-compare-result\s*\{[\s\S]*max-width:\s*none/);
+  assert.match(css, /\.semantic-object-card\s*\{[\s\S]*max-width:\s*none/);
+  assert.match(css, /\.semantic-line-row\s*\{[\s\S]*grid-template-columns:\s*72px minmax\(0,\s*1fr\) 24px minmax\(0,\s*1fr\)/);
+  assert.match(css, /\.semantic-line-cell\s*\{[\s\S]*white-space:\s*pre-wrap/);
+  assert.match(css, /\.semantic-line-cell\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.semantic-line-reason\s*\{[\s\S]*max-width:\s*150px/);
+});
+
+test("compare object mapping background uses separate under-text layer", () => {
+  const css = readGlobalStyles();
+  const shell = fs.readFileSync("src/components/ConfigInputPanel.jsx", "utf8");
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(shell, /id="diffObjectBackgroundSvg" className="diff-object-background-overlay"/);
+  assert.match(legacy, /renderDiffObjectBackgroundLayers/);
+  assert.match(legacy, /backgroundMarkup:\s*`<path class="diff-object-region/);
+  assert.match(legacy, /class="diff-object-flow-spine/);
+  assert.match(css, /\.diff-object-background-overlay\s*\{[\s\S]*z-index:\s*4/);
+  assert.match(css, /\.diff-object-region\s*\{[\s\S]*stroke:\s*none/);
+  assert.match(css, /\.diff-object-region\s*\{[\s\S]*stroke-width:\s*0/);
+  assert.match(css, /\.diff-connector-overlay\s*\{[\s\S]*z-index:\s*30/);
+  assert.match(css, /editor-grid\.diff-connectors-active article\.ncw-editor-card:first-of-type/);
+  assert.match(css, /editor-grid\.diff-connectors-active article\.ncw-editor-card:nth-of-type\(2\)/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.ncw-editor-card\s*\{[\s\S]*z-index:\s*10/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-object-block[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-config-line\.is-matched,[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-config-line\.is-unmatched,[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.diff-line\.object-matched,[\s\S]*background:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-diff-object-block[\s\S]*border:\s*0 !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.diff-line-number,[\s\S]*border-left:\s*0 !important/);
+  assert.match(css, /#compareTab\.active \.diff-object-flow,[\s\S]*display:\s*none !important/);
+  assert.match(css, /#compareTab\.active \.diff-object-flow-spine\s*\{[\s\S]*display:\s*block !important/);
+  assert.match(css, /#compareTab\.active \.diff-object-flow-spine\s*\{[\s\S]*stroke:\s*transparent !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.semantic-object-block-wrapper,[\s\S]*border-left:\s*0 !important/);
+  assert.match(css, /editor-grid\.diff-connectors-active \.embedded-diff\s*\{[\s\S]*scrollbar-gutter:\s*stable/);
+  assert.match(legacy, /function paneClientBounds/);
+  assert.match(legacy, /oldRegionLeft/);
+  assert.match(legacy, /newRegionRight/);
+});
+
+test("line mapping anchors use full visible command text bounds before token fallback", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /const LINE_MAPPING_TEXT_OFFSET = 6/);
+  assert.match(legacy, /function getLineTextAnchorRect/);
+  assert.match(legacy, /getVisibleLineTextGroupRect\(lineElement, bounds\)[\s\S]*getLineContentTextRect\(lineElement, bounds\)[\s\S]*getRelationTokenGroupRect\(sourceElement, lineElement, bounds\)[\s\S]*getVisibleLineTokenGroupRect\(lineElement, bounds\)/);
+  assert.match(legacy, /function getVisibleLineTextGroupRect/);
+  assert.match(legacy, /getActualLineTextRect\(contentElement\)[\s\S]*querySelectorAll\("\.diff-token-match"\)/);
+  assert.match(legacy, /function lineTextAnchorX/);
+  assert.match(legacy, /edge \+ offset/);
+  assert.doesNotMatch(legacy, /function lineMappingRailX/);
+});
+
+test("compare pane line relation infers Nokia port scheduler policy source lines", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /function inferPortLineField/);
+  assert.match(legacy, /\^egress-scheduler-policy\\b[\s\S]*ethernet\.egress\.scheduler-policy/);
+  assert.match(legacy, /\^port-scheduler-policy\\b[\s\S]*ethernet\.egress\.scheduler-policy/);
+  assert.match(legacy, /\^policy-name\\b[\s\S]*port-scheduler-policy[\s\S]*ethernet\.egress\.scheduler-policy/);
+  assert.match(legacy, /buildSemanticLineMatchIndex[\s\S]*lineMatchIndexLinesForSide\(lineMatch, side\)/);
+});
+
+test("legacy compare path merges MD-CLI one-line port settings before paired row rendering", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /function extractPortNameFromLine/);
+  assert.match(legacy, /objectType === "port"[\s\S]*setField\("port", extractPortNameFromLine\(normalized\)\)/);
+  assert.match(legacy, /setField\("ethernet\.mode"[\s\S]*ethernet\\s\+mode/);
+  assert.match(legacy, /setField\("ethernet\.mtu"[\s\S]*ethernet\\s\+mtu/);
+  assert.match(legacy, /setField\("ethernet\.crc-monitor\.signal-degrade\.threshold"/);
+  assert.match(legacy, /setField\("ethernet\.egress\.scheduler-policy"/);
+  assert.match(legacy, /mergeObjectsByCanonicalKey[\s\S]*target\.rawLines\.push\(\.\.\.safeObject\.rawLines\)/);
+  assert.match(legacy, /getObjectDisplayLines\(object\)[\s\S]*object\.rawLines/);
+  assert.match(legacy, /const diffRows = buildPairedObjectDiffRows\(oldMap, newMap, comparedObjectKeys\)/);
+  assert.match(legacy, /function logMdCliOneLinePortGroupingDebug/);
+  assert.match(legacy, /console\.table\(parserRows\)/);
+  assert.match(legacy, /console\.table\(matchedRows\)/);
+  assert.match(legacy, /newSourceLineCount/);
+});
+
+test("diff connector overlay is clipped to current compare viewport", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const css = readGlobalStyles();
+  const renderer = fs.readFileSync("src/core/diffRenderer.js", "utf8");
+
+  assert.match(legacy, /function buildDiffConnectorViewportClipRect/);
+  assert.match(legacy, /function paneViewportClientRect/);
+  assert.match(legacy, /const connectorClipRect = buildDiffConnectorViewportClipRect/);
+  assert.match(legacy, /buildVisibleLineConnectorPaths\(grid, oldPaneRect, newPaneRect, connectorClipRect\)/);
+  assert.match(legacy, /function lineMappingConnectorIntersectsClip/);
+  assert.match(legacy, /clipRect: connectorClipRect/);
+  assert.match(renderer, /clipPath id="\$\{escapeHtml\(id\)\}"/);
+  assert.match(renderer, /clip-path="url\(#\$\{clipId\}\)"/);
+  assert.match(css, /\.diff-object-background-overlay,[\s\S]*\.diff-connector-overlay\s*\{[\s\S]*overflow:\s*hidden/);
+});
+
 test("diff block status and color tokens target config panes", () => {
-  const css = fs.readFileSync("src/styles/global.css", "utf8");
+  const css = readGlobalStyles();
 
   assert.equal(getSemanticDiffBlockState({ status: "old-only" }), "unmatched");
   assert.equal(getSemanticDiffBlockState({ status: "new-only" }), "unmatched");

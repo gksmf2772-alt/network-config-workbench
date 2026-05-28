@@ -69,6 +69,46 @@ import {
   mergeStaticRouteFields,
   splitStaticRouteNextHopList,
 } from "./staticRouteFields.js";
+import {
+  deleteRecord,
+  readRecords,
+  saveRecord,
+} from "./storage.js";
+import { createLegacySelectors } from "./legacySelectors.js";
+import { createLegacyState } from "./legacyState.js";
+import {
+  buildLineMappingPathD,
+  buildLineMappingRailPath,
+  buildSlimeLineShinePath,
+  connectorLabelText,
+  objectConnectorState,
+  objectConnectorTypeClass,
+  renderDiffConnectorLayers,
+  renderDiffObjectBackgroundLayers,
+} from "./diffRenderer.js";
+import {
+  defaultObjectFieldForType,
+  defaultSemanticFieldForType,
+  formatNormalizeSummary,
+  formatSemanticNodeLabel,
+  getSemanticMappingNodes,
+  inferValueTokenIndex,
+  mergeSemanticNodes,
+  parseNormalizeMap,
+  renderProfileExceptionEditorTable,
+  renderProfileExceptionOverview,
+  renderProfileExceptionOverviewChevron,
+  renderProfileExceptionRuleGroups,
+  renderSemanticMappingRow,
+  semanticMappingCardinality,
+} from "./profileEditor.js";
+import {
+  buildOperatorAlerts,
+  renderFieldHotList,
+  renderHiddenDiagnosticsLinks,
+  renderMetricCard,
+} from "./summaryRenderer.js";
+import { syncPairedPaneScroll } from "./diffScrollSync.js";
 
 const objectTypes = [
   "port",
@@ -95,122 +135,7 @@ const objectTypes = [
 ];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
 
-const selectors = {
-  compareTabBtn: document.querySelector("#compareTabBtn"),
-  profilesTabBtn: document.querySelector("#profilesTabBtn"),
-  summaryPageTabBtn: document.querySelector("#summaryPageTabBtn"),
-  compareTab: document.querySelector("#compareTab"),
-  profilesTab: document.querySelector("#profilesTab"),
-  summaryTab: document.querySelector("#summaryTab"),
-  historySelect: document.querySelector("#historySelect"),
-  loadHistoryBtn: document.querySelector("#loadHistoryBtn"),
-  saveSessionBtn: document.querySelector("#saveSessionBtn"),
-  deleteSessionBtn: document.querySelector("#deleteSessionBtn"),
-  profileSelect: document.querySelector("#profileSelect"),
-  loadProfileBtn: document.querySelector("#loadProfileBtn"),
-  normalizeSpacingToggle: document.querySelector("#normalizeSpacingToggle"),
-  sortObjectsToggle: document.querySelector("#sortObjectsToggle"),
-  autoAlignToggle: document.querySelector("#autoAlignToggle"),
-  ignoreCommentsToggle: document.querySelector("#ignoreCommentsToggle"),
-  ignoreGeneratedToggle: document.querySelector("#ignoreGeneratedToggle"),
-  semanticDebugToggle: document.querySelector("#semanticDebugToggle"),
-  fieldHighlightToggle: document.querySelector("#fieldHighlightToggle"),
-  objectMappingVisibleToggle: document.querySelector("#objectMappingVisibleToggle"),
-  mappingDebugToggle: document.querySelector("#mappingDebugToggle"),
-  lineMappingStyleSelect: document.querySelector("#lineMappingStyleSelect"),
-  lineMappingBendRange: document.querySelector("#lineMappingBendRange"),
-  lineMappingVisibleToggle: document.querySelector("#lineMappingVisibleToggle"),
-  lineMappingAnimationToggle: document.querySelector("#lineMappingAnimationToggle"),
-  objectToggles: document.querySelector("#objectToggles"),
-  themeSelect: document.querySelector("#themeSelect"),
-  fontSelect: document.querySelector("#fontSelect"),
-  filterInput: document.querySelector("#filterInput"),
-  resultFilterSelect: document.querySelector("#resultFilterSelect"),
-  compareStatus: document.querySelector("#compareStatus"),
-  lastComparedAt: document.querySelector("#lastComparedAt"),
-  oldMeta: document.querySelector("#oldMeta"),
-  newMeta: document.querySelector("#newMeta"),
-  oldDropZone: document.querySelector("#oldConfigInput")?.closest(".code-frame") || document.querySelector("#oldDropZone"),
-  newDropZone: document.querySelector("#newConfigInput")?.closest(".code-frame") || document.querySelector("#newDropZone"),
-  oldInput: document.querySelector("#oldConfigInput"),
-  newInput: document.querySelector("#newConfigInput"),
-  oldLineNumbers: document.querySelector("#oldLineNumbers"),
-  newLineNumbers: document.querySelector("#newLineNumbers"),
-  moveOldUpBtn: document.querySelector("#moveOldUpBtn"),
-  moveOldDownBtn: document.querySelector("#moveOldDownBtn"),
-  moveNewUpBtn: document.querySelector("#moveNewUpBtn"),
-  moveNewDownBtn: document.querySelector("#moveNewDownBtn"),
-  restoreOldBtn: document.querySelector("#restoreOldBtn"),
-  restoreNewBtn: document.querySelector("#restoreNewBtn"),
-  clearOldBtn: document.querySelector("#clearOldBtn"),
-  clearNewBtn: document.querySelector("#clearNewBtn"),
-  clearAllBtn: document.querySelector("#clearAllBtn"),
-  saveOldBtn: document.querySelector("#saveOldBtn"),
-  saveNewBtn: document.querySelector("#saveNewBtn"),
-  toggleControlsBtn: document.querySelector("#toggleControlsBtn"),
-  compareBtn: document.querySelector("#compareBtn"),
-  alignBtn: document.querySelector("#alignBtn"),
-  exportReportBtn: document.querySelector("#exportReportBtn"),
-  summaryTabBtn: document.querySelector("#summaryTabBtn"),
-  objectsTabBtn: document.querySelector("#objectsTabBtn"),
-  overviewTabBtn: document.querySelector("#overviewTabBtn"),
-  summaryResultPanel: document.querySelector("#summaryResultPanel"),
-  objectsResultPanel: document.querySelector("#objectsResultPanel"),
-  overviewResultPanel: document.querySelector("#overviewResultPanel"),
-  overviewReport: document.querySelector("#overviewReport"),
-  objectSearchInput: document.querySelector("#objectSearchInput"),
-  objectSortSelect: document.querySelector("#objectSortSelect"),
-  restoreInitialBtn: document.querySelector("#restoreInitialBtn"),
-  summaryCards: document.querySelector("#summaryCards"),
-  reportList: document.querySelector("#reportList"),
-  objectList: document.querySelector("#objectList"),
-  oldDiffPane: document.querySelector("#oldDiffPane"),
-  newDiffPane: document.querySelector("#newDiffPane"),
-  oldDiffObjectToolbar: document.querySelector("#oldDiffObjectToolbar"),
-  newDiffObjectToolbar: document.querySelector("#newDiffObjectToolbar"),
-  diffConnectorSvg: document.querySelector("#diffConnectorSvg"),
-  profileNameInput: document.querySelector("#profileNameInput"),
-  vendorSelect: document.querySelector("#vendorSelect"),
-  oldVendorSelect: document.querySelector("#oldVendorSelect"),
-  newVendorSelect: document.querySelector("#newVendorSelect"),
-  vendorSupportNotice: document.querySelector("#vendorSupportNotice"),
-  newProfileBtn: document.querySelector("#newProfileBtn"),
-  saveProfileBtn: document.querySelector("#saveProfileBtn"),
-  saveProfileAsBtn: document.querySelector("#saveProfileAsBtn"),
-  mappingEditor: document.querySelector("#mappingEditor"),
-  identityRuleEditor: document.querySelector("#identityRuleEditor"),
-  policyEditor: document.querySelector("#policyEditor"),
-  normalizeEditor: document.querySelector("#normalizeEditor"),
-  semanticRuleEditor: document.querySelector("#semanticRuleEditor"),
-  parserRuleEditor: document.querySelector("#parserRuleEditor"),
-  profileObjectTypeSelect: document.querySelector("#profileObjectTypeSelect"),
-  profileOldExampleInput: document.querySelector("#profileOldExampleInput"),
-  profileNewExampleInput: document.querySelector("#profileNewExampleInput"),
-  profileOldPreview: document.querySelector("#profileOldPreview"),
-  profileNewPreview: document.querySelector("#profileNewPreview"),
-  profileExampleConnectorSvg: document.querySelector("#profileExampleConnectorSvg"),
-  profileRulePopover: document.querySelector("#profileRulePopover"),
-  profileMappingReactRoot: document.querySelector("#profileMappingReactRoot"),
-  profileMappingRows: document.querySelector("#profileMappingRows"),
-  profileContextMappingRows: document.querySelector("#profileContextMappingRows"),
-  profileFieldMappingRows: document.querySelector("#profileFieldMappingRows"),
-  profileRuleRows: document.querySelector("#profileRuleRows"),
-  profileStatus: document.querySelector("#profileStatus"),
-  profileSelectionGuide: document.querySelector("#profileSelectionGuide"),
-  profileChangesList: document.querySelector("#profileChangesList"),
-  undoProfileBtn: document.querySelector("#undoProfileBtn"),
-  rollbackProfileBtn: document.querySelector("#rollbackProfileBtn"),
-  savedProfilesList: document.querySelector("#savedProfilesList"),
-  deleteProfileBtn: document.querySelector("#deleteProfileBtn"),
-  autoLearnRulesBtn: document.querySelector("#autoLearnRulesBtn"),
-  addLineMappingBtn: document.querySelector("#addLineMappingBtn"),
-  addContextMappingBtn: document.querySelector("#addContextMappingBtn"),
-  addFieldMappingBtn: document.querySelector("#addFieldMappingBtn"),
-  createTokenGroupBtn: document.querySelector("#createTokenGroupBtn"),
-  createLineGroupBtn: document.querySelector("#createLineGroupBtn"),
-  addOldLineRuleBtn: document.querySelector("#addOldLineRuleBtn"),
-  addNewLineRuleBtn: document.querySelector("#addNewLineRuleBtn"),
-};
+const selectors = createLegacySelectors();
 
 const vendorRules = {
   nokia: [
@@ -242,56 +167,7 @@ const vendorRules = {
   ],
 };
 
-const state = {
-  activeProfileId: null,
-  selectedProfileObjectType: "static-route",
-  lastReport: null,
-  initialConfigSnapshot: null,
-  syncingEditorScroll: false,
-  syncingDiffScroll: false,
-  connectorFrame: null,
-  semanticObjectAlignFrame: null,
-  semanticObjectWidthFrame: null,
-  draggingProfileLine: null,
-  selectedProfileLineLink: null,
-  pendingProfileLineRef: null,
-  lastProfileExampleSource: "",
-  selectedProfileLibraryId: null,
-  compareDirty: false,
-  profileChanges: [],
-  profileSavedSnapshot: null,
-  profileUndoStack: [],
-  selectedSemanticTokens: { old: [], new: [] },
-  activeSemanticSelectionSource: "",
-  draggingProfileToken: null,
-  suppressNextPreviewTokenClick: false,
-  pendingSemanticMapping: null,
-  activeDiffObjectKey: "",
-  activeSemanticPairKey: "",
-  activeLineRelationKey: "",
-  lastSemanticSummary: null,
-  lastSemanticPlan: [],
-  lastManualMap: {},
-  lastDashboardData: null,
-  lastCoverageDiagnostics: null,
-  lastStandardsAudit: null,
-  lastStandardsAuditRaw: null,
-  lastAnalysisContext: null,
-  exceptionTargets: new Map(),
-  summaryIssueGroups: new Map(),
-  activeIssueContext: null,
-  lastSessionName: "",
-  semanticPairKeyboardBound: false,
-  lineRelationDelegationBound: false,
-  connectorSvgDelegationBound: false,
-  diffResizeObserver: null,
-  diffMutationObserver: null,
-  connectorSettleTimer: null,
-  mappingDebugSignature: "",
-  lineMappingDebugSignature: "",
-  mappingDebugAnchorCount: 0,
-  profileDraft: createDefaultProfile(),
-};
+const state = createLegacyState(createDefaultProfile);
 
 const defaultSamples = {
   oldConfig: [
@@ -1018,10 +894,64 @@ function renderProfileEditor() {
   renderFieldMappings();
   renderSemanticRuleEditor();
   renderPolicyEditor();
+  renderProfileExceptionOverviewSection();
   renderLineRules();
   renderProfileChanges();
   renderExamplePreviews();
   renderReactProfileMappingPanel();
+}
+
+function renderProfileExceptionOverviewSection() {
+  const section = ensureProfileExceptionOverviewContainer();
+  if (!section) return;
+  section.innerHTML = renderProfileExceptionOverview(state.profileDraft.exceptions || []);
+  bindProfileExceptionOverviewToggle(section);
+  section.querySelectorAll("[data-profile-exception-overview-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const exceptionId = button.dataset.profileExceptionOverviewRemove || "";
+      if (!exceptionId) return;
+      state.profileDraft.exceptions = (state.profileDraft.exceptions || []).filter((item) => item.id !== exceptionId);
+      renderProfileEditor();
+      markProfileDirty("Profile Exception", "삭제", exceptionId);
+      markCompareStale();
+    });
+  });
+}
+
+function bindProfileExceptionOverviewToggle(section) {
+  const header = section.querySelector("[data-profile-exception-overview-toggle]");
+  const content = section.querySelector("#profile-exception-overview-content");
+  if (!header || !content) return;
+  setProfileExceptionOverviewOpen(section, header, section.classList.contains("is-open"), { persist: false });
+  header.addEventListener("click", () => {
+    setProfileExceptionOverviewOpen(section, header, !section.classList.contains("is-open"));
+  });
+}
+
+function setProfileExceptionOverviewOpen(section, header, open, { persist = true } = {}) {
+  section.classList.toggle("is-open", open);
+  section.classList.toggle("is-closed", !open);
+  header.setAttribute("aria-expanded", open ? "true" : "false");
+  const icon = header.querySelector(".collapsible-icon");
+  if (icon) icon.innerHTML = renderProfileExceptionOverviewChevron(open);
+  if (persist) {
+    window.localStorage?.setItem("profile-section-open:profile-exception-overview", open ? "open" : "closed");
+  }
+}
+
+function ensureProfileExceptionOverviewContainer() {
+  let container = document.querySelector("#profileExceptionOverview");
+  if (container) return container;
+
+  const changesSection = selectors.profileChangesList?.closest?.(".profile-section");
+  if (!changesSection?.parentElement) return null;
+
+  const section = document.createElement("section");
+  section.id = "profileExceptionOverview";
+  const saved = window.localStorage?.getItem("profile-section-open:profile-exception-overview");
+  section.className = `profile-section collapsible-section ${saved === "open" ? "is-open" : "is-closed"}`;
+  changesSection.parentElement.insertBefore(section, changesSection);
+  return section;
 }
 
 function renderReactProfileMappingPanel() {
@@ -1299,12 +1229,6 @@ function renderParserRuleEditor() {
   });
 }
 
-function formatNormalizeSummary(normalizeRules = {}) {
-  const remove = (normalizeRules.remove || []).join(", ");
-  const mapped = Object.entries(normalizeRules.map || {}).map(([from, to]) => `${from} -> ${to}`).join(" | ");
-  return [`remove: ${remove || "-"}`, `map: ${mapped || "-"}`].join("; ");
-}
-
 function renderSemanticRuleEditor() {
   const type = state.selectedProfileObjectType;
   const rules = state.profileDraft.semanticRules?.[type] || [];
@@ -1349,30 +1273,6 @@ function renderSemanticRuleEditor() {
     row.addEventListener("mouseenter", () => setProfilePreviewHoverState(row.dataset.groupId || ""));
     row.addEventListener("mouseleave", clearProfilePreviewHoverState);
   });
-}
-
-function renderSemanticMappingRow(row, index) {
-  const oldNodes = getSemanticMappingNodes(row, "old");
-  const newNodes = getSemanticMappingNodes(row, "new");
-  return `
-    <div class="semantic-rule-row semantic-mapping-row">
-      <div class="profile-rule-line">${escapeHtml(row.field || "")}</div>
-      <div class="small-note">${escapeHtml(row.role || "compare-field")} / ${escapeHtml(row.cardinality || "1:1")}</div>
-      <div class="small-note">기존 ${oldNodes.length}개 ↔ 신규 ${newNodes.length}개</div>
-      <div class="profile-rule-line">${escapeHtml(oldNodes.map(formatSemanticNodeLabel).join(", "))} → ${escapeHtml(newNodes.map(formatSemanticNodeLabel).join(", "))}</div>
-      <button type="button" data-semantic-map-remove="${index}">삭제</button>
-    </div>
-  `;
-}
-
-function getSemanticMappingNodes(mapping, source) {
-  if (!mapping) return [];
-  if (source === "old") return mapping.oldNodes || mapping.oldSelectors || [];
-  return mapping.newNodes || mapping.newSelectors || [];
-}
-
-function formatSemanticNodeLabel(node) {
-  return node.value || node.selectedToken || node.token || "";
 }
 
 function addSemanticMappingFromPreviewTokens() {
@@ -1435,35 +1335,6 @@ function findCompatibleSemanticMapping(mappings, field, role, oldNodes, newNodes
     const existingNew = getSemanticMappingNodes(mapping, "new").map((node) => canonicalizeComparableLine(node.value || node.selectedToken || node.token));
     return existingOld.some((value) => oldValues.has(value)) || existingNew.some((value) => newValues.has(value));
   });
-}
-
-function mergeSemanticNodes(current, incoming) {
-  const result = [...current];
-  const seen = new Set(result.map(semanticNodeKey));
-  incoming.forEach((node) => {
-    const key = semanticNodeKey(node);
-    if (seen.has(key)) return;
-    seen.add(key);
-    result.push(node);
-  });
-  return result;
-}
-
-function semanticNodeKey(node) {
-  return [
-    node.lineIndex,
-    node.tokenIndex,
-    node.valueTokenIndex,
-    canonicalizeComparableLine(node.selectedToken || node.token || ""),
-    canonicalizeComparableLine(node.value || ""),
-  ].join(":");
-}
-
-function semanticMappingCardinality(oldNodes, newNodes) {
-  if (oldNodes.length === 1 && newNodes.length > 1) return "1:N";
-  if (oldNodes.length > 1 && newNodes.length === 1) return "N:1";
-  if (oldNodes.length === 1 && newNodes.length === 1) return "1:1";
-  return "N:N";
 }
 
 function showSemanticMappingConfirm(mapping) {
@@ -1754,15 +1625,6 @@ function inferGroupedValue(text, field) {
   return extractFieldValue(normalized, field) || normalized;
 }
 
-function inferValueTokenIndex(tokens, tokenIndex, field) {
-  if (field === "state" || field === "admin-state") return tokenIndex;
-  const selected = canonicalizeComparableLine(tokens[tokenIndex] || "");
-  if (selected === field || ["route", "static-route-entry", "next-hop", "tag", "description", "neighbor"].includes(selected)) {
-    return Math.min(tokens.length - 1, tokenIndex + 1);
-  }
-  return tokenIndex;
-}
-
 function renderSemanticRuleRow(row, index) {
   return `
     <div class="semantic-rule-row">
@@ -1852,18 +1714,6 @@ function buildSemanticRuleFromTextarea(source, textarea) {
   };
 }
 
-function defaultSemanticFieldForType(type) {
-  return {
-    "static-route": "route",
-    bgp: "neighbor",
-    interface: "interface",
-    "subscriber-interface": "subscriber-interface",
-    port: "port",
-    lag: "lag",
-    pim: "interface",
-  }[type] || "field";
-}
-
 function renderParserRuleRow(row, index) {
   return `
     <div class="parser-rule-row">
@@ -1873,19 +1723,6 @@ function renderParserRuleRow(row, index) {
       <button type="button" data-parser-remove="${index}">삭제</button>
     </div>
   `;
-}
-
-function defaultObjectFieldForType(type) {
-  return {
-    "static-route": "route",
-    bgp: "neighbor",
-    interface: "interface",
-    "subscriber-interface": "subscriber-interface",
-    "group-interface": "group-interface",
-    port: "port",
-    lag: "lag",
-    pim: "interface",
-  }[type] || "name";
 }
 
 function renderPolicyEditor() {
@@ -1899,7 +1736,7 @@ function renderPolicyEditor() {
     <div class="policy-rows">
       ${policies.length ? policies.map(renderPolicyRow).join("") : `<div class="small-note">정책이 없습니다. 필드 정책을 추가하세요.</div>`}
     </div>
-    ${renderProfileExceptionEditorTable(type)}
+    ${renderProfileExceptionEditorTable({ exceptions: state.profileDraft.exceptions || [], objectType: type })}
   `;
 
   selectors.policyEditor.querySelector("#addPolicyRowBtn").addEventListener("click", () => {
@@ -1993,17 +1830,6 @@ function renderNormalizeEditor() {
     markProfileDirty("Normalize", "수정", "map");
     markCompareStale();
   });
-}
-
-function parseNormalizeMap(text) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.split(/\s*=>\s*/))
-    .filter((parts) => parts.length === 2 && parts[0].trim() && parts[1].trim())
-    .reduce((map, [from, to]) => {
-      map[canonicalizeComparableLine(from)] = canonicalizeComparableLine(to);
-      return map;
-    }, {});
 }
 
 function renderIdentityRuleEditor() {
@@ -3108,6 +2934,14 @@ function inferSemanticFieldNameForLineContext(line, context = {}) {
     return inferLagLineFields(line)[0] || "";
   }
 
+  const portField = inferPortLineField(line, {
+    objectType,
+    rawLines,
+    lineIndex,
+  });
+
+  if (portField) return portField;
+
   const scopedField = inferScopedInterfaceLineField(line, {
     objectType,
     rawLines,
@@ -3120,6 +2954,34 @@ function inferSemanticFieldNameForLineContext(line, context = {}) {
   }
 
   return inferSemanticFieldName(line);
+}
+
+function inferPortLineField(line, {
+  objectType = "",
+  rawLines = [],
+  lineIndex = -1,
+} = {}) {
+  if (canonicalizeComparableLine(objectType) !== "port") return "";
+
+  const normalized = canonicalizeComparableLine(line);
+  if (!normalized) return "";
+  if (/\badmin-state\b|\bno\s+shutdown\b|^shutdown$/.test(normalized)) return "admin-state";
+  if (/\bethernet\s+mode\b|^mode\b/.test(normalized)) return "ethernet.mode";
+  if (/\bethernet\s+mtu\b|^mtu\b/.test(normalized)) return "ethernet.mtu";
+  if (/\bdown-on-internal-error\b/.test(normalized)) return "ethernet.down-on-internal-error";
+  if (/\bcrc-monitor\s+signal-degrade\s+threshold\b|^sd-threshold\b|^threshold\b/.test(normalized)) return "ethernet.crc-monitor.signal-degrade.threshold";
+  if (/\bqueue-group\b/.test(normalized)) return "ethernet.access.egress.queue-group.name";
+  if (/\bhost-match\b|\bint-dest-id\b/.test(normalized)) return "ethernet.access.egress.queue-group.host-match.destination";
+  if (/^egress-scheduler-policy\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
+  if (/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
+  if (/^port-scheduler-policy\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
+
+  if (/^policy-name\b/.test(normalized)) {
+    const scope = getMdCliBraceLineScope(rawLines, lineIndex);
+    if (scope.includes("port-scheduler-policy")) return "ethernet.egress.scheduler-policy";
+  }
+
+  return "";
 }
 
 function inferScopedInterfaceLineField(line, {
@@ -3968,37 +3830,6 @@ function bindDropZone(zone, input, meta) {
   });
 }
 
-function renderProfileExceptionEditorTable(objectType = "") {
-  const exceptions = (state.profileDraft.exceptions || [])
-    .filter((item) => item.enabled !== false)
-    .filter((item) => !objectType || item.target?.objectType === objectType || item.match?.objectType === objectType);
-  return `
-    <div class="profile-exception-editor">
-      <div class="policy-toolbar">
-        <strong>프로파일 예외</strong>
-        <span class="small-note">${escapeHtml(objectType)} 기준 ${escapeHtml(exceptions.length)}개</span>
-      </div>
-      ${exceptions.length ? `
-        <div class="profile-exception-table compact">
-          <div>범위</div><div>필드</div><div>규칙</div><div>상태</div><div>사유</div><div>동작</div>
-          ${exceptions.map((exception) => {
-            const target = exception.target || {};
-            const match = exception.match || {};
-            return `
-              <div>${escapeHtml(exception.scope === "profile" ? "프로파일" : "객체")}</div>
-              <div>${escapeHtml(target.fieldPath || match.fieldPath || "-")}</div>
-              <div>${escapeHtml(target.ruleId || match.ruleId || "-")}</div>
-              <div>${escapeHtml(target.changeType || match.changeType || target.status || "-")}</div>
-              <div>${escapeHtml(exception.reasonKo || "-")}</div>
-              <div><button type="button" data-profile-exception-remove="${escapeHtml(exception.id || "")}">삭제</button></div>
-            `;
-          }).join("")}
-        </div>
-      ` : `<div class="small-note">이 객체 타입의 프로파일 예외 없음.</div>`}
-    </div>
-  `;
-}
-
 function captureInitialConfigSnapshot(force = false) {
   const oldValue = selectors.oldInput?.value || "";
   const newValue = selectors.newInput?.value || "";
@@ -4207,6 +4038,7 @@ function showEditMode() {
   selectors.oldInput.closest(".code-frame").classList.remove("diff-mode");
   selectors.newInput.closest(".code-frame").classList.remove("diff-mode");
   selectors.diffConnectorSvg.closest(".editor-grid").classList.remove("diff-connectors-active");
+  if (selectors.diffObjectBackgroundSvg) selectors.diffObjectBackgroundSvg.innerHTML = "";
   selectors.diffConnectorSvg.innerHTML = "";
   clearSelectedDiffTokens();
 }
@@ -4241,13 +4073,21 @@ function syncEditorScroll(event) {
 function syncDiffScroll(event) {
   if (state.syncingDiffScroll) return;
   const sourcePane = event.target;
-  const targetPane = sourcePane === selectors.oldDiffPane ? selectors.newDiffPane : selectors.oldDiffPane;
+  const sourceKey = sourcePane === selectors.oldDiffPane ? "old" : "new";
+  const targetKey = sourceKey === "old" ? "new" : "old";
+  const targetPane = sourceKey === "old" ? selectors.newDiffPane : selectors.oldDiffPane;
 
   state.syncingDiffScroll = true;
-  targetPane.scrollTop = sourcePane.scrollTop;
-  targetPane.scrollLeft = sourcePane.scrollLeft;
+  const result = syncPairedPaneScroll({
+    sourcePane,
+    targetPane,
+    lastSource: state.diffScrollPositions[sourceKey],
+    lastTarget: state.diffScrollPositions[targetKey],
+  });
+  state.diffScrollPositions[sourceKey] = result.source;
+  state.diffScrollPositions[targetKey] = result.target;
   state.syncingDiffScroll = false;
-  scheduleDiffConnectorRender();
+  if (result.changed) scheduleDiffConnectorRender();
 }
 
 function clearSelectedDiffTokens() {
@@ -4883,20 +4723,6 @@ function buildCurrentDashboardData(report, semantic = state.lastSemanticSummary)
   return dashboard;
 }
 
-function renderMetricCard({ label, value, detail = "", state = "", action = "", help = "" }) {
-  const tag = action ? "button" : "div";
-  const attrs = action
-    ? ` type="button" data-summary-filter="${escapeHtml(action)}" title="${escapeHtml(help || detail || label)}"`
-    : "";
-  return `
-    <${tag}${attrs} class="summary-card summary-metric ${action ? "summary-metric-action" : ""} ${state ? `summary-metric-${escapeHtml(state)}` : ""}">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
-      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
-    </${tag}>
-  `;
-}
-
 function renderStandardsAuditSummary(audit = {}) {
   const summary = audit.summary || {};
   const bySeverity = summary.bySeverity || {};
@@ -4940,24 +4766,6 @@ function renderAuditFindingCompact(finding = {}) {
         ${renderExceptionActionControls(exceptionTargetId)}
       </div>
     </article>
-  `;
-}
-
-function renderHiddenDiagnosticsLinks(context = {}, counts = {}) {
-  if (context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible) return "";
-  return `
-    <section class="summary-section summary-hidden-diagnostics">
-      <div class="summary-section-head">
-        <h3>고급 결과</h3>
-      </div>
-      <div class="summary-action-grid">
-        <button type="button" data-summary-filter="standards-audit">표준 점검 결과 보기</button>
-        <button type="button" data-summary-filter="audit-migration">전환 준비도 보기</button>
-        <button type="button" data-summary-filter="coverage">고급 진단 보기</button>
-        <button type="button" data-summary-filter="audit-suppressed">예외/숨김 처리된 항목</button>
-      </div>
-      <p class="small-note">현재 모드에서는 표준 점검, 전환 준비도, 고급 진단을 활성 이슈로 표시하지 않음. 예외/숨김 항목 ${escapeHtml(counts.auditSuppressed || 0)}개.</p>
-    </section>
   `;
 }
 
@@ -5080,21 +4888,6 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
   bindSummaryActions();
 }
 
-function buildOperatorAlerts({ dashboard, semanticSummary, report }) {
-  const { review, counts, context } = dashboard;
-  return [
-    counts.oldOnly ? `기존 설정에만 있는 항목 ${counts.oldOnly}개` : "",
-    counts.newOnly ? `신규 설정에만 있는 항목 ${counts.newOnly}개` : "",
-    counts.ambiguous ? `매핑 후보 여러 개 ${counts.ambiguous}개` : "",
-    counts.lowConfidence ? `낮은 신뢰도 설정 ${counts.lowConfidence}개` : "",
-    review.relationshipChanges.length ? `연결/참조 관계 변경 ${review.relationshipChanges.length}개` : "",
-    review.abnormal.length ? `비정상/검토 필요 값 ${review.abnormal.length}개` : "",
-    Number(semanticSummary.coveragePercent || 0) < 60 ? `분석된 라인 비율 ${semanticSummary.coveragePercent || 0}%` : "",
-    report.summary?.required ? `필수 규칙 위반 ${report.summary.required}건` : "",
-    context.support?.state === VENDOR_SUPPORT_STATE.PARTIAL ? "부분 지원 벤더 포함" : "",
-  ].filter(Boolean);
-}
-
 function renderCoverageWarning(semanticSummary = {}, support = {}, diagnostics = null) {
   const sideSummary = diagnostics
     ? `미분석 ${diagnostics.unparsedLineCount ?? 0} · wrapper ${diagnostics.wrapperLineCount ?? 0} · 라인매핑 없음 ${diagnostics.linesWithoutSourceMapping ?? 0}`
@@ -5148,19 +4941,6 @@ function renderFieldOverlapSummary(fieldAnalysis = {}) {
       `).join("") : `<div class="summary-table-empty">연결된 설정의 설정 항목 분석 결과가 없습니다.</div>`}
     </div>
     ${renderFieldHotList(fieldAnalysis.byField || [])}
-  `;
-}
-
-function renderFieldHotList(fields = []) {
-  if (!fields.length) return "";
-  return `
-    <div class="summary-field-hotlist">
-      ${fields.slice(0, 10).map((field) => `
-        <span title="다른 값 ${escapeHtml(field.different)} / 기존 누락 ${escapeHtml(field.missingOld)} / 신규 누락 ${escapeHtml(field.missingNew)}">
-          ${escapeHtml(field.field)} <strong>${escapeHtml(field.different + field.missingOld + field.missingNew)}</strong>
-        </span>
-      `).join("")}
-    </div>
   `;
 }
 
@@ -5542,16 +5322,25 @@ function renderProfileExceptionManager() {
   const exclusionCount = exceptions.filter((item) => item.type === "comparison-exclusion").length;
   return `
     <section class="summary-section profile-exception-manager" data-review-panel="suppressed">
-      <div class="summary-section-head">
-        <h3>예외/비교 제외된 항목</h3>
-        <span>${escapeHtml(exceptions.length)}개${exclusionCount ? ` · 비교 제외 ${escapeHtml(exclusionCount)}개` : ""}</span>
-      </div>
-      ${exceptions.length ? `
-        <div class="profile-exception-table">
-          <div>범위</div><div>설정 종류</div><div>설정</div><div>설정 항목</div><div>규칙/구분</div><div>사유</div><div>동작</div>
-          ${exceptions.map((exception) => renderProfileExceptionRow(exception)).join("")}
-        </div>
-      ` : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외 또는 비교 제외를 추가할 수 있음.</span></div>`}
+      <details class="profile-exception-overview-details summary-profile-exception-details" open>
+        <summary>
+          <div>
+            <strong>예외/비교 제외된 항목</strong>
+            <span>설정 종류별로 저장된 예외와 객체 비교 제외 규칙을 확인합니다.</span>
+          </div>
+          <div class="profile-exception-overview-counts">
+            <span>전체 ${escapeHtml(exceptions.length)}</span>
+            <span>예외 ${escapeHtml(exceptions.length - exclusionCount)}</span>
+            <span>객체 비교 제외 ${escapeHtml(exclusionCount)}</span>
+          </div>
+        </summary>
+        ${exceptions.length
+          ? renderProfileExceptionRuleGroups(exceptions, {
+            actionAttribute: "data-remove-exception",
+            actionLabel: "auto",
+          })
+          : `<div class="summary-empty-state"><strong>등록된 예외 없음</strong><span>검토 항목 상세에서 예외 또는 비교 제외를 추가할 수 있음.</span></div>`}
+      </details>
     </section>
   `;
 }
@@ -7146,6 +6935,45 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
     if (/^shutdown$|\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
   }
 
+  if (!objectType || objectType === "port") {
+    setField("port", extractPortNameFromLine(normalized));
+    setField("description", extractDescriptionValue(line));
+    setField("ethernet.mode",
+      normalized.match(/\bethernet\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("ethernet.mtu",
+      normalized.match(/\bethernet\s+mtu\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mtu\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("ethernet.crc-monitor.signal-degrade.threshold",
+      normalized.match(/\bcrc-monitor\s+signal-degrade\s+threshold\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^sd-threshold\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("ethernet.egress.scheduler-policy",
+      normalized.match(/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/^egress-scheduler-policy\s+"?([^"\s{}]+)"?/)?.[1]
+    );
+    const queueGroup = normalized.match(/\bqueue-group\s+"?([^"\s{}]+)"?/);
+    if (queueGroup) {
+      setField("ethernet.access.egress.queue-group.name", queueGroup[1]);
+      setField("ethernet.access.egress.queue-group.instance", normalized.match(/\b(?:instance-id|instance)\s+([^"\s{}]+)/)?.[1]);
+    }
+    setField("ethernet.access.egress.queue-group.host-match.destination",
+      normalized.match(/\bhost-match\b.*\b(?:dest|int-dest-id)\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/\bint-dest-id\s+"?([^"\s{}]+)"?/)?.[1]
+    );
+    if (/\bdown-on-internal-error\b/.test(normalized)) setField("ethernet.down-on-internal-error", "true");
+    if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) {
+      setField("state", "enabled");
+      setField("admin-state", "enabled");
+    }
+    if (/\badmin-state\s+disable\b/.test(normalized) || (!/\bno\s+shutdown\b/.test(normalized) && (/^shutdown$|\bshutdown\b/.test(normalized)))) {
+      setField("state", "disabled");
+      setField("admin-state", "disabled");
+    }
+  }
+
   if (!objectType || objectType === "interface") {
     setField("interface", normalized.match(/\binterface\s+"?([^"\s{}]+)"?/)?.[1]);
     const vprnMatch = normalized.match(/\bservice\s+vprn\s+"?([^"\s{}]+)"?/);
@@ -7418,6 +7246,99 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
     if (/\badmin-state\s+disable\b/.test(normalized)) add("state", "disabled", "admin-state", "terminal");
     if (/^shutdown$|\bshutdown\b/.test(normalized)) add("state", "disabled", "shutdown", "terminal");
   }
+  if (!objectType || objectType === "port") {
+    const port = extractPortNameFromLine(normalized);
+    if (port) {
+      add("port", port, "port", "context");
+      add("port", port, port, "context");
+      add("port", port, `"${port}"`, "context");
+    }
+
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "description", "terminal");
+      add("description", description, description, "terminal");
+      add("description", description, `"${description}"`, "terminal");
+    }
+
+    const mode =
+      normalized.match(/\bethernet\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^mode\s+([^"\s{}]+)/);
+    if (mode) {
+      add("ethernet.mode", mode[1], "mode", "terminal");
+      add("ethernet.mode", mode[1], mode[1], "terminal");
+    }
+
+    const mtu =
+      normalized.match(/\bethernet\s+mtu\s+([^"\s{}]+)/) ||
+      normalized.match(/^mtu\s+([^"\s{}]+)/);
+    if (mtu) {
+      add("ethernet.mtu", mtu[1], "mtu", "terminal");
+      add("ethernet.mtu", mtu[1], mtu[1], "terminal");
+    }
+
+    const threshold =
+      normalized.match(/\bcrc-monitor\s+signal-degrade\s+threshold\s+([^"\s{}]+)/) ||
+      normalized.match(/^sd-threshold\s+([^"\s{}]+)/);
+    if (threshold) {
+      add("ethernet.crc-monitor.signal-degrade.threshold", threshold[1], "threshold", "terminal");
+      add("ethernet.crc-monitor.signal-degrade.threshold", threshold[1], threshold[1], "terminal");
+    }
+
+    const scheduler =
+      normalized.match(/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\s+"?([^"\s{}]+)"?/) ||
+      normalized.match(/^egress-scheduler-policy\s+"?([^"\s{}]+)"?/);
+    if (scheduler) {
+      add("ethernet.egress.scheduler-policy", scheduler[1], "policy-name", "terminal");
+      add("ethernet.egress.scheduler-policy", scheduler[1], scheduler[1], "terminal");
+      add("ethernet.egress.scheduler-policy", scheduler[1], `"${scheduler[1]}"`, "terminal");
+    }
+
+    const queueGroup = normalized.match(/\bqueue-group\s+"?([^"\s{}]+)"?/);
+    if (queueGroup) {
+      add("ethernet.access.egress.queue-group.name", queueGroup[1], "queue-group", "terminal");
+      add("ethernet.access.egress.queue-group.name", queueGroup[1], queueGroup[1], "terminal");
+      add("ethernet.access.egress.queue-group.name", queueGroup[1], `"${queueGroup[1]}"`, "terminal");
+    }
+    const queueInstance = normalized.match(/\b(?:instance-id|instance)\s+([^"\s{}]+)/);
+    if (queueInstance && queueGroup) {
+      add("ethernet.access.egress.queue-group.instance", queueInstance[1], "instance", "terminal");
+      add("ethernet.access.egress.queue-group.instance", queueInstance[1], "instance-id", "terminal");
+      add("ethernet.access.egress.queue-group.instance", queueInstance[1], queueInstance[1], "terminal");
+    }
+
+    const hostDestination =
+      normalized.match(/\bhost-match\b.*\b(?:dest|int-dest-id)\s+"?([^"\s{}]+)"?/) ||
+      normalized.match(/\bint-dest-id\s+"?([^"\s{}]+)"?/);
+    if (hostDestination) {
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], "host-match", "terminal");
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], "int-dest-id", "terminal");
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], "dest", "terminal");
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], hostDestination[1], "terminal");
+    }
+
+    if (/\bdown-on-internal-error\b/.test(normalized)) {
+      add("ethernet.down-on-internal-error", "true", "down-on-internal-error", "terminal");
+    }
+    if (/\bno\s+shutdown\b/.test(normalized)) {
+      add("state", "enabled", "no shutdown", "terminal");
+      add("admin-state", "enabled", "no shutdown", "terminal");
+    }
+    if (/\badmin-state\s+enable\b/.test(normalized)) {
+      add("state", "enabled", "admin-state", "terminal");
+      add("admin-state", "enabled", "admin-state", "terminal");
+      add("admin-state", "enabled", "enable", "terminal");
+    }
+    if (/\badmin-state\s+disable\b/.test(normalized)) {
+      add("state", "disabled", "admin-state", "terminal");
+      add("admin-state", "disabled", "admin-state", "terminal");
+      add("admin-state", "disabled", "disable", "terminal");
+    }
+    if (!/\bno\s+shutdown\b/.test(normalized) && (/^shutdown$|\bshutdown\b/.test(normalized))) {
+      add("state", "disabled", "shutdown", "terminal");
+      add("admin-state", "disabled", "shutdown", "terminal");
+    }
+  }
   if (!objectType || objectType === "interface") {
     const interfaceName = normalized.match(/\binterface\s+"?([^"\s{}]+)"?/);
     if (interfaceName) {
@@ -7579,6 +7500,17 @@ function extractLagNameFromLine(line = "") {
     normalized.match(/^\/configure\s*\{\s*lag\s+"?([^"\s{}]+)"?/)?.[1] ||
     normalized.match(/^configure\s+lag\s+"?([^"\s{}]+)"?/)?.[1] ||
     normalized.match(/\blag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    ""
+  ).replace(/^"|"$/g, "");
+}
+
+function extractPortNameFromLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return stripTrailingSyntax(
+    normalized.match(/^port\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^\/configure\s*\{\s*port\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^configure\s+port\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/\bport\s+"?([^"\s{}]+)"?/)?.[1] ||
     ""
   ).replace(/^"|"$/g, "");
 }
@@ -8625,6 +8557,7 @@ function extractSemanticFieldFromLine(line, fieldRule, fieldName, normalizeRules
 
 function extractKnownFieldValue(line, fieldName) {
   const normalized = canonicalizeComparableLine(line);
+  if (fieldName === "port") return extractPortNameFromLine(normalized);
   if (fieldName === "route") return stripTrailingSyntax(normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?\b/)?.[1] || "");
   if (fieldName === "next-hop") return stripTrailingSyntax(normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (fieldName === "tag") return stripTrailingSyntax(normalized.match(/\btag\s+([^"\s{}]+)/)?.[1] || "");
@@ -8640,6 +8573,46 @@ function extractKnownFieldValue(line, fieldName) {
     if (isInterfaceIcmpLine(normalized)) return "";
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
     if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (fieldName === "ethernet.mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\bethernet\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.mtu") {
+    return stripTrailingSyntax(
+      normalized.match(/\bethernet\s+mtu\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mtu\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.down-on-internal-error" && /\bdown-on-internal-error\b/.test(normalized)) return "true";
+  if (fieldName === "ethernet.crc-monitor.signal-degrade.threshold") {
+    return stripTrailingSyntax(
+      normalized.match(/\bcrc-monitor\s+signal-degrade\s+threshold\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^sd-threshold\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^threshold\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.egress.scheduler-policy") {
+    return stripTrailingSyntax(
+      normalized.match(/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/^egress-scheduler-policy\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/^policy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.access.egress.queue-group.name") return stripTrailingSyntax(normalized.match(/\bqueue-group\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "ethernet.access.egress.queue-group.instance") return stripTrailingSyntax(normalized.match(/\b(?:instance-id|instance)\s+([^"\s{}]+)/)?.[1] || "");
+  if (fieldName === "ethernet.access.egress.queue-group.host-match.destination") {
+    return stripTrailingSyntax(
+      normalized.match(/\bhost-match\b.*\b(?:dest|int-dest-id)\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/\bint-dest-id\s+"?([^"\s{}]+)"?/)?.[1] ||
+      ""
+    );
   }
   if (fieldName === "address") {
     return stripTrailingSyntax(
@@ -9092,13 +9065,18 @@ function compareObjects(oldObjects, newObjects, options) {
   const requiredItems = buildRequiredItems(options.profile, selectors.oldInput.value, selectors.newInput.value, options.selectedObjects);
   const mergedItems = [...items, ...essentialItems, ...requiredItems];
   const comparedObjectKeys = keys.filter((key) => !key.startsWith("global:"));
+  const diffRows = buildPairedObjectDiffRows(oldMap, newMap, comparedObjectKeys);
+
+  if (shouldLogMdCliOneLinePortGroupingDebug(options)) {
+    logMdCliOneLinePortGroupingDebug(oldObjects, newObjects, oldMap, newMap, diffRows);
+  }
 
   return {
     items: mergedItems,
     visibleItems: filterItems(mergedItems, options),
 
     // Semantic Preview와 상단 diff 창의 source-of-truth를 통일한다.
-    diffRows: buildPairedObjectDiffRows(oldMap, newMap, comparedObjectKeys),
+    diffRows,
 
     oldObjects,
     newObjects,
@@ -9112,6 +9090,70 @@ function compareObjects(oldObjects, newObjects, options) {
       required: mergedItems.filter((item) => item.type === "required").length,
     },
   };
+}
+
+function shouldLogMdCliOneLinePortGroupingDebug(options = {}) {
+  return Boolean(options.semanticDebug || globalThis.__NCW_DEBUG_ONE_LINE_PORTS__);
+}
+
+function logMdCliOneLinePortGroupingDebug(oldObjects = [], newObjects = [], oldMap = new Map(), newMap = new Map(), diffRows = []) {
+  const parserRows = newObjects
+    .filter(isMdCliOneLinePortObject)
+    .map((object) => {
+      const fields = Object.keys(object.canonicalFields || object.fields || {});
+      return {
+        type: object.type,
+        key: object.key,
+        sourceLineCount: object.rawLines?.length || 0,
+        fieldCount: fields.length,
+        firstSourceLine: object.rawLines?.[0] || "",
+        fields: fields.join(", "),
+      };
+    });
+
+  if (!parserRows.length) return;
+
+  const matchedRows = [...newMap.entries()]
+    .filter(([, object]) => isMdCliOneLinePortObject(object))
+    .map(([mapKey, newObject]) => {
+      const oldObject = oldMap.get(mapKey) || null;
+      const newFields = Object.keys(newObject.canonicalFields || newObject.fields || {});
+      const oldFields = Object.keys(oldObject?.canonicalFields || oldObject?.fields || {});
+      return {
+        oldKey: oldObject?.key || mapKey,
+        newKey: newObject.originalKey || newObject.key || mapKey,
+        matchReason: newObject.descriptionEndpointMappedFrom ? "description-endpoint" : oldObject ? "key" : "new-only",
+        score: oldObject ? 100 : "",
+        oldFieldCount: oldFields.length,
+        newFieldCount: newFields.length,
+        newSourceLineCount: newObject.rawLines?.length || 0,
+      };
+    });
+
+  const diffInputRows = diffRows
+    .filter((row) => isMdCliOneLinePortRow(row.newRow))
+    .map((row) => ({
+      objectKey: row.newRow.objectKey,
+      lineNumber: row.newRow.number,
+      semanticField: row.newRow.semanticField,
+      text: row.newRow.text,
+    }));
+
+  console.groupCollapsed?.("[legacyCore] MD-CLI one-line port grouping");
+  console.table(parserRows);
+  console.table(matchedRows);
+  console.table(diffInputRows);
+  console.groupEnd?.();
+}
+
+function isMdCliOneLinePortObject(object = {}) {
+  const type = canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "");
+  if (type !== "port") return false;
+  return (object.rawLines || []).some((line) => /^\/configure\s*\{\s*port\b/i.test(String(line || "").trim()));
+}
+
+function isMdCliOneLinePortRow(row = {}) {
+  return Boolean(row?.text && /^\/configure\s*\{\s*port\b/i.test(String(row.text || "").trim()));
 }
 
 function alignObjectMapsByDescriptionEndpoint(oldMap, newMap, objectTypes = []) {
@@ -9744,6 +9786,7 @@ function buildDiffRows(oldText, newText, options) {
 }
 
 const semanticFieldOrder = [
+  "port",
   "lag",
   "member-port",
   "route",
@@ -9761,6 +9804,14 @@ const semanticFieldOrder = [
   "group",
   "state",
   "admin-state",
+  "ethernet.mode",
+  "ethernet.mtu",
+  "ethernet.down-on-internal-error",
+  "ethernet.crc-monitor.signal-degrade.threshold",
+  "ethernet.egress.scheduler-policy",
+  "ethernet.access.egress.queue-group.name",
+  "ethernet.access.egress.queue-group.instance",
+  "ethernet.access.egress.queue-group.host-match.destination",
   "peer-as",
   "interface",
   "subscriber-interface",
@@ -10274,18 +10325,74 @@ function semanticBlockState(item = {}, side = "") {
   return "changed";
 }
 
+function lineMatchComparableLinesForSide(lineMatch = {}, side = "") {
+  lineMatch = lineMatch || {};
+  return side === "old" ? (lineMatch.oldLines || []) : (lineMatch.newLines || []);
+}
+
+function lineMatchSourceLinesForSide(lineMatch = {}, side = "") {
+  lineMatch = lineMatch || {};
+  return side === "old" ? (lineMatch.oldSourceLines || []) : (lineMatch.newSourceLines || []);
+}
+
+function lineMatchValueForSide(lineMatch = {}, side = "") {
+  lineMatch = lineMatch || {};
+  const fieldMatch = Array.isArray(lineMatch.fieldMatches) ? lineMatch.fieldMatches[0] : null;
+  return side === "old"
+    ? (lineMatch.oldValue ?? fieldMatch?.oldValue ?? fieldMatch?.oldRawValue ?? "")
+    : (lineMatch.newValue ?? fieldMatch?.newValue ?? fieldMatch?.newRawValue ?? "");
+}
+
+function isSemanticClosingSourceLine(line = "") {
+  const text = String(line || "").trim();
+  return text === "exit" || text === "}";
+}
+
+function sourceLineContainsSemanticValue(line = "", value = "") {
+  const normalizedLine = canonicalizeComparableLine(line);
+  const normalizedValue = canonicalizeComparableLine(value).replace(/^"|"$/g, "");
+  if (!normalizedLine || !normalizedValue || normalizedValue === "true" || normalizedValue === "false") return false;
+  return normalizedLine.includes(normalizedValue);
+}
+
+function lineMatchSourceAnchorLinesForSide(lineMatch = {}, side = "") {
+  const sourceLines = lineMatchSourceLinesForSide(lineMatch, side)
+    .filter((line) => canonicalizeComparableLine(line))
+    .filter((line) => !isSemanticClosingSourceLine(line));
+  if (!sourceLines.length) return [];
+
+  const value = lineMatchValueForSide(lineMatch, side);
+  const valueMatched = sourceLines.filter((line) => sourceLineContainsSemanticValue(line, value));
+  if (valueMatched.length) return valueMatched;
+
+  return [sourceLines[sourceLines.length - 1]];
+}
+
+function lineMatchIndexLinesForSide(lineMatch = {}, side = "") {
+  const seen = new Set();
+  return [
+    ...lineMatchComparableLinesForSide(lineMatch, side),
+    ...lineMatchSourceAnchorLinesForSide(lineMatch, side),
+  ].filter((line) => {
+    const key = canonicalizeComparableLine(line);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function buildSemanticLineMatchIndex(lineMatches = [], side = "", item = {}) {
   const index = new Map();
 
   lineMatches.forEach((lineMatch, matchIndex) => {
-    const lines = side === "old" ? lineMatch.oldLines : lineMatch.newLines;
+    const lines = lineMatchIndexLinesForSide(lineMatch, side);
     const field =
       lineMatch.field ||
       lineMatch.semanticField ||
       inferSemanticFieldFromLineMatch(lineMatch);
     const relationKey = `${item?.id || "semantic-object"}:${buildLineRelationKeyFromMatch(lineMatch, matchIndex)}`;
 
-    (Array.isArray(lines) ? lines : []).forEach((line) => {
+    lines.forEach((line) => {
       const key = canonicalizeComparableLine(line);
       if (!key) return;
       index.set(key, {
@@ -10799,28 +10906,43 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
   const oldMatchedByNormalized = new Map();
   const newMatchedByNormalized = new Map();
 
-  (item.lineMatches || []).forEach((lineMatch, matchIndex) => {
-    (lineMatch.oldLines || []).forEach((line) => {
-      const key = canonicalizeComparableLine(line);
-      if (key) oldMatchedByNormalized.set(key, { lineMatch, matchIndex });
-    });
+  function setMatchedLine(map, line, payload) {
+    const key = canonicalizeComparableLine(line);
+    if (key && !map.has(key)) map.set(key, payload);
+  }
 
-    (lineMatch.newLines || []).forEach((line) => {
-      const key = canonicalizeComparableLine(line);
-      if (key) newMatchedByNormalized.set(key, { lineMatch, matchIndex });
-    });
+  (item.lineMatches || []).forEach((lineMatch, matchIndex) => {
+    lineMatchIndexLinesForSide(lineMatch, "old").forEach((line) =>
+      setMatchedLine(oldMatchedByNormalized, line, { lineMatch, matchIndex })
+    );
+
+    lineMatchIndexLinesForSide(lineMatch, "new").forEach((line) =>
+      setMatchedLine(newMatchedByNormalized, line, { lineMatch, matchIndex })
+    );
   });
+
+  function findRawLineIndexForCandidates(rawLines = [], consumed = new Set(), candidates = []) {
+    const candidateKeys = new Set(
+      candidates
+        .map((line) => canonicalizeComparableLine(line))
+        .filter(Boolean)
+    );
+    if (!candidateKeys.size) return -1;
+
+    return rawLines.findIndex((line, index) =>
+      !consumed.has(index) && candidateKeys.has(canonicalizeComparableLine(line))
+    );
+  }
 
   function findOldLineIndexForNewLine(newLine) {
     const newKey = canonicalizeComparableLine(newLine);
     const matched = newMatchedByNormalized.get(newKey);
     if (!matched) return -1;
 
-    const oldCandidate = matched.lineMatch.oldLines?.[0];
-    const oldKey = canonicalizeComparableLine(oldCandidate);
-
-    return oldRawLines.findIndex((line, index) =>
-      !oldConsumed.has(index) && canonicalizeComparableLine(line) === oldKey
+    return findRawLineIndexForCandidates(
+      oldRawLines,
+      oldConsumed,
+      lineMatchIndexLinesForSide(matched.lineMatch, "old")
     );
   }
 
@@ -10829,11 +10951,10 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
     const matched = oldMatchedByNormalized.get(oldKey);
     if (!matched) return -1;
 
-    const newCandidate = matched.lineMatch.newLines?.[0];
-    const newKey = canonicalizeComparableLine(newCandidate);
-
-    return newRawLines.findIndex((line, index) =>
-      !newConsumed.has(index) && canonicalizeComparableLine(line) === newKey
+    return findRawLineIndexForCandidates(
+      newRawLines,
+      newConsumed,
+      lineMatchIndexLinesForSide(matched.lineMatch, "new")
     );
   }
 
@@ -10855,10 +10976,10 @@ function buildSemanticMappedLineRows(item = {}, objectIndex = 0, oldObject = nul
     const sourceOnly = Boolean(oldLine && !newLine);
     const targetOnly = Boolean(newLine && !oldLine);
     const rowObjectStatus = sourceOnly ? "old-only" : targetOnly ? "new-only" : "";
-    const oldMatched = Boolean(lineMatch?.oldLines?.some((line) =>
+    const oldMatched = Boolean(lineMatchIndexLinesForSide(lineMatch, "old").some((line) =>
       canonicalizeComparableLine(line) === canonicalizeComparableLine(oldLine)
     ));
-    const newMatched = Boolean(lineMatch?.newLines?.some((line) =>
+    const newMatched = Boolean(lineMatchIndexLinesForSide(lineMatch, "new").some((line) =>
       canonicalizeComparableLine(line) === canonicalizeComparableLine(newLine)
     ));
 
@@ -12642,6 +12763,7 @@ function scheduleSettledDiffConnectorRender() {
 function renderDiffConnectors() {
   try {
     const svg = selectors.diffConnectorSvg;
+    const backgroundSvg = selectors.diffObjectBackgroundSvg;
     const grid = svg?.closest(".editor-grid");
     if (!svg || !grid?.classList.contains("diff-connectors-active")) return;
 
@@ -12650,13 +12772,17 @@ function renderDiffConnectors() {
     const newPaneRect = selectors.newDiffPane.getBoundingClientRect();
     const width = Math.max(0, gridRect.width);
     const height = Math.max(0, gridRect.height);
+    const connectorClipRect = buildDiffConnectorViewportClipRect(grid, selectors.oldDiffPane, selectors.newDiffPane);
 
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.setAttribute("width", width);
-    svg.setAttribute("height", height);
+    [backgroundSvg, svg].filter(Boolean).forEach((targetSvg) => {
+      targetSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      targetSvg.setAttribute("width", width);
+      targetSvg.setAttribute("height", height);
+    });
 
     const oldGroups = collectVisibleDiffObjectGroups(selectors.oldDiffPane, oldPaneRect);
     const newGroups = collectVisibleDiffObjectGroups(selectors.newDiffPane, newPaneRect);
+    const objectBackgroundPaths = [];
     const objectPaths = [];
     const debugPaths = [];
 
@@ -12668,13 +12794,14 @@ function renderDiffConnectors() {
           return;
         }
         const connector = buildObjectConnectorBand(oldGroup, newGroup, grid, isMappingDebugVisible());
+        objectBackgroundPaths.push(connector.backgroundMarkup);
         objectPaths.push(connector.markup);
         if (connector.debugMarkup) debugPaths.push(connector.debugMarkup);
       });
     }
 
     state.lineMappingDebugAnchorCount = 0;
-    const fieldPaths = buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect);
+    const fieldPaths = buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect);
     reportMappingDebugSnapshot({
       oldGroups,
       newGroups,
@@ -12682,10 +12809,17 @@ function renderDiffConnectors() {
       fieldPathCount: fieldPaths.filter(Boolean).length,
     });
 
+    if (backgroundSvg) {
+      backgroundSvg.innerHTML = renderDiffObjectBackgroundLayers({
+        objectBackgroundPaths,
+        clipRect: connectorClipRect,
+      });
+    }
     svg.innerHTML = renderDiffConnectorLayers({
       objectPaths,
       fieldPaths,
       debugPaths,
+      clipRect: connectorClipRect,
     });
     if (state.activeSemanticPairKey) {
       applySemanticPairClass(state.activeSemanticPairKey, "semantic-pair-selected", true);
@@ -12697,21 +12831,6 @@ function renderDiffConnectors() {
   } catch (error) {
     console.error("renderDiffConnectors failed", error);
   }
-}
-
-function renderDiffConnectorLayers({ objectPaths = [], fieldPaths = [], debugPaths = [] } = {}) {
-  return `
-    ${renderDiffConnectorDefs()}
-    <g class="object-mapping-overlay" data-overlay-layer="object">
-      ${objectPaths.filter(Boolean).join("")}
-    </g>
-    <g class="semantic-line-overlay" data-overlay-layer="line">
-      ${fieldPaths.filter(Boolean).join("")}
-    </g>
-    <g class="mapping-debug-overlay" data-overlay-layer="debug">
-      ${debugPaths.filter(Boolean).join("")}
-    </g>
-  `;
 }
 
 function ensureConnectorSvgDelegation() {
@@ -12757,29 +12876,6 @@ function ensureConnectorSvgDelegation() {
   });
 }
 
-function renderDiffConnectorDefs() {
-  return `
-    <defs>
-      <linearGradient id="lineMappingGloss" x1="-120%" y1="0%" x2="-20%" y2="0%">
-        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
-        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
-        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.58" />
-        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
-        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-        <animate attributeName="x1" values="-120%;100%" dur="3.2s" repeatCount="indefinite" />
-        <animate attributeName="x2" values="-20%;200%" dur="3.2s" repeatCount="indefinite" />
-      </linearGradient>
-      <filter id="objectFlowGlow" x="-20%" y="-40%" width="140%" height="180%">
-        <feGaussianBlur stdDeviation="7" result="blur" />
-        <feMerge>
-          <feMergeNode in="blur" />
-          <feMergeNode in="SourceGraphic" />
-        </feMerge>
-      </filter>
-    </defs>
-  `;
-}
-
 function collectVisibleDiffObjectGroups(pane, paneRect) {
   const groups = new Map();
   const lines = [...pane.querySelectorAll(".semantic-object-block-wrapper[data-pair-index], .diff-line[data-pair-index]")];
@@ -12818,12 +12914,24 @@ function collectVisibleDiffObjectGroups(pane, paneRect) {
 
 function groupVisibleRect(group, container) {
   const base = container.getBoundingClientRect();
+  const paneClientLeft = group.paneRect
+    ? group.paneRect.left + (group.pane?.clientLeft || 0)
+    : null;
+  const paneClientTop = group.paneRect
+    ? group.paneRect.top + (group.pane?.clientTop || 0)
+    : null;
+  const paneClientRight = group.paneRect
+    ? paneClientLeft + (group.pane?.clientWidth || group.paneRect.width)
+    : null;
+  const paneClientBottom = group.paneRect
+    ? paneClientTop + (group.pane?.clientHeight || group.paneRect.height)
+    : null;
   const paneBounds = group.paneRect
     ? {
-      left: group.paneRect.left - base.left,
-      right: group.paneRect.right - base.left,
-      top: group.paneRect.top - base.top,
-      bottom: group.paneRect.bottom - base.top,
+      left: paneClientLeft - base.left,
+      right: paneClientRight - base.left,
+      top: paneClientTop - base.top,
+      bottom: paneClientBottom - base.top,
     }
     : null;
   const rects = group.lines
@@ -12890,13 +12998,61 @@ function getRelativePoint(point, container) {
   };
 }
 
+function paneClientBounds(group, container) {
+  if (!group?.pane || !group?.paneRect) return null;
+  const base = container.getBoundingClientRect();
+  const left = group.paneRect.left + (group.pane.clientLeft || 0) - base.left;
+  const top = group.paneRect.top + (group.pane.clientTop || 0) - base.top;
+  return {
+    left,
+    right: left + (group.pane.clientWidth || group.paneRect.width),
+    top,
+    bottom: top + (group.pane.clientHeight || group.paneRect.height),
+  };
+}
+
+function buildDiffConnectorViewportClipRect(grid, oldPane, newPane) {
+  const base = grid?.getBoundingClientRect?.();
+  const oldViewport = paneViewportClientRect(oldPane);
+  const newViewport = paneViewportClientRect(newPane);
+  if (!base || !oldViewport || !newViewport) return null;
+
+  const left = Math.min(oldViewport.left, newViewport.left) - base.left;
+  const right = Math.max(oldViewport.right, newViewport.right) - base.left;
+  const top = Math.max(oldViewport.top, newViewport.top) - base.top;
+  const bottom = Math.min(oldViewport.bottom, newViewport.bottom) - base.top;
+  const x = Math.max(0, left);
+  const y = Math.max(0, top);
+  const width = Math.max(0, Math.min(base.width, right) - x);
+  const height = Math.max(0, Math.min(base.height, bottom) - y);
+
+  return { x, y, width, height, right: x + width, bottom: y + height };
+}
+
+function paneViewportClientRect(pane) {
+  const rect = pane?.getBoundingClientRect?.();
+  if (!rect) return null;
+  const left = rect.left + (pane.clientLeft || 0);
+  const top = rect.top + (pane.clientTop || 0);
+  return {
+    left,
+    top,
+    right: left + (pane.clientWidth || rect.width),
+    bottom: top + (pane.clientHeight || rect.height),
+  };
+}
+
 function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
   if (!oldGroup?.lines?.length || !newGroup?.lines?.length) return { markup: "", debugMarkup: "" };
 
   const oldRect = groupVisibleRect(oldGroup, grid);
   const newRect = groupVisibleRect(newGroup, grid);
+  const oldPaneBounds = paneClientBounds(oldGroup, grid);
+  const newPaneBounds = paneClientBounds(newGroup, grid);
   const x1 = oldRect.right;
   const x2 = newRect.left;
+  const oldRegionLeft = (oldPaneBounds?.left ?? oldRect.left) - 8;
+  const newRegionRight = newPaneBounds?.right ?? newRect.right;
   const y1Top = oldRect.top;
   const y1Bottom = oldRect.bottom;
   const y2Top = newRect.top;
@@ -12908,6 +13064,17 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
   const typeClass = objectConnectorTypeClass(oldGroup, newGroup);
   const connectorWidth = Math.abs(x2 - x1);
   const controlOffset = Math.max(20, Math.min(140, connectorWidth * 0.5));
+  const objectRegionPath = [
+    `M ${oldRegionLeft} ${y1Top}`,
+    `L ${x1} ${y1Top}`,
+    `C ${x1 + controlOffset} ${y1Top}, ${x2 - controlOffset} ${y2Top}, ${x2} ${y2Top}`,
+    `L ${newRegionRight} ${y2Top}`,
+    `L ${newRegionRight} ${y2Bottom}`,
+    `L ${x2} ${y2Bottom}`,
+    `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
+    `L ${oldRegionLeft} ${y1Bottom}`,
+    "Z",
+  ].join(" ");
   const ribbonPath = [
     `M ${x1} ${y1Top}`,
     `C ${x1 + controlOffset} ${y1Top}, ${x2 - controlOffset} ${y2Top}, ${x2} ${y2Top}`,
@@ -12915,6 +13082,7 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
     `C ${x2 - controlOffset} ${y2Bottom}, ${x1 + controlOffset} ${y1Bottom}, ${x1} ${y1Bottom}`,
     "Z",
   ].join(" ");
+  const spinePath = `M ${x1} ${y1Center} C ${x1 + controlOffset} ${y1Center}, ${x2 - controlOffset} ${y2Center}, ${x2} ${y2Center}`;
   const label = connectorLabelText(oldGroup, newGroup);
   const debugMarkup = debug
     ? [
@@ -12925,45 +13093,17 @@ function buildObjectConnectorBand(oldGroup, newGroup, grid, debug = false) {
     : "";
 
   return {
+    backgroundMarkup: `<path class="diff-object-region ${state} ${typeClass}" d="${objectRegionPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />`,
     markup: `
     <g class="diff-object-connector ${state} ${typeClass}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" data-connector-state="${escapeHtml(state)}">
       <title>${escapeHtml(label)} · ${escapeHtml(state)}</title>
       <path class="diff-object-flow-glow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
       <path class="diff-object-flow ${state} ${typeClass}" d="${ribbonPath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
+      <path class="diff-object-flow-spine ${state} ${typeClass}" d="${spinePath}" data-semantic-pair-key="${escapeHtml(oldGroup.key)}" />
     </g>
   `,
     debugMarkup,
   };
-}
-
-function objectConnectorTypeClass(oldGroup = {}, newGroup = {}) {
-  return `type-${cssSafeClassName(oldGroup.type || newGroup.type || "object")}`;
-}
-
-function objectConnectorState(oldGroup = {}, newGroup = {}) {
-  const oldStatus = String(oldGroup.status || "").toLowerCase();
-  const newStatus = String(newGroup.status || "").toLowerCase();
-  const status = oldStatus || newStatus;
-  const reason = String(oldGroup.reason || newGroup.reason || "").toLowerCase();
-  const score = Number(oldGroup.score || newGroup.score || 0);
-
-  if (reason === "manual") return "manual";
-  if (status === "partial" || status === "changed") return "partial";
-  if (status === "ambiguous") return "candidate";
-  if (status === "candidate") return "candidate";
-  if (status === "old-only" || status === "new-only" || status === "unmatched") return "unmatched";
-  if (oldStatus === "matched" && newStatus === "matched") return "matched";
-  if (oldGroup.state !== "equal" || newGroup.state !== "equal") return "changed";
-  if (Number.isFinite(score) && score > 0 && score < 100) return "changed";
-  return "matched";
-}
-
-function connectorLabelText(oldGroup = {}, newGroup = {}) {
-  const type = oldGroup.type || newGroup.type || "object";
-  const identity = oldGroup.identity || newGroup.identity || "";
-  const compactIdentity = String(identity).length > 14 ? `${String(identity).slice(0, 13)}...` : identity;
-  const label = compactIdentity ? `${type} ${compactIdentity}` : type;
-  return label.length > 24 ? `${label.slice(0, 23)}...` : label;
 }
 
 function buildMappingDebugAnchor(x, y, kind, key, side = "") {
@@ -13026,13 +13166,13 @@ function reportLineMappingDebugRows(label, rows = []) {
   console.table(rows.slice(0, 60));
 }
 
-function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
+function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect = null) {
   if (!isLineMappingVisible()) {
     lineMappingDebug("relations: hidden");
     return [];
   }
 
-  const paths = buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect);
+  const paths = buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect);
   const newLineMap = new Map();
 
   [...selectors.newDiffPane.querySelectorAll(".diff-line[data-semantic-line-mapping-key]")].forEach((line) => {
@@ -13067,6 +13207,7 @@ function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
       relationState: lineRelationStateFromElements(oldLine, newLine),
       oldAnchorFn: diffLineTextAnchor,
       newAnchorFn: diffLineTextAnchor,
+      clipRect: connectorClipRect,
     }));
   });
 
@@ -13089,7 +13230,7 @@ function buildVisibleLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
   return paths;
 }
 
-function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect) {
+function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPaneRect, connectorClipRect = null) {
   const paths = [];
   const debugRows = [];
   const oldElements = collectSemanticRelationElements(selectors.oldDiffPane);
@@ -13131,6 +13272,7 @@ function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPane
       relationState: lineRelationStateFromElements(oldLine, newLine),
       oldAnchorFn: semanticConfigLineAnchor,
       newAnchorFn: semanticConfigLineAnchor,
+      clipRect: connectorClipRect,
     }));
   });
 
@@ -13139,12 +13281,14 @@ function buildVisibleSemanticConfigLineConnectorPaths(grid, oldPaneRect, newPane
     oldPaneRect,
     newPaneRect,
     coveredFieldPairs,
+    connectorClipRect,
   }));
   paths.push(...buildFallbackFlatSemanticFieldConnectorPaths({
     grid,
     oldPaneRect,
     newPaneRect,
     coveredFieldPairs,
+    connectorClipRect,
   }));
   reportLineMappingDebugRows("explicit semantic lines", debugRows);
 
@@ -13180,6 +13324,7 @@ function buildFallbackSemanticFieldConnectorPaths({
   oldPaneRect,
   newPaneRect,
   coveredFieldPairs,
+  connectorClipRect = null,
 }) {
   const paths = [];
   const debugRows = [];
@@ -13243,6 +13388,7 @@ function buildFallbackSemanticFieldConnectorPaths({
           relationState,
           oldAnchorFn: semanticConfigLineAnchor,
           newAnchorFn: semanticConfigLineAnchor,
+          clipRect: connectorClipRect,
         }));
       }
     });
@@ -13265,6 +13411,7 @@ function buildFallbackFlatSemanticFieldConnectorPaths({
   oldPaneRect,
   newPaneRect,
   coveredFieldPairs,
+  connectorClipRect = null,
 }) {
   const paths = [];
   const debugRows = [];
@@ -13320,6 +13467,7 @@ function buildFallbackFlatSemanticFieldConnectorPaths({
           relationState,
           oldAnchorFn: diffLineTextAnchor,
           newAnchorFn: diffLineTextAnchor,
+          clipRect: connectorClipRect,
         }));
       }
     });
@@ -13528,6 +13676,8 @@ function currentLineMappingBend() {
   return Math.max(0, Math.min(1, raw / 100));
 }
 
+const LINE_MAPPING_TEXT_OFFSET = 6;
+
 function buildLineMappingConnectorPath({
   oldElement,
   newElement,
@@ -13538,6 +13688,7 @@ function buildLineMappingConnectorPath({
   relationState,
   oldAnchorFn,
   newAnchorFn,
+  clipRect = null,
 }) {
   const oldAnchor = oldAnchorFn(oldElement, oldPaneRect, "right");
   const newAnchor = newAnchorFn(newElement, newPaneRect, "left");
@@ -13547,6 +13698,8 @@ function buildLineMappingConnectorPath({
   const x2 = newPoint.x;
   const y1 = oldPoint.y;
   const y2 = newPoint.y;
+  if (!lineMappingConnectorIntersectsClip({ x1, y1, x2, y2, clipRect })) return "";
+
   const style = currentLineMappingStyle();
   const active = relationKey && relationKey === state.activeLineRelationKey ? "line-relation-selected" : "";
   const animated = selectors.lineMappingAnimationToggle?.checked ? "is-animated" : "";
@@ -13555,7 +13708,7 @@ function buildLineMappingConnectorPath({
     ? "clean-matched"
     : "";
   const laneBounds = getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 });
-  const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds });
+  const path = buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass, laneBounds, bend: currentLineMappingBend() });
   const railMarkup = style === "slime"
     ? buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass, active, path })
     : "";
@@ -13586,33 +13739,16 @@ function buildLineMappingConnectorPath({
     d="${path}" />${shineMarkup}${debugMarkup}`;
 }
 
-function buildLineMappingRailPath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path }) {
-  return `<path class="line-mapping-rail ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active}"
-    data-line-relation-key="${escapeHtml(relationKey)}"
-    d="${path}" />`;
-}
-
-function buildSlimeLineShinePath({ relationKey, relationState, fieldClass, cleanMatchedClass = "", active, path, x1, y1, x2, y2 }) {
-  const glossId = `lineMappingGloss-${cssSafeClassName(relationKey || `${x1}-${y1}-${x2}-${y2}`)}`;
-  const sweep = Math.max(72, Math.min(180, Math.abs(x2 - x1) * 0.22));
-  const startX = Math.min(x1, x2) - sweep;
-  const endX = Math.max(x1, x2) + sweep;
-  const midY = (y1 + y2) / 2;
-  return `<defs>
-      <linearGradient id="${escapeHtml(glossId)}" gradientUnits="userSpaceOnUse" x1="${startX}" y1="${midY}" x2="${startX + sweep}" y2="${midY}">
-        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
-        <stop offset="38%" stop-color="#ffffff" stop-opacity="0.05" />
-        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.62" />
-        <stop offset="62%" stop-color="#ffffff" stop-opacity="0.08" />
-        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-        <animate attributeName="x1" values="${startX};${endX}" dur="3.2s" repeatCount="indefinite" />
-        <animate attributeName="x2" values="${startX + sweep};${endX + sweep}" dur="3.2s" repeatCount="indefinite" />
-      </linearGradient>
-    </defs>
-    <path class="line-mapping-shine ${escapeHtml(relationState)} ${escapeHtml(fieldClass)} ${cleanMatchedClass} ${active} is-animated"
-    style="stroke: url(#${escapeHtml(glossId)})"
-    data-line-relation-key="${escapeHtml(relationKey)}"
-    d="${path}" />`;
+function lineMappingConnectorIntersectsClip({ x1, y1, x2, y2, clipRect = null, buffer = 48 }) {
+  if (!clipRect) return true;
+  const left = Math.min(x1, x2) - buffer;
+  const right = Math.max(x1, x2) + buffer;
+  const top = Math.min(y1, y2) - buffer;
+  const bottom = Math.max(y1, y2) + buffer;
+  return right >= clipRect.x &&
+    left <= clipRect.right &&
+    bottom >= clipRect.y &&
+    top <= clipRect.bottom;
 }
 
 function lineRelationFieldClass(oldElement, newElement, relationKey = "") {
@@ -13669,193 +13805,103 @@ function getLineMappingLaneBounds({ grid, oldPaneRect, newPaneRect, x1, x2 }) {
   };
 }
 
-function buildLineMappingPathD({ x1, y1, x2, y2, style, fieldClass = "", laneBounds = null }) {
-  const bend = currentLineMappingBend();
-  if (style === "straight" || style === "chain") {
-    return buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass, bend, laneBounds });
-  }
-
-  return buildSlimeTubePath({ x1, y1, x2, y2, bend, laneBounds });
-}
-
-function buildFieldLaneLinePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
-  if (bend <= 0.02) return `M ${x1} ${y1} L ${x2} ${y2}`;
-  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
-  return `M ${x1} ${y1} L ${lane.leftX} ${y1} L ${lane.x} ${lane.y} L ${lane.rightX} ${y2} L ${x2} ${y2}`;
-}
-
-function buildFieldLaneCurvePath({ x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null }) {
-  const distance = Math.abs(x2 - x1);
-  if (bend <= 0.02) {
-    const tension = Math.max(64, Math.min(220, distance * 0.46));
-    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
-  }
-
-  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass, bend, laneBounds);
-  const middleTension = Math.max(12, Math.min(42, distance * 0.045));
-  return [
-    `M ${x1} ${y1}`,
-    `L ${lane.leftX} ${y1}`,
-    `C ${lane.leftX + middleTension} ${y1}, ${lane.x - middleTension} ${lane.y}, ${lane.x} ${lane.y}`,
-    `C ${lane.x + middleTension} ${lane.y}, ${lane.rightX - middleTension} ${y2}, ${lane.rightX} ${y2}`,
-    `L ${x2} ${y2}`,
-  ].join(" ");
-}
-
-function buildSlimeTubePath({ x1, y1, x2, y2, bend = 0.65, laneBounds = null }) {
-  const distance = Math.abs(x2 - x1);
-  const verticalDistance = Math.abs(y2 - y1);
-  if (distance < 24 || verticalDistance < 3) {
-    const tension = Math.max(36, Math.min(180, distance * (0.28 + bend * 0.22)));
-    return `M ${x1} ${y1} C ${x1 + tension} ${y1}, ${x2 - tension} ${y2}, ${x2} ${y2}`;
-  }
-
-  const lane = lineRelationFieldLanePoint(x1, y1, x2, y2, "", bend, laneBounds);
-  const laneWidth = Math.max(40, lane.rightX - lane.leftX);
-  const tension = Math.max(28, Math.min(82, laneWidth * 0.36));
-
-  return [
-    `M ${x1} ${y1}`,
-    `L ${lane.leftX} ${y1}`,
-    `C ${lane.leftX + tension} ${y1}, ${lane.rightX - tension} ${y2}, ${lane.rightX} ${y2}`,
-    `L ${x2} ${y2}`,
-  ].join(" ");
-}
-
-function lineRelationFieldLanePoint(x1, y1, x2, y2, fieldClass = "", bend = 0.65, laneBounds = null) {
-  const distance = Math.abs(x2 - x1);
-  const leftX = Number.isFinite(laneBounds?.leftX) ? laneBounds.leftX : null;
-  const rightX = Number.isFinite(laneBounds?.rightX) ? laneBounds.rightX : null;
-  const directX = Number.isFinite(laneBounds?.centerX) ? laneBounds.centerX : (x1 + x2) / 2;
-  const directY = (y1 + y2) / 2;
-  const laneHalfWidth = Math.max(18, Math.min(46, distance * 0.075));
-  const verticalDistance = Math.abs(y2 - y1);
-  const laneY = verticalDistance < 4
-    ? directY
-    : directY;
-  return {
-    x: directX,
-    leftX: Number.isFinite(leftX) ? leftX : directX - laneHalfWidth,
-    rightX: Number.isFinite(rightX) ? rightX : directX + laneHalfWidth,
-    y: laneY,
-  };
-}
-
-function clampLineLaneY(value, y1, y2) {
-  const minY = Math.min(y1, y2);
-  const maxY = Math.max(y1, y2);
-  const span = maxY - minY;
-  if (span < 4) return (y1 + y2) / 2;
-
-  const inset = Math.min(6, span * 0.18);
-  return Math.max(minY + inset, Math.min(maxY - inset, value));
-}
-
-function lineRelationFieldLaneYOffset(fieldClass = "") {
-  const offsetByField = {
-    "field-route": -22,
-    "field-neighbor": -22,
-    "field-address": -15,
-    "field-ip-address": -15,
-    "field-next-hop": -11,
-    "field-gateway": -11,
-    "field-state": 9,
-    "field-admin-state": 9,
-    "field-description": 18,
-    "field-tag": 28,
-    "field-interface": 14,
-    "field-sap": 14,
-    "field-port": 14,
-    "field-lag": 14,
-    "field-group": 38,
-    "field-peer-group": 38,
-    "field-authentication-key": 48,
-    "field-peer-as": 48,
-  };
-  return offsetByField[fieldClass] ?? 0;
-}
-
-function buildSmoothLineMappingPath({ x1, y1, x2, y2 }) {
-  const distance = Math.abs(x2 - x1);
-  const tension = Math.max(64, Math.min(220, distance * 0.46));
-  const dy = y2 - y1;
-  const curveY = Math.abs(dy) < 6 ? 0 : dy * 0.18;
-  return `M ${x1} ${y1} C ${x1 + tension} ${y1 + curveY}, ${x2 - tension} ${y2 - curveY}, ${x2} ${y2}`;
-}
-
 function semanticConfigLineAnchor(line, paneRect, preferredEdge) {
   const lineElement = line.closest?.(".semantic-diff-config-line, .diff-line") || line;
-  const textElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
-  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
+  const anchorBounds = getLineMappingAnchorBounds(lineElement, paneRect);
+  const anchorRect = getLineTextAnchorRect(line, lineElement, anchorBounds);
   const lineRect = lineElement.getBoundingClientRect();
-  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
-  const visibleLeft = Math.max(textRect.left, paneRect.left);
-  const visibleRight = Math.min(textRect.right, paneRect.right);
-  const hasVisibleWidth = visibleRight > visibleLeft;
-  const x = preferredEdge === "left"
-    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
-    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
-    x,
+    x: lineTextAnchorX(anchorRect, preferredEdge, anchorBounds),
     y: lineRect.top + (lineRect.height / 2),
   };
 }
 
 function diffLineTextAnchor(line, paneRect, preferredEdge) {
   const lineElement = line.closest?.(".diff-line, .semantic-diff-config-line") || line;
-  const textElement = lineElement.querySelector(".diff-line-text") || lineElement.querySelector("code") || lineElement;
-  const textRect = getActualSettingTextRect(textElement, preferredEdge) || textElement.getBoundingClientRect();
+  const anchorBounds = getLineMappingAnchorBounds(lineElement, paneRect);
+  const anchorRect = getLineTextAnchorRect(line, lineElement, anchorBounds);
   const lineRect = lineElement.getBoundingClientRect();
-  const visibleTokenRect = getVisibleSemanticTokenRect(lineElement, paneRect, preferredEdge);
-  const visibleLeft = Math.max(textRect.left, paneRect.left);
-  const visibleRight = Math.min(textRect.right, paneRect.right);
-  const hasVisibleWidth = visibleRight > visibleLeft;
-  const x = preferredEdge === "left"
-    ? (hasVisibleWidth ? visibleLeft : visibleTokenRect?.left ?? Math.max(paneRect.left, Math.min(textRect.left, paneRect.right)))
-    : (hasVisibleWidth ? visibleRight : visibleTokenRect?.right ?? Math.max(paneRect.left, Math.min(textRect.right, paneRect.right)));
   return {
-    x,
+    x: lineTextAnchorX(anchorRect, preferredEdge, anchorBounds),
     y: lineRect.top + (lineRect.height / 2),
   };
 }
 
-function getVisibleSemanticTokenRect(line, paneRect, preferredEdge = "right") {
-  const tokens = [...line.querySelectorAll(".diff-token-match[data-semantic-field]:not([data-semantic-field=''])")];
-  const preferredField = normalizeRelationField(line?.dataset?.semanticField || "");
-  const visible = tokens
-    .map((token) => ({ token, rect: token.getBoundingClientRect() }))
-    .filter((item) => item.rect.right > paneRect.left && item.rect.left < paneRect.right);
-  if (!visible.length) return null;
-
-  const fieldMatched = preferredField
-    ? visible.filter((item) => normalizeRelationField(item.token.dataset.semanticField || "") === preferredField)
-    : [];
-  const visiblePool = fieldMatched.length ? fieldMatched : visible;
-  const candidates = preferredEdge === "right"
-    ? visiblePool.filter((item) => item.token.dataset.tokenKind === "keyword")
-    : visiblePool;
-  const pool = candidates.length ? candidates : visiblePool;
-  const item = preferredEdge === "left"
-    ? pool.reduce((best, candidate) => (candidate.rect.left < best.rect.left ? candidate : best), pool[0])
-    : pool.reduce((best, candidate) => (candidate.rect.right > best.rect.right ? candidate : best), pool[0]);
-  const rect = item.rect;
-
+function getLineMappingAnchorBounds(element, paneRect) {
+  const pane = element?.closest?.(".embedded-diff");
+  if (!pane) return paneRect;
+  const rect = pane.getBoundingClientRect();
+  const left = rect.left + (pane.clientLeft || 0);
   return {
-    left: Math.max(rect.left, paneRect.left),
-    right: Math.min(rect.right, paneRect.right),
+    left,
+    right: left + (pane.clientWidth || rect.width),
   };
 }
 
-function getActualSettingTextRect(element, preferredEdge = "right") {
+function getLineTextAnchorRect(sourceElement, lineElement, bounds) {
+  return getVisibleLineTextGroupRect(lineElement, bounds)
+    || getLineContentTextRect(lineElement, bounds)
+    || getRelationTokenGroupRect(sourceElement, lineElement, bounds)
+    || getVisibleLineTokenGroupRect(lineElement, bounds)
+    || clippedRect(lineElement.getBoundingClientRect(), bounds)
+    || lineElement.getBoundingClientRect();
+}
+
+function getRelationTokenGroupRect(sourceElement, lineElement, bounds) {
+  const directToken = sourceElement?.classList?.contains("diff-token-match") ? sourceElement : null;
+  const relationKey = sourceElement?.dataset?.lineRelationKey || lineElement?.dataset?.lineRelationKey || "";
+  const semanticField = normalizeRelationField(
+    sourceElement?.dataset?.semanticField ||
+    lineElement?.dataset?.semanticField ||
+    ""
+  );
+  const tokens = new Set();
+
+  if (directToken) tokens.add(directToken);
+  if (relationKey) {
+    lineElement
+      .querySelectorAll(`.diff-token-match[data-line-relation-key="${cssEscape(relationKey)}"]`)
+      .forEach((token) => tokens.add(token));
+  }
+  if (semanticField) {
+    lineElement.querySelectorAll(".diff-token-match[data-semantic-field]").forEach((token) => {
+      if (normalizeRelationField(token.dataset.semanticField || "") === semanticField) {
+        tokens.add(token);
+      }
+    });
+  }
+
+  return unionVisibleRects([...tokens].map((token) => token.getBoundingClientRect()), bounds);
+}
+
+function getVisibleLineTokenGroupRect(lineElement, bounds) {
+  const tokenRects = [...lineElement.querySelectorAll(".diff-token-match")]
+    .map((token) => token.getBoundingClientRect());
+  return unionVisibleRects(tokenRects, bounds);
+}
+
+function getVisibleLineTextGroupRect(lineElement, bounds) {
+  const contentElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
+  const textRect = getActualLineTextRect(contentElement);
+  const tokenRects = [...contentElement.querySelectorAll(".diff-token-match")]
+    .map((token) => token.getBoundingClientRect());
+  return unionVisibleRects([textRect, ...tokenRects], bounds);
+}
+
+function getLineContentTextRect(lineElement, bounds) {
+  const contentElement = lineElement.querySelector("code") || lineElement.querySelector(".diff-line-text") || lineElement;
+  return clippedRect(contentElement.getBoundingClientRect(), bounds);
+}
+
+function getActualLineTextRect(element) {
   if (!element || !document.createRange || !document.createTreeWalker) return null;
-  const textNodeInfo = preferredEdge === "left"
-    ? findFirstNonWhitespaceTextNode(element)
-    : findLastNonWhitespaceTextNode(element);
-  if (!textNodeInfo) return null;
+  const first = findFirstNonWhitespaceTextNode(element);
+  const last = findLastNonWhitespaceTextNode(element);
+  if (!first || !last) return null;
 
   const range = document.createRange();
-  range.setStart(textNodeInfo.node, textNodeInfo.offset);
-  range.setEnd(textNodeInfo.node, textNodeInfo.offset + 1);
+  range.setStart(first.node, first.offset);
+  range.setEnd(last.node, last.offset + 1);
   const rect = range.getBoundingClientRect();
   range.detach?.();
   return rect && rect.width >= 0 ? rect : null;
@@ -13867,9 +13913,7 @@ function findFirstNonWhitespaceTextNode(element) {
 
   while (node) {
     const match = String(node.nodeValue || "").match(/\S/);
-    if (match) {
-      return { node, offset: match.index };
-    }
+    if (match) return { node, offset: match.index };
     node = walker.nextNode();
   }
 
@@ -13889,12 +13933,42 @@ function findLastNonWhitespaceTextNode(element) {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
     const value = String(nodes[index].nodeValue || "");
     const match = value.match(/\S(?=\s*$)/);
-    if (match) {
-      return { node: nodes[index], offset: match.index };
-    }
+    if (match) return { node: nodes[index], offset: match.index };
   }
 
   return null;
+}
+
+function unionVisibleRects(rects = [], bounds) {
+  const visible = rects
+    .map((rect) => clippedRect(rect, bounds))
+    .filter(Boolean);
+  if (!visible.length) return null;
+  return visible.reduce((acc, rect) => ({
+    left: Math.min(acc.left, rect.left),
+    right: Math.max(acc.right, rect.right),
+    top: Math.min(acc.top, rect.top),
+    bottom: Math.max(acc.bottom, rect.bottom),
+  }), visible[0]);
+}
+
+function clippedRect(rect, bounds) {
+  if (!rect || !bounds) return null;
+  const left = Math.max(rect.left, bounds.left);
+  const right = Math.min(rect.right, bounds.right);
+  if (right <= left || rect.bottom <= rect.top) return null;
+  return {
+    left,
+    right,
+    top: rect.top,
+    bottom: rect.bottom,
+  };
+}
+
+function lineTextAnchorX(rect, preferredEdge, bounds) {
+  const edge = preferredEdge === "left" ? rect.left : rect.right;
+  const offset = preferredEdge === "left" ? -LINE_MAPPING_TEXT_OFFSET : LINE_MAPPING_TEXT_OFFSET;
+  return Math.max(bounds.left, Math.min(edge + offset, bounds.right));
 }
 
 function renderReportV2(report) {
@@ -16410,7 +16484,6 @@ async function renderSavedProfiles() {
                 <div class="small-note">${profile.vendor} | 수정 ${formatDate(profile.updatedAt)}</div>
               </div>
               <div class="saved-profile-actions">
-                <button type="button" data-profile-select-id="${profile.id}">선택</button>
                 <button type="button" data-profile-load-id="${profile.id}">불러오기</button>
               </div>
             </div>
@@ -16418,12 +16491,6 @@ async function renderSavedProfiles() {
         )
         .join("")
     : `<div class="small-note">저장된 프로파일이 없습니다.</div>`;
-
-  selectors.savedProfilesList.querySelectorAll("[data-profile-select-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectSavedProfile(button.dataset.profileSelectId);
-    });
-  });
 
   selectors.savedProfilesList.querySelectorAll("[data-profile-item-id]").forEach((item) => {
     item.addEventListener("click", (event) => {
@@ -17048,69 +17115,6 @@ function escapeHtml(value) {
 function createId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function openDatabase() {
-  if (typeof indexedDB === "undefined") return Promise.reject(new Error("IndexedDB unavailable"));
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("networkConfigWorkbench", 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("sessions")) db.createObjectStore("sessions", { keyPath: "id" });
-      if (!db.objectStoreNames.contains("profiles")) db.createObjectStore("profiles", { keyPath: "id" });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function saveRecord(storeName, record, fallbackKey) {
-  try {
-    const db = await openDatabase();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(storeName, "readwrite");
-      tx.objectStore(storeName).put(record);
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-  } catch {
-    const current = JSON.parse(localStorage.getItem(fallbackKey) || "[]").filter((item) => item.id !== record.id);
-    current.unshift(record);
-    localStorage.setItem(fallbackKey, JSON.stringify(current.slice(0, 50)));
-  }
-}
-
-async function readRecords(storeName, fallbackKey) {
-  try {
-    const db = await openDatabase();
-    const records = await new Promise((resolve, reject) => {
-      const tx = db.transaction(storeName, "readonly");
-      const request = tx.objectStore(storeName).getAll();
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => reject(request.error);
-    });
-    db.close();
-    return records.sort((left, right) => right.updatedAt - left.updatedAt);
-  } catch {
-    return JSON.parse(localStorage.getItem(fallbackKey) || "[]").sort((left, right) => right.updatedAt - left.updatedAt);
-  }
-}
-
-async function deleteRecord(storeName, id, fallbackKey) {
-  try {
-    const db = await openDatabase();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(storeName, "readwrite");
-      tx.objectStore(storeName).delete(id);
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-  } catch {
-    const current = JSON.parse(localStorage.getItem(fallbackKey) || "[]").filter((item) => item.id !== id);
-    localStorage.setItem(fallbackKey, JSON.stringify(current));
-  }
 }
 
 function autoLearnRulesFromExamples() {

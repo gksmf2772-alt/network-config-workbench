@@ -25,6 +25,12 @@ function isIgnorableLine(line) {
 function makeLineMatch({
   oldLines = [],
   newLines = [],
+  oldDisplayLine = null,
+  newDisplayLine = null,
+  oldSourceLines = [],
+  newSourceLines = [],
+  matchKey = null,
+  canonicalField = null,
   status,
   reason,
   score = null,
@@ -33,6 +39,12 @@ function makeLineMatch({
   return {
     oldLines,
     newLines,
+    oldDisplayLine,
+    newDisplayLine,
+    oldSourceLines,
+    newSourceLines,
+    matchKey,
+    canonicalField,
     status,
     reason,
     score,
@@ -43,6 +55,18 @@ function makeLineMatch({
 const CANONICAL_LINE_FIELD_ORDER = {
   "static-route": ["route", "next-hop", "tag", "description", "metric", "state"],
   bgp: ["neighbor", "description", "authentication-key", "group", "state", "peer-as"],
+  port: [
+    "description",
+    "admin-state",
+    "ethernet.mode",
+    "ethernet.mtu",
+    "ethernet.egress.scheduler-policy",
+    "ethernet.crc-monitor.signal-degrade.threshold",
+    "ethernet.down-on-internal-error",
+    "ethernet.access.egress.queue-group.name",
+    "ethernet.access.egress.queue-group.instance",
+    "ethernet.access.egress.queue-group.host-match.destination",
+  ],
   lag: [
     "description",
     "mode",
@@ -145,6 +169,231 @@ function formatCanonicalLine(field, value) {
   return `${field} ${value}`;
 }
 
+function sourceDisplayLines(object = {}, field = "") {
+  const lines = Array.isArray(object?.rawLines) ? object.rawLines : [];
+  if (!lines.length || !field) return [];
+
+  if ((object.normalizedType || object.sourceType) === "port") {
+    return portSourceDisplayLines(object, field, lines);
+  }
+
+  return genericSourceDisplayLines(field, lines);
+}
+
+function genericSourceDisplayLines(field = "", lines = []) {
+  if (field === "description") return findSingleSourceLine(lines, /^description\s+/i);
+  if (field === "admin-state" || field === "state") {
+    return findSingleSourceLine(lines, /^(no\s+shutdown|shutdown|admin-state\s+(?:enable|disable|enabled|disabled))$/i);
+  }
+  return [];
+}
+
+function portSourceDisplayLines(object = {}, field = "", lines = []) {
+  const vendor = object.vendor || "";
+
+  if (vendor === "nokia-md-cli") {
+    return mdCliPortSourceDisplayLines(field, lines);
+  }
+
+  if (field === "description" || field === "admin-state" || field === "state") {
+    return genericSourceDisplayLines(field, lines);
+  }
+
+  return classicPortSourceDisplayLines(field, lines);
+}
+
+function classicPortSourceDisplayLines(field = "", lines = []) {
+  if (field === "ethernet.mode") return findSingleSourceLine(lines, /^mode\s+\S+/i);
+  if (field === "ethernet.mtu") return findSingleSourceLine(lines, /^mtu\s+\S+/i);
+  if (field === "ethernet.egress.scheduler-policy") {
+    return findSingleSourceLine(lines, /^egress-scheduler-policy\s+/i);
+  }
+  if (field === "ethernet.crc-monitor.signal-degrade.threshold") {
+    return findClassicExitBlock(lines, /^crc-monitor$/i) ||
+      findSingleSourceLine(lines, /^sd-threshold\s+/i);
+  }
+  if (field === "ethernet.down-on-internal-error") {
+    return findSingleSourceLine(lines, /^down-on-internal-error$/i);
+  }
+  if (
+    field === "ethernet.access.egress.queue-group.name" ||
+    field === "ethernet.access.egress.queue-group.instance"
+  ) {
+    return findSingleSourceLine(lines, /^queue-group\s+/i);
+  }
+  if (field === "ethernet.access.egress.queue-group.host-match.destination") {
+    return findSingleSourceLine(lines, /^host-match\s+dest\s+/i);
+  }
+  return [];
+}
+
+function mdCliPortSourceDisplayLines(field = "", lines = []) {
+  if (field === "description") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^description\s+/i),
+      findMdCliOneLineSourceLine(lines, ["description"])
+    );
+  }
+  if (field === "admin-state" || field === "state") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^admin-state\s+(?:enable|disable|enabled|disabled)$/i),
+      findMdCliOneLineSourceLine(lines, ["admin-state"])
+    );
+  }
+  if (field === "ethernet.mode") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^mode\s+\S+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "mode"])
+    );
+  }
+  if (field === "ethernet.mtu") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^mtu\s+\S+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "mtu"]),
+      findMdCliOneLineSourceLine(lines, ["mtu"])
+    );
+  }
+  if (field === "ethernet.egress.scheduler-policy") {
+    return firstSourceLines(
+      findMdCliEnclosingBraceBlock(lines, /^policy-name\s+/i, /^egress\s*\{/i),
+      findMdCliEnclosingBraceBlock(lines, /^policy-name\s+/i, /^port-scheduler-policy\s*\{/i),
+      findSingleSourceLine(lines, /^policy-name\s+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "egress", "port-scheduler-policy", "policy-name"])
+    );
+  }
+  if (field === "ethernet.crc-monitor.signal-degrade.threshold") {
+    return firstSourceLines(
+      findMdCliEnclosingBraceBlock(lines, /^threshold\s+/i, /^crc-monitor\s*\{/i),
+      findSingleSourceLine(lines, /^threshold\s+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "crc-monitor", "signal-degrade", "threshold"])
+    );
+  }
+  if (field === "ethernet.down-on-internal-error") {
+    return firstSourceLines(
+      findMdCliBraceBlock(lines, /^down-on-internal-error\b/i),
+      findSingleSourceLine(lines, /^down-on-internal-error\b/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "down-on-internal-error"])
+    );
+  }
+  if (
+    field === "ethernet.access.egress.queue-group.name" ||
+    field === "ethernet.access.egress.queue-group.instance"
+  ) {
+    return firstSourceLines(
+      findMdCliBraceBlock(lines, /^queue-group\s+/i),
+      findSingleSourceLine(lines, /^queue-group\s+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "access", "egress", "queue-group"])
+    );
+  }
+  if (field === "ethernet.access.egress.queue-group.host-match.destination") {
+    return firstSourceLines(
+      findMdCliEnclosingBraceBlock(lines, /^int-dest-id\s+/i, /^host-match\s*\{/i),
+      findSingleSourceLine(lines, /^int-dest-id\s+/i),
+      findMdCliOneLineSourceLine(lines, ["host-match", "int-dest-id"]),
+      findMdCliOneLineSourceLine(lines, ["int-dest-id"])
+    );
+  }
+  return [];
+}
+
+function firstSourceLines(...candidates) {
+  return candidates.find((item) => Array.isArray(item) && item.length > 0) || [];
+}
+
+function findMdCliOneLineSourceLine(lines = [], path = []) {
+  const line = lines.find((item) => {
+    const text = String(item || "");
+    if (!/^\s*\/?configure\s*\{/i.test(text)) return false;
+    return tokenPathExists(tokenizeSourceLine(text), path);
+  });
+  return line ? [line] : [];
+}
+
+function tokenizeSourceLine(line = "") {
+  return [...String(line || "").matchAll(/"([^"]*)"|[{}]|\S+/g)]
+    .map((match) => (match[1] !== undefined ? match[1] : match[0]))
+    .map((token) => String(token || "").replace(/[{};,]+$/g, "").replace(/^["']|["']$/g, "").toLowerCase())
+    .filter((token) => token && token !== "{" && token !== "}");
+}
+
+function tokenPathExists(tokens = [], path = []) {
+  const normalizedPath = path.map((item) => String(item || "").toLowerCase());
+  for (let index = 0; index <= tokens.length - normalizedPath.length; index += 1) {
+    const matched = normalizedPath.every((part, offset) => tokens[index + offset] === part);
+    if (matched) return true;
+  }
+  return false;
+}
+
+function findSingleSourceLine(lines = [], pattern) {
+  const line = lines.find((item) => pattern.test(String(item || "").trim()));
+  return line ? [line] : [];
+}
+
+function indentationOf(line = "") {
+  return String(line || "").match(/^\s*/)?.[0]?.length || 0;
+}
+
+function findClassicExitBlock(lines = [], startPattern) {
+  const startIndex = lines.findIndex((line) => startPattern.test(String(line || "").trim()));
+  if (startIndex < 0) return [];
+
+  const startIndent = indentationOf(lines[startIndex]);
+  const block = [lines[startIndex]];
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    block.push(line);
+    const text = String(line || "").trim();
+    if (/^exit$/i.test(text) && indentationOf(line) <= startIndent) break;
+  }
+
+  return block;
+}
+
+function findMdCliBraceBlock(lines = [], startPattern) {
+  const startIndex = lines.findIndex((line) => startPattern.test(String(line || "").trim()));
+  if (startIndex < 0) return [];
+  return collectMdCliBraceBlock(lines, startIndex);
+}
+
+function findMdCliEnclosingBraceBlock(lines = [], targetPattern, blockStartPattern) {
+  const targetIndex = lines.findIndex((line) => targetPattern.test(String(line || "").trim()));
+  if (targetIndex < 0) return [];
+
+  let best = [];
+  for (let index = 0; index <= targetIndex; index += 1) {
+    if (!blockStartPattern.test(String(lines[index] || "").trim())) continue;
+    const block = collectMdCliBraceBlock(lines, index);
+    if (block.length && index + block.length > targetIndex) best = block;
+  }
+
+  return best;
+}
+
+function collectMdCliBraceBlock(lines = [], startIndex = 0) {
+  const first = lines[startIndex];
+  if (!first) return [];
+
+  const block = [first];
+  let depth = (String(first).match(/\{/g) || []).length - (String(first).match(/\}/g) || []).length;
+  if (depth <= 0) return block;
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    block.push(line);
+    depth += (String(line).match(/\{/g) || []).length;
+    depth -= (String(line).match(/\}/g) || []).length;
+    if (depth <= 0) break;
+  }
+
+  return block;
+}
+
+function displayLineFromSource(sourceLines = [], canonicalLine = "") {
+  return sourceLines.length ? sourceLines.join("\n") : canonicalLine || null;
+}
+
 function compareCanonicalFieldRows(planItem = {}) {
   const type = planItem.objectType || planItem.oldObject?.normalizedType || planItem.newObject?.normalizedType;
   const ordered = CANONICAL_LINE_FIELD_ORDER[type] || [];
@@ -153,7 +402,6 @@ function compareCanonicalFieldRows(planItem = {}) {
     ...Object.keys(planItem.newObject?.fields || {}),
   ]);
   const duplicateFields = new Set([
-    "admin-state",
     "peerIp",
     "nextHop",
     "prefix",
@@ -163,6 +411,8 @@ function compareCanonicalFieldRows(planItem = {}) {
     "service-id",
     "prefix-length",
     "state",
+    "admin-state",
+    "port",
     "lag",
     "members",
     "lacpMode",
@@ -182,10 +432,18 @@ function compareCanonicalFieldRows(planItem = {}) {
       const newLine = formatCanonicalLine(field, newValue);
       const same = oldLine && newLine && String(oldValue) === String(newValue);
       const status = oldLine && newLine ? (same ? "equal" : "changed") : oldLine ? "missing" : "added";
+      const oldSourceLines = oldLine ? sourceDisplayLines(planItem.oldObject, field) : [];
+      const newSourceLines = newLine ? sourceDisplayLines(planItem.newObject, field) : [];
 
       return makeLineMatch({
         oldLines: oldLine ? [oldLine] : [],
         newLines: newLine ? [newLine] : [],
+        oldDisplayLine: displayLineFromSource(oldSourceLines, oldLine),
+        newDisplayLine: displayLineFromSource(newSourceLines, newLine),
+        oldSourceLines,
+        newSourceLines,
+        matchKey: field,
+        canonicalField: field,
         status,
         reason: "canonical-field-align",
         score: same ? 100 : 0,

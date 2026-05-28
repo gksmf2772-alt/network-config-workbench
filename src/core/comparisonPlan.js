@@ -318,6 +318,7 @@ const VISIBLE_COMPARE_FIELDS = new Set([
   "lacp-xmit-interval",
   "access.adapt-qos.mode",
   "ethernet.mode",
+  "ethernet.mtu",
   "ethernet.egress.scheduler-policy",
   "ethernet.crc-monitor.signal-degrade.threshold",
   "ethernet.down-on-internal-error",

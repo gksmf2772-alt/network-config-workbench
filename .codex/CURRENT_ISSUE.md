@@ -1,5 +1,40 @@
 # Current Issue
 
+## Current MD-CLI one-line port legacyCore fix
+
+영향 boundary:
+- `legacyCore.js` hot path 중 parser/paired diff row 입력.
+- `parseConfig -> buildCanonicalObject -> mergeObjectsByCanonicalKey -> compareObjects -> buildPairedObjectDiffRows`.
+
+허용 범위:
+- MD-CLI `/configure { port <id> ... }` 한 줄 설정의 root object key를 `port:<id>`로 유지.
+- 같은 port prefix의 rawLines/canonicalFields/fieldOccurrences 누적.
+- port canonical field 보강: `admin-state`, `ethernet.mode`, `ethernet.mtu`, `ethernet.down-on-internal-error`, `ethernet.crc-monitor.signal-degrade.threshold`, `ethernet.egress.scheduler-policy`, queue-group/host-match.
+- semantic debug mode에서 parser/matched pair/render input `console.table` 추가.
+- characterization test 추가.
+
+금지 범위:
+- semantic object match 정책 변경 금지.
+- manual mapping 변경 금지.
+- profile exception/comparison exclusion 변경 금지.
+- summary/report/graph count 변경 금지.
+- connector/line rendering UI, bridge, anchor, SVG geometry 변경 금지.
+- golden regression 기대값 임의 변경 금지.
+
+테스트 결과:
+- npm.cmd run guard:legacy-core pass
+- npm.cmd test pass
+- npm.cmd run build pass
+
+수정 후 영향 받은 기능 체크리스트:
+- Semantic match: matcher 코드 변경 없음.
+- Manual mapping: 저장/병합 코드 변경 없음.
+- Profile exception: 저장/삭제/매칭 코드 변경 없음.
+- Comparison exclusion: 저장/삭제/매칭 코드 변경 없음.
+- Summary/report/graph count: 요약 모듈 변경 없음.
+- Diff scroll sync: 변경 없음.
+- Line connector rendering: 변경 없음.
+
 ## 문제
 프로파일 탭 하단 저장된 예외/비교 제외 규칙 row가 1~4번 아코디언 row와 다른 DOM 구조로 렌더링됨.
 
@@ -88,4 +123,39 @@ Post-edit checklist:
 - Summary/report/graph count checked: no count code touched.
 - Diff scroll sync checked: no scroll sync code touched.
 - Line connector rendering checked: anchor measurement only; no SVG path/style change.
+- Tests run: npm.cmd run guard:legacy-core pass; npm.cmd test pass; npm.cmd run build pass.
+
+## Current Nokia MD-CLI one-line port grouping/source fix
+
+Affected stability-map boundary:
+- Parser/normalizer module only: `src/core/parsers/nokiaMdCliParser.js`,
+  `src/core/parsers/nokiaClassicParser.js`.
+- Line relation source lookup only: `src/core/lineDiff.js`.
+
+Allowed edit scope:
+- Keep MD-CLI one-line objects merged by same semantic identity.
+- Add port canonical field `ethernet.mtu` for Classic block and MD-CLI
+  one-line/block parser output.
+- Preserve MD-CLI one-line raw `/configure { port ... }` as source lines for
+  canonical port fields in line comparison.
+- Add characterization tests for one-line port grouping and source line
+  preservation.
+
+Forbidden:
+- Semantic object match behavior.
+- Manual mapping behavior.
+- Profile exception behavior.
+- Comparison exclusion behavior.
+- Summary/report/graph counts outside intended new `ethernet.mtu` field.
+- Diff scroll sync behavior.
+- Connector/line rendering UI, SVG geometry, relation keys, or bridge styling.
+
+Post-edit checklist:
+- Semantic match checked: object matcher code untouched.
+- Manual mapping checked: no storage/merge code touched.
+- Profile exception checked: no exception save/delete/match code touched.
+- Comparison exclusion checked: no exclusion save/delete/match code touched.
+- Summary/report/graph count checked: no summary module change.
+- Diff scroll sync checked: no scroll sync code touched.
+- Line connector rendering checked: source-line lookup only; connector code untouched.
 - Tests run: npm.cmd run guard:legacy-core pass; npm.cmd test pass; npm.cmd run build pass.

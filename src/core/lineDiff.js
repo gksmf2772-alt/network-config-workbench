@@ -59,6 +59,7 @@ const CANONICAL_LINE_FIELD_ORDER = {
     "description",
     "admin-state",
     "ethernet.mode",
+    "ethernet.mtu",
     "ethernet.egress.scheduler-policy",
     "ethernet.crc-monitor.signal-degrade.threshold",
     "ethernet.down-on-internal-error",
@@ -190,12 +191,12 @@ function genericSourceDisplayLines(field = "", lines = []) {
 function portSourceDisplayLines(object = {}, field = "", lines = []) {
   const vendor = object.vendor || "";
 
-  if (field === "description" || field === "admin-state" || field === "state") {
-    return genericSourceDisplayLines(field, lines);
-  }
-
   if (vendor === "nokia-md-cli") {
     return mdCliPortSourceDisplayLines(field, lines);
+  }
+
+  if (field === "description" || field === "admin-state" || field === "state") {
+    return genericSourceDisplayLines(field, lines);
   }
 
   return classicPortSourceDisplayLines(field, lines);
@@ -203,6 +204,7 @@ function portSourceDisplayLines(object = {}, field = "", lines = []) {
 
 function classicPortSourceDisplayLines(field = "", lines = []) {
   if (field === "ethernet.mode") return findSingleSourceLine(lines, /^mode\s+\S+/i);
+  if (field === "ethernet.mtu") return findSingleSourceLine(lines, /^mtu\s+\S+/i);
   if (field === "ethernet.egress.scheduler-policy") {
     return findSingleSourceLine(lines, /^egress-scheduler-policy\s+/i);
   }
@@ -226,32 +228,101 @@ function classicPortSourceDisplayLines(field = "", lines = []) {
 }
 
 function mdCliPortSourceDisplayLines(field = "", lines = []) {
-  if (field === "ethernet.mode") return findSingleSourceLine(lines, /^mode\s+\S+/i);
+  if (field === "description") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^description\s+/i),
+      findMdCliOneLineSourceLine(lines, ["description"])
+    );
+  }
+  if (field === "admin-state" || field === "state") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^admin-state\s+(?:enable|disable|enabled|disabled)$/i),
+      findMdCliOneLineSourceLine(lines, ["admin-state"])
+    );
+  }
+  if (field === "ethernet.mode") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^mode\s+\S+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "mode"])
+    );
+  }
+  if (field === "ethernet.mtu") {
+    return firstSourceLines(
+      findSingleSourceLine(lines, /^mtu\s+\S+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "mtu"]),
+      findMdCliOneLineSourceLine(lines, ["mtu"])
+    );
+  }
   if (field === "ethernet.egress.scheduler-policy") {
-    return findMdCliEnclosingBraceBlock(lines, /^policy-name\s+/i, /^egress\s*\{/i) ||
-      findMdCliEnclosingBraceBlock(lines, /^policy-name\s+/i, /^port-scheduler-policy\s*\{/i) ||
-      findSingleSourceLine(lines, /^policy-name\s+/i);
+    return firstSourceLines(
+      findMdCliEnclosingBraceBlock(lines, /^policy-name\s+/i, /^egress\s*\{/i),
+      findMdCliEnclosingBraceBlock(lines, /^policy-name\s+/i, /^port-scheduler-policy\s*\{/i),
+      findSingleSourceLine(lines, /^policy-name\s+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "egress", "port-scheduler-policy", "policy-name"])
+    );
   }
   if (field === "ethernet.crc-monitor.signal-degrade.threshold") {
-    return findMdCliEnclosingBraceBlock(lines, /^threshold\s+/i, /^crc-monitor\s*\{/i) ||
-      findSingleSourceLine(lines, /^threshold\s+/i);
+    return firstSourceLines(
+      findMdCliEnclosingBraceBlock(lines, /^threshold\s+/i, /^crc-monitor\s*\{/i),
+      findSingleSourceLine(lines, /^threshold\s+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "crc-monitor", "signal-degrade", "threshold"])
+    );
   }
   if (field === "ethernet.down-on-internal-error") {
-    return findMdCliBraceBlock(lines, /^down-on-internal-error\b/i) ||
-      findSingleSourceLine(lines, /^down-on-internal-error\b/i);
+    return firstSourceLines(
+      findMdCliBraceBlock(lines, /^down-on-internal-error\b/i),
+      findSingleSourceLine(lines, /^down-on-internal-error\b/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "down-on-internal-error"])
+    );
   }
   if (
     field === "ethernet.access.egress.queue-group.name" ||
     field === "ethernet.access.egress.queue-group.instance"
   ) {
-    return findMdCliBraceBlock(lines, /^queue-group\s+/i) ||
-      findSingleSourceLine(lines, /^queue-group\s+/i);
+    return firstSourceLines(
+      findMdCliBraceBlock(lines, /^queue-group\s+/i),
+      findSingleSourceLine(lines, /^queue-group\s+/i),
+      findMdCliOneLineSourceLine(lines, ["ethernet", "access", "egress", "queue-group"])
+    );
   }
   if (field === "ethernet.access.egress.queue-group.host-match.destination") {
-    return findMdCliEnclosingBraceBlock(lines, /^int-dest-id\s+/i, /^host-match\s*\{/i) ||
-      findSingleSourceLine(lines, /^int-dest-id\s+/i);
+    return firstSourceLines(
+      findMdCliEnclosingBraceBlock(lines, /^int-dest-id\s+/i, /^host-match\s*\{/i),
+      findSingleSourceLine(lines, /^int-dest-id\s+/i),
+      findMdCliOneLineSourceLine(lines, ["host-match", "int-dest-id"]),
+      findMdCliOneLineSourceLine(lines, ["int-dest-id"])
+    );
   }
   return [];
+}
+
+function firstSourceLines(...candidates) {
+  return candidates.find((item) => Array.isArray(item) && item.length > 0) || [];
+}
+
+function findMdCliOneLineSourceLine(lines = [], path = []) {
+  const line = lines.find((item) => {
+    const text = String(item || "");
+    if (!/^\s*\/?configure\s*\{/i.test(text)) return false;
+    return tokenPathExists(tokenizeSourceLine(text), path);
+  });
+  return line ? [line] : [];
+}
+
+function tokenizeSourceLine(line = "") {
+  return [...String(line || "").matchAll(/"([^"]*)"|[{}]|\S+/g)]
+    .map((match) => (match[1] !== undefined ? match[1] : match[0]))
+    .map((token) => String(token || "").replace(/[{};,]+$/g, "").replace(/^["']|["']$/g, "").toLowerCase())
+    .filter((token) => token && token !== "{" && token !== "}");
+}
+
+function tokenPathExists(tokens = [], path = []) {
+  const normalizedPath = path.map((item) => String(item || "").toLowerCase());
+  for (let index = 0; index <= tokens.length - normalizedPath.length; index += 1) {
+    const matched = normalizedPath.every((part, offset) => tokens[index + offset] === part);
+    if (matched) return true;
+  }
+  return false;
 }
 
 function findSingleSourceLine(lines = [], pattern) {

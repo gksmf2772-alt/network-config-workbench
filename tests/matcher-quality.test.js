@@ -503,6 +503,125 @@ test("Nokia port scheduler policy line relation keeps source anchors", () => {
   assert.match(lineMatch.newDisplayLine, /policy-name "qos"/);
 });
 
+test("Nokia MD-CLI one-line port settings merge by port prefix", () => {
+  const result = normalizeConfig({
+    vendor: "nokia-md-cli",
+    side: "new",
+    configText: [
+      '/configure { port 2/1/c1/1 admin-state enable }',
+      '/configure { port 2/1/c1/1 description "## Port C1 ##" }',
+      '/configure { port 2/1/c1/1 ethernet mode access }',
+      '/configure { port 2/1/c1/1 ethernet mtu 4484 }',
+      '/configure { port 2/1/c1/1 ethernet down-on-internal-error }',
+      '/configure { port 2/1/c1/1 ethernet crc-monitor signal-degrade threshold 9 }',
+      '/configure { port 2/1/c1/1 ethernet egress port-scheduler-policy policy-name "qos" }',
+      '/configure { port 2/1/c1/1 ethernet access egress queue-group "Queue_Group" instance-id 1 host-match int-dest-id "PQ_3WFQ" }',
+      '/configure { port 2/1/c2/1 admin-state enable }',
+    ].join("\n"),
+  });
+  const ports = result.objects.filter((item) => item.normalizedType === "port");
+  const first = ports.find((item) => item.normalizedIdentity === "2/1/c1/1");
+  const second = ports.find((item) => item.normalizedIdentity === "2/1/c2/1");
+
+  assert.equal(ports.length, 2);
+  assert.ok(first);
+  assert.ok(second);
+  assert.equal(first.rawLines.length, 8);
+  assert.equal(first.fields["admin-state"], "enabled");
+  assert.equal(first.fields.description, "## Port C1 ##");
+  assert.equal(first.fields["ethernet.mode"], "access");
+  assert.equal(first.fields["ethernet.mtu"], "4484");
+  assert.equal(first.fields["ethernet.down-on-internal-error"], "true");
+  assert.equal(first.fields["ethernet.crc-monitor.signal-degrade.threshold"], "9");
+  assert.equal(first.fields["ethernet.egress.scheduler-policy"], "qos");
+  assert.equal(first.fields["ethernet.access.egress.queue-group.name"], "Queue_Group");
+  assert.equal(first.fields["ethernet.access.egress.queue-group.instance"], "1");
+  assert.equal(first.fields["ethernet.access.egress.queue-group.host-match.destination"], "PQ_3WFQ");
+});
+
+test("Nokia Classic block port compares MD-CLI one-line port fields and source lines", () => {
+  const oldConfig = [
+    "port 2/1/6",
+    "    description \"## Ulsan-TOD-FN77 ge13/1(ACT) ##\"",
+    "    shutdown",
+    "    ethernet",
+    "        mode access",
+    "        mtu 4484",
+    "        egress-scheduler-policy \"qos\"",
+    "        crc-monitor",
+    "            sd-threshold 9",
+    "        exit",
+    "        access",
+    "            egress",
+    "                queue-group \"Queue_Group\" instance 1 create",
+    "                    host-match dest \"PQ_3WFQ\" create",
+    "                exit",
+    "            exit",
+    "        exit",
+    "        down-on-internal-error",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { port 2/1/c1/1 description "## Ulsan-TOD-FN77 ge13/1(ACT) ##" }',
+    '/configure { port 2/1/c1/1 admin-state disable }',
+    '/configure { port 2/1/c1/1 ethernet mode access }',
+    '/configure { port 2/1/c1/1 ethernet mtu 4484 }',
+    '/configure { port 2/1/c1/1 ethernet down-on-internal-error }',
+    '/configure { port 2/1/c1/1 ethernet crc-monitor signal-degrade threshold 9 }',
+    '/configure { port 2/1/c1/1 ethernet egress port-scheduler-policy policy-name "qos" }',
+    '/configure { port 2/1/c1/1 ethernet access egress queue-group "Queue_Group" instance-id 1 host-match int-dest-id "PQ_3WFQ" }',
+  ].join("\n");
+  const oldObjects = normalizeConfig({ vendor: "nokia-classic", side: "old", configText: oldConfig }).objects;
+  const newObjects = normalizeConfig({ vendor: "nokia-md-cli", side: "new", configText: newConfig }).objects;
+  const matches = matchNormalizedObjects({ oldObjects, newObjects });
+  const [planItem] = createComparisonPlan(matches);
+  const lineByField = new Map(planItem.lineMatches.map((lineMatch) => [lineMatch.canonicalField, lineMatch]));
+  const expectedEqualFields = [
+    "admin-state",
+    "ethernet.mode",
+    "ethernet.mtu",
+    "ethernet.egress.scheduler-policy",
+    "ethernet.crc-monitor.signal-degrade.threshold",
+    "ethernet.down-on-internal-error",
+    "ethernet.access.egress.queue-group.name",
+    "ethernet.access.egress.queue-group.instance",
+    "ethernet.access.egress.queue-group.host-match.destination",
+  ];
+
+  assert.equal(newObjects.filter((item) => item.normalizedType === "port").length, 1);
+  assert.equal(matches[0].status, "matched");
+  assert.ok(matches[0].scoreReasons.includes("description-endpoint-match"));
+
+  for (const field of expectedEqualFields) {
+    assert.equal(planItem.fieldSummary[field].status, "equal");
+    assert.equal(lineByField.get(field)?.status, "equal");
+    assert.match(lineByField.get(field)?.newSourceLines.join("\n") || "", /^\/configure \{ port 2\/1\/c1\/1/m);
+  }
+});
+
+test("Nokia MD-CLI router interface one-line settings merge by router and interface path", () => {
+  const result = normalizeConfig({
+    vendor: "nokia-md-cli",
+    side: "new",
+    configText: [
+      '/configure { router "Base" interface "to-core" description "uplink" }',
+      '/configure { router "Base" interface "to-core" ipv4 primary address 192.0.2.1 prefix-length 30 }',
+      '/configure { router "Other" interface "to-core" description "other uplink" }',
+    ].join("\n"),
+  });
+  const interfaces = result.objects.filter((item) => item.normalizedType === "interface");
+  const base = interfaces.find((item) => item.sourceName === "to-core" && item.rawLines.length === 2);
+  const other = interfaces.find((item) => item.fields.router === "Other");
+
+  assert.equal(interfaces.length, 2);
+  assert.ok(base);
+  assert.ok(other);
+  assert.equal(base.rawLines.length, 2);
+  assert.equal(base.fields.description, "uplink");
+  assert.equal(base.fields.address, "192.0.2.1/30");
+});
+
 test("MD-CLI BGP one-line parser extracts import and export policy references", () => {
   const result = normalizeConfig({
     vendor: "nokia-md-cli",

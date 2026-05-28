@@ -216,6 +216,12 @@ function collectClassicPortFields(rawLines = [], portName = "") {
       return;
     }
 
+    match = text.match(/^mtu\s+(\S+)/i);
+    if (match && stack.includes("ethernet")) {
+      setPortSemanticField(fields, "ethernet.mtu", match[1]);
+      return;
+    }
+
     match = text.match(/^egress-scheduler-policy\s+(.+)$/i);
     if (match && stack.includes("ethernet")) {
       setPortSemanticField(fields, "ethernet.egress.scheduler-policy", match[1]);

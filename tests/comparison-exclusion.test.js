@@ -194,6 +194,24 @@ test("compare pane line relation infers Nokia port scheduler policy source lines
   assert.match(legacy, /buildSemanticLineMatchIndex[\s\S]*lineMatchIndexLinesForSide\(lineMatch, side\)/);
 });
 
+test("legacy compare path merges MD-CLI one-line port settings before paired row rendering", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /function extractPortNameFromLine/);
+  assert.match(legacy, /objectType === "port"[\s\S]*setField\("port", extractPortNameFromLine\(normalized\)\)/);
+  assert.match(legacy, /setField\("ethernet\.mode"[\s\S]*ethernet\\s\+mode/);
+  assert.match(legacy, /setField\("ethernet\.mtu"[\s\S]*ethernet\\s\+mtu/);
+  assert.match(legacy, /setField\("ethernet\.crc-monitor\.signal-degrade\.threshold"/);
+  assert.match(legacy, /setField\("ethernet\.egress\.scheduler-policy"/);
+  assert.match(legacy, /mergeObjectsByCanonicalKey[\s\S]*target\.rawLines\.push\(\.\.\.safeObject\.rawLines\)/);
+  assert.match(legacy, /getObjectDisplayLines\(object\)[\s\S]*object\.rawLines/);
+  assert.match(legacy, /const diffRows = buildPairedObjectDiffRows\(oldMap, newMap, comparedObjectKeys\)/);
+  assert.match(legacy, /function logMdCliOneLinePortGroupingDebug/);
+  assert.match(legacy, /console\.table\(parserRows\)/);
+  assert.match(legacy, /console\.table\(matchedRows\)/);
+  assert.match(legacy, /newSourceLineCount/);
+});
+
 test("diff block status and color tokens target config panes", () => {
   const css = readGlobalStyles();
 

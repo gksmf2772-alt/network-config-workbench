@@ -2965,7 +2965,15 @@ function inferPortLineField(line, {
 
   const normalized = canonicalizeComparableLine(line);
   if (!normalized) return "";
+  if (/\badmin-state\b|\bno\s+shutdown\b|^shutdown$/.test(normalized)) return "admin-state";
+  if (/\bethernet\s+mode\b|^mode\b/.test(normalized)) return "ethernet.mode";
+  if (/\bethernet\s+mtu\b|^mtu\b/.test(normalized)) return "ethernet.mtu";
+  if (/\bdown-on-internal-error\b/.test(normalized)) return "ethernet.down-on-internal-error";
+  if (/\bcrc-monitor\s+signal-degrade\s+threshold\b|^sd-threshold\b|^threshold\b/.test(normalized)) return "ethernet.crc-monitor.signal-degrade.threshold";
+  if (/\bqueue-group\b/.test(normalized)) return "ethernet.access.egress.queue-group.name";
+  if (/\bhost-match\b|\bint-dest-id\b/.test(normalized)) return "ethernet.access.egress.queue-group.host-match.destination";
   if (/^egress-scheduler-policy\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
+  if (/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
   if (/^port-scheduler-policy\b/.test(normalized)) return "ethernet.egress.scheduler-policy";
 
   if (/^policy-name\b/.test(normalized)) {
@@ -6927,6 +6935,45 @@ function extractFieldsFromLine(line, profile = state.profileDraft, objectType = 
     if (/^shutdown$|\bshutdown\b|\badmin-state\s+disable\b/.test(normalized)) setField("state", "disabled");
   }
 
+  if (!objectType || objectType === "port") {
+    setField("port", extractPortNameFromLine(normalized));
+    setField("description", extractDescriptionValue(line));
+    setField("ethernet.mode",
+      normalized.match(/\bethernet\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("ethernet.mtu",
+      normalized.match(/\bethernet\s+mtu\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mtu\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("ethernet.crc-monitor.signal-degrade.threshold",
+      normalized.match(/\bcrc-monitor\s+signal-degrade\s+threshold\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^sd-threshold\s+([^"\s{}]+)/)?.[1]
+    );
+    setField("ethernet.egress.scheduler-policy",
+      normalized.match(/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/^egress-scheduler-policy\s+"?([^"\s{}]+)"?/)?.[1]
+    );
+    const queueGroup = normalized.match(/\bqueue-group\s+"?([^"\s{}]+)"?/);
+    if (queueGroup) {
+      setField("ethernet.access.egress.queue-group.name", queueGroup[1]);
+      setField("ethernet.access.egress.queue-group.instance", normalized.match(/\b(?:instance-id|instance)\s+([^"\s{}]+)/)?.[1]);
+    }
+    setField("ethernet.access.egress.queue-group.host-match.destination",
+      normalized.match(/\bhost-match\b.*\b(?:dest|int-dest-id)\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/\bint-dest-id\s+"?([^"\s{}]+)"?/)?.[1]
+    );
+    if (/\bdown-on-internal-error\b/.test(normalized)) setField("ethernet.down-on-internal-error", "true");
+    if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) {
+      setField("state", "enabled");
+      setField("admin-state", "enabled");
+    }
+    if (/\badmin-state\s+disable\b/.test(normalized) || (!/\bno\s+shutdown\b/.test(normalized) && (/^shutdown$|\bshutdown\b/.test(normalized)))) {
+      setField("state", "disabled");
+      setField("admin-state", "disabled");
+    }
+  }
+
   if (!objectType || objectType === "interface") {
     setField("interface", normalized.match(/\binterface\s+"?([^"\s{}]+)"?/)?.[1]);
     const vprnMatch = normalized.match(/\bservice\s+vprn\s+"?([^"\s{}]+)"?/);
@@ -7199,6 +7246,99 @@ function extractFieldOccurrencesFromLine(line, objectType = "", rawLineIndex = 0
     if (/\badmin-state\s+disable\b/.test(normalized)) add("state", "disabled", "admin-state", "terminal");
     if (/^shutdown$|\bshutdown\b/.test(normalized)) add("state", "disabled", "shutdown", "terminal");
   }
+  if (!objectType || objectType === "port") {
+    const port = extractPortNameFromLine(normalized);
+    if (port) {
+      add("port", port, "port", "context");
+      add("port", port, port, "context");
+      add("port", port, `"${port}"`, "context");
+    }
+
+    const description = extractDescriptionValue(source);
+    if (description) {
+      add("description", description, "description", "terminal");
+      add("description", description, description, "terminal");
+      add("description", description, `"${description}"`, "terminal");
+    }
+
+    const mode =
+      normalized.match(/\bethernet\s+mode\s+([^"\s{}]+)/) ||
+      normalized.match(/^mode\s+([^"\s{}]+)/);
+    if (mode) {
+      add("ethernet.mode", mode[1], "mode", "terminal");
+      add("ethernet.mode", mode[1], mode[1], "terminal");
+    }
+
+    const mtu =
+      normalized.match(/\bethernet\s+mtu\s+([^"\s{}]+)/) ||
+      normalized.match(/^mtu\s+([^"\s{}]+)/);
+    if (mtu) {
+      add("ethernet.mtu", mtu[1], "mtu", "terminal");
+      add("ethernet.mtu", mtu[1], mtu[1], "terminal");
+    }
+
+    const threshold =
+      normalized.match(/\bcrc-monitor\s+signal-degrade\s+threshold\s+([^"\s{}]+)/) ||
+      normalized.match(/^sd-threshold\s+([^"\s{}]+)/);
+    if (threshold) {
+      add("ethernet.crc-monitor.signal-degrade.threshold", threshold[1], "threshold", "terminal");
+      add("ethernet.crc-monitor.signal-degrade.threshold", threshold[1], threshold[1], "terminal");
+    }
+
+    const scheduler =
+      normalized.match(/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\s+"?([^"\s{}]+)"?/) ||
+      normalized.match(/^egress-scheduler-policy\s+"?([^"\s{}]+)"?/);
+    if (scheduler) {
+      add("ethernet.egress.scheduler-policy", scheduler[1], "policy-name", "terminal");
+      add("ethernet.egress.scheduler-policy", scheduler[1], scheduler[1], "terminal");
+      add("ethernet.egress.scheduler-policy", scheduler[1], `"${scheduler[1]}"`, "terminal");
+    }
+
+    const queueGroup = normalized.match(/\bqueue-group\s+"?([^"\s{}]+)"?/);
+    if (queueGroup) {
+      add("ethernet.access.egress.queue-group.name", queueGroup[1], "queue-group", "terminal");
+      add("ethernet.access.egress.queue-group.name", queueGroup[1], queueGroup[1], "terminal");
+      add("ethernet.access.egress.queue-group.name", queueGroup[1], `"${queueGroup[1]}"`, "terminal");
+    }
+    const queueInstance = normalized.match(/\b(?:instance-id|instance)\s+([^"\s{}]+)/);
+    if (queueInstance && queueGroup) {
+      add("ethernet.access.egress.queue-group.instance", queueInstance[1], "instance", "terminal");
+      add("ethernet.access.egress.queue-group.instance", queueInstance[1], "instance-id", "terminal");
+      add("ethernet.access.egress.queue-group.instance", queueInstance[1], queueInstance[1], "terminal");
+    }
+
+    const hostDestination =
+      normalized.match(/\bhost-match\b.*\b(?:dest|int-dest-id)\s+"?([^"\s{}]+)"?/) ||
+      normalized.match(/\bint-dest-id\s+"?([^"\s{}]+)"?/);
+    if (hostDestination) {
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], "host-match", "terminal");
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], "int-dest-id", "terminal");
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], "dest", "terminal");
+      add("ethernet.access.egress.queue-group.host-match.destination", hostDestination[1], hostDestination[1], "terminal");
+    }
+
+    if (/\bdown-on-internal-error\b/.test(normalized)) {
+      add("ethernet.down-on-internal-error", "true", "down-on-internal-error", "terminal");
+    }
+    if (/\bno\s+shutdown\b/.test(normalized)) {
+      add("state", "enabled", "no shutdown", "terminal");
+      add("admin-state", "enabled", "no shutdown", "terminal");
+    }
+    if (/\badmin-state\s+enable\b/.test(normalized)) {
+      add("state", "enabled", "admin-state", "terminal");
+      add("admin-state", "enabled", "admin-state", "terminal");
+      add("admin-state", "enabled", "enable", "terminal");
+    }
+    if (/\badmin-state\s+disable\b/.test(normalized)) {
+      add("state", "disabled", "admin-state", "terminal");
+      add("admin-state", "disabled", "admin-state", "terminal");
+      add("admin-state", "disabled", "disable", "terminal");
+    }
+    if (!/\bno\s+shutdown\b/.test(normalized) && (/^shutdown$|\bshutdown\b/.test(normalized))) {
+      add("state", "disabled", "shutdown", "terminal");
+      add("admin-state", "disabled", "shutdown", "terminal");
+    }
+  }
   if (!objectType || objectType === "interface") {
     const interfaceName = normalized.match(/\binterface\s+"?([^"\s{}]+)"?/);
     if (interfaceName) {
@@ -7360,6 +7500,17 @@ function extractLagNameFromLine(line = "") {
     normalized.match(/^\/configure\s*\{\s*lag\s+"?([^"\s{}]+)"?/)?.[1] ||
     normalized.match(/^configure\s+lag\s+"?([^"\s{}]+)"?/)?.[1] ||
     normalized.match(/\blag\s+"?([^"\s{}]+)"?/)?.[1] ||
+    ""
+  ).replace(/^"|"$/g, "");
+}
+
+function extractPortNameFromLine(line = "") {
+  const normalized = canonicalizeComparableLine(line);
+  return stripTrailingSyntax(
+    normalized.match(/^port\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^\/configure\s*\{\s*port\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/^configure\s+port\s+"?([^"\s{}]+)"?/)?.[1] ||
+    normalized.match(/\bport\s+"?([^"\s{}]+)"?/)?.[1] ||
     ""
   ).replace(/^"|"$/g, "");
 }
@@ -8406,6 +8557,7 @@ function extractSemanticFieldFromLine(line, fieldRule, fieldName, normalizeRules
 
 function extractKnownFieldValue(line, fieldName) {
   const normalized = canonicalizeComparableLine(line);
+  if (fieldName === "port") return extractPortNameFromLine(normalized);
   if (fieldName === "route") return stripTrailingSyntax(normalized.match(/(?:^|\s)(?:static-route-entry|route)\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?\b/)?.[1] || "");
   if (fieldName === "next-hop") return stripTrailingSyntax(normalized.match(/\bnext-hop\s+"?([^"\s{}]+)"?/)?.[1] || "");
   if (fieldName === "tag") return stripTrailingSyntax(normalized.match(/\btag\s+([^"\s{}]+)/)?.[1] || "");
@@ -8421,6 +8573,46 @@ function extractKnownFieldValue(line, fieldName) {
     if (isInterfaceIcmpLine(normalized)) return "";
     if (/\bno\s+shutdown\b|\badmin-state\s+enable\b/.test(normalized)) return "enabled";
     if (/^shutdown$|\badmin-state\s+disable\b/.test(normalized)) return "disabled";
+  }
+  if (fieldName === "ethernet.mode") {
+    return stripTrailingSyntax(
+      normalized.match(/\bethernet\s+mode\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mode\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.mtu") {
+    return stripTrailingSyntax(
+      normalized.match(/\bethernet\s+mtu\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^mtu\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.down-on-internal-error" && /\bdown-on-internal-error\b/.test(normalized)) return "true";
+  if (fieldName === "ethernet.crc-monitor.signal-degrade.threshold") {
+    return stripTrailingSyntax(
+      normalized.match(/\bcrc-monitor\s+signal-degrade\s+threshold\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^sd-threshold\s+([^"\s{}]+)/)?.[1] ||
+      normalized.match(/^threshold\s+([^"\s{}]+)/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.egress.scheduler-policy") {
+    return stripTrailingSyntax(
+      normalized.match(/\bethernet\s+egress\s+port-scheduler-policy\s+policy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/^egress-scheduler-policy\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/^policy-name\s+"?([^"\s{}]+)"?/)?.[1] ||
+      ""
+    );
+  }
+  if (fieldName === "ethernet.access.egress.queue-group.name") return stripTrailingSyntax(normalized.match(/\bqueue-group\s+"?([^"\s{}]+)"?/)?.[1] || "");
+  if (fieldName === "ethernet.access.egress.queue-group.instance") return stripTrailingSyntax(normalized.match(/\b(?:instance-id|instance)\s+([^"\s{}]+)/)?.[1] || "");
+  if (fieldName === "ethernet.access.egress.queue-group.host-match.destination") {
+    return stripTrailingSyntax(
+      normalized.match(/\bhost-match\b.*\b(?:dest|int-dest-id)\s+"?([^"\s{}]+)"?/)?.[1] ||
+      normalized.match(/\bint-dest-id\s+"?([^"\s{}]+)"?/)?.[1] ||
+      ""
+    );
   }
   if (fieldName === "address") {
     return stripTrailingSyntax(
@@ -8873,13 +9065,18 @@ function compareObjects(oldObjects, newObjects, options) {
   const requiredItems = buildRequiredItems(options.profile, selectors.oldInput.value, selectors.newInput.value, options.selectedObjects);
   const mergedItems = [...items, ...essentialItems, ...requiredItems];
   const comparedObjectKeys = keys.filter((key) => !key.startsWith("global:"));
+  const diffRows = buildPairedObjectDiffRows(oldMap, newMap, comparedObjectKeys);
+
+  if (shouldLogMdCliOneLinePortGroupingDebug(options)) {
+    logMdCliOneLinePortGroupingDebug(oldObjects, newObjects, oldMap, newMap, diffRows);
+  }
 
   return {
     items: mergedItems,
     visibleItems: filterItems(mergedItems, options),
 
     // Semantic Preview와 상단 diff 창의 source-of-truth를 통일한다.
-    diffRows: buildPairedObjectDiffRows(oldMap, newMap, comparedObjectKeys),
+    diffRows,
 
     oldObjects,
     newObjects,
@@ -8893,6 +9090,70 @@ function compareObjects(oldObjects, newObjects, options) {
       required: mergedItems.filter((item) => item.type === "required").length,
     },
   };
+}
+
+function shouldLogMdCliOneLinePortGroupingDebug(options = {}) {
+  return Boolean(options.semanticDebug || globalThis.__NCW_DEBUG_ONE_LINE_PORTS__);
+}
+
+function logMdCliOneLinePortGroupingDebug(oldObjects = [], newObjects = [], oldMap = new Map(), newMap = new Map(), diffRows = []) {
+  const parserRows = newObjects
+    .filter(isMdCliOneLinePortObject)
+    .map((object) => {
+      const fields = Object.keys(object.canonicalFields || object.fields || {});
+      return {
+        type: object.type,
+        key: object.key,
+        sourceLineCount: object.rawLines?.length || 0,
+        fieldCount: fields.length,
+        firstSourceLine: object.rawLines?.[0] || "",
+        fields: fields.join(", "),
+      };
+    });
+
+  if (!parserRows.length) return;
+
+  const matchedRows = [...newMap.entries()]
+    .filter(([, object]) => isMdCliOneLinePortObject(object))
+    .map(([mapKey, newObject]) => {
+      const oldObject = oldMap.get(mapKey) || null;
+      const newFields = Object.keys(newObject.canonicalFields || newObject.fields || {});
+      const oldFields = Object.keys(oldObject?.canonicalFields || oldObject?.fields || {});
+      return {
+        oldKey: oldObject?.key || mapKey,
+        newKey: newObject.originalKey || newObject.key || mapKey,
+        matchReason: newObject.descriptionEndpointMappedFrom ? "description-endpoint" : oldObject ? "key" : "new-only",
+        score: oldObject ? 100 : "",
+        oldFieldCount: oldFields.length,
+        newFieldCount: newFields.length,
+        newSourceLineCount: newObject.rawLines?.length || 0,
+      };
+    });
+
+  const diffInputRows = diffRows
+    .filter((row) => isMdCliOneLinePortRow(row.newRow))
+    .map((row) => ({
+      objectKey: row.newRow.objectKey,
+      lineNumber: row.newRow.number,
+      semanticField: row.newRow.semanticField,
+      text: row.newRow.text,
+    }));
+
+  console.groupCollapsed?.("[legacyCore] MD-CLI one-line port grouping");
+  console.table(parserRows);
+  console.table(matchedRows);
+  console.table(diffInputRows);
+  console.groupEnd?.();
+}
+
+function isMdCliOneLinePortObject(object = {}) {
+  const type = canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "");
+  if (type !== "port") return false;
+  return (object.rawLines || []).some((line) => /^\/configure\s*\{\s*port\b/i.test(String(line || "").trim()));
+}
+
+function isMdCliOneLinePortRow(row = {}) {
+  return Boolean(row?.text && /^\/configure\s*\{\s*port\b/i.test(String(row.text || "").trim()));
 }
 
 function alignObjectMapsByDescriptionEndpoint(oldMap, newMap, objectTypes = []) {
@@ -9525,6 +9786,7 @@ function buildDiffRows(oldText, newText, options) {
 }
 
 const semanticFieldOrder = [
+  "port",
   "lag",
   "member-port",
   "route",
@@ -9542,6 +9804,14 @@ const semanticFieldOrder = [
   "group",
   "state",
   "admin-state",
+  "ethernet.mode",
+  "ethernet.mtu",
+  "ethernet.down-on-internal-error",
+  "ethernet.crc-monitor.signal-degrade.threshold",
+  "ethernet.egress.scheduler-policy",
+  "ethernet.access.egress.queue-group.name",
+  "ethernet.access.egress.queue-group.instance",
+  "ethernet.access.egress.queue-group.host-match.destination",
   "peer-as",
   "interface",
   "subscriber-interface",

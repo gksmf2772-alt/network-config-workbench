@@ -462,6 +462,11 @@ function extractMdCliPortBlockFields(lines = [], portName = "") {
       setField(fields, "ethernet.mode", match[1]);
     }
 
+    match = text.match(/^mtu\s+(\S+)/i);
+    if (match && stack.includes("ethernet")) {
+      setField(fields, "ethernet.mtu", match[1]);
+    }
+
     if (/^down-on-internal-error\b/i.test(text) && stack.includes("ethernet")) {
       fields["ethernet.down-on-internal-error"] = "true";
     }
@@ -1248,8 +1253,8 @@ const PORT_ONE_LINE_FIELDS = [
   { path: ["admin-state"], field: "admin-state", normalize: normalizeState },
   { path: ["description"], field: "description" },
   { path: ["ethernet", "mode"], field: "ethernet.mode" },
-  { path: ["ethernet", "mtu"], field: "mtu" },
-  { path: ["mtu"], field: "mtu" },
+  { path: ["ethernet", "mtu"], field: "ethernet.mtu" },
+  { path: ["mtu"], field: "ethernet.mtu" },
   { path: ["ethernet", "crc-monitor", "signal-degrade", "threshold"], field: "ethernet.crc-monitor.signal-degrade.threshold" },
   { path: ["ethernet", "egress", "port-scheduler-policy", "policy-name"], field: "ethernet.egress.scheduler-policy" },
   { path: ["ethernet", "access", "egress", "queue-group"], field: "ethernet.access.egress.queue-group.name" },
@@ -1274,6 +1279,7 @@ const INTERFACE_ONE_LINE_FIELDS = [
   { path: ["description"], field: "description" },
   { path: ["ipv4", "primary", "address"], field: "address" },
   { path: ["ipv4", "primary", "prefix-length"], field: "prefix-length" },
+  { path: ["prefix-length"], field: "prefix-length" },
   { path: ["ip", "address"], field: "address" },
   { path: ["address"], field: "address" },
   { path: ["admin-state"], field: "state", normalize: normalizeState },
@@ -1686,7 +1692,9 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
 
   const bgpIndex = findToken(tokens, "bgp", 1);
   const staticRoutesIndex = findToken(tokens, "static-routes", 1);
+  const interfaceIndex = findToken(tokens, "interface", 1);
   const pimIndex = findToken(tokens, "pim", 1);
+  const routerName = stripQuotes(tokens[1] || "Base");
 
   if (bgpIndex >= 0 && tokenEquals(tokens, bgpIndex + 1, "neighbor") && tokens[bgpIndex + 2]) {
     const peerIp = stripQuotes(tokens[bgpIndex + 2]);
@@ -1758,6 +1766,25 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
       sourceType: "route",
       sourceName: route,
       fields: normalizedFields,
+      rawLine,
+      index,
+    });
+  }
+
+  if (interfaceIndex >= 0 && tokens[interfaceIndex + 1]) {
+    const interfaceName = canonicalInterfaceName(tokens[interfaceIndex + 1]);
+    const fields = withPrefix(mapLeafFields(
+      { router: routerName, interface: interfaceName },
+      tokens,
+      interfaceIndex + 2,
+      INTERFACE_ONE_LINE_FIELDS
+    ));
+    return createMdCliOneLineObject({
+      type: "interface",
+      identity: buildHierarchyKey([routerName, interfaceName]),
+      sourceType: "interface",
+      sourceName: interfaceName,
+      fields,
       rawLine,
       index,
     });

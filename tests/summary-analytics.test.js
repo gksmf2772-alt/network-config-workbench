@@ -1169,6 +1169,8 @@ test("review items expose unmatched, ambiguous, low confidence, and relationship
 
   assert.equal(review.unmatchedOld.length, 1);
   assert.equal(review.unmatchedNew.length, 1);
+  assert.equal(review.unmatchedOld[0].unmatchedCategory, "realMissingTarget");
+  assert.equal(review.unmatchedOld[0].diagnosticReason, "missing-target-bgp-peer");
   assert.equal(review.ambiguous.length, 1);
   assert.equal(review.lowConfidence.length, 1);
   assert.equal(review.relationshipChanges.length, 1);

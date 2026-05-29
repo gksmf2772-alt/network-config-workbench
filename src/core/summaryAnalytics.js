@@ -125,7 +125,7 @@ export function buildSummaryDashboardData({
   const lineSummary = buildLineSummary(report);
   const fieldAnalysis = buildFieldOverlapAnalysis(reviewablePlan);
   const sectionSummary = buildSectionSummary(reviewablePlan, fieldAnalysis);
-  const review = buildReviewItems(plan);
+  const review = buildReviewItems(plan, fixtureScope);
   const analysisContext = buildAnalysisContext({
     mode: analysisMode,
     scope: compareScope,
@@ -1010,7 +1010,7 @@ export function buildFieldOverlapAnalysis(plan = []) {
   };
 }
 
-export function buildReviewItems(plan = []) {
+export function buildReviewItems(plan = [], fixtureScope = null) {
   const review = {
     critical: [],
     unmatchedOld: [],
@@ -1023,6 +1023,8 @@ export function buildReviewItems(plan = []) {
     relationshipChanges: [],
     aliasOnly: [],
   };
+
+  const classifyUnmatched = createFixtureUnmatchedClassifier(plan, fixtureScope);
 
   plan.forEach((item) => {
     if (!isActivePlanItem(item)) {
@@ -1040,9 +1042,12 @@ export function buildReviewItems(plan = []) {
     }
     const base = buildReviewBase(item);
     if (item.status === "old-only") {
+      const classification = classifyUnmatched(item);
       review.unmatchedOld.push({
         ...base,
         side: "old",
+        unmatchedCategory: classification.category || "",
+        diagnosticReason: classification.reason || "",
         reason: "기존 설정에서만 발견됨",
         action: "비교 위치로 이동",
       });

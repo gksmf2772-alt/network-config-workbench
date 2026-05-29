@@ -404,6 +404,8 @@ test("legacy main compare parser keeps static route blocks as route-level object
   assert.match(source, /add\("metric", stripTrailingSyntax\(metric\[1\]\), "number"\);/);
   assert.match(source, /object-item-description/);
   assert.match(source, /data-review-description/);
+  assert.match(source, /data-review-diagnostic/);
+  assert.match(source, /getReportReviewDiagnostic/);
   assert.match(source, /renderReportReviewDescriptionCell/);
   assert.match(source, /normalizeReportReviewFieldName/);
   assert.match(fs.readFileSync("src/core/compareRenderer.js", "utf8"), /semantic-object-description/);

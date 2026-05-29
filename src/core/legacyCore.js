@@ -14677,6 +14677,7 @@ function renderReportReviewTable(review = {}) {
             <th>${renderReportReviewHeaderSearch("설정 키", "key", valueOptions.key)}</th>
             <th>${renderReportReviewHeaderSearch("description", "description", valueOptions.description)}</th>
             <th>${renderReportReviewHeaderSearch("사유", "reason", valueOptions.reason)}</th>
+            <th>${renderReportReviewHeaderSearch("진단", "diagnostic", valueOptions.diagnostic)}</th>
             ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses, valueOptions.fields.get(field) || [])}</th>`).join("")}
             <th>${renderReportReviewHeaderSearch("일치도", "score", valueOptions.score)}</th>
             <th><div class="report-review-th"><div class="report-review-th-bar"><span>동작</span></div></div></th>
@@ -14688,6 +14689,7 @@ function renderReportReviewTable(review = {}) {
             const meta = getReportReviewRowMeta(item);
             const objectKey = item.label || item.objectKey || "-";
             const description = getReportReviewDescription(item);
+            const diagnostic = getReportReviewDiagnostic(item);
             return `
               <tr
                 data-report-review-row
@@ -14698,6 +14700,8 @@ function renderReportReviewTable(review = {}) {
                 data-review-description-option="${escapeHtml(reportReviewOptionValue(description.value))}"
                 data-review-reason="${escapeHtml(item.reason || "")}"
                 data-review-reason-option="${escapeHtml(reportReviewOptionValue(item.reason || ""))}"
+                data-review-diagnostic="${escapeHtml(diagnostic.searchText)}"
+                data-review-diagnostic-option="${escapeHtml(reportReviewOptionValue(diagnostic.value))}"
                 data-review-score="${escapeHtml(item.score || "")}"
                 data-review-score-option="${escapeHtml(reportReviewOptionValue(item.score || ""))}"
                 data-review-fields="${escapeHtml(meta.fields.join(" "))}"
@@ -14708,6 +14712,7 @@ function renderReportReviewTable(review = {}) {
                 <td><strong>${escapeHtml(objectKey)}</strong></td>
                 ${renderReportReviewDescriptionCell(description)}
                 <td>${escapeHtml(item.reason || "-")}</td>
+                <td>${escapeHtml(diagnostic.value || "-")}</td>
                 ${fieldColumns.map((field) => renderReportReviewFieldCell(item, field)).join("")}
                 <td>${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>
                 <td>
@@ -14719,7 +14724,7 @@ function renderReportReviewTable(review = {}) {
                 </td>
               </tr>
             `;
-          }).join("") : `<tr><td colspan="${fieldColumns.length + 7}" class="report-review-empty">검토 항목 없음</td></tr>`}
+          }).join("") : `<tr><td colspan="${fieldColumns.length + 8}" class="report-review-empty">검토 항목 없음</td></tr>`}
         </tbody>
       </table>
       <div class="report-review-filter-empty" data-report-review-filter-empty hidden>조건에 맞는 검토 항목 없음</div>
@@ -14933,6 +14938,7 @@ function getReportReviewChecklistOptions(rows = [], fieldColumns = []) {
     key: new Set(),
     description: new Set(),
     reason: new Set(),
+    diagnostic: new Set(),
     score: new Set(),
     fields: new Map(fieldColumns.map((field) => [field, new Set()])),
   };
@@ -14945,6 +14951,7 @@ function getReportReviewChecklistOptions(rows = [], fieldColumns = []) {
     addReportReviewOption(options.key, objectKey);
     addReportReviewOption(options.description, description.value || "");
     addReportReviewOption(options.reason, item.reason || "");
+    addReportReviewOption(options.diagnostic, getReportReviewDiagnostic(item).value || "");
     addReportReviewOption(options.score, item.score || "");
     fieldColumns.forEach((field) => {
       addReportReviewOption(options.fields.get(field), reportReviewFieldDisplayValue(item, field));
@@ -14957,6 +14964,7 @@ function getReportReviewChecklistOptions(rows = [], fieldColumns = []) {
     key: sortReportReviewOptions(options.key),
     description: sortReportReviewOptions(options.description),
     reason: sortReportReviewOptions(options.reason),
+    diagnostic: sortReportReviewOptions(options.diagnostic),
     score: sortReportReviewOptions(options.score),
     fields: new Map([...options.fields.entries()].map(([field, values]) => [field, sortReportReviewOptions(values)])),
   };
@@ -14999,6 +15007,7 @@ function getReportReviewRowMeta(item = {}) {
   const fields = [];
   const statuses = [];
   const fieldText = [];
+  const diagnostic = getReportReviewDiagnostic(item);
 
   (item.fieldRows || []).forEach((row) => {
     const field = normalizeReportReviewFieldName(row.field);
@@ -15017,6 +15026,7 @@ function getReportReviewRowMeta(item = {}) {
       item.label,
       item.objectKey,
       item.reason,
+      diagnostic.searchText,
       item.score,
       ...fieldText,
     ].map((value) => String(value || "").toLowerCase()).join(" "),
@@ -15044,6 +15054,18 @@ function getReportReviewDescription(item = {}) {
   const value = formatReportFieldValue(status, oldValue, newValue);
   const searchText = [value, label, oldValue, newValue, status].map((entry) => String(entry || "").toLowerCase()).join(" ");
   return { value, label, searchText };
+}
+
+function getReportReviewDiagnostic(item = {}) {
+  const values = [
+    item.unmatchedCategory || "",
+    item.diagnosticReason || "",
+  ].filter(Boolean);
+  const value = values.join(" / ");
+  return {
+    value,
+    searchText: values.map((entry) => String(entry || "").toLowerCase()).join(" "),
+  };
 }
 
 function renderReportReviewDescriptionCell(description = {}) {
@@ -15304,12 +15326,14 @@ function bindReportReviewTableInteractions() {
       const keyMatch = !columnQueries.key || String(row.dataset.reviewKey || "").toLowerCase().includes(columnQueries.key);
       const descriptionMatch = !columnQueries.description || String(row.dataset.reviewDescription || "").toLowerCase().includes(columnQueries.description);
       const reasonMatch = !columnQueries.reason || String(row.dataset.reviewReason || "").toLowerCase().includes(columnQueries.reason);
+      const diagnosticMatch = !columnQueries.diagnostic || String(row.dataset.reviewDiagnostic || "").toLowerCase().includes(columnQueries.diagnostic);
       const scoreMatch = !columnQueries.score || String(row.dataset.reviewScore || "").toLowerCase().includes(columnQueries.score);
       const groupValueMatch = reportReviewChecklistMatches(checklistSelections, "group", row.dataset.reviewGroup);
       const typeValueMatch = reportReviewChecklistMatches(checklistSelections, "type", row.dataset.reviewType);
       const keyValueMatch = reportReviewChecklistMatches(checklistSelections, "key", row.dataset.reviewKey);
       const descriptionValueMatch = reportReviewChecklistMatches(checklistSelections, "description", row.dataset.reviewDescriptionOption);
       const reasonValueMatch = reportReviewChecklistMatches(checklistSelections, "reason", row.dataset.reviewReasonOption);
+      const diagnosticValueMatch = reportReviewChecklistMatches(checklistSelections, "diagnostic", row.dataset.reviewDiagnosticOption);
       const scoreValueMatch = reportReviewChecklistMatches(checklistSelections, "score", row.dataset.reviewScoreOption);
       const fieldQueryMatch = fieldQueries.every(({ field, query: fieldQuery }) => {
         if (!fieldQuery) return true;
@@ -15331,12 +15355,14 @@ function bindReportReviewTableInteractions() {
         keyMatch &&
         descriptionMatch &&
         reasonMatch &&
+        diagnosticMatch &&
         scoreMatch &&
         groupValueMatch &&
         typeValueMatch &&
         keyValueMatch &&
         descriptionValueMatch &&
         reasonValueMatch &&
+        diagnosticValueMatch &&
         scoreValueMatch &&
         fieldQueryMatch &&
         fieldStatusMatch &&

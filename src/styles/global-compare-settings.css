@@ -92,6 +92,45 @@
   padding: 0 12px;
 }
 
+#compareTab.active .compare-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(8, 145, 178, 0.24);
+  border-radius: 8px;
+  background: rgba(236, 254, 255, 0.78);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+#compareTab.active .compare-loading-indicator[hidden] {
+  display: none;
+}
+
+#compareTab.active .compare-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(8, 145, 178, 0.24);
+  border-top-color: #0891b2;
+  border-radius: 50%;
+  animation: compare-loading-spin 760ms linear infinite;
+}
+
+#compareTab.active #compareBtn.is-loading {
+  opacity: 0.72;
+  cursor: progress;
+}
+
+@keyframes compare-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 #compareTab.active .compare-settings-scrim {
   position: fixed;
   inset: 0;

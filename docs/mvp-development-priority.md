@@ -129,6 +129,14 @@ BGP neighbor:
 - policy placeholder realMissingTarget reason split 완료: community members/expression, ip-prefix-list/prefix-list, route-policy deny/drop/iCOD/peer
 - BGP realMissingTarget reason split 완료: SER-PEER missing target peer case 1/2 각 1건
 
+## 2026-05-29 진행 기록
+
+- 전체 config 비교 중 브라우저가 응답 없음 상태로 보이는 문제를 완화했다.
+- 비교 실행 시 `비교 중` 로딩 UI를 표시하고, 파싱/비교/semantic 계산/report/diff 렌더 단계 사이에 브라우저에 제어권을 돌려준다.
+- diff 렌더링은 한 번에 전체 HTML을 넣지 않고 chunk 단위로 렌더링한다.
+- 객체/section 나누기 UI는 시도 후 원복했다. 전체 설정에서 너무 느리고 비교창 사용성을 해쳐서 현재 방식으로는 못써먹는다.
+- 나누기 기능은 추후 재검토 시 별도 worker/index 기반으로 설계해야 한다. 현재 비교창 기본 흐름에는 넣지 않는다.
+
 ## 보류 항목
 
 다음은 MVP 안정화 전까지 진행하지 않는다.

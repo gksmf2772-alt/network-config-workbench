@@ -4131,7 +4131,62 @@ function getOptions() {
   };
 }
 
-function runCompare() {
+function setCompareLoading(isLoading) {
+  state.compareLoading = Boolean(isLoading);
+  if (selectors.compareBtn) {
+    selectors.compareBtn.disabled = state.compareLoading;
+    selectors.compareBtn.classList.toggle("is-loading", state.compareLoading);
+    selectors.compareBtn.setAttribute("aria-busy", state.compareLoading ? "true" : "false");
+  }
+  if (selectors.compareLoadingIndicator) {
+    selectors.compareLoadingIndicator.hidden = !state.compareLoading;
+  }
+}
+
+function setCompareLoadingMessage(message = "비교 중") {
+  const label = selectors.compareLoadingIndicator?.querySelector("[data-compare-loading-text]");
+  if (label) label.textContent = message;
+}
+
+function waitForCompareLoadingPaint() {
+  return new Promise((resolve) => {
+    const raf = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
+    raf(() => raf(resolve));
+  });
+}
+
+function yieldToBrowser() {
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
+}
+
+async function runCompareStep(label, callback) {
+  setCompareLoadingMessage(label);
+  await yieldToBrowser();
+  try {
+    return await callback();
+  } catch (error) {
+    error.message = `${label}: ${error.message}`;
+    throw error;
+  } finally {
+    await yieldToBrowser();
+  }
+}
+
+function renderActiveCompareDiffRows() {
+  renderDiff(state.lastReport?.diffRows || []);
+  scheduleSettledDiffConnectorRender();
+}
+
+async function renderActiveCompareDiffRowsAsync() {
+  await renderDiffAsync(state.lastReport?.diffRows || []);
+  scheduleSettledDiffConnectorRender();
+}
+
+async function runCompare() {
+  setCompareLoading(true);
+  setCompareLoadingMessage("비교 준비");
+  await waitForCompareLoadingPaint();
+
   try {
     if (!isCurrentVendorPairRunnable()) {
       const vendorPair = getProfileVendorPairFromControls();
@@ -4153,19 +4208,19 @@ function runCompare() {
 
     const options = getOptions();
 
-    const oldObjects = safeStep("기존 config 파싱", () =>
+    const oldObjects = await runCompareStep("기존 config 파싱", () =>
       parseConfig(selectors.oldInput.value, options, "old")
     );
 
-    const newObjects = safeStep("신규 config 파싱", () =>
+    const newObjects = await runCompareStep("신규 config 파싱", () =>
       parseConfig(selectors.newInput.value, options, "new")
     );
 
-    const report = safeStep("객체 비교", () =>
+    const report = await runCompareStep("객체 비교", () =>
       compareObjects(oldObjects, newObjects, options)
     );
 
-    const semanticRuntime = safeStep("의미 기반 비교 상태 계산", () =>
+    const semanticRuntime = await runCompareStep("의미 기반 비교 상태 계산", () =>
       buildSemanticRuntime({
         oldText: selectors.oldInput.value,
         newText: selectors.newInput.value,
@@ -4183,15 +4238,14 @@ function runCompare() {
 
     state.lastReport = report;
 
-    safeStep("리포트 렌더링", () => renderReportV2(report));
-    safeStep("diff 렌더링", () => renderDiff(report.diffRows || []));
+    await runCompareStep("리포트 렌더링", () => renderReportV2(report));
+    await runCompareStep("diff 렌더링", renderActiveCompareDiffRowsAsync);
 
     showDiffMode();
 
-    safeStep("semantic preview 렌더링", () => {
+    await runCompareStep("semantic preview 렌더링", () => {
       renderSemanticPreview(semanticRuntime);
     });
-
     state.compareDirty = false;
     selectors.compareStatus.textContent = report.items.length
       ? `차이 ${report.items.length}건`
@@ -4199,10 +4253,12 @@ function runCompare() {
     selectors.lastComparedAt.textContent = `마지막 비교: ${formatDate(Date.now())}`;
   } catch (error) {
     handleCompareError(error);
+  } finally {
+    setCompareLoading(false);
   }
 }
 
-function handleFieldHighlightToggle() {
+async function handleFieldHighlightToggle() {
   saveUiPreferences();
   if (!state.lastReport?.diffRows) {
     scheduleSettledDiffConnectorRender();
@@ -4211,10 +4267,16 @@ function handleFieldHighlightToggle() {
 
   const oldScrollTop = selectors.oldDiffPane?.scrollTop || 0;
   const newScrollTop = selectors.newDiffPane?.scrollTop || 0;
-  renderDiff(state.lastReport.diffRows || []);
-  if (selectors.oldDiffPane) selectors.oldDiffPane.scrollTop = oldScrollTop;
-  if (selectors.newDiffPane) selectors.newDiffPane.scrollTop = newScrollTop;
-  scheduleSettledDiffConnectorRender();
+  setCompareLoading(true);
+  setCompareLoadingMessage("표시 갱신");
+  await waitForCompareLoadingPaint();
+  try {
+    await renderActiveCompareDiffRowsAsync();
+    if (selectors.oldDiffPane) selectors.oldDiffPane.scrollTop = oldScrollTop;
+    if (selectors.newDiffPane) selectors.newDiffPane.scrollTop = newScrollTop;
+  } finally {
+    setCompareLoading(false);
+  }
 }
 
 function countRawRowLines(row = {}) {
@@ -12751,19 +12813,55 @@ function renderReport(report) {
 function renderDiff(rows) {
   try {
     const safeRows = Array.isArray(rows) ? rows : [];
+    state.diffRenderVersion += 1;
     clearSelectedDiffTokens();
     selectors.oldDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.oldRow || null, row?.oldState || "placeholder", row?.newRow || null, index, "old")).join("");
     selectors.newDiffPane.innerHTML = safeRows.map((row, index) => renderDiffLine(row?.newRow || null, row?.newState || "placeholder", row?.oldRow || null, index, "new")).join("");
+    finishDiffRender();
+  } catch (error) {
+    console.error("renderDiff failed", error);
+    throw error;
+  }
+}
+
+async function renderDiffAsync(rows) {
+  try {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const renderVersion = state.diffRenderVersion + 1;
+    state.diffRenderVersion = renderVersion;
+    clearSelectedDiffTokens();
+    selectors.oldDiffPane.innerHTML = "";
+    selectors.newDiffPane.innerHTML = "";
+
+    const chunkSize = safeRows.length > 2000 ? 120 : 240;
+    for (let index = 0; index < safeRows.length; index += chunkSize) {
+      if (state.diffRenderVersion !== renderVersion) return;
+      const chunk = safeRows.slice(index, index + chunkSize);
+      selectors.oldDiffPane.insertAdjacentHTML("beforeend", chunk.map((row, offset) => {
+        const pairIndex = index + offset;
+        return renderDiffLine(row?.oldRow || null, row?.oldState || "placeholder", row?.newRow || null, pairIndex, "old");
+      }).join(""));
+      selectors.newDiffPane.insertAdjacentHTML("beforeend", chunk.map((row, offset) => {
+        const pairIndex = index + offset;
+        return renderDiffLine(row?.newRow || null, row?.newState || "placeholder", row?.oldRow || null, pairIndex, "new");
+      }).join(""));
+      await yieldToBrowser();
+    }
+
+    finishDiffRender();
+  } catch (error) {
+    console.error("renderDiff failed", error);
+    throw error;
+  }
+}
+
+function finishDiffRender() {
     bindSemanticDiffInteractions();
     renderDiffObjectToolbars();
     syncSemanticObjectBlockWidths();
     if (state.activeDiffObjectKey) highlightObjectLines(state.activeDiffObjectKey);
     renderCompareIssueContextBanner();
     scheduleSemanticObjectStartAlignment();
-  } catch (error) {
-    console.error("renderDiff failed", error);
-    throw error;
-  }
 }
 
 function bindSemanticDiffInteractions() {

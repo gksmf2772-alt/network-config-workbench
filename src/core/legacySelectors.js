@@ -31,6 +31,7 @@ export function createLegacySelectors(doc = document) {
     filterInput: doc.querySelector("#filterInput"),
     resultFilterSelect: doc.querySelector("#resultFilterSelect"),
     compareStatus: doc.querySelector("#compareStatus"),
+    compareLoadingIndicator: doc.querySelector("#compareLoadingIndicator"),
     lastComparedAt: doc.querySelector("#lastComparedAt"),
     oldMeta: doc.querySelector("#oldMeta"),
     newMeta: doc.querySelector("#newMeta"),

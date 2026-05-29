@@ -199,6 +199,10 @@ export default function ConfigInputPanel() {
                 <AppButton id="loadProfileBtn" type="button" variant="secondary">적용</AppButton>
               </div>
               <AppButton id="compareBtn" type="button"><GitCompare />비교 실행</AppButton>
+              <span id="compareLoadingIndicator" className="compare-loading-indicator" hidden>
+                <span className="compare-loading-spinner" aria-hidden="true" />
+                <span data-compare-loading-text>비교 중</span>
+              </span>
               <AppButton id="alignBtn" type="button" variant="secondary">설정 정렬</AppButton>
               <AppIconButton id="restoreInitialBtn" type="button" title="초기 입력 원복"><RotateCcw /></AppIconButton>
               <AppButton id="exportReportBtn" type="button" variant="secondary"><Download />Excel 저장</AppButton>

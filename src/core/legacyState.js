@@ -26,6 +26,8 @@ export function createLegacyState(createDefaultProfile) {
     activeDiffObjectKey: "",
     activeSemanticPairKey: "",
     activeLineRelationKey: "",
+    compareLoading: false,
+    diffRenderVersion: 0,
     lastSemanticSummary: null,
     lastSemanticPlan: [],
     lastManualMap: {},

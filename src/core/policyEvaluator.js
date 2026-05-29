@@ -3,6 +3,8 @@
 import { getPolicyForField, getProfilePolicyEntry } from "./fieldPolicy.js";
 import { normalizeComparableLine } from "./lineNormalizer.js";
 
+const preparedIgnoreRuleCache = new WeakMap();
+
 export function evaluatePolicyContext({
   profile = {},
   rawLine = "",
@@ -207,6 +209,8 @@ export function findMatchingProfileException({
   sourceLineId = "",
 } = {}) {
   const exceptions = Array.isArray(profile?.exceptions) ? profile.exceptions : [];
+  if (!exceptions.length) return null;
+
   const context = {
     rawLine,
     normalizedLine,
@@ -341,6 +345,8 @@ export function findMatchingComparisonExclusion({
   vendorPair = "",
 } = {}) {
   const exceptions = Array.isArray(profile?.exceptions) ? profile.exceptions : [];
+  if (!exceptions.length) return null;
+
   const context = {
     side: normalizeSide(side),
     objectType: settingType || objectType,
@@ -417,7 +423,10 @@ export function findMatchingLineRule({
   scope = "",
   sourceLineId = "",
 } = {}) {
-  const rules = Array.isArray(profile?.rules?.ignore) ? profile.rules.ignore : [];
+  const rawRules = Array.isArray(profile?.rules?.ignore) ? profile.rules.ignore : [];
+  const rules = getPreparedIgnoreRules(rawRules);
+  if (!rules.length) return null;
+
   const haystacks = [
     rawLine,
     normalizedLine,
@@ -437,22 +446,52 @@ export function findMatchingLineRule({
     scope,
     sourceLineId,
   ].map((value) => String(value || ""));
+  let normalizedHaystacks = null;
+  const getNormalizedHaystacks = () => {
+    if (!normalizedHaystacks) {
+      normalizedHaystacks = haystacks.map((value) => normalizeComparableLine(value));
+    }
+    return normalizedHaystacks;
+  };
+  const contextValues = {
+    objectType: normalizeComparableLine(objectType),
+    objectKey: normalizeComparableLine(objectKey),
+    field: normalizeComparableLine(field),
+    ruleId: normalizeComparableLine(ruleId),
+    category: normalizeComparableLine(category),
+    findingType: normalizeComparableLine(findingType),
+    mode: normalizeComparableLine(mode),
+    scope: normalizeComparableLine(scope),
+  };
 
-  return rules.find((rule) => {
-    if (!rule || (rule.action && rule.action !== "ignore")) return false;
-    if (!sideApplies(rule.source || rule.side || "both", side)) return false;
-    if (rule.objectType && normalizeComparableLine(rule.objectType) !== normalizeComparableLine(objectType)) return false;
-    if (rule.objectKey && normalizeComparableLine(rule.objectKey) !== normalizeComparableLine(objectKey)) return false;
-    if (rule.field && normalizeComparableLine(rule.field) !== normalizeComparableLine(field)) return false;
-    if (rule.ruleId && normalizeComparableLine(rule.ruleId) !== normalizeComparableLine(ruleId)) return false;
-    if (rule.category && normalizeComparableLine(rule.category) !== normalizeComparableLine(category)) return false;
-    if (rule.findingType && normalizeComparableLine(rule.findingType) !== normalizeComparableLine(findingType)) return false;
-    if (rule.mode && normalizeComparableLine(rule.mode) !== normalizeComparableLine(mode)) return false;
-    if (rule.scope && normalizeComparableLine(rule.scope) !== normalizeComparableLine(scope)) return false;
-    const pattern = String(rule.pattern || rule.value || rule.text || "").trim();
-    if (!pattern) return false;
-    return haystacks.some((value) => lineRuleMatches(value, pattern, rule.matchMode || rule.mode || rule.type || "contains"));
+  const match = rules.find((rule) => {
+    if (!rule.valid) return false;
+    if (!sideApplies(rule.source, side)) return false;
+    if (rule.objectType && rule.objectType !== contextValues.objectType) return false;
+    if (rule.objectKey && rule.objectKey !== contextValues.objectKey) return false;
+    if (rule.field && rule.field !== contextValues.field) return false;
+    if (rule.ruleId && rule.ruleId !== contextValues.ruleId) return false;
+    if (rule.category && rule.category !== contextValues.category) return false;
+    if (rule.findingType && rule.findingType !== contextValues.findingType) return false;
+    if (rule.mode && rule.mode !== contextValues.mode) return false;
+    if (rule.scope && rule.scope !== contextValues.scope) return false;
+    if (rule.matchMode === "regex") {
+      return haystacks.some((value) => lineRuleMatches(value, rule.pattern, rule.matchMode));
+    }
+
+    if (!rule.normalizedPattern) return false;
+    const normalizedValues = getNormalizedHaystacks();
+
+    if (rule.matchMode === "exact") {
+      return normalizedValues.some((value) => value === rule.normalizedPattern);
+    }
+    if (rule.matchMode === "prefix") {
+      return normalizedValues.some((value) => value.startsWith(rule.normalizedPattern));
+    }
+    return normalizedValues.some((value) => value.includes(rule.normalizedPattern));
   });
+
+  return match?.original || null;
 }
 
 function findMatchingManualLineRule({
@@ -462,7 +501,7 @@ function findMatchingManualLineRule({
   side = "both",
   objectType = "",
 } = {}) {
-  const lineRules = profile?.lineRules || {};
+  const lineRules = profile?.lineRules;
   if (!lineRules || typeof lineRules !== "object") return null;
 
   const normalizedObjectType = normalizeComparableLine(objectType);
@@ -482,6 +521,13 @@ function findMatchingManualLineRule({
   if (!rules.length) return null;
   const currentSide = normalizeSide(side);
   const haystacks = [rawLine, normalizedLine].map((value) => String(value || ""));
+  let normalizedHaystacks = null;
+  const getNormalizedHaystacks = () => {
+    if (!normalizedHaystacks) {
+      normalizedHaystacks = haystacks.map((value) => normalizeComparableLine(value));
+    }
+    return normalizedHaystacks;
+  };
 
   return rules.find((rule) => {
     if (!rule) return false;
@@ -496,10 +542,13 @@ function findMatchingManualLineRule({
 
     const pattern = String(rule.pattern || rule.value || rule.text || "").trim();
     if (!pattern) return false;
+    const normalizedPattern = normalizeComparableLine(pattern);
+    if (!normalizedPattern) return false;
+    const normalizedValues = getNormalizedHaystacks();
 
-    return haystacks.some((value) =>
-      lineRuleMatches(value, pattern, "exact") ||
-      lineRuleMatches(value, pattern, "contains")
+    return normalizedValues.some((value) =>
+      value === normalizedPattern ||
+      value.includes(normalizedPattern)
     );
   });
 }
@@ -523,6 +572,67 @@ export function lineRuleMatches(value = "", pattern = "", mode = "contains") {
   if (mode === "exact") return normalizedValue === normalizedPattern;
   if (mode === "prefix") return normalizedValue.startsWith(normalizedPattern);
   return normalizedValue.includes(normalizedPattern);
+}
+
+function getPreparedIgnoreRules(rules = []) {
+  if (!Array.isArray(rules) || !rules.length) return [];
+  const signature = ignoreRulesSignature(rules);
+  const cached = preparedIgnoreRuleCache.get(rules);
+  if (cached?.signature === signature) {
+    return cached.prepared;
+  }
+
+  const prepared = rules.map((rule) => {
+    if (!rule || (rule.action && rule.action !== "ignore")) {
+      return { valid: false, original: rule };
+    }
+
+    const pattern = String(rule.pattern || rule.value || rule.text || "").trim();
+    const matchMode = rule.matchMode || rule.mode || rule.type || "contains";
+    return {
+      valid: Boolean(pattern),
+      original: rule,
+      source: rule.source || rule.side || "both",
+      objectType: normalizeComparableLine(rule.objectType),
+      objectKey: normalizeComparableLine(rule.objectKey),
+      field: normalizeComparableLine(rule.field),
+      ruleId: normalizeComparableLine(rule.ruleId),
+      category: normalizeComparableLine(rule.category),
+      findingType: normalizeComparableLine(rule.findingType),
+      mode: normalizeComparableLine(rule.mode),
+      scope: normalizeComparableLine(rule.scope),
+      pattern,
+      normalizedPattern: normalizeComparableLine(pattern),
+      matchMode,
+    };
+  });
+
+  preparedIgnoreRuleCache.set(rules, { signature, prepared });
+  return prepared;
+}
+
+function ignoreRulesSignature(rules = []) {
+  return rules.map((rule) => {
+    if (!rule) return "";
+    return [
+      rule.action,
+      rule.source,
+      rule.side,
+      rule.objectType,
+      rule.objectKey,
+      rule.field,
+      rule.ruleId,
+      rule.category,
+      rule.findingType,
+      rule.mode,
+      rule.scope,
+      rule.pattern,
+      rule.value,
+      rule.text,
+      rule.matchMode,
+      rule.type,
+    ].map((value) => String(value || "")).join("\u0001");
+  }).join("\u0002");
 }
 
 export function normalizeSide(side = "both") {

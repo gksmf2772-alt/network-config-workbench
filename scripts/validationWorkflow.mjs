@@ -100,12 +100,44 @@ export function toRepoPath(filePath = "") {
 }
 
 export function readText(relativePath) {
-  return fs.readFileSync(absPath(relativePath), "utf8");
+  return fs.readFileSync(resolveReadablePath(relativePath), "utf8");
 }
 
 export function readJson(relativePath, fallback = {}) {
-  if (!relativePath || !fs.existsSync(absPath(relativePath))) return fallback;
+  if (!relativePath || !fs.existsSync(resolveReadablePath(relativePath))) return fallback;
   return JSON.parse(readText(relativePath));
+}
+
+function resolveReadablePath(relativePath = "") {
+  const primary = absPath(relativePath);
+  if (fs.existsSync(primary)) return primary;
+
+  const basename = path.basename(String(relativePath || ""));
+  if (!basename) return primary;
+
+  for (const fixtureDir of externalFixtureDirCandidates()) {
+    const candidate = path.join(fixtureDir, basename);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return primary;
+}
+
+function externalFixtureDirCandidates() {
+  const candidates = [
+    process.env.NCW_FIXTURE_DIR || "",
+    path.resolve(REPO_ROOT, "..", "network-config-workbench-home", "예제 및 테스트 설정"),
+    path.resolve(REPO_ROOT, "..", "예제 및 테스트 설정"),
+  ].filter(Boolean);
+  const seen = new Set();
+
+  return candidates.filter((candidate) => {
+    const resolved = path.resolve(candidate);
+    const key = resolved.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return fs.existsSync(resolved);
+  });
 }
 
 export function writeJson(relativePath, data) {
@@ -366,32 +398,11 @@ export function runManifestValidation({
   return summary;
 }
 
-function loadQualityAnalysisSummary() {
-  const paths = {
-    unmatched: `${RESULTS_DIR}/unmatched-analysis.json`,
-    unsupportedLines: `${RESULTS_DIR}/unsupported-line-analysis.json`,
-    findingPriority: `${RESULTS_DIR}/finding-priority-analysis.json`,
-    fixtureCompleteness: `${RESULTS_DIR}/fixture-completeness-analysis.json`,
-    parserBacklog: `${RESULTS_DIR}/parser-backlog.json`,
-    blocksAutoGeneration: `${RESULTS_DIR}/blocks-auto-generation-analysis.json`,
-    conversionPolicyRequired: `${RESULTS_DIR}/conversion-policy-required-analysis.json`,
-    actualMissing: `${RESULTS_DIR}/actual-missing-analysis.json`,
-    matcherEffectiveness: `${RESULTS_DIR}/matcher-effectiveness-analysis.json`,
-    modeScopeValidation: `${RESULTS_DIR}/mode-scope-validation.json`,
-  };
-  const result = {};
-  for (const [key, filePath] of Object.entries(paths)) {
-    if (fs.existsSync(absPath(filePath))) {
-      result[key] = readJson(filePath, null);
-    }
-  }
-  return Object.keys(result).length ? result : null;
-}
-
 export function writeFinalReports({
   inventory = discoverInventory(),
   validationSummaries = [],
   commandResults = [],
+  qualityAnalysis = null,
 } = {}) {
   const manifest = loadManifest();
   const final = {
@@ -401,7 +412,7 @@ export function writeFinalReports({
     cases: manifest.cases || [],
     validationSummaries,
     commandResults,
-    qualityAnalysis: loadQualityAnalysisSummary(),
+    qualityAnalysis,
     remainingLimitations: [
       "Juniper 실제 설정 기반 검증은 source-juniper.conf 추가 전까지 blocked 상태입니다.",
       "Synthetic Juniper smoke fixture는 production migration/comparison pass로 계산하지 않습니다.",
@@ -780,7 +791,7 @@ function blockedCaseResult(testCase, strictMissingFixtures) {
 
 function loadCaseSourceText(testCase) {
   assert(testCase.sourceConfigPath, `${testCase.id}: sourceConfigPath missing`);
-  assert(fs.existsSync(absPath(testCase.sourceConfigPath)), `${testCase.id}: source config missing: ${testCase.sourceConfigPath}`);
+  assert(fs.existsSync(resolveReadablePath(testCase.sourceConfigPath)), `${testCase.id}: source config missing: ${testCase.sourceConfigPath}`);
   return readText(testCase.sourceConfigPath);
 }
 
@@ -788,7 +799,7 @@ function loadCaseTargetText(testCase) {
   const paths = getTargetPaths(testCase);
   assert(paths.length > 0, `${testCase.id}: target config path missing`);
   return paths.map((targetPath) => {
-    assert(fs.existsSync(absPath(targetPath)), `${testCase.id}: target config missing: ${targetPath}`);
+    assert(fs.existsSync(resolveReadablePath(targetPath)), `${testCase.id}: target config missing: ${targetPath}`);
     return readText(targetPath);
   }).join("\n");
 }
@@ -863,8 +874,8 @@ function validateCanonicalResult({
   assert(compareHtml.length > 0, `${testCase.id}: compare HTML empty`);
   assert(!compareHtml.includes("undefined"), `${testCase.id}: undefined visible in compare data`);
   assert(!compareHtml.includes("NaN"), `${testCase.id}: NaN visible in compare data`);
-  assertNoDuplicateKeys(testCase, oldResult.objects, "old");
-  assertNoDuplicateKeys(testCase, newResult.objects, "new");
+  assertNoDuplicateObjectIds(testCase, oldResult.objects, "old");
+  assertNoDuplicateObjectIds(testCase, newResult.objects, "new");
   assertNoObjectStatusConflict(testCase, plan);
   assertGraphValid(testCase, dashboard.graph);
   assertFindingsValid(testCase, audit.findings);
@@ -889,11 +900,12 @@ function validateCanonicalResult({
   }
 }
 
-function assertNoDuplicateKeys(testCase, objects, side) {
+function assertNoDuplicateObjectIds(testCase, objects, side) {
   const seen = new Set();
   for (const object of objects) {
-    const key = `${object.normalizedType}:${object.normalizedIdentity}`;
-    assert(!seen.has(key), `${testCase.id}: duplicate ${side} object key ${key}`);
+    const key = object.id;
+    assert(key, `${testCase.id}: missing ${side} object id`);
+    assert(!seen.has(key), `${testCase.id}: duplicate ${side} object id ${key}`);
     seen.add(key);
   }
 }

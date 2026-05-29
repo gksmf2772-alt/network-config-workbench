@@ -10,7 +10,11 @@ import {
 import { buildSemanticCoverageDiagnostics } from "../src/core/coverageDiagnostics.js";
 import { evaluatePolicyContext } from "../src/core/policyEvaluator.js";
 import { normalizeComparableLine } from "../src/core/lineNormalizer.js";
-import { buildGraphData, buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
+import {
+  buildGraphData,
+  buildSummaryDashboardData,
+  createFixtureUnmatchedClassifier,
+} from "../src/core/summaryAnalytics.js";
 import {
   buildAnalysisContext,
   filterAuditForModeScope,
@@ -189,11 +193,16 @@ function buildCaseArtifacts(testCase, inventory) {
 
 function buildUnmatchedAnalysis(artifacts) {
   const { testCase, oldResult, newResult, plan, dashboard, targetBundle } = artifacts;
+  const classifyFixtureUnmatched = createFixtureUnmatchedClassifier(
+    plan,
+    artifacts.profile.fixturePolicy || { status: testCase.fixtureCompleteness }
+  );
   const records = plan
     .filter((item) => !item.policySuppressed && ["old-only", "new-only"].includes(item.status))
     .map((item) => {
       const side = item.status === "old-only" ? "old" : "new";
       const object = side === "old" ? item.oldObject : item.newObject;
+      const fixtureClassification = side === "old" ? classifyFixtureUnmatched(item) : null;
       const source = side === "old"
         ? locateSourceObject(object, oldResult, testCase.sourceConfigPath)
         : locateTargetObject(object, targetBundle);
@@ -213,8 +222,10 @@ function buildUnmatchedAnalysis(artifacts) {
           oldResult,
           newResult,
           oppositeObjects,
-          fixturePartial: true,
+          fixtureClassification,
         }),
+        fixtureUnmatchedCategory: fixtureClassification?.category || "",
+        diagnosticReason: fixtureClassification?.reason || "",
         score: item.score ?? null,
         sampleLines: (object.rawLines || []).slice(0, 3),
       };
@@ -260,8 +271,9 @@ function buildUnmatchedAnalysis(artifacts) {
       unmatchedDueLikelyMatcherIssue: scopeSummary.unmatchedDueLikelyMatcherIssue,
       unmatchedDueParserGap: scopeSummary.unmatchedDueParserGap,
       unmatchedDueRealMissingTarget: scopeSummary.unmatchedDueRealMissingTarget,
+      unmatchedTargetOnly: scopeSummary.unmatchedTargetOnly,
       labelsKo: scopeSummary.labelsKo,
-      primaryConclusion: "High unmatched count is expected for this fixture set because the MD-CLI target is a partial feature-split target, but port/LAG/SAP rename mapping and service parent matching also need matcher or manual-map work.",
+      primaryConclusion: "High unmatched count is expected because the MD-CLI target is a partial feature-split target; source unmatched counts now follow the dashboard fixture-scope classifier.",
     },
     groups: {
       byTypeSide,
@@ -278,20 +290,22 @@ function buildUnmatchedAnalysis(artifacts) {
   };
 }
 
-function buildUnmatchedScopeSummary({ artifacts, records }) {
+export function buildUnmatchedScopeSummary({ artifacts, records }) {
   const { oldResult, newResult, profile, testCase } = artifacts;
   const partialTarget =
     profile.fixturePolicy?.status === "partial-assembled-target" ||
     testCase.fixtureCompleteness === "partial-assembled-target";
   const targetTypes = new Set(newResult.objects.map(objectType));
   const sourceObjectsInTargetScope = oldResult.objects.filter((object) => targetTypes.has(objectType(object))).length;
-  const unmatchedDuePartialTargetScope = records.filter((item) => item.likelyReason === "target fixture is partial").length;
-  const unmatchedDueLikelyMatcherIssue = records.filter((item) =>
+  const sourceRecords = records.filter((item) => item.side === "old");
+  const targetOnlyRecords = records.filter((item) => item.side === "new");
+  const unmatchedDuePartialTargetScope = sourceRecords.filter((item) => item.likelyReason === "target fixture is partial").length;
+  const unmatchedDueLikelyMatcherIssue = sourceRecords.filter((item) =>
     ["object key normalization mismatch", "parent/relationship mismatch", "matching rule too strict"].includes(item.likelyReason)
   ).length;
-  const unmatchedDueParserGap = records.filter((item) => item.likelyReason === "parser gap" || item.parserSupportStatus === "placeholder-partial").length;
-  const unmatchedDueRealMissingTarget = records.filter((item) =>
-    ["source object has no target counterpart", "target object has no source counterpart"].includes(item.likelyReason)
+  const unmatchedDueParserGap = sourceRecords.filter((item) => item.likelyReason === "parser gap").length;
+  const unmatchedDueRealMissingTarget = sourceRecords.filter((item) =>
+    item.likelyReason === "source object has no target counterpart"
   ).length;
 
   return {
@@ -312,6 +326,7 @@ function buildUnmatchedScopeSummary({ artifacts, records }) {
     unmatchedDueLikelyMatcherIssue,
     unmatchedDueParserGap,
     unmatchedDueRealMissingTarget,
+    unmatchedTargetOnly: targetOnlyRecords.length,
   };
 }
 
@@ -776,7 +791,7 @@ function buildActualMissingAnalysis(artifacts, unmatched) {
       parserMatcherFalseNegative: records.filter((item) => item.parserOrMatcherStatus === "parser-or-matcher-false-negative").length,
       missingParentRelationship: records.filter((item) => item.missingParentRelationship).length,
       manualMappingCouldResolve: records.filter((item) => item.manualMappingCouldResolve).length,
-      primaryConclusion: "Actual missing candidates are mostly target-side extra objects or source objects without same-type target coverage; each still needs fixture-scope confirmation.",
+      primaryConclusion: "Actual missing candidates now separate confirmed source-missing objects from target-only extras; parser/matcher false-negative counts are kept distinct.",
     },
     groups: {
       bySide: countBy(records, (item) => item.side),
@@ -789,16 +804,22 @@ function buildActualMissingAnalysis(artifacts, unmatched) {
   };
 }
 
-function classifyActualMissingRecord(record, artifacts) {
+export function classifyActualMissingRecord(record, artifacts) {
   const partialTarget =
     artifacts.profile.fixturePolicy?.status === "partial-assembled-target" ||
     artifacts.testCase.fixtureCompleteness === "partial-assembled-target";
   const oldCount = artifacts.oldResult.objects.filter((object) => objectType(object) === record.objectType).length;
   const newCount = artifacts.newResult.objects.filter((object) => objectType(object) === record.objectType).length;
   const hasSameTypeOpposite = record.side === "old" ? newCount > 0 : oldCount > 0;
+  const fixtureCategory = record.fixtureUnmatchedCategory || "";
+  const isConfirmedSourceMissing = record.side === "old" && fixtureCategory === "realMissingTarget";
   const missingParentRelationship = ["sap", "subscriber-interface", "group-interface", "static-host", "default-host", "sub-sla-mgmt"].includes(record.objectType);
-  const manualMappingCouldResolve = hasSameTypeOpposite && ["port", "lag", "interface", "sap", "static-route", "bgp"].includes(record.objectType);
-  const outsidePartialTargetScope = partialTarget && record.side === "old" && (!newCount || oldCount > newCount);
+  const outsidePartialTargetScope = partialTarget && record.side === "old" && fixtureCategory === "partialTargetScope";
+  const manualMappingCouldResolve =
+    record.side === "old" &&
+    !isConfirmedSourceMissing &&
+    hasSameTypeOpposite &&
+    ["port", "lag", "interface", "sap", "static-route", "bgp"].includes(record.objectType);
 
   return {
     completenessStatus: outsidePartialTargetScope
@@ -806,9 +827,13 @@ function classifyActualMissingRecord(record, artifacts) {
       : record.side === "new"
         ? "target-object-has-no-source-counterpart"
         : "true-missing-from-target-fixture",
-    parserOrMatcherStatus: hasSameTypeOpposite
-      ? "parser-or-matcher-false-negative"
-      : "no-opposite-type-coverage",
+    parserOrMatcherStatus: isConfirmedSourceMissing
+      ? "confirmed-source-missing"
+      : record.side === "new"
+        ? "target-only-object"
+        : hasSameTypeOpposite
+          ? "parser-or-matcher-false-negative"
+          : "no-opposite-type-coverage",
     missingParentRelationship,
     manualMappingCouldResolve,
     recommendedAction: manualMappingCouldResolve
@@ -1402,7 +1427,7 @@ function parserSupportStatus(object) {
   return "parsed";
 }
 
-function classifyUnmatchedReason({ item, object, side, oldResult, newResult, oppositeObjects }) {
+function classifyUnmatchedReason({ item, object, side, oldResult, newResult, oppositeObjects, fixtureClassification }) {
   const type = objectType(object);
   const oldCount = oldResult.objects.filter((candidate) => objectType(candidate) === type).length;
   const newCount = newResult.objects.filter((candidate) => objectType(candidate) === type).length;
@@ -1411,6 +1436,10 @@ function classifyUnmatchedReason({ item, object, side, oldResult, newResult, opp
     objectType(candidate) === type && normalizeKey(candidate) === normalizeKey(object)
   );
 
+  if (side === "old" && fixtureClassification) {
+    return unmatchedReasonFromFixtureClassification(fixtureClassification);
+  }
+  if (side === "new") return "target object has no source counterpart";
   if (PLACEHOLDER_TYPES.has(type)) return "parser gap";
   if (side === "old" && newCount === 0) return "target fixture is partial";
   if (side === "old" && oldCount > newCount) return "target fixture is partial";
@@ -1423,6 +1452,13 @@ function classifyUnmatchedReason({ item, object, side, oldResult, newResult, opp
   }
   if (item.reason === "unmatched" && CORE_OBJECT_TYPES.has(type)) return "source object has no target counterpart";
   return side === "old" ? "expected unmatched" : "target object has no source counterpart";
+}
+
+function unmatchedReasonFromFixtureClassification(classification = {}) {
+  if (classification.category === "partialTargetScope") return "target fixture is partial";
+  if (classification.category === "parserGap") return "parser gap";
+  if (classification.category === "matcherIssue") return "matching rule too strict";
+  return "source object has no target counterpart";
 }
 
 function classifyWeakMappingReason(item) {
@@ -1654,6 +1690,7 @@ function renderUnmatchedMarkdown(analysis) {
     `- Matcher 개선 필요: ${analysis.summary.unmatchedDueLikelyMatcherIssue}`,
     `- Parser 미지원 가능성: ${analysis.summary.unmatchedDueParserGap}`,
     `- 실제 누락 가능성: ${analysis.summary.unmatchedDueRealMissingTarget}`,
+    `- target-only objects: ${analysis.summary.unmatchedTargetOnly || 0}`,
     `- conclusion: ${analysis.summary.primaryConclusion}`,
     "",
     "## By Reason",
@@ -1991,9 +2028,14 @@ function updateFinalValidationReport(quality) {
 
   const finalMdPath = `${RESULTS_DIR}/final-validation-report.md`;
   const existing = fs.existsSync(absPath(finalMdPath)) ? readText(finalMdPath) : "";
-  const marker = "\n## 12. Validation Quality Analysis";
-  const base = existing.includes(marker) ? existing.slice(0, existing.indexOf(marker)) : existing.trimEnd();
+  const base = stripFinalGeneratedQualitySections(existing);
   writeText(finalMdPath, `${base}\n${renderFinalQualityMarkdown(quality)}\n${renderProfileExceptionFinalMarkdown(profileExceptionApplication)}\n${renderObjectReviewGroupingFinalMarkdown(objectReviewGrouping)}\n${renderFieldIssueDedupeFinalMarkdown(fieldIssueDedupe)}\n`);
+}
+
+export function stripFinalGeneratedQualitySections(markdown = "") {
+  const text = String(markdown || "");
+  const marker = text.match(/\n## (?:11|12)\. Validation Quality Analysis\b/);
+  return (marker ? text.slice(0, marker.index) : text).trimEnd();
 }
 
 function renderFinalQualityMarkdown(quality) {
@@ -2005,15 +2047,17 @@ function renderFinalQualityMarkdown(quality) {
   const modeScope = quality.modeScopeValidation.summary;
   return [
     "",
-    "## 12. Validation Quality Analysis",
+    "## 11. Validation Quality Analysis",
     `- fixture completeness: ${quality.fixtureCompleteness.summary.status}`,
     `- high unmatched expected: ${quality.fixtureCompleteness.summary.highUnmatchedExpected}`,
     `- unmatched: source ${quality.unmatched.summary.unmatchedSource}, target ${quality.unmatched.summary.unmatchedTarget}, weak mappings ${quality.unmatched.summary.weakMappings}`,
     `- full source objects: ${quality.unmatched.summary.fullSourceObjectCount}, target fixture objects: ${quality.unmatched.summary.targetFixtureObjectCount}`,
+    `- in target scope: ${quality.unmatched.summary.sourceObjectsInTargetScope}, outside target scope: ${quality.unmatched.summary.sourceObjectsOutsideTargetScope}`,
     `- Target fixture 범위 밖 미매칭: ${quality.unmatched.summary.unmatchedDuePartialTargetScope}`,
     `- Matcher 개선 필요: ${quality.unmatched.summary.unmatchedDueLikelyMatcherIssue}`,
     `- Parser 미지원 가능성: ${quality.unmatched.summary.unmatchedDueParserGap}`,
     `- 실제 누락 가능성: ${quality.unmatched.summary.unmatchedDueRealMissingTarget}`,
+    `- target-only objects: ${quality.unmatched.summary.unmatchedTargetOnly || 0}`,
     `- line accounting: eligible ${lineAccounting.eligibleLines}, recognized ${lineAccounting.recognizedAnalyzedLines}, parser-unmapped ${lineAccounting.parserUnmappedLines}, ignored/suppressed ${lineAccounting.ignoredSuppressedLines}, wrapper ${lineAccounting.routerLogWrapperLines}`,
     `- active findings: ${quality.findingPriority.summary.activeFindings}, suppressed ${quality.findingPriority.summary.suppressedFindings}`,
     `- blocks auto-generation: ${quality.findingPriority.summary.blocksAutoGeneration}`,
@@ -2036,7 +2080,7 @@ function renderProfileExceptionFinalMarkdown(report) {
   if (!report) {
     return [
       "",
-      "## 13. Profile Exception Application",
+      "## 12. Profile Exception Application",
       "- not run",
     ].join("\n");
   }
@@ -2045,7 +2089,7 @@ function renderProfileExceptionFinalMarkdown(report) {
   const invariant = report.invariant || {};
   return [
     "",
-    "## 13. Profile Exception Application",
+    "## 12. Profile Exception Application",
     `- active profile: ${report.activeProfileName || "-"}`,
     `- loaded profile exceptions: ${report.loadedProfileExceptionsCount || 0}`,
     `- matched exception IDs: ${(report.matchedExceptionIds || []).join(", ") || "-"}`,
@@ -2064,13 +2108,13 @@ function renderObjectReviewGroupingFinalMarkdown(report) {
   if (!report) {
     return [
       "",
-      "## 14. Object Review Grouping",
+      "## 13. Object Review Grouping",
       "- not run",
     ].join("\n");
   }
   return [
     "",
-    "## 14. Object Review Grouping",
+    "## 13. Object Review Grouping",
     `- active profile: ${report.activeProfileName || "-"}`,
     `- object groups before: ${report.before?.objectReviewGroupCount || 0}`,
     `- object groups after profile exception: ${report.after?.objectReviewGroupCount || 0}`,
@@ -2088,14 +2132,14 @@ function renderFieldIssueDedupeFinalMarkdown(report) {
   if (!report) {
     return [
       "",
-      "## 15. Field Issue Dedupe",
+      "## 14. Field Issue Dedupe",
       "- not run",
     ].join("\n");
   }
   const description = report.activeFieldRows?.find((row) => row.fieldPath === "description") || {};
   return [
     "",
-    "## 15. Field Issue Dedupe",
+    "## 14. Field Issue Dedupe",
     `- status: ${report.status || "-"}`,
     `- duplicate field rows before: ${report.duplicateFieldRowsBefore ?? 0}`,
     `- duplicate field rows after: ${report.duplicateFieldRowsAfter ?? 0}`,

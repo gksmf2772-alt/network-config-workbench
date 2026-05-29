@@ -74,6 +74,20 @@ const MVP_SECTION_TYPES = [
   { objectType: "bgp", label: "BGP neighbor" },
 ];
 
+const DESCRIPTION_ENDPOINT_CACHE_LIMIT = 20000;
+const portLagDescriptionEndpointCache = new Map();
+const portLagDescriptionEndpointSetCache = new Map();
+const interfaceTargetDescriptionEndpointSetCache = new WeakMap();
+
+function cacheDescriptionValue(cache, key, buildValue) {
+  const normalizedKey = String(key || "");
+  if (cache.has(normalizedKey)) return cache.get(normalizedKey);
+  const value = buildValue(normalizedKey);
+  if (cache.size >= DESCRIPTION_ENDPOINT_CACHE_LIMIT) cache.clear();
+  cache.set(normalizedKey, value);
+  return value;
+}
+
 export function buildLineSummary(report = {}) {
   const rows = Array.isArray(report.diffRows) ? report.diffRows : [];
   const metrics = {
@@ -649,13 +663,23 @@ function hasInterfaceDescriptionTargetEvidence(oldObject = {}, newObjects = []) 
   const oldEndpoints = portLagDescriptionEndpointCandidates(interfaceDescription(oldObject));
   if (!oldEndpoints.length) return false;
 
-  const targetEndpoints = new Set(
+  const targetEndpoints = interfaceTargetDescriptionEndpointSet(newObjects);
+
+  return oldEndpoints.some((endpoint) => targetEndpoints.has(endpoint));
+}
+
+function interfaceTargetDescriptionEndpointSet(newObjects = []) {
+  if (interfaceTargetDescriptionEndpointSetCache.has(newObjects)) {
+    return interfaceTargetDescriptionEndpointSetCache.get(newObjects);
+  }
+
+  const endpoints = new Set(
     newObjects.flatMap((object) =>
       portLagDescriptionEndpointCandidates(interfaceDescription(object))
     )
   );
-
-  return oldEndpoints.some((endpoint) => targetEndpoints.has(endpoint));
+  interfaceTargetDescriptionEndpointSetCache.set(newObjects, endpoints);
+  return endpoints;
 }
 
 function interfaceAddress(object = {}) {
@@ -800,24 +824,34 @@ function normalizePortLagList(value) {
 
 function sharedPortLagDescriptionEndpoint(oldDescription = "", newDescription = "") {
   const oldEndpoints = portLagDescriptionEndpointCandidates(oldDescription);
-  const newEndpointSet = new Set(portLagDescriptionEndpointCandidates(newDescription));
+  const newEndpointSet = portLagDescriptionEndpointSet(newDescription);
   return oldEndpoints.some((endpoint) => newEndpointSet.has(endpoint));
 }
 
 function portLagDescriptionEndpointCandidates(description = "") {
-  const cleanDescription = String(description || "")
-    .replace(/^["']|["']$/g, "")
-    .replace(/^#+|#+$/g, "");
+  return cacheDescriptionValue(portLagDescriptionEndpointCache, description, (rawDescription) => {
+    const cleanDescription = String(rawDescription || "")
+      .replace(/^["']|["']$/g, "")
+      .replace(/^#+|#+$/g, "");
 
-  return [...new Set(cleanDescription
-    .split(/[,;]+/)
-    .flatMap((segment) => {
-      const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
-      return [cleanSegment, ...cleanSegment.split(/\s+/)];
-    })
-    .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
-    .filter(isLikelyPortLagDescriptionEndpoint)
-    .map(normalizePortLagDescriptionEndpoint))];
+    return [...new Set(cleanDescription
+      .split(/[,;]+/)
+      .flatMap((segment) => {
+        const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
+        return [cleanSegment, ...cleanSegment.split(/\s+/)];
+      })
+      .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
+      .filter(isLikelyPortLagDescriptionEndpoint)
+      .map(normalizePortLagDescriptionEndpoint))];
+  });
+}
+
+function portLagDescriptionEndpointSet(description = "") {
+  return cacheDescriptionValue(
+    portLagDescriptionEndpointSetCache,
+    description,
+    (rawDescription) => new Set(portLagDescriptionEndpointCandidates(rawDescription))
+  );
 }
 
 function isLikelyPortLagDescriptionEndpoint(segment = "") {

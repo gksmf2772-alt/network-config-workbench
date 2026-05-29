@@ -83,6 +83,35 @@ test("line exception keeps new-only object visible as suppressed review item", (
   assert.equal(dashboard.review.abnormal.length, 0);
 });
 
+test("policy ignore cache follows in-place rule edits", () => {
+  const profile = {
+    rules: {
+      ignore: [
+        { source: "new", pattern: "metric 100", matchMode: "contains" },
+      ],
+    },
+  };
+
+  assert.equal(evaluatePolicyContext({
+    profile,
+    rawLine: "metric 100",
+    side: "new",
+  }).suppressed, true);
+
+  profile.rules.ignore[0].pattern = "metric 200";
+
+  assert.equal(evaluatePolicyContext({
+    profile,
+    rawLine: "metric 100",
+    side: "new",
+  }).suppressed, false);
+  assert.equal(evaluatePolicyContext({
+    profile,
+    rawLine: "metric 200",
+    side: "new",
+  }).suppressed, true);
+});
+
 test("manual added line rule keeps object in integrated report as suppressed", () => {
   const rawLine = '/configure { router "Base" bgp neighbor "210.183.28.161" group "ACCESS-PEER" }';
   const profile = {

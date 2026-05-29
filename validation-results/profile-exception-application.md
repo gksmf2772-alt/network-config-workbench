@@ -1,6 +1,6 @@
 # Profile Exception Application
 
-- generatedAt: 2026-05-18T12:20:20.158Z
+- generatedAt: 2026-05-29T14:11:31.132Z
 - activeProfile: profile-exception-application-fixture
 - loadedProfileExceptions: 1
 - matchedExceptionId: ex-profile-bgp-group-added-mdcli

@@ -105,7 +105,39 @@ test("summary section cards are bound to object list filtering", () => {
   const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
 
   assert.match(legacy, /selectors\.summaryCards\?\.querySelectorAll\("\[data-field-type-filter\]"\)/);
-  assert.match(legacy, /selectors\.objectSearchInput\.value = button\.dataset\.fieldTypeFilter \|\| ""/);
+  assert.match(legacy, /state\.activeObjectSectionScope = getSectionFilterForObjectType\(button\.dataset\.fieldTypeFilter \|\| ""\)\.scope/);
   assert.match(legacy, /renderObjectNavigator\(\);/);
   assert.match(legacy, /setResultTab\("objects"\);/);
+});
+
+test("app shell exposes separated summary review compare profile and report tabs", () => {
+  const shell = fs.readFileSync("src/components/AppShell.jsx", "utf8");
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(shell, /summaryPageTabBtn/);
+  assert.match(shell, /objectsPageTabBtn/);
+  assert.match(shell, /compareTabBtn/);
+  assert.match(shell, /profilesTabBtn/);
+  assert.match(shell, /reportPageTabBtn/);
+  assert.match(shell, /id="objectsTab"/);
+  assert.match(shell, /id="reportTab"/);
+  assert.match(legacy, /selectors\.objectsPageTabBtn\?\.addEventListener\("click", \(\) => setActiveTab\("objects"\)\)/);
+  assert.match(legacy, /selectors\.reportPageTabBtn\?\.addEventListener\("click", \(\) => setActiveTab\("report"\)\)/);
+});
+
+test("object review has muted section tabs and compact quick actions", () => {
+  const table = fs.readFileSync("src/components/ObjectMatchTable.jsx", "utf8");
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const css = fs.readFileSync("src/styles/global-summary.css", "utf8");
+
+  assert.match(table, /objectSectionTabs/);
+  assert.match(table, /objectQuickActions/);
+  assert.match(table, /비교 보기/);
+  assert.match(table, /내보내기/);
+  assert.match(table, /필터 초기화/);
+  assert.match(legacy, /const OBJECT_SECTION_FILTERS = \[/);
+  assert.match(legacy, /scope: "port-lag"/);
+  assert.match(legacy, /function objectMatchesActiveSection/);
+  assert.match(css, /\.section-filter-tab\.active/);
+  assert.match(css, /background: #f3f7fb/);
 });

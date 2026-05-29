@@ -24,6 +24,7 @@ export function createLegacyState(createDefaultProfile) {
     suppressNextPreviewTokenClick: false,
     pendingSemanticMapping: null,
     activeDiffObjectKey: "",
+    activeObjectSectionScope: "all",
     activeSemanticPairKey: "",
     activeLineRelationKey: "",
     compareLoading: false,

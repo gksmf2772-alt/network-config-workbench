@@ -2,6 +2,20 @@
 
 import { resolveBgpEffectiveObjects } from "../bgpEffectiveResolver.js";
 
+const DESCRIPTION_CACHE_LIMIT = 20000;
+const descriptionTokenCache = new Map();
+const descriptionEndpointCache = new Map();
+const descriptionEndpointSetCache = new Map();
+
+function cacheValue(cache, key, buildValue) {
+  const normalizedKey = String(key || "");
+  if (cache.has(normalizedKey)) return cache.get(normalizedKey);
+  const value = buildValue(normalizedKey);
+  if (cache.size >= DESCRIPTION_CACHE_LIMIT) cache.clear();
+  cache.set(normalizedKey, value);
+  return value;
+}
+
 function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
@@ -11,13 +25,15 @@ function normalizeText(value) {
 }
 
 function tokenizeDescription(value) {
-  const normalized = normalizeText(value);
-  if (!normalized) return [];
+  return cacheValue(descriptionTokenCache, value, (rawValue) => {
+    const normalized = normalizeText(rawValue);
+    if (!normalized) return [];
 
-  return normalized
-    .split(" ")
-    .map((token) => token.trim())
-    .filter(Boolean);
+    return normalized
+      .split(" ")
+      .map((token) => token.trim())
+      .filter(Boolean);
+  });
 }
 
 function normalizeDescriptionEndpoint(value = "") {
@@ -73,6 +89,13 @@ function endpointPortTokenCandidates(token = "") {
 
   for (const match of normalized.matchAll(/\(([^()]+)\)/g)) {
     for (const candidate of endpointPortTokenCandidates(match[1])) {
+      candidates.add(candidate);
+    }
+  }
+
+  const withoutParentheticalSuffix = normalized.replace(/\([^()]*\)$/g, "");
+  if (withoutParentheticalSuffix && withoutParentheticalSuffix !== normalized) {
+    for (const candidate of endpointPortTokenCandidates(withoutParentheticalSuffix)) {
       candidates.add(candidate);
     }
   }
@@ -154,41 +177,61 @@ function descriptionSplitEndpointCandidates(description = "") {
 }
 
 function descriptionEndpointCandidates(description = "") {
-  const cleanDescription = String(description || "")
-    .replace(/^["']|["']$/g, "")
-    .replace(/^#+|#+$/g, "");
+  return cacheValue(descriptionEndpointCache, description, (rawDescription) => {
+    const cleanDescription = String(rawDescription || "")
+      .replace(/^["']|["']$/g, "")
+      .replace(/^#+|#+$/g, "");
 
-  const segments = cleanDescription
-    .split(/[,;]+/)
-    .flatMap((segment) => {
-      const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
-      return [
-        cleanSegment,
-        ...cleanSegment.split(/\s+/),
-      ];
-    });
+    const segments = cleanDescription
+      .split(/[,;]+/)
+      .flatMap((segment) => {
+        const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
+        return [
+          cleanSegment,
+          ...cleanSegment.split(/\s+/),
+        ];
+      });
 
-  const candidates = new Set(segments
-    .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
-    .filter(isLikelyDescriptionEndpoint)
-    .map(normalizeDescriptionEndpoint));
+    const candidates = new Set(segments
+      .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
+      .filter(isLikelyDescriptionEndpoint)
+      .map(normalizeDescriptionEndpoint));
 
-  for (const endpoint of descriptionCompositeEndpointCandidates(cleanDescription)) {
-    candidates.add(endpoint);
-  }
+    for (const endpoint of descriptionCompositeEndpointCandidates(cleanDescription)) {
+      candidates.add(endpoint);
+    }
 
-  for (const endpoint of descriptionSplitEndpointCandidates(cleanDescription)) {
-    candidates.add(endpoint);
-  }
+    for (const endpoint of descriptionSplitEndpointCandidates(cleanDescription)) {
+      candidates.add(endpoint);
+    }
 
-  return [...candidates];
+    return [...candidates];
+  });
 }
 
-function sharedDescriptionEndpoint(oldDescription = "", newDescription = "") {
-  const oldEndpoints = descriptionEndpointCandidates(oldDescription);
-  const newEndpointSet = new Set(descriptionEndpointCandidates(newDescription));
+function descriptionEndpointSet(description = "") {
+  return cacheValue(
+    descriptionEndpointSetCache,
+    description,
+    (rawDescription) => new Set(descriptionEndpointCandidates(rawDescription))
+  );
+}
 
-  return oldEndpoints.find((endpoint) => newEndpointSet.has(endpoint)) || null;
+function sharedDescriptionEndpoint(oldDescription = "", newDescription = "", {
+  requireComposite = false,
+} = {}) {
+  const oldEndpoints = descriptionEndpointCandidates(oldDescription)
+    .filter((endpoint) => !requireComposite || isCompositeDescriptionEndpoint(endpoint));
+  const newEndpointSet = descriptionEndpointSet(newDescription);
+
+  return oldEndpoints.find((endpoint) =>
+    newEndpointSet.has(endpoint) &&
+    (!requireComposite || isCompositeDescriptionEndpoint(endpoint))
+  ) || null;
+}
+
+function isCompositeDescriptionEndpoint(endpoint = "") {
+  return String(endpoint || "").includes("|");
 }
 
 function tokenWeight(token) {
@@ -356,7 +399,7 @@ function canUseNormalizedIdentityAsStrongMatch(object = {}) {
   return true;
 }
 
-function findIdentityMatch(oldObject, candidates) {
+function findIdentityMatch(oldObject, candidates, context = {}) {
   const normalizedIdentityMatches = [];
 
   for (const newObject of candidates) {
@@ -372,6 +415,39 @@ function findIdentityMatch(oldObject, candidates) {
         newObject.prefix &&
         oldObject.prefix === newObject.prefix
       ) {
+        const hasOldCompetitor = hasStrongIdentityOldCompetitor({
+          oldObject,
+          newObject,
+          oldObjects: context.oldObjects,
+          usedOldIds: context.usedOldIds,
+          key: "interface-prefix",
+        });
+        const newCompetitors = getStrongIdentityNewCompetitors({
+          oldObject,
+          newObject,
+          newObjects: candidates,
+          key: "interface-prefix",
+        });
+
+        if (hasOldCompetitor || newCompetitors.length) {
+          return makeMatch({
+            oldObject,
+            newObject,
+            status: "candidate",
+            reason: "ambiguous-prefix",
+            score: 100,
+            matchKeyFields: ["prefix"],
+            scoreReasons: ["prefix", "ambiguous-candidates"],
+            ambiguousAlternatives: buildStrongIdentityAlternatives({
+              newObject,
+              newCompetitors,
+              reason: "prefix",
+              matchKeyFields: ["prefix"],
+              scoreReasons: ["prefix"],
+            }),
+          });
+        }
+
         return makeMatch({
           oldObject,
           newObject,
@@ -388,6 +464,39 @@ function findIdentityMatch(oldObject, candidates) {
         newObject.ipAddress &&
         oldObject.ipAddress === newObject.ipAddress
       ) {
+        const hasOldCompetitor = hasStrongIdentityOldCompetitor({
+          oldObject,
+          newObject,
+          oldObjects: context.oldObjects,
+          usedOldIds: context.usedOldIds,
+          key: "interface-ip-address",
+        });
+        const newCompetitors = getStrongIdentityNewCompetitors({
+          oldObject,
+          newObject,
+          newObjects: candidates,
+          key: "interface-ip-address",
+        });
+
+        if (hasOldCompetitor || newCompetitors.length) {
+          return makeMatch({
+            oldObject,
+            newObject,
+            status: "candidate",
+            reason: "ambiguous-ip-address",
+            score: 100,
+            matchKeyFields: ["ipAddress"],
+            scoreReasons: ["ip-address", "ambiguous-candidates"],
+            ambiguousAlternatives: buildStrongIdentityAlternatives({
+              newObject,
+              newCompetitors,
+              reason: "ip-address",
+              matchKeyFields: ["ipAddress"],
+              scoreReasons: ["ip-address"],
+            }),
+          });
+        }
+
         return makeMatch({
           oldObject,
           newObject,
@@ -418,6 +527,39 @@ function findIdentityMatch(oldObject, candidates) {
         newNextHop &&
         oldNextHop === newNextHop
       ) {
+        const hasOldCompetitor = hasStrongIdentityOldCompetitor({
+          oldObject,
+          newObject,
+          oldObjects: context.oldObjects,
+          usedOldIds: context.usedOldIds,
+          key: "static-route-prefix-next-hop",
+        });
+        const newCompetitors = getStrongIdentityNewCompetitors({
+          oldObject,
+          newObject,
+          newObjects: candidates,
+          key: "static-route-prefix-next-hop",
+        });
+
+        if (hasOldCompetitor || newCompetitors.length) {
+          return makeMatch({
+            oldObject,
+            newObject,
+            status: "candidate",
+            reason: "ambiguous-prefix-next-hop",
+            score: 100,
+            matchKeyFields: ["prefix", "next-hop"],
+            scoreReasons: ["prefix", "next-hop", "static-route-exact-identity", "ambiguous-candidates"],
+            ambiguousAlternatives: buildStrongIdentityAlternatives({
+              newObject,
+              newCompetitors,
+              reason: "prefix-next-hop",
+              matchKeyFields: ["prefix", "next-hop"],
+              scoreReasons: ["prefix", "next-hop", "static-route-exact-identity"],
+            }),
+          });
+        }
+
         return makeMatch({
           oldObject,
           newObject,
@@ -433,11 +575,48 @@ function findIdentityMatch(oldObject, candidates) {
     }
 
     if (oldObject.normalizedType === "bgp") {
+      if (!hasCompatibleBgpContext(oldObject, newObject)) {
+        continue;
+      }
+
       if (
         oldObject.peerIp &&
         newObject.peerIp &&
         oldObject.peerIp === newObject.peerIp
       ) {
+        const hasOldCompetitor = hasStrongIdentityOldCompetitor({
+          oldObject,
+          newObject,
+          oldObjects: context.oldObjects,
+          usedOldIds: context.usedOldIds,
+          key: "bgp-peer-ip",
+        });
+        const newCompetitors = getStrongIdentityNewCompetitors({
+          oldObject,
+          newObject,
+          newObjects: candidates,
+          key: "bgp-peer-ip",
+        });
+
+        if (hasOldCompetitor || newCompetitors.length) {
+          return makeMatch({
+            oldObject,
+            newObject,
+            status: "candidate",
+            reason: "ambiguous-peer-ip",
+            score: 100,
+            matchKeyFields: ["peerIp"],
+            scoreReasons: ["peer-ip", "ambiguous-candidates"],
+            ambiguousAlternatives: buildStrongIdentityAlternatives({
+              newObject,
+              newCompetitors,
+              reason: "peer-ip",
+              matchKeyFields: ["peerIp"],
+              scoreReasons: ["peer-ip"],
+            }),
+          });
+        }
+
         const groupBased = Boolean(newObject.bgpInheritance?.groupReference);
         return makeMatch({
           oldObject,
@@ -600,13 +779,24 @@ function getInterfaceIdentity(object = {}) {
   );
 }
 
-function findLagServiceInterfaceSapMatch(oldObject, newObjects = [], usedNewIds = new Set()) {
+function findLagServiceInterfaceSapMatch(oldObject, newObjects = [], usedNewIds = new Set(), currentMatches = []) {
   if (oldObject?.normalizedType !== "lag") return null;
 
   const serviceInterface = getSimpleDescriptionReference(oldObject);
   if (!serviceInterface) return null;
 
-  const sapLagRefs = new Set(
+  const matchedServiceInterfaceSapRefs = new Set(
+    currentMatches
+      .filter((match) => match?.status === "matched")
+      .filter((match) => match.oldObject?.normalizedType === "interface")
+      .filter((match) => match.newObject?.normalizedType === "interface")
+      .filter((match) => getInterfaceIdentity(match.oldObject) === serviceInterface)
+      .filter((match) => interfaceReferencesLag(match.oldObject, oldObject))
+      .map((match) => normalizeLagReference(getFieldValue(match.newObject, "sap")))
+      .filter(Boolean)
+  );
+
+  const sapLagRefs = matchedServiceInterfaceSapRefs.size ? matchedServiceInterfaceSapRefs : new Set(
     newObjects
       .filter((object) => object?.normalizedType === "interface")
       .filter((object) => getInterfaceIdentity(object) === serviceInterface)
@@ -703,6 +893,8 @@ function getInterfaceRoutingContext(object = {}) {
     getFieldValue(object, "serviceId")
   );
   if (service === "vprn" && serviceId) return `vprn:${serviceId}`;
+  if (service && serviceId) return `service:${service}:${serviceId}`;
+  if (service) return `service:${service}`;
 
   return nonDefaultRouterContext(getFieldValue(object, "router"));
 }
@@ -712,7 +904,20 @@ function hasCompatibleInterfaceContext(oldObject = {}, newObject = {}) {
   const newContext = getInterfaceRoutingContext(newObject);
 
   if (!oldContext && !newContext) return true;
-  return Boolean(oldContext && newContext && oldContext === newContext);
+  if (oldContext === newContext) return true;
+
+  const oldService = parseServiceInterfaceContext(oldContext);
+  const newService = parseServiceInterfaceContext(newContext);
+  if (oldService || newService) {
+    if (!oldService || !newService) return true;
+    if (oldService.service !== newService.service) return false;
+    if (oldService.serviceId && newService.serviceId && oldService.serviceId !== newService.serviceId) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
 }
 
 function hasCompatibleStaticRouteContext(oldObject = {}, newObject = {}) {
@@ -721,6 +926,150 @@ function hasCompatibleStaticRouteContext(oldObject = {}, newObject = {}) {
 
   if (!oldContext && !newContext) return true;
   return Boolean(oldContext && newContext && oldContext === newContext);
+}
+
+function getBgpRoutingContext(object = {}) {
+  return getStaticRouteRoutingContext(object);
+}
+
+function hasCompatibleBgpContext(oldObject = {}, newObject = {}) {
+  const oldContext = getBgpRoutingContext(oldObject);
+  const newContext = getBgpRoutingContext(newObject);
+
+  if (!oldContext && !newContext) return true;
+  return Boolean(oldContext && newContext && oldContext === newContext);
+}
+
+function parseServiceInterfaceContext(context = "") {
+  const parts = String(context || "").split(":");
+  if (parts[0] !== "service") return null;
+  return {
+    service: parts[1] || "",
+    serviceId: parts.slice(2).join(":") || "",
+  };
+}
+
+function hasStrongIdentityOldCompetitor({
+  oldObject,
+  newObject,
+  oldObjects = [],
+  usedOldIds = new Set(),
+  key = "",
+} = {}) {
+  return (oldObjects || []).some((candidate) => {
+    if (!candidate || candidate.id === oldObject?.id) return false;
+    if (usedOldIds.has(candidate.id)) return false;
+    if (!isSameType(candidate, oldObject)) return false;
+
+    if (key === "interface-prefix") {
+      return hasCompatibleInterfaceContext(candidate, newObject) &&
+        candidate.prefix &&
+        newObject.prefix &&
+        candidate.prefix === newObject.prefix;
+    }
+
+    if (key === "interface-ip-address") {
+      return hasCompatibleInterfaceContext(candidate, newObject) &&
+        candidate.ipAddress &&
+        newObject.ipAddress &&
+        candidate.ipAddress === newObject.ipAddress;
+    }
+
+    if (key === "static-route-prefix-next-hop") {
+      return hasCompatibleStaticRouteContext(candidate, newObject) &&
+        getStaticRoutePrefix(candidate) &&
+        getStaticRoutePrefix(candidate) === getStaticRoutePrefix(newObject) &&
+        getStaticRouteNextHop(candidate) &&
+        getStaticRouteNextHop(candidate) === getStaticRouteNextHop(newObject);
+    }
+
+    if (key === "bgp-peer-ip") {
+      return hasCompatibleBgpContext(candidate, newObject) &&
+        candidate.peerIp &&
+        newObject.peerIp &&
+        candidate.peerIp === newObject.peerIp;
+    }
+
+    return false;
+  });
+}
+
+function hasStrongIdentityNewCompetitor({
+  oldObject,
+  newObject,
+  newObjects = [],
+  key = "",
+} = {}) {
+  return getStrongIdentityNewCompetitors({
+    oldObject,
+    newObject,
+    newObjects,
+    key,
+  }).length > 0;
+}
+
+function getStrongIdentityNewCompetitors({
+  oldObject,
+  newObject,
+  newObjects = [],
+  key = "",
+} = {}) {
+  return (newObjects || []).filter((candidate) => {
+    if (!candidate || candidate.id === newObject?.id) return false;
+    if (!isSameType(candidate, newObject)) return false;
+
+    if (key === "interface-prefix") {
+      return hasCompatibleInterfaceContext(oldObject, candidate) &&
+        oldObject.prefix &&
+        candidate.prefix &&
+        oldObject.prefix === candidate.prefix;
+    }
+
+    if (key === "interface-ip-address") {
+      return hasCompatibleInterfaceContext(oldObject, candidate) &&
+        oldObject.ipAddress &&
+        candidate.ipAddress &&
+        oldObject.ipAddress === candidate.ipAddress;
+    }
+
+    if (key === "static-route-prefix-next-hop") {
+      return hasCompatibleStaticRouteContext(oldObject, candidate) &&
+        getStaticRoutePrefix(oldObject) &&
+        getStaticRoutePrefix(oldObject) === getStaticRoutePrefix(candidate) &&
+        getStaticRouteNextHop(oldObject) &&
+        getStaticRouteNextHop(oldObject) === getStaticRouteNextHop(candidate);
+    }
+
+    if (key === "bgp-peer-ip") {
+      return hasCompatibleBgpContext(oldObject, candidate) &&
+        oldObject.peerIp &&
+        candidate.peerIp &&
+        oldObject.peerIp === candidate.peerIp;
+    }
+
+    return false;
+  });
+}
+
+function buildStrongIdentityAlternatives({
+  newObject,
+  newCompetitors = [],
+  score = 100,
+  reason = "",
+  matchKeyFields = [],
+  scoreReasons = [],
+} = {}) {
+  return [newObject, ...newCompetitors]
+    .filter(Boolean)
+    .map((item) => ({
+      id: item.id,
+      sourceName: item.sourceName,
+      normalizedIdentity: item.normalizedIdentity,
+      score,
+      reason,
+      matchKeyFields,
+      scoreReasons,
+    }));
 }
 
 function getStaticRoutePolicy(profile = {}) {
@@ -888,7 +1237,9 @@ function scorePortLagPair(oldObject, newObject) {
 
   const oldDescription = oldObject.description || getFieldValue(oldObject, "description");
   const newDescription = newObject.description || getFieldValue(newObject, "description");
-  const commonEndpoint = sharedDescriptionEndpoint(oldDescription, newDescription);
+  const commonEndpoint = sharedDescriptionEndpoint(oldDescription, newDescription, {
+    requireComposite: objectType === "port",
+  });
 
   if (commonEndpoint) {
     addWeightedScore(result, "description", 85, "description-endpoint-match");
@@ -1017,6 +1368,11 @@ function scoreSemanticObjectPair(oldObject, newObject, profile = {}) {
 
   if (objectType === "interface" && !hasCompatibleInterfaceContext(oldObject, newObject)) {
     result.scoreReasons.push("interface-routing-context-mismatch");
+    return result;
+  }
+
+  if (objectType === "bgp" && !hasCompatibleBgpContext(oldObject, newObject)) {
+    result.scoreReasons.push("bgp-routing-context-mismatch");
     return result;
   }
 
@@ -1348,6 +1704,41 @@ function findBestDescriptionMatch(oldObject, candidates) {
   });
 }
 
+function interfaceReferencesLag(interfaceObject = {}, lagObject = {}) {
+  const lagRef = normalizeComparableLagReference(
+    getFieldValue(lagObject, "lag") ||
+    lagObject.normalizedIdentity ||
+    lagObject.sourceName
+  );
+  if (!lagRef) return false;
+
+  return normalizeListValue(getFieldValue(interfaceObject, "sap"))
+    .map(normalizeComparableLagReference)
+    .some((sapRef) => sapRef === lagRef);
+}
+
+function normalizeComparableLagReference(value = "") {
+  return normalizeLagReference(value).replace(/^lag[-_]?/i, "");
+}
+
+function objectsByType(objects = []) {
+  const byType = new Map();
+
+  for (const object of objects) {
+    const type = object?.normalizedType || "";
+    if (!type) continue;
+    if (!byType.has(type)) byType.set(type, []);
+    byType.get(type).push(object);
+  }
+
+  return byType;
+}
+
+function unusedCandidatesByType(byType, oldObject, usedNewIds) {
+  return (byType.get(oldObject?.normalizedType) || [])
+    .filter((newObject) => !usedNewIds.has(newObject.id));
+}
+
 export function matchNormalizedObjects({
   oldObjects = [],
   newObjects = [],
@@ -1356,9 +1747,11 @@ export function matchNormalizedObjects({
 } = {}) {
   oldObjects = activeComparableObjects(oldObjects);
   newObjects = activeComparableObjects(newObjects);
+  const newObjectsByType = objectsByType(newObjects);
   const matches = [];
   const usedOldIds = new Set();
   const usedNewIds = new Set();
+  const confirmedOldIds = new Set();
 
   // 1. Manual object mapping
   for (const oldObject of oldObjects) {
@@ -1381,6 +1774,7 @@ export function matchNormalizedObjects({
     );
 
     usedOldIds.add(oldObject.id);
+    confirmedOldIds.add(oldObject.id);
     usedNewIds.add(newObject.id);
   }
 
@@ -1388,17 +1782,14 @@ export function matchNormalizedObjects({
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
-    const candidates = newObjects.filter(
-      (newObject) =>
-        !usedNewIds.has(newObject.id) &&
-        newObject.normalizedType === oldObject.normalizedType
-    );
+    const candidates = unusedCandidatesByType(newObjectsByType, oldObject, usedNewIds);
 
     const match = findObjectAliasMatch(oldObject, candidates, profile);
     if (!match) continue;
 
     matches.push(match);
     usedOldIds.add(oldObject.id);
+    confirmedOldIds.add(oldObject.id);
     usedNewIds.add(match.newObject.id);
   }
 
@@ -1406,25 +1797,27 @@ export function matchNormalizedObjects({
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
-    const candidates = newObjects.filter(
-      (newObject) =>
-        !usedNewIds.has(newObject.id) &&
-        newObject.normalizedType === oldObject.normalizedType
-    );
+    const candidates = unusedCandidatesByType(newObjectsByType, oldObject, usedNewIds);
 
-    const match = findIdentityMatch(oldObject, candidates);
+    const match = findIdentityMatch(oldObject, candidates, {
+      oldObjects,
+      usedOldIds: confirmedOldIds,
+    });
     if (!match) continue;
 
     matches.push(match);
     usedOldIds.add(oldObject.id);
-    usedNewIds.add(match.newObject.id);
+    if (match.status === "matched") {
+      confirmedOldIds.add(oldObject.id);
+      usedNewIds.add(match.newObject.id);
+    }
   }
 
   // 4. Cross-object service relationship matching
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
-    const match = findLagServiceInterfaceSapMatch(oldObject, newObjects, usedNewIds);
+    const match = findLagServiceInterfaceSapMatch(oldObject, newObjects, usedNewIds, matches);
     if (!match) continue;
 
     matches.push(match);
@@ -1436,11 +1829,7 @@ export function matchNormalizedObjects({
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
-    const candidates = newObjects.filter(
-      (newObject) =>
-        !usedNewIds.has(newObject.id) &&
-        newObject.normalizedType === oldObject.normalizedType
-    );
+    const candidates = unusedCandidatesByType(newObjectsByType, oldObject, usedNewIds);
 
     const match = findBestWeightedMatch(oldObject, candidates, profile);
     if (!match) continue;
@@ -1457,11 +1846,7 @@ export function matchNormalizedObjects({
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
-    const candidates = newObjects.filter(
-      (newObject) =>
-        !usedNewIds.has(newObject.id) &&
-        newObject.normalizedType === oldObject.normalizedType
-    );
+    const candidates = unusedCandidatesByType(newObjectsByType, oldObject, usedNewIds);
 
     const match = findBestDescriptionMatch(oldObject, candidates);
     if (!match) continue;

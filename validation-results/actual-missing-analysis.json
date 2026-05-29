@@ -1,66 +1,632 @@
 {
-  "generatedAt": "2026-05-18T12:21:00.164Z",
+  "generatedAt": "2026-05-29T14:11:42.325Z",
   "caseId": "nokia-classic15-to-nokia-mdcli-22",
   "summary": {
-    "total": 50,
-    "trueMissingFromTargetFixture": 0,
+    "total": 38,
+    "trueMissingFromTargetFixture": 23,
     "outsidePartialTargetScope": 0,
-    "targetObjectHasNoSourceCounterpart": 50,
+    "targetObjectHasNoSourceCounterpart": 15,
     "parserMatcherFalseNegative": 0,
     "missingParentRelationship": 0,
     "manualMappingCouldResolve": 0,
-    "primaryConclusion": "Actual missing candidates are mostly target-side extra objects or source objects without same-type target coverage; each still needs fixture-scope confirmation."
+    "primaryConclusion": "Actual missing candidates now separate confirmed source-missing objects from target-only extras; parser/matcher false-negative counts are kept distinct."
   },
   "groups": {
     "bySide": [
       {
+        "key": "old",
+        "count": 23
+      },
+      {
         "key": "new",
-        "count": 50
+        "count": 15
       }
     ],
     "byObjectType": [
       {
+        "key": "route-policy",
+        "count": 8
+      },
+      {
+        "key": "port",
+        "count": 7
+      },
+      {
+        "key": "prefix-list",
+        "count": 7
+      },
+      {
+        "key": "community",
+        "count": 6
+      },
+      {
+        "key": "interface",
+        "count": 4
+      },
+      {
+        "key": "lag",
+        "count": 4
+      },
+      {
         "key": "pim",
-        "count": 50
+        "count": 2
       }
     ],
     "byCompletenessStatus": [
       {
+        "key": "true-missing-from-target-fixture",
+        "count": 23
+      },
+      {
         "key": "target-object-has-no-source-counterpart",
-        "count": 50
+        "count": 15
       }
     ],
     "byParserOrMatcherStatus": [
       {
-        "key": "no-opposite-type-coverage",
-        "count": 50
+        "key": "confirmed-source-missing",
+        "count": 23
+      },
+      {
+        "key": "target-only-object",
+        "count": 15
       }
     ],
     "byManualMapping": [
       {
         "key": "manual-map-not-enough",
-        "count": 50
+        "count": 38
       }
     ]
   },
   "records": [
     {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fb03",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "side": "old",
+      "status": "old-only",
+      "objectType": "lag",
+      "objectKey": "lag:75",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "sourceLines": [
-        1
+        4507,
+        4508,
+        1931,
+        2027,
+        4339,
+        19,
+        3528,
+        4514,
+        4343,
+        26
       ],
       "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-lag-members-with-description",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB03\" }"
+        "    lag 75",
+        "        description \"##OLT,10A,Gangbuk-TOU-FG03,6/1##\"",
+        "        mode access"
       ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "lag",
+      "objectKey": "lag:175",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        4793,
+        4794,
+        1931,
+        2027,
+        4339,
+        19,
+        3642,
+        4800,
+        4343,
+        26
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-lag-members-with-description",
+      "score": null,
+      "sampleLines": [
+        "    lag 175",
+        "        description \"## OLT,10B,Gangbuk-TOU-FG02_7/1_DIRECT##\"",
+        "        mode access"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "prefix-list",
+      "objectKey": "prefix-list:KT_DHCP+CVNET",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        1292
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-ip-prefix-list-definition",
+      "score": null,
+      "sampleLines": [
+        "            ip-prefix-list \"KT_DHCP+CVNET\" create"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "prefix-list",
+      "objectKey": "prefix-list:LDP",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        1297
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-ip-prefix-list-definition",
+      "score": null,
+      "sampleLines": [
+        "            ip-prefix-list \"LDP\" create"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "prefix-list",
+      "objectKey": "prefix-list:PREMIUM",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        1311
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-ip-prefix-list-definition",
+      "score": null,
+      "sampleLines": [
+        "            ip-prefix-list \"PREMIUM\" create"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "prefix-list",
+      "objectKey": "prefix-list:iCOD_Addr",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        1349
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-ip-prefix-list-definition",
+      "score": null,
+      "sampleLines": [
+        "            ip-prefix-list \"iCOD_Addr\" create"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "prefix-list",
+      "objectKey": "prefix-list:iCOD_VOD",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        1353
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-ip-prefix-list-definition",
+      "score": null,
+      "sampleLines": [
+        "            ip-prefix-list \"iCOD_VOD\" create"
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "prefix-list",
+      "objectKey": "prefix-list:In-Filter",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12665
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-prefix-list-definition",
+      "score": null,
+      "sampleLines": [
+        "            prefix-list \"In-Filter\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "prefix-list",
+      "objectKey": "prefix-list:Drop_Prefix",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12797
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-prefix-list-definition",
+      "score": null,
+      "sampleLines": [
+        "            prefix-list \"Drop_Prefix\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "community",
+      "objectKey": "community:900",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12819
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-community-members-definition",
+      "score": null,
+      "sampleLines": [
+        "            community \"900\" members \"4766:900\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "community",
+      "objectKey": "community:901",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12820
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-community-members-definition",
+      "score": null,
+      "sampleLines": [
+        "            community \"901\" members \"4766:901\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "community",
+      "objectKey": "community:7750",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12821
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-community-members-definition",
+      "score": null,
+      "sampleLines": [
+        "            community \"7750\" members \"4766:7750\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "community",
+      "objectKey": "community:9000",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12822
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-community-members-definition",
+      "score": null,
+      "sampleLines": [
+        "            community \"9000\" members \"4766:9000\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "community",
+      "objectKey": "community:9150",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12823
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-community-members-definition",
+      "score": null,
+      "sampleLines": [
+        "            community \"9150\" members \"4766:9150\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "community",
+      "objectKey": "community:Deny-to-iCoD",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12824
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-community-expression-definition",
+      "score": null,
+      "sampleLines": [
+        "            community \"Deny-to-iCoD\" expression \"4766:200 OR 4766:250 OR 4766:300 OR 4766:9920 OR 4766:9922 OR 4766:9930 OR 4766:9932 OR 4766:9960\" "
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:Deny",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12825
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-deny-drop",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"Deny\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:TO-iCOD",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12829
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-icod",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"TO-iCOD\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:UP-PEER",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        12924
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-peer",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"UP-PEER\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:SER-PEER",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        13028
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-peer",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"SER-PEER\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:bsr_drop",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        13060
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-deny-drop",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"bsr_drop\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:FROM-iCOD",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        13064
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-icod",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"FROM-iCOD\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:NTOPIA-PEER",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        13106
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-peer",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"NTOPIA-PEER\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "old",
+      "status": "old-only",
+      "objectType": "route-policy",
+      "objectKey": "route-policy:PREMIUM-PEER",
+      "sourceFile": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
+      "sourceLines": [
+        13138
+      ],
+      "parserSupportStatus": "placeholder-partial",
+      "likelyReason": "source object has no target counterpart",
+      "fixtureUnmatchedCategory": "realMissingTarget",
+      "diagnosticReason": "missing-target-route-policy-peer",
+      "score": null,
+      "sampleLines": [
+        "            policy-statement \"PREMIUM-PEER\""
+      ],
+      "completenessStatus": "true-missing-from-target-fixture",
+      "parserOrMatcherStatus": "confirmed-source-missing",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -68,209 +634,34 @@
     {
       "side": "new",
       "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fb04",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectType": "interface",
+      "objectKey": "interface:112.188.16.114/30",
+      "sourceFile": "예제 및 테스트 설정/New_interface_2.txt",
       "sourceLines": [
-        2
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB04\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fb05",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        3
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB05\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fb09",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        4
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FB09\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fd14",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        5
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD14\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fd15",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        6
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD15\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fd20",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        7
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD20\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fd21",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        8
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FD21\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-dobong-tou-fk66",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        9
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Dobong-TOU-FK66\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-gangbuk-tou-fk51",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        10
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK51\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-gangbuk-tou-fk53",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
         11
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK53\" }"
+        "/configure { service ies \"100\" interface \"To-MNC#1-1\" admin-state enable }",
+        "/configure { service ies \"100\" interface \"To-MNC#1-1\" description \"## Dobong-MNC161H, hu0/6/0/43 ##\" }",
+        "/configure { service ies \"100\" interface \"To-MNC#1-1\" sap 2/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -278,20 +669,34 @@
     {
       "side": "new",
       "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-gangbuk-tou-fk54",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectType": "interface",
+      "objectKey": "interface:112.188.16.118/30",
+      "sourceFile": "예제 및 테스트 설정/New_interface_2.txt",
       "sourceLines": [
-        12
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK54\" }"
+        "/configure { service ies \"100\" interface \"To-MNC#1-2\" admin-state enable }",
+        "/configure { service ies \"100\" interface \"To-MNC#1-2\" description \"## Dobong-MNC161H, hu0/12/0/42 ##\" }",
+        "/configure { service ies \"100\" interface \"To-MNC#1-2\" sap 4/1/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -299,20 +704,34 @@
     {
       "side": "new",
       "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-gangbuk-tou-fk55",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectType": "interface",
+      "objectKey": "interface:112.188.17.114/30",
+      "sourceFile": "예제 및 테스트 설정/New_interface_2.txt",
       "sourceLines": [
-        13
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK55\" }"
+        "/configure { service ies \"100\" interface \"To-MNC#2-1\" admin-state enable }",
+        "/configure { service ies \"100\" interface \"To-MNC#2-1\" description \"## Dobong-MNC162D, hu0/6/0/43 ##\" }",
+        "/configure { service ies \"100\" interface \"To-MNC#2-1\" sap 2/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -320,20 +739,34 @@
     {
       "side": "new",
       "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-gangbuk-tou-fk57",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectType": "interface",
+      "objectKey": "interface:112.188.17.118/30",
+      "sourceFile": "예제 및 테스트 설정/New_interface_2.txt",
       "sourceLines": [
-        14
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK57\" }"
+        "/configure { service ies \"100\" interface \"To-MNC#2-2\" admin-state enable }",
+        "/configure { service ies \"100\" interface \"To-MNC#2-2\" description \"## Dobong-MNC162D, hu0/12/0/42 ##\" }",
+        "/configure { service ies \"100\" interface \"To-MNC#2-2\" sap 4/2/c17/1 ingress qos sap-ingress policy-name \"SEA_IN\" }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -341,20 +774,125 @@
     {
       "side": "new",
       "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn05",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectType": "lag",
+      "objectKey": "lag:lag-A-4101",
+      "sourceFile": "예제 및 테스트 설정/New_lag_2.txt",
       "sourceLines": [
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
+      "score": null,
+      "sampleLines": [
+        "/configure { lag \"lag-A-4101\" admin-state disable }",
+        "/configure { lag \"lag-A-4101\" description \"## TO, lag-A-4101(4/1/c1/1), Gangbuk-TOU-FK52, Po10(Te6/1), ACT, 02020002-6429, GB-SLInter2b-FO-0001-170 ##\" }",
+        "/configure { lag \"lag-A-4101\" mode access }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "target-only-object",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "lag",
+      "objectKey": "lag:lag-B-4203",
+      "sourceFile": "예제 및 테스트 설정/New_lag_2.txt",
+      "sourceLines": [
+        245,
+        246,
+        247,
+        248,
+        249,
+        250,
+        251,
+        252
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
+      "score": null,
+      "sampleLines": [
+        "/configure { lag \"lag-B-4203\" admin-state disable }",
+        "/configure { lag \"lag-B-4203\" description \"## TO, lag-B-4203(4/2/c3/1), Gangbuk-TOU-FK51, Po11(Te7/1), SBY, 02020002-6465, GB-SLInter2b-FO-0001-172 ##\" }",
+        "/configure { lag \"lag-B-4203\" mode access }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "target-only-object",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "port",
+      "objectKey": "port:2/1/c17/1",
+      "sourceFile": "예제 및 테스트 설정/New_port_2.txt",
+      "sourceLines": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
+      "score": null,
+      "sampleLines": [
+        "/configure { port 2/1/c17/1 admin-state enable }",
+        "/configure { port 2/1/c17/1 description \"## MN, Dobong-MNC161H, hu0/6/0/43, 02020002-6442, 100G, DB-SLInter2b-SF-0001-055,056 ##\" }",
+        "/configure { port 2/1/c17/1 ethernet mode access }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "target-only-object",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "port",
+      "objectKey": "port:2/2/c17/1",
+      "sourceFile": "예제 및 테스트 설정/New_port_2.txt",
+      "sourceLines": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
         15
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN05\" }"
+        "/configure { port 2/2/c17/1 admin-state enable }",
+        "/configure { port 2/2/c17/1 description \"## MN, Dobong-MNC162D, hu0/6/0/43, 100G, Direct ##\" }",
+        "/configure { port 2/2/c17/1 ethernet mode access }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -362,20 +900,30 @@
     {
       "side": "new",
       "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn06",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectType": "port",
+      "objectKey": "port:4/1/c17/1",
+      "sourceFile": "예제 및 테스트 설정/New_port_2.txt",
       "sourceLines": [
-        16
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN06\" }"
+        "/configure { port 4/1/c17/1 admin-state enable }",
+        "/configure { port 4/1/c17/1 description \"## MN, Dobong-MNC161H, hu0/12/0/42, 02020002-6444, 100G, DB-SLInter2b-SF-0001-057,058 ##\" }",
+        "/configure { port 4/1/c17/1 ethernet mode access }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -383,20 +931,122 @@
     {
       "side": "new",
       "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn07",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectType": "port",
+      "objectKey": "port:4/2/c17/1",
+      "sourceFile": "예제 및 테스트 설정/New_port_2.txt",
       "sourceLines": [
-        17
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN07\" }"
+        "/configure { port 4/2/c17/1 admin-state enable }",
+        "/configure { port 4/2/c17/1 description \"## MN, Dobong-MNC162D, hu0/12/0/42, 100G, Direct ##\" }",
+        "/configure { port 4/2/c17/1 ethernet mode access }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "port",
+      "objectKey": "port:4/1/c11/1",
+      "sourceFile": "예제 및 테스트 설정/New_port_2.txt",
+      "sourceLines": [
+        89,
+        90,
+        91,
+        92,
+        93,
+        94
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
+      "score": null,
+      "sampleLines": [
+        "/configure { port 4/1/c11/1 admin-state enable }",
+        "/configure { port 4/1/c11/1 description \"## TD, Haengda-TDN050, Eth1/8, Direct ##\" }",
+        "/configure { port 4/1/c11/1 ethernet mode access }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "target-only-object",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "port",
+      "objectKey": "port:4/1/c1/1",
+      "sourceFile": "예제 및 테스트 설정/New_port_2.txt",
+      "sourceLines": [
+        192,
+        193,
+        194,
+        195,
+        196,
+        197,
+        198
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
+      "score": null,
+      "sampleLines": [
+        "/configure { port 4/1/c1/1 admin-state enable }",
+        "/configure { port 4/1/c1/1 description \"## TO, lag-A-4101(4/1/c1/1), Gangbuk-TOU-FK52, Po10(Te6/1), ACT, 02020002-6429, GB-SLInter2b-FO-0001-170 ##\" }",
+        "/configure { port 4/1/c1/1 ethernet mode access }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "target-only-object",
+      "missingParentRelationship": false,
+      "manualMappingCouldResolve": false,
+      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
+    },
+    {
+      "side": "new",
+      "status": "new-only",
+      "objectType": "port",
+      "objectKey": "port:4/2/c3/1",
+      "sourceFile": "예제 및 테스트 설정/New_port_2.txt",
+      "sourceLines": [
+        256,
+        257,
+        258,
+        259,
+        260,
+        261,
+        262
+      ],
+      "parserSupportStatus": "parsed",
+      "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
+      "score": null,
+      "sampleLines": [
+        "/configure { port 4/2/c3/1 admin-state enable }",
+        "/configure { port 4/2/c3/1 description \"## TO, lag-B-4203(4/2/c3/1), Gangbuk-TOU-FK51, Po11(Te7/1), SBY, 02020002-6465, GB-SLInter2b-FO-0001-172 ##\" }",
+        "/configure { port 4/2/c3/1 ethernet mode access }"
+      ],
+      "completenessStatus": "target-object-has-no-source-counterpart",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -405,19 +1055,21 @@
       "side": "new",
       "status": "new-only",
       "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn08",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectKey": "pim:g-to-gangbuk-tou-fk52",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_2.txt",
       "sourceLines": [
         18
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN08\" }"
+        "/configure { router \"Base\" pim interface \"g-to-Gangbuk-TOU-FK52\" }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
@@ -426,670 +1078,21 @@
       "side": "new",
       "status": "new-only",
       "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn09",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        19
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN09\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn11",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        20
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN11\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn14",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        21
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN14\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn15",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        22
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN15\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn16",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        23
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN16\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn17",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        24
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN17\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:g-to-nowon-tou-fn18",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        25
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"g-to-Nowon-TOU-FN18\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fb01",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        26
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB01\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fb02",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        27
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB02\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fb06",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        28
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB06\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fb07",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        29
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB07\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fb08",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        30
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FB08\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd04",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        31
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD04\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd05",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        32
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD05\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd06",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        33
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD06\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd07",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        34
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD07\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd08",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        35
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD08\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd09",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
+      "objectKey": "pim:to-gangbuk-tou-fk51",
+      "sourceFile": "예제 및 테스트 설정/New_PIM_2.txt",
       "sourceLines": [
         36
       ],
       "parserSupportStatus": "parsed",
       "likelyReason": "target object has no source counterpart",
+      "fixtureUnmatchedCategory": "",
+      "diagnosticReason": "",
       "score": null,
       "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD09\" }"
+        "/configure { router \"Base\" pim interface \"to-Gangbuk-TOU-FK51\" }"
       ],
       "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd13",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        37
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD13\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd16",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        38
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD16\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd17",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        39
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD17\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd18",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        40
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD18\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd19",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        41
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD19\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-dobong-tou-fd22",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        42
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Dobong-TOU-FD22\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-gangbuk-tou-fk52",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        43
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Gangbuk-TOU-FK52\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-gangbuk-tou-fk56",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        44
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Gangbuk-TOU-FK56\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-gongneug-tou-fg11",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        45
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG11\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-gongneug-tou-fg12",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        46
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG12\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-gongneug-tou-fg18",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        47
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG18\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-gongneug-tou-fg19",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        48
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Gongneug-TOU-FG19\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-nowon-tou-fn19",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        49
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Nowon-TOU-FN19\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
-      "missingParentRelationship": false,
-      "manualMappingCouldResolve": false,
-      "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."
-    },
-    {
-      "side": "new",
-      "status": "new-only",
-      "objectType": "pim",
-      "objectKey": "pim:to-nowon-tou-fn20",
-      "sourceFile": "예제 및 테스트 설정/New_PIM_1.txt",
-      "sourceLines": [
-        50
-      ],
-      "parserSupportStatus": "parsed",
-      "likelyReason": "target object has no source counterpart",
-      "score": null,
-      "sampleLines": [
-        "/configure { router \"Base\" pim interface \"to-Nowon-TOU-FN20\" }"
-      ],
-      "completenessStatus": "target-object-has-no-source-counterpart",
-      "parserOrMatcherStatus": "no-opposite-type-coverage",
+      "parserOrMatcherStatus": "target-only-object",
       "missingParentRelationship": false,
       "manualMappingCouldResolve": false,
       "recommendedAction": "Complete target fixture or confirm object is intentionally out of migration scope."

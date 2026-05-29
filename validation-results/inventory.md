@@ -1,6 +1,6 @@
 # Validation Inventory
 
-Generated: 2026-05-18T12:20:20.909Z
+Generated: 2026-05-29T14:11:31.870Z
 
 ## Searched Paths
 - examples
@@ -25,71 +25,13 @@ Generated: 2026-05-18T12:20:20.909Z
 - .
 
 ## Found Config Files
-- 예제 및 테스트 설정/Gangbu-SEA027H_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/Gangbu-SEA029H_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/Gangbuk-SEA028_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/Gangbuk-SEA030_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/New_bgp_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_bgp_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_bgp_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_bgp_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/test 기존 static.txt (nokia-classic, classic-cli)
 - validation/fixtures/synthetic/juniper-set-smoke.conf (juniper-set, set) [synthetic]
 - validation/fixtures/synthetic/nokia-mdcli22-smoke.conf (nokia-md-cli, md-cli) [synthetic]
 
 ## Found Old/Source Files
-- 예제 및 테스트 설정/Gangbu-SEA027H_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/Gangbu-SEA029H_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/Gangbuk-SEA028_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/Gangbuk-SEA030_config.txt (nokia-classic, classic-cli)
-- 예제 및 테스트 설정/test 기존 static.txt (nokia-classic, classic-cli)
 - validation/fixtures/synthetic/juniper-set-smoke.conf (juniper-set, set) [synthetic]
 
 ## Found New/Target Files
-- 예제 및 테스트 설정/New_bgp_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_bgp_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_bgp_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_bgp_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_interface_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_lag_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_PIM_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_port_4.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_1.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_2.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_3.txt (nokia-md-cli, md-cli)
-- 예제 및 테스트 설정/New_static_4.txt (nokia-md-cli, md-cli)
 - validation/fixtures/synthetic/nokia-mdcli22-smoke.conf (nokia-md-cli, md-cli) [synthetic]
 
 ## Found Profiles
@@ -105,6 +47,7 @@ Generated: 2026-05-18T12:20:20.909Z
 - src/core/comparisonPlan.js
 - src/core/legacyCore.js
 - src/core/profile.js
+- src/core/summaryRenderer.js
 - src/core/vendorPresets.js
 - tests/policy-coverage.test.js
 - tests/static-route-object-key.test.js
@@ -119,6 +62,7 @@ Generated: 2026-05-18T12:20:20.909Z
 ## Found Standards Audit Profiles
 - scripts/analyze-validation-quality.mjs
 - src/core/analysisModes.js
+- src/core/legacyState.js
 - src/core/standardsAudit.js
 - src/core/summaryAnalytics.js
 - tests/bgp-effective-neighbor.test.js
@@ -127,18 +71,21 @@ Generated: 2026-05-18T12:20:20.909Z
 - validation/compare-validation.manifest.json
 
 ## Found Saved Sessions
-- src/core/legacyCore.backup.js
+- src/core/legacySelectors.js
 
 ## Found Manual Mapping Data
+- scripts/check-legacy-core-guardrail.js
 - src/core/comparator.js
 - src/core/manualMapping.js
 - src/core/matchers/objectMatcher.js
+- tests/compare-golden-regression.test.js
+- tests/fixture-validation-script.test.js
 - validation/fixtures/juniper-to-nokia-mdcli22/README.md
 
 ## Unknown Or Ambiguous Files
-- .agents/skills/network-config-compare/SKILL.md
-- 예제 및 테스트 설정/test 신규 static.txt
 - src/core/profileBackup.js
+- src/core/profileEditor.js
+- tests/profile-editor.test.js
 - vite.config.js
 
 ## Missing Inputs

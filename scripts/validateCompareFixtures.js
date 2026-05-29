@@ -72,6 +72,12 @@ const PROFILE = {
   },
 };
 
+const FEATURE_SPLIT_FIXTURE_SCOPE = {
+  status: "partial-assembled-target",
+  fixtureCompleteness: "partial-assembled-target",
+  partialTarget: true,
+};
+
 if (isMainModule()) {
   try {
     main();
@@ -116,6 +122,7 @@ export function main(argv = process.argv.slice(2)) {
         oldText: fs.readFileSync(fixtureCase.oldPath, "utf8"),
         newText: fixtureCase.newPaths.map((filePath) => fs.readFileSync(filePath, "utf8")).join("\n"),
         profile: PROFILE,
+        fixtureScope: fixtureCase.fixtureScope,
       });
       const signatureKey = `${fixtureCase.id}:${fixtureCase.scope || options.scope}`;
       const previousSignature = firstSignatures.get(signatureKey);
@@ -206,6 +213,7 @@ export function resolveFixtureCases({
       ...entry,
       label: `case ${entry.id}`,
       scope: normalizedScope,
+      fixtureScope: FEATURE_SPLIT_FIXTURE_SCOPE,
       oldPath,
       newFiles,
       newPaths,
@@ -306,7 +314,7 @@ function resolveMdFullLogFileName(fixtureDir, targetIncludes = []) {
   return candidates[0] || `${targetIncludes.join("_")}.log`;
 }
 
-function runFixtureComparison({ oldText, newText, profile }) {
+export function runFixtureComparison({ oldText, newText, profile, fixtureScope = null }) {
   const oldResult = normalizeConfig({
     vendor: VENDOR_IDS.NOKIA_CLASSIC,
     profile,
@@ -340,6 +348,7 @@ function runFixtureComparison({ oldText, newText, profile }) {
     plan,
     semanticSummary,
     profileName: profile.name,
+    fixtureScope,
   });
   const ignoredFields = new Set(["metric", "authentication-key"]);
   const ignoredPolicyAbnormalCount = dashboard.review.abnormal.filter((item) =>

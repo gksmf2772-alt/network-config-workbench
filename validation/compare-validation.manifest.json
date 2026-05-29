@@ -72,12 +72,12 @@
       "targetVersion": "22",
       "sourceConfigPath": "예제 및 테스트 설정/Gangbuk-SEA028_config.txt",
       "targetConfigPaths": [
-        "예제 및 테스트 설정/New_bgp_1.txt",
-        "예제 및 테스트 설정/New_static_1.txt",
-        "예제 및 테스트 설정/New_interface_1.txt",
-        "예제 및 테스트 설정/New_lag_1.txt",
-        "예제 및 테스트 설정/New_port_1.txt",
-        "예제 및 테스트 설정/New_PIM_1.txt"
+        "예제 및 테스트 설정/New_bgp_2.txt",
+        "예제 및 테스트 설정/New_static_2.txt",
+        "예제 및 테스트 설정/New_interface_2.txt",
+        "예제 및 테스트 설정/New_lag_2.txt",
+        "예제 및 테스트 설정/New_port_2.txt",
+        "예제 및 테스트 설정/New_PIM_2.txt"
       ],
       "profilePath": "validation/profiles/nokia-classic15-mdcli22-profile.json",
       "exceptionPolicyPath": "validation/policies/classic15-mdcli22-line-exceptions.json",

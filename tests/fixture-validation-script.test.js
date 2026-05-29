@@ -12,7 +12,13 @@ import {
   getNewFilesForScope,
   resolveFixtureCases,
   resolveMdFullLogCases,
+  runFixtureComparison,
 } from "../scripts/validateCompareFixtures.js";
+import {
+  buildUnmatchedScopeSummary,
+  classifyActualMissingRecord,
+  stripFinalGeneratedQualitySections,
+} from "../scripts/analyze-validation-quality.mjs";
 
 test("fixture discovery finds sibling home example directory", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ncw-fixture-discovery-"));
@@ -72,9 +78,30 @@ test("fixture case matrix resolves all cases and target scopes", () => {
       "New_port_2.txt",
       "New_PIM_2.txt",
     ]);
+    assert.equal(cases[0].fixtureScope.status, "partial-assembled-target");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("feature split fixture comparison reports excess source objects as partial scope", () => {
+  const result = runFixtureComparison({
+    oldText: [
+      "port 1/1/1",
+      "exit",
+      "port 1/1/2",
+      "exit",
+    ].join("\n"),
+    newText: [
+      "/configure { port 1/1/1 admin-state enable }",
+    ].join("\n"),
+    profile: { name: "fixture-scope-test" },
+    fixtureScope: { status: "partial-assembled-target" },
+  });
+
+  assert.equal(result.fixtureScope.status, "partial-assembled-target");
+  assert.equal(result.counts.unmatchedPartialTargetScope, 1);
+  assert.equal(result.counts.unmatchedMatcherIssue, 0);
 });
 
 test("fixture case matrix accepts single suffixed target file variants", () => {
@@ -180,4 +207,109 @@ test("MD full log fixture matrix resolves block and full-context log targets", (
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("quality unmatched summary uses source-side dashboard buckets", () => {
+  const artifacts = {
+    oldResult: {
+      objects: [
+        { normalizedType: "port", normalizedIdentity: "1/1/1" },
+        { normalizedType: "route-policy", normalizedIdentity: "legacy-policy" },
+      ],
+    },
+    newResult: {
+      objects: [
+        { normalizedType: "port", normalizedIdentity: "1/1/c1/1" },
+        { normalizedType: "pim", normalizedIdentity: "target-only" },
+      ],
+    },
+    profile: { fixturePolicy: { status: "partial-assembled-target" } },
+    testCase: {},
+  };
+  const records = [
+    { side: "old", objectType: "port", likelyReason: "target fixture is partial" },
+    {
+      side: "old",
+      objectType: "route-policy",
+      likelyReason: "source object has no target counterpart",
+      fixtureUnmatchedCategory: "realMissingTarget",
+    },
+    { side: "new", objectType: "pim", likelyReason: "target object has no source counterpart" },
+  ];
+
+  const summary = buildUnmatchedScopeSummary({ artifacts, records });
+
+  assert.equal(summary.unmatchedDuePartialTargetScope, 1);
+  assert.equal(summary.unmatchedDueLikelyMatcherIssue, 0);
+  assert.equal(summary.unmatchedDueParserGap, 0);
+  assert.equal(summary.unmatchedDueRealMissingTarget, 1);
+  assert.equal(summary.unmatchedTargetOnly, 1);
+});
+
+test("actual missing classification does not mark confirmed gaps as matcher false negatives", () => {
+  const artifacts = {
+    oldResult: {
+      objects: [
+        { normalizedType: "port", normalizedIdentity: "1/1/1" },
+        { normalizedType: "pim", normalizedIdentity: "source-pim" },
+      ],
+    },
+    newResult: {
+      objects: [
+        { normalizedType: "port", normalizedIdentity: "1/1/c1/1" },
+        { normalizedType: "pim", normalizedIdentity: "target-pim" },
+      ],
+    },
+    profile: { fixturePolicy: { status: "partial-assembled-target" } },
+    testCase: {},
+  };
+
+  const confirmedSourceMissing = classifyActualMissingRecord({
+    side: "old",
+    objectType: "port",
+    fixtureUnmatchedCategory: "realMissingTarget",
+  }, artifacts);
+  const targetOnly = classifyActualMissingRecord({
+    side: "new",
+    objectType: "pim",
+  }, artifacts);
+
+  assert.equal(confirmedSourceMissing.completenessStatus, "true-missing-from-target-fixture");
+  assert.equal(confirmedSourceMissing.parserOrMatcherStatus, "confirmed-source-missing");
+  assert.equal(confirmedSourceMissing.manualMappingCouldResolve, false);
+  assert.equal(targetOnly.completenessStatus, "target-object-has-no-source-counterpart");
+  assert.equal(targetOnly.parserOrMatcherStatus, "target-only-object");
+  assert.equal(targetOnly.manualMappingCouldResolve, false);
+});
+
+test("final quality update strips stale duplicated quality sections", () => {
+  const markdown = [
+    "# Final Validation Report",
+    "",
+    "## 10. Remaining Limitations",
+    "- base",
+    "",
+    "## 11. Validation Quality Analysis",
+    "- stale quality",
+    "",
+    "## 12. Validation Quality Analysis",
+    "- duplicate quality",
+    "",
+    "## 13. Profile Exception Application",
+    "- stale extension",
+  ].join("\n");
+
+  assert.equal(stripFinalGeneratedQualitySections(markdown), [
+    "# Final Validation Report",
+    "",
+    "## 10. Remaining Limitations",
+    "- base",
+  ].join("\n"));
+});
+
+test("final report writer does not preload stale quality files", () => {
+  const source = fs.readFileSync("scripts/validationWorkflow.mjs", "utf8");
+
+  assert.match(source, /qualityAnalysis = null/);
+  assert.doesNotMatch(source, /loadQualityAnalysisSummary/);
 });

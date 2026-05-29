@@ -1,7 +1,7 @@
 # Validation compare
 
 Status: passed
-Generated: 2026-05-18T12:20:23.581Z
+Generated: 2026-05-29T14:11:33.240Z
 
 ## Counts
 - passed: 2
@@ -18,14 +18,14 @@ Generated: 2026-05-18T12:20:23.581Z
 ### synthetic-juniper-set-smoke
 - status: passed
 - synthetic: true
-- parsed objects: old 5, new 3
-- semantic: matched 3, old-only 2, new-only 0, coverage 90%
+- parsed objects: old 5, new 4
+- semantic: matched 4, old-only 1, new-only 0, coverage 100%
 - audit: active 7, suppressed 2
-- graph: nodes 20, edges 10
+- graph: nodes 21, edges 11
 ### nokia-classic15-to-nokia-mdcli-22
 - status: passed
 - synthetic: false
-- parsed objects: old 549, new 349
-- semantic: matched 118, old-only 351, new-only 156, coverage 94%
-- audit: active 572, suppressed 60
-- graph: nodes 415, edges 308
+- parsed objects: old 503, new 351
+- semantic: matched 336, old-only 167, new-only 15, coverage 64%
+- audit: active 469, suppressed 59
+- graph: nodes 407, edges 300

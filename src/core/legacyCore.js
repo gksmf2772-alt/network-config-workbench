@@ -614,6 +614,8 @@ function bindEvents() {
   selectors.compareTabBtn.addEventListener("click", () => setActiveTab("compare"));
   selectors.profilesTabBtn.addEventListener("click", () => setActiveTab("profiles"));
   selectors.summaryPageTabBtn?.addEventListener("click", () => setActiveTab("summary"));
+  selectors.objectsPageTabBtn?.addEventListener("click", () => setActiveTab("objects"));
+  selectors.reportPageTabBtn?.addEventListener("click", () => setActiveTab("report"));
   selectors.loadHistoryBtn.addEventListener("click", loadSelectedSession);
   selectors.saveSessionBtn.addEventListener("click", saveSession);
   selectors.deleteSessionBtn?.addEventListener("click", deleteSelectedSession);
@@ -628,9 +630,11 @@ function bindEvents() {
   selectors.exportReportBtn.addEventListener("click", exportReport);
   selectors.summaryTabBtn?.addEventListener("click", () => setResultTab("summary"));
   selectors.objectsTabBtn?.addEventListener("click", () => setResultTab("objects"));
-  selectors.overviewTabBtn?.addEventListener("click", () => setResultTab("overview"));
+  selectors.overviewTabBtn?.addEventListener("click", () => setResultTab("report"));
   selectors.objectSearchInput?.addEventListener("input", renderObjectNavigator);
   selectors.objectSortSelect?.addEventListener("input", renderObjectNavigator);
+  selectors.objectSectionTabs?.addEventListener("click", handleObjectSectionTabClick);
+  selectors.objectQuickActions?.addEventListener("click", handleObjectQuickAction);
   selectors.restoreInitialBtn?.addEventListener("click", restoreInitialConfigSnapshot);
   selectors.restoreOldBtn?.addEventListener("click", () => restoreInitialConfigSnapshot("old"));
   selectors.restoreNewBtn?.addEventListener("click", () => restoreInitialConfigSnapshot("new"));
@@ -820,17 +824,26 @@ function setupDiffConnectorMutationObserver() {
 function setActiveTab(tab, options = {}) {
   if (!options.skipConfirm && tab === "compare" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 탭으로 이동")) return false;
   if (!options.skipConfirm && tab === "summary" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 요약 탭으로 이동")) return false;
+  if (!options.skipConfirm && tab === "objects" && !confirmUnsavedProfileAction("프로파일 변경 후 객체 검토 탭으로 이동")) return false;
+  if (!options.skipConfirm && tab === "report" && !confirmUnsavedProfileAction("프로파일 변경 후 리포트 탭으로 이동")) return false;
   hideProfileRulePopover();
   const compare = tab === "compare";
   const profiles = tab === "profiles";
   const summary = tab === "summary";
+  const objects = tab === "objects";
+  const report = tab === "report";
   selectors.compareTabBtn.classList.toggle("active", compare);
   selectors.profilesTabBtn.classList.toggle("active", profiles);
   selectors.summaryPageTabBtn?.classList.toggle("active", summary);
+  selectors.objectsPageTabBtn?.classList.toggle("active", objects);
+  selectors.reportPageTabBtn?.classList.toggle("active", report);
   selectors.compareTab.classList.toggle("active", compare);
   selectors.profilesTab.classList.toggle("active", profiles);
   selectors.summaryTab?.classList.toggle("active", summary);
-  if (summary) renderObjectNavigator();
+  selectors.objectsTab?.classList.toggle("active", objects);
+  selectors.reportTab?.classList.toggle("active", report);
+  if (objects) renderObjectNavigator();
+  if (report) renderOverviewReport(state.lastReport);
   if (compare) scheduleSettledDiffConnectorRender();
   return true;
 }
@@ -3899,19 +3912,107 @@ function toggleCompareControls() {
   scheduleSettledDiffConnectorRender();
 }
 
+const OBJECT_SECTION_FILTERS = [
+  { scope: "all", label: "전체", types: null },
+  { scope: "interface", label: "Interface", types: ["interface"] },
+  { scope: "static-route", label: "Static Route", types: ["static-route"] },
+  { scope: "bgp", label: "BGP", types: ["bgp"] },
+  { scope: "port-lag", label: "Port/LAG", types: ["port", "lag"] },
+  { scope: "service-sap", label: "Service/SAP", types: ["service", "sap", "subscriber-interface", "group-interface", "static-host", "default-host"] },
+  { scope: "pim", label: "PIM", types: ["pim"] },
+  { scope: "policy", label: "Policy", types: ["route-policy", "prefix-list", "community", "filter", "acl"] },
+];
+
 function setResultTab(tabName) {
-  const target = ["summary", "objects", "overview"].includes(tabName) ? tabName : "summary";
-  [
-    [selectors.summaryTabBtn, selectors.summaryResultPanel, "summary"],
-    [selectors.objectsTabBtn, selectors.objectsResultPanel, "objects"],
-    [selectors.overviewTabBtn, selectors.overviewResultPanel, "overview"],
-  ].forEach(([button, panel, name]) => {
-    const active = name === target;
-    button?.classList.toggle("active", active);
-    button?.setAttribute("aria-selected", String(active));
-    panel?.classList.toggle("active", active);
-    if (panel) panel.hidden = !active;
-  });
+  const target = tabName === "overview" ? "report" : (["summary", "objects", "report"].includes(tabName) ? tabName : "summary");
+  setActiveTab(target, { skipConfirm: true });
+}
+
+function handleObjectSectionTabClick(event) {
+  const button = event.target.closest("[data-section-scope]");
+  if (!button) return;
+  setObjectSectionScope(button.dataset.sectionScope || "all");
+}
+
+function handleObjectQuickAction(event) {
+  const button = event.target.closest("[data-object-action]");
+  if (!button) return;
+  const action = button.dataset.objectAction || "";
+  if (action === "open-compare") {
+    if (setActiveTab("compare", { skipConfirm: true }) && state.lastReport) {
+      showDiffMode();
+      scheduleSettledDiffConnectorRender();
+    }
+    return;
+  }
+  if (action === "export") {
+    exportReport();
+    return;
+  }
+  if (action === "reset-filter") {
+    if (selectors.objectSearchInput) selectors.objectSearchInput.value = "";
+    setObjectSectionScope("all");
+  }
+}
+
+function setObjectSectionScope(scope = "all") {
+  state.activeObjectSectionScope = getObjectSectionFilter(scope).scope;
+  renderObjectSectionTabs();
+  renderObjectNavigator();
+}
+
+function getObjectSectionFilter(scope = "all") {
+  return OBJECT_SECTION_FILTERS.find((item) => item.scope === scope) || OBJECT_SECTION_FILTERS[0];
+}
+
+function getSectionFilterForObjectType(type = "") {
+  return OBJECT_SECTION_FILTERS.find((item) => item.types?.includes(type)) || OBJECT_SECTION_FILTERS[0];
+}
+
+function renderObjectSectionTabs() {
+  if (!selectors.objectSectionTabs) return;
+  const activeScope = state.activeObjectSectionScope || "all";
+  selectors.objectSectionTabs.innerHTML = OBJECT_SECTION_FILTERS.map((filter) => {
+    const { total, review } = getObjectSectionCounts(filter);
+    const active = filter.scope === activeScope;
+    const badge = review > 0 ? `<span class="section-filter-badge">${escapeHtml(review)}</span>` : "";
+    return `
+      <button type="button" class="section-filter-tab ${active ? "active" : ""}" data-section-scope="${escapeHtml(filter.scope)}" role="tab" aria-selected="${active}">
+        <span>${escapeHtml(filter.label)}</span>
+        <strong>${escapeHtml(total)}</strong>
+        ${badge}
+      </button>
+    `;
+  }).join("");
+}
+
+function getObjectSectionCounts(filter = OBJECT_SECTION_FILTERS[0]) {
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+  const matched = plan.filter((item) => sectionFilterMatchesType(filter, planItemObjectType(item)));
+  const total = filter.scope === "all" ? plan.length : matched.length;
+  const review = matched.filter(isReviewNeededPlanItem).length;
+  return { total, review };
+}
+
+function sectionFilterMatchesType(filter = OBJECT_SECTION_FILTERS[0], type = "") {
+  return !filter.types || filter.types.includes(type);
+}
+
+function planItemObjectType(item = {}) {
+  return String(item.objectType || item.oldObject?.normalizedType || item.newObject?.normalizedType || item.oldObject?.type || item.newObject?.type || "");
+}
+
+function isReviewNeededPlanItem(item = {}) {
+  const status = String(item.status || "").toLowerCase();
+  return ["candidate", "ambiguous", "low-confidence", "old-only", "new-only"].includes(status) ||
+    Number(item.policyViolationCount || 0) > 0 ||
+    Number(item.auditFindingCount || 0) > 0 ||
+    Boolean(item.relationshipSummary?.length || item.relationshipDiffs?.length);
+}
+
+function objectMatchesActiveSection(object = {}) {
+  const filter = getObjectSectionFilter(state.activeObjectSectionScope || "all");
+  return sectionFilterMatchesType(filter, String(object.type || object.normalizedType || ""));
 }
 
 function setProfileStatus(message, kind = "info") {
@@ -5930,7 +6031,8 @@ function bindSummaryActions() {
   bindSummaryIssueWorkspaceActions();
   selectors.summaryCards?.querySelectorAll("[data-field-type-filter]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
+      if (selectors.objectSearchInput) selectors.objectSearchInput.value = "";
+      state.activeObjectSectionScope = getSectionFilterForObjectType(button.dataset.fieldTypeFilter || "").scope;
       renderObjectNavigator();
       setResultTab("objects");
     });
@@ -14570,10 +14672,12 @@ function compactReportValue(value) {
 
 function renderObjectNavigator(rebind = true) {
   if (!selectors.objectList || !state.lastReport) return;
+  renderObjectSectionTabs();
   const query = canonicalizeComparableLine(selectors.objectSearchInput?.value || "");
   const sortMode = selectors.objectSortSelect?.value || "identity";
   const objects = [...state.lastReport.oldObjects, ...state.lastReport.newObjects]
     .filter((object) => object.type !== "global")
+    .filter(objectMatchesActiveSection)
     .filter((object) => !query || objectMatchesSearch(object, query))
     .sort((left, right) => compareNavigatorObjects(left, right, sortMode));
 
@@ -14739,6 +14843,17 @@ function bindDiffObjectNavigation() {
 
 function renderOverviewReport(report) {
   if (!selectors.overviewReport) return;
+  if (!report) {
+    selectors.overviewReport.innerHTML = `
+      <section class="overview-section">
+        <div class="summary-empty-state">
+          <strong>리포트 없음</strong>
+          <span>비교 실행 후 리포트가 표시됨.</span>
+        </div>
+      </section>
+    `;
+    return;
+  }
   const objects = [...(report.oldObjects || []), ...(report.newObjects || [])].filter((object) => object.type !== "global");
   const byType = groupBy(objects, (object) => object.type);
   const dashboard = buildCurrentDashboardData(report);

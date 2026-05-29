@@ -337,6 +337,62 @@ test("Classic LAG maps MD-CLI LAG through service interface SAP reference", () =
   assert.ok(lagItem.scoreReasons.includes("service-interface-sap-lag"));
 });
 
+test("full LAG service-interface SAP mapping follows the already matched interface", () => {
+  const oldLag = object("lag", "311", {
+    lag: "311",
+    description: "To-PE#1-1",
+  });
+  const oldInterface = {
+    ...object("interface", "old-interface", {
+      interface: "to-pe#1-1",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+      sap: "lag-311",
+    }),
+    prefix: "10.0.0.1/30",
+    ipAddress: "10.0.0.1",
+  };
+  const wrongServiceInterface = {
+    ...object("interface", "wrong-service-interface", {
+      service: "ies",
+      "service-id": "100",
+      interface: "to-pe#1-1",
+      address: "10.0.0.5/30",
+      prefix: "10.0.0.5/30",
+      sap: "lag-wrong",
+    }),
+    prefix: "10.0.0.5/30",
+    ipAddress: "10.0.0.5",
+  };
+  const rightServiceInterface = {
+    ...object("interface", "right-service-interface", {
+      service: "ies",
+      "service-id": "200",
+      interface: "to-pe#1-1",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+      sap: "lag-right",
+    }),
+    prefix: "10.0.0.1/30",
+    ipAddress: "10.0.0.1",
+  };
+  const wrongLag = object("lag", "lag-wrong", { lag: "lag-wrong" });
+  const rightLag = object("lag", "lag-right", { lag: "lag-right" });
+
+  const sectionMatch = firstMatch([oldLag], [rightServiceInterface, rightLag]);
+  const fullMatches = matchNormalizedObjects({
+    oldObjects: [oldInterface, oldLag],
+    newObjects: [wrongServiceInterface, wrongLag, rightServiceInterface, rightLag],
+  });
+  const lagMatch = fullMatches.find((match) => match.oldObject?.id === oldLag.id);
+
+  assert.equal(sectionMatch.status, "matched");
+  assert.equal(sectionMatch.newObject.id, rightLag.id);
+  assert.equal(lagMatch?.status, "matched");
+  assert.equal(lagMatch?.newObject?.id, rightLag.id);
+  assert.equal(lagMatch?.reason, "lag-service-interface-sap");
+});
+
 test("port endpoint match normalizes known Ganbuk spelling typo", () => {
   const oldDescription = "## OLT,10B,Ganbuk-TOU-FK53_7/1_OFD#6-74 ##";
   const newDescription = "## TO, lag-B-6205(6/2/c5/1), Gangbuk-TOU-FK53, Po11(Te7/1), SBY, 02020002-6481, Fiber ##";
@@ -358,6 +414,26 @@ test("port endpoint match normalizes known Ganbuk spelling typo", () => {
   assert.equal(match.status, "matched");
   assert.ok(match.score >= 85);
   assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+});
+
+test("port endpoint match ignores shared device name when port token differs", () => {
+  const matches = matchNormalizedObjects({
+    oldObjects: [
+      object("port", "2/1/1", {
+        port: "2/1/1",
+        description: "## MN, Dobong-MNC161H, Te0/8/0/3, To-MNT#1 ##",
+      }),
+    ],
+    newObjects: [
+      object("port", "2/1/c17/1", {
+        port: "2/1/c17/1",
+        description: "## MN, Dobong-MNC161H, hu0/6/0/43, Direct ##",
+      }),
+    ],
+  });
+
+  assert.equal(matches.some((match) => match.status === "matched"), false);
+  assert.equal(matches.some((match) => match.reason === "description-endpoint-match"), false);
 });
 
 test("LAG endpoint falls back to underscore device token when no port token exists", () => {
@@ -422,6 +498,182 @@ test("description-only interface candidate keeps diagnostic score reason", () =>
   assert.equal(match.status, "candidate");
   assert.ok(match.score > 0 && match.score < 80);
   assert.ok(match.scoreReasons.includes("description-similarity"));
+});
+
+test("full interface matching keeps same-prefix candidates inside service scope", () => {
+  const oldWrongService = object("interface", "old-service-100", {
+    service: "ies",
+    "service-id": "100",
+    interface: "old-wrong-service",
+    address: "10.0.0.1/30",
+    prefix: "10.0.0.1/30",
+  });
+  const oldRightService = object("interface", "old-service-200", {
+    service: "ies",
+    "service-id": "200",
+    interface: "old-right-service",
+    address: "10.0.0.1/30",
+    prefix: "10.0.0.1/30",
+  });
+  const newRightService = object("interface", "new-service-200", {
+    service: "ies",
+    "service-id": "200",
+    interface: "new-right-service",
+    address: "10.0.0.1/30",
+    prefix: "10.0.0.1/30",
+  });
+
+  const sectionMatch = firstMatch([oldRightService], [newRightService]);
+  const fullMatches = matchNormalizedObjects({
+    oldObjects: [oldWrongService, oldRightService],
+    newObjects: [newRightService],
+  });
+  const matched = fullMatches.find((match) => match.status === "matched");
+
+  assert.equal(sectionMatch.status, "matched");
+  assert.equal(sectionMatch.oldObject.id, oldRightService.id);
+  assert.equal(matched?.oldObject?.id, oldRightService.id);
+  assert.equal(matched?.newObject?.id, newRightService.id);
+  assert.equal(
+    fullMatches.find((match) => match.oldObject?.id === oldWrongService.id)?.status,
+    "old-only"
+  );
+});
+
+test("full interface matching does not auto-match duplicate old prefix to one target", () => {
+  const oldFirst = {
+    ...object("interface", "old-first", {
+      service: "ies",
+      "service-id": "100",
+      interface: "old-first",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+    }),
+    prefix: "10.0.0.1/30",
+  };
+  const oldSecond = {
+    ...object("interface", "old-second", {
+      service: "ies",
+      "service-id": "100",
+      interface: "old-second",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+    }),
+    prefix: "10.0.0.1/30",
+  };
+  const newOnlyTarget = {
+    ...object("interface", "new-target", {
+      service: "ies",
+      "service-id": "100",
+      interface: "new-target",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+    }),
+    prefix: "10.0.0.1/30",
+  };
+
+  const matches = matchNormalizedObjects({
+    oldObjects: [oldFirst, oldSecond],
+    newObjects: [newOnlyTarget],
+  });
+  const interfaceMatches = matches.filter((match) => match.oldObject?.normalizedType === "interface");
+
+  assert.equal(interfaceMatches.some((match) => match.status === "matched"), false);
+  assert.equal(interfaceMatches.length, 2);
+  assert.equal(
+    interfaceMatches.every((match) => match.status === "candidate" && match.reason === "ambiguous-prefix"),
+    true
+  );
+});
+
+test("full interface matching does not auto-match one old prefix to duplicate targets", () => {
+  const oldOnlySource = {
+    ...object("interface", "old-source", {
+      service: "ies",
+      "service-id": "100",
+      interface: "old-source",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+    }),
+    prefix: "10.0.0.1/30",
+  };
+  const newFirst = {
+    ...object("interface", "new-first", {
+      service: "ies",
+      "service-id": "100",
+      interface: "new-first",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+    }),
+    prefix: "10.0.0.1/30",
+  };
+  const newSecond = {
+    ...object("interface", "new-second", {
+      service: "ies",
+      "service-id": "100",
+      interface: "new-second",
+      address: "10.0.0.1/30",
+      prefix: "10.0.0.1/30",
+    }),
+    prefix: "10.0.0.1/30",
+  };
+
+  const matches = matchNormalizedObjects({
+    oldObjects: [oldOnlySource],
+    newObjects: [newFirst, newSecond],
+  });
+  const interfaceMatch = matches.find((match) => match.oldObject?.id === oldOnlySource.id);
+
+  assert.equal(interfaceMatch?.status, "candidate");
+  assert.equal(interfaceMatch?.reason, "ambiguous-prefix");
+  assert.equal(matches.some((match) => match.status === "matched"), false);
+  assert.equal(matches.some((match) => match.status === "new-only"), false);
+});
+
+test("full BGP matching keeps same-peer candidates inside router scope", () => {
+  const oldWrongRouter = {
+    ...object("bgp", "old-blue-peer", {
+      router: "Blue",
+      neighbor: "192.0.2.10",
+      peerIp: "192.0.2.10",
+      "peer-as": "64500",
+    }),
+    peerIp: "192.0.2.10",
+  };
+  const oldRightRouter = {
+    ...object("bgp", "old-base-peer", {
+      router: "Base",
+      neighbor: "192.0.2.10",
+      peerIp: "192.0.2.10",
+      "peer-as": "64500",
+    }),
+    peerIp: "192.0.2.10",
+  };
+  const newRightRouter = {
+    ...object("bgp", "new-base-peer", {
+      router: "Base",
+      neighbor: "192.0.2.10",
+      peerIp: "192.0.2.10",
+      "peer-as": "64500",
+    }),
+    peerIp: "192.0.2.10",
+  };
+
+  const sectionMatch = firstMatch([oldRightRouter], [newRightRouter]);
+  const fullMatches = matchNormalizedObjects({
+    oldObjects: [oldWrongRouter, oldRightRouter],
+    newObjects: [newRightRouter],
+  });
+  const matched = fullMatches.find((match) => match.status === "matched");
+
+  assert.equal(sectionMatch.status, "matched");
+  assert.equal(sectionMatch.oldObject.id, oldRightRouter.id);
+  assert.equal(matched?.oldObject?.id, oldRightRouter.id);
+  assert.equal(matched?.newObject?.id, newRightRouter.id);
+  assert.equal(
+    fullMatches.find((match) => match.oldObject?.id === oldWrongRouter.id)?.status,
+    "old-only"
+  );
 });
 
 test("Nokia GRE source primary redundancy conversion auto-matches gre-source-1", () => {

@@ -1,46 +1,57 @@
 # Unsupported Line Analysis
 
-Generated: 2026-05-18T12:21:00.146Z
+Generated: 2026-05-29T14:11:42.306Z
 Case: nokia-classic15-to-nokia-mdcli-22
 
 ## Summary
-- total unsupported: 757
-- eligible lines: 11841
-- recognized/analyzed lines: 11084
-- parser-unmapped lines: 757
+- total unsupported: 4288
+- eligible lines: 11844
+- recognized/analyzed lines: 7556
+- parser-unmapped lines: 4288
 - ignored/suppressed lines: 62
-- unsupported syntax lines: 757
+- unsupported syntax lines: 4288
 - router-log wrapper lines: 123
-- old/source unsupported: 757
+- old/source unsupported: 4288
 - new/target unsupported: 0
 - status: partial-support
-- conclusion: Unsupported lines are parser coverage gaps, mostly Classic source system/router/service/policy detail lines. The previous aggregate was an undercount caused by double-subtracting 62 ignored target lines; corrected parser-unmapped count is 757.
+- conclusion: Unsupported lines are parser coverage gaps, mostly Classic source system/router/service/policy detail lines. The previous aggregate was an undercount caused by double-subtracting 62 ignored target lines; corrected parser-unmapped count is 4288.
 
 ## By Section
-- filter: 388
-- router: 188
-- system: 179
-- port: 2
+- filter: 1978
+- service: 638
+- qos: 344
+- system: 293
+- port: 287
+- interface: 268
+- router/static-routes: 241
+- router: 214
+- router/bgp: 25
 
 ## By Object Type
-- unknown: 301
-- filter: 278
-- management-security: 160
-- qos-policy: 7
-- route-policy: 6
-- subscriber-service: 4
-- port: 1
+- filter: 1705
+- unknown: 878
+- qos-policy: 432
+- service: 258
+- port: 254
+- interface: 243
+- management-security: 215
+- static-route: 128
+- route-policy: 92
+- bgp: 51
+- sap: 21
+- subscriber-service: 11
 
 ## Focus Areas
-- Filter/ACL: 500
-- Management/Security: 210
-- Parser coverage: 89
-- QoS: 7
-- Subscriber/Service: 7
-- Routing policy: 6
-- BGP: 5
+- Filter/ACL: 2372
+- Parser coverage: 985
+- QoS: 710
+- Management/Security: 337
+- Routing policy: 93
+- Subscriber/Service: 72
+- BGP: 59
 
 ## Samples
+- old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:14 [system/management-security] system
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:15 [system/management-security] name "Gangbuk-SEA028"
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:16 [system/management-security] load-balancing
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:17 [system/management-security] l4-load-balancing
@@ -52,6 +63,8 @@ Case: nokia-classic15-to-nokia-mdcli-22
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:28 [system/management-security] rollback
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:29 [system/management-security] rollback-location "cf3:/rollback/rollback"
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:30 [system/management-security] local-max-checkpoints 50
+- old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:32 [system/management-security] time
+- old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:33 [system/management-security] ntp
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:36 [system/management-security] sntp
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:39 [system/management-security] zone KST 09
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:40 [system/management-security] prefer-local-time
@@ -68,6 +81,3 @@ Case: nokia-classic15-to-nokia-mdcli-22
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:60 [system/management-security] location "cf3:/EHS/mda3_1.script"
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:63 [system/management-security] script "mda3_2"
 - old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:64 [system/management-security] location "cf3:/EHS/mda3_2.script"
-- old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:67 [system/management-security] script "mda4_1"
-- old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:68 [system/management-security] location "cf3:/EHS/mda4_1.script"
-- old 예제 및 테스트 설정/Gangbuk-SEA028_config.txt:71 [system/management-security] script "mda4_2"

@@ -100,7 +100,9 @@ BGP neighbor:
 `변경`과 `검토 필요`는 반드시 분리한다.
 
 진행:
-- Excel-compatible UTF-8 CSV export 완료
+- 실제 `.xlsx` multi-sheet export 완료
+- sheet 구성: All / Interface / Static Route / BGP / Port LAG / Service / Other
+- 기존 CSV builder는 호환용으로 유지
 - ignored / structure-converted / inheritance-unresolved noise는 active export에서 제외
 - 실제 fixture 기준 CSV row 생성 확인 완료
 
@@ -111,6 +113,13 @@ BGP neighbor:
 - case mapping 완료: 027 -> New_*_1, 028 -> New_*_2, 029 -> New_*_3, 030 -> New_*_4
 - scope별 검증 완료: full, bgp, static, interface, lag, port, pim
 - PIM identity 매칭 gap 수정 완료
+- Added MD-CLI `MDconfig.log` / `MDfullcontext.log` full-log check: case 1/2 unmatchedMatcherIssue 0, parserGap 0, lowConfidence 0
+- Nokia-only GRE source redundancy conversion 완료: `gre-source` -> `gre-source-1` primary match, `gre-source-2`는 신규 이중화 회선으로 유지
+- port/lag realMissingTarget reason split 완료: disabled port, active port with description, lag members with description
+- interface realMissingTarget reason split 완료: MNT description-evidence 20, GRE address 16, system/loopback address 2
+- static-route realMissingTarget reason split 완료: default, indirect tunnel, loopback host, multi next-hop
+- policy placeholder realMissingTarget reason split 완료: community members/expression, ip-prefix-list/prefix-list, route-policy deny/drop/iCOD/peer
+- BGP realMissingTarget reason split 완료: SER-PEER missing target peer case 1/2 각 1건
 
 ## 보류 항목
 

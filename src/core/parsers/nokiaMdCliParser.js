@@ -146,6 +146,17 @@ function setField(fields, field, value) {
   fields[field] = cleanValue;
 }
 
+function appendCsvField(fields, field, value) {
+  const cleanValue = stripQuotes(value);
+  if (!field || !cleanValue) return;
+  const current = String(fields[field] || "")
+    .split(/\s*,\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!current.includes(cleanValue)) current.push(cleanValue);
+  fields[field] = current.join(", ");
+}
+
 function mapLeafFields(fields, tokens, start, specs = []) {
   const orderedSpecs = [...specs].sort((a, b) => b.path.length - a.path.length);
 
@@ -327,6 +338,222 @@ function extractMdCliInterfaceBlockFields(lines = [], interfaceName = "") {
     }
 
     updateMdCliInterfaceBlockScope(stack, text);
+  });
+
+  return normalizeNokiaSemanticFields(fields);
+}
+
+function updateMdCliSubscriberBlockScope(stack, rawLine = "") {
+  const text = String(rawLine || "").trim();
+  if (!text) return;
+
+  const openCount = (text.match(/\{/g) || []).length;
+  if (openCount) {
+    const scope = text.match(/^([a-z0-9-]+)/i)?.[1]?.toLowerCase() || "block";
+    for (let count = 0; count < openCount; count += 1) {
+      stack.push(count === 0 ? scope : "block");
+    }
+  }
+
+  const closeCount = (text.match(/\}/g) || []).length;
+  for (let count = 0; count < closeCount; count += 1) {
+    stack.pop();
+  }
+}
+
+function collectMdCliSubscriberInterfaceFields(rawLines = [], subscriberName = "") {
+  const fields = {
+    "subscriber-interface": subscriberName,
+  };
+  const stack = [];
+  let pendingAddress = "";
+  let pendingDefaultHost = "";
+  let currentGroup = "";
+  let currentSap = "";
+  let direction = "";
+
+  const hasScope = (scope) => stack.includes(scope);
+  const setScopedState = (stateValue) => {
+    const state = normalizeState(stateValue);
+    const scope = latestScope(stack, ["static-host", "sub-sla-mgmt", "dhcp"]);
+    if (scope === "static-host") {
+      fields["static-host.admin-state"] = state;
+      return;
+    }
+    if (scope === "sub-sla-mgmt") {
+      fields["sub-sla-mgmt.admin-state"] = state;
+      return;
+    }
+    if (scope === "dhcp") {
+      fields["dhcp.admin-state"] = state;
+      return;
+    }
+    fields.state = state;
+    fields["admin-state"] = state;
+  };
+
+  rawLines.forEach((rawLine) => {
+    const text = String(rawLine || "").trim();
+    if (!text) {
+      updateMdCliSubscriberBlockScope(stack, rawLine);
+      return;
+    }
+
+    let match = text.match(/^subscriber-interface\s+"?([^"\s{]+)"?\s*\{/i);
+    if (match) {
+      fields["subscriber-interface"] = canonicalServiceName(match[1]);
+    }
+
+    match = text.match(/^group-interface\s+"?([^"\s{]+)"?\s*\{/i);
+    if (match) {
+      currentGroup = canonicalServiceName(match[1]);
+      currentSap = "";
+      direction = "";
+      fields["group-interface"] = currentGroup;
+    }
+
+    match = text.match(/^sap\s+"?([^"\s{]+)"?\s*\{/i);
+    if (match) {
+      currentSap = canonicalServiceName(match[1]);
+      direction = "";
+      appendCsvField(fields, "sap", currentSap);
+    }
+
+    match = text.match(/^description\s+(.+)$/i);
+    if (match) {
+      fields.description = stripQuotes(match[1]);
+    }
+
+    match = text.match(/^admin-state\s+(enable|disable|enabled|disabled)$/i);
+    if (match) {
+      setScopedState(match[1]);
+    }
+
+    match = text.match(/^address\s+(\S+)(?:\s+prefix-length\s+(\d+))?\s*\{/i);
+    if (match && !hasScope("default-host") && !hasScope("static-host")) {
+      pendingAddress = stripQuotes(match[1]);
+      if (match[2]) {
+        fields.address = `${pendingAddress}/${match[2]}`;
+        fields.prefix = fields.address;
+      }
+    }
+
+    match = text.match(/^prefix-length\s+(\d+)$/i);
+    if (match && pendingAddress && hasScope("address")) {
+      fields.address = `${pendingAddress}/${match[1]}`;
+      fields.prefix = fields.address;
+    }
+
+    match = text.match(/^allow-unmatching-subnets\s+(true|false)$/i);
+    if (match) {
+      fields["dhcp.allow-unmatching-subnets"] = match[1];
+    }
+
+    match = text.match(/^radius-auth-policy\s+"?([^"\s{}]+)"?/i);
+    if (match) {
+      fields["radius-auth-policy"] = stripQuotes(match[1]);
+    }
+
+    match = text.match(/^populate\s+(true|false)$/i);
+    if (match && hasScope("neighbor-discovery")) {
+      fields["neighbor-discovery.populate"] = match[1];
+    }
+
+    if (hasScope("dhcp")) {
+      match = text.match(/^filter\s+(\S+)/i);
+      if (match) fields["dhcp.filter"] = stripQuotes(match[1]);
+
+      match = text.match(/^server\s+(.+)$/i);
+      if (match) fields["dhcp.server"] = stripQuotes(match[1]);
+
+      match = text.match(/^trusted\s+(true|false)$/i);
+      if (match) fields["dhcp.trusted"] = match[1];
+
+      match = text.match(/^max-leases\s+(\S+)/i);
+      if (match && hasScope("lease-populate")) fields["dhcp.lease-populate.max-leases"] = stripQuotes(match[1]);
+
+      if (/^l2-header\s*\{/i.test(text) && hasScope("lease-populate")) {
+        fields["dhcp.lease-populate.l2-header"] = "true";
+      }
+    }
+
+    if (/^ingress\s*\{/i.test(text) && currentSap) direction = "ingress";
+    if (/^egress\s*\{/i.test(text) && currentSap) direction = "egress";
+
+    match = text.match(/^ip\s+"?([^"\s{}]+)"?/i);
+    if (match && currentSap && hasScope("filter")) {
+      appendCsvField(fields, `${direction === "egress" ? "egress" : "ingress"}.filter.ip`, match[1]);
+    }
+
+    match = text.match(/^policy-name\s+"?([^"\s{}]+)"?/i);
+    if (match && currentSap && hasScope("sap-egress")) {
+      appendCsvField(fields, "egress.qos.sap-egress.policy-name", match[1]);
+    }
+
+    if (hasScope("cpu-protection")) {
+      match = text.match(/^policy-id\s+(\S+)/i);
+      if (match) fields["cpu-protection.policy-id"] = stripQuotes(match[1]);
+      if (/^ip-src-monitoring$/i.test(text)) fields["cpu-protection.ip-src-monitoring"] = "true";
+    }
+
+    if (hasScope("sub-sla-mgmt")) {
+      match = text.match(/^sub-ident-policy\s+(.+)$/i);
+      if (match) fields["sub-sla-mgmt.sub-ident-policy"] = stripQuotes(match[1]);
+
+      match = text.match(/^subscriber-limit\s+(\S+)/i);
+      if (match) fields["sub-sla-mgmt.subscriber-limit"] = stripQuotes(match[1]);
+
+      if (hasScope("defaults")) {
+        match = text.match(/^sub-profile\s+(.+)$/i);
+        if (match) fields["sub-sla-mgmt.defaults.sub-profile"] = stripQuotes(match[1]);
+
+        match = text.match(/^sla-profile\s+(.+)$/i);
+        if (match) fields["sub-sla-mgmt.defaults.sla-profile"] = stripQuotes(match[1]);
+
+        match = text.match(/^string\s+(.+)$/i);
+        if (match && hasScope("int-dest-id")) fields["sub-sla-mgmt.defaults.int-dest-id"] = stripQuotes(match[1]);
+
+        if (/^auto-id$/i.test(text) && hasScope("subscriber-id")) {
+          fields["sub-sla-mgmt.defaults.subscriber-id"] = "auto-id";
+        }
+      }
+    }
+
+    if (hasScope("static-host")) {
+      match = text.match(/^ipv4\s+(\S+)(?:\s+mac\s+(\S+))?(?:\s+prefix-length\s+(\d+))?\s*\{/i);
+      if (match) {
+        fields["static-host"] = match[3] ? `${stripQuotes(match[1])}/${match[3]}` : stripQuotes(match[1]);
+        if (match[2]) fields["static-host.mac"] = stripQuotes(match[2]);
+      }
+
+      match = text.match(/^sub-profile\s+(.+)$/i);
+      if (match) fields["static-host.sub-profile"] = stripQuotes(match[1]);
+
+      match = text.match(/^sla-profile\s+(.+)$/i);
+      if (match) fields["static-host.sla-profile"] = stripQuotes(match[1]);
+
+      match = text.match(/^int-dest-id\s+(.+)$/i);
+      if (match) fields["static-host.int-dest-id"] = stripQuotes(match[1]);
+
+      if (/^use-sap-id$/i.test(text) && hasScope("subscriber-id")) {
+        fields["static-host.subscriber-id"] = "use-sap-id";
+      }
+    }
+
+    if (hasScope("default-host")) {
+      match = text.match(/^ipv4\s+(\S+)\s+prefix-length\s+(\d+)\s*\{/i);
+      if (match) {
+        pendingDefaultHost = `${stripQuotes(match[1])}/${match[2]}`;
+        fields["default-host"] = pendingDefaultHost;
+      }
+
+      match = text.match(/^next-hop\s+(\S+)/i);
+      if (match && pendingDefaultHost) {
+        fields["default-host.next-hop"] = stripQuotes(match[1]);
+      }
+    }
+
+    updateMdCliSubscriberBlockScope(stack, rawLine);
   });
 
   return normalizeNokiaSemanticFields(fields);
@@ -775,7 +1002,7 @@ function parseMdCliPimInterfaces(lines) {
 
     if (!match) continue;
 
-    const interfaceName = match[1];
+    const interfaceName = canonicalInterfaceName(match[1]);
 
     const blockLines = [raw];
     let blockDepth = 1;
@@ -1075,6 +1302,7 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^subscriber-interface\s+"?([^"\s{]+)"?\s*\{/i);
     if (match) {
+      const rawLines = findMdCliBlockLines(lines, index);
       context.subscriber = canonicalServiceName(match[1]);
       context.group = "";
       context.sap = "";
@@ -1082,8 +1310,11 @@ function parseMdCliServiceObjects(lines) {
       objects.push(createMdServiceObject({
         type: "subscriber-interface",
         name: context.subscriber,
-        fields: { interface: context.interface, "subscriber-interface": context.subscriber },
-        rawLines: findMdCliBlockLines(lines, index),
+        fields: {
+          interface: context.interface,
+          ...collectMdCliSubscriberInterfaceFields(rawLines, context.subscriber),
+        },
+        rawLines,
         index,
       }));
       return;

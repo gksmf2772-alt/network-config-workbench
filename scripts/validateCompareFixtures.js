@@ -175,7 +175,7 @@ export function resolveFixtureCases({
   }
 
   return selected.map((entry) => {
-    const newFiles = getNewFilesForScope(normalizedScope, entry.newIndex);
+    const newFiles = resolveNewFilesForScope(fixtureDir, normalizedScope, entry.newIndex);
     const oldPath = path.join(fixtureDir, entry.oldFile);
     const newPaths = newFiles.map((file) => path.join(fixtureDir, file));
     const missing = [oldPath, ...newPaths].filter((filePath) => !fs.existsSync(filePath));
@@ -199,6 +199,29 @@ export function getNewFilesForScope(scope = "full", index = "1") {
   const normalizedScope = normalizeScope(scope);
   const parts = normalizedScope === "full" ? FULL_SCOPE : [normalizedScope];
   return parts.map((part) => `${TARGET_PARTS[part]}_${index}.txt`);
+}
+
+function resolveNewFilesForScope(fixtureDir, scope = "full", index = "1") {
+  return getNewFilesForScope(scope, index).map((fileName) =>
+    resolveFixtureFileName(fixtureDir, fileName)
+  );
+}
+
+function resolveFixtureFileName(fixtureDir, fileName) {
+  const exactPath = path.join(fixtureDir, fileName);
+  if (fs.existsSync(exactPath)) return fileName;
+  if (!fs.existsSync(fixtureDir)) return fileName;
+
+  const parsed = path.parse(fileName);
+  const variantPrefix = `${parsed.name}_`;
+  const candidates = fs.readdirSync(fixtureDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((entryName) => entryName.startsWith(variantPrefix) && path.extname(entryName) === parsed.ext)
+    .sort((left, right) => left.localeCompare(right));
+
+  if (candidates.length === 1) return candidates[0];
+  return fileName;
 }
 
 function runFixtureComparison({ oldText, newText, profile }) {
@@ -279,6 +302,7 @@ function runFixtureComparison({ oldText, newText, profile }) {
     matchedTypeCounts,
     ignoredPolicyFields,
     ignoredPolicyAbnormalCount,
+    fixtureScope: dashboard.context.fixtureScope,
     serialized: JSON.stringify({ dashboard, coverage }),
     signature,
   };
@@ -343,6 +367,7 @@ function summarizeFixtureResult(result = {}) {
     ignoredLineCount: result.ignoredLineCount,
     wrapperLineCount: result.wrapperLineCount,
     counts: result.counts,
+    fixtureScope: result.fixtureScope,
     typeCounts: result.typeCounts,
     matchedTypeCounts: result.matchedTypeCounts,
   };

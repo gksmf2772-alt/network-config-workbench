@@ -930,7 +930,9 @@ function mergeObjectsBySemanticIdentity(objects = []) {
     applyDerivedObjectMetadata(target);
   });
 
-  return mergeFinalizedObjectsBySemanticIdentity([...merged.values()].map(applyDerivedObjectMetadata));
+  return mergeClassicInterfaceNameOnlyShadows(
+    mergeFinalizedObjectsBySemanticIdentity([...merged.values()].map(applyDerivedObjectMetadata))
+  );
 }
 
 function mergeFinalizedObjectsBySemanticIdentity(objects = []) {
@@ -959,6 +961,68 @@ function mergeFinalizedObjectsBySemanticIdentity(objects = []) {
   return [...merged.values()];
 }
 
+function mergeClassicInterfaceNameOnlyShadows(objects = []) {
+  const addressedInterfacesByName = new Map();
+
+  for (const object of objects) {
+    if (object.normalizedType !== "interface" || !hasInterfaceAddress(object)) continue;
+    const name = interfaceMergeName(object);
+    if (!name) continue;
+    if (!addressedInterfacesByName.has(name)) addressedInterfacesByName.set(name, []);
+    addressedInterfacesByName.get(name).push(object);
+  }
+
+  const dropped = new Set();
+
+  for (const object of objects) {
+    if (object.normalizedType !== "interface" || hasInterfaceAddress(object)) continue;
+    const name = interfaceMergeName(object);
+    if (!name) continue;
+    const targets = (addressedInterfacesByName.get(name) || [])
+      .filter((target) => hasCompatibleInterfaceMergeContext(object, target));
+    if (targets.length !== 1) continue;
+
+    const target = targets[0];
+    target.fields = normalizeNokiaSemanticFields({
+      ...(object.fields || {}),
+      ...(target.fields || {}),
+    });
+    target.rawLines = mergeRawLines(object.rawLines, target.rawLines);
+    applyDerivedObjectMetadata(target);
+    dropped.add(object);
+  }
+
+  return objects.filter((object) => !dropped.has(object));
+}
+
+function hasInterfaceAddress(object = {}) {
+  const fields = object.fields || {};
+  return Boolean(fields.address || fields.prefix || object.prefix || object.ipAddress);
+}
+
+function interfaceMergeName(object = {}) {
+  const fields = object.fields || {};
+  return canonicalInterfaceName(fields.interface || object.sourceName || object.normalizedIdentity || "");
+}
+
+function hasCompatibleInterfaceMergeContext(left = {}, right = {}) {
+  const leftContext = interfaceMergeContext(left);
+  const rightContext = interfaceMergeContext(right);
+  return !leftContext || !rightContext || leftContext === rightContext;
+}
+
+function interfaceMergeContext(object = {}) {
+  const fields = object.fields || {};
+  return [
+    fields["routing-context"] || fields.router || "",
+    fields.service || "",
+    fields["service-id"] || fields.serviceId || "",
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join("|");
+}
+
 function mergeRawLines(base = [], next = []) {
   const result = [...(base || [])];
   const seen = new Set(result.map((line) => String(line || "")));
@@ -978,10 +1042,14 @@ function parseHeaderLine(text) {
   let match;
 
   match = text.match(/^configure\s+port\s+(\S+)/i);
-  if (match) return { type: "port", name: stripQuotes(match[1]) };
+  if (match && isClassicPhysicalPortName(match[1])) {
+    return { type: "port", name: stripQuotes(match[1]) };
+  }
 
   match = text.match(/^port\s+(\S+)/i);
-  if (match) return { type: "port", name: stripQuotes(match[1]) };
+  if (match && isClassicPhysicalPortName(match[1])) {
+    return { type: "port", name: stripQuotes(match[1]) };
+  }
 
   match = text.match(/^configure\s+lag\s+(\S+)/i);
   if (match) return { type: "lag", name: stripQuotes(match[1]) };
@@ -1031,6 +1099,11 @@ function parseHeaderLine(text) {
   if (match) return { type: "pim", name: stripQuotes(match[1]) };
 
   return null;
+}
+
+function isClassicPhysicalPortName(value = "") {
+  const port = stripQuotes(value);
+  return /^(?:[a-z]*\d+\/){1,}[a-z]*\d+$/i.test(port);
 }
 
 function indentationOf(raw = "") {
@@ -1303,7 +1376,7 @@ export function parseNokiaClassicConfig(configText = "", { side = "old" } = {}) 
       continue;
     }
 
-    if (pimContext && /^(exit|})$/i.test(text) && indentationOf(line.raw) <= pimContext.indent) {
+    if (!current && pimContext && /^(exit|})$/i.test(text) && indentationOf(line.raw) <= pimContext.indent) {
       pimContext = null;
       continue;
     }

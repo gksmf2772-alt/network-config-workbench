@@ -92,11 +92,12 @@ MVP는 다음에 집중한다.
 - Review row에서 `admin-state` 표시 보존
 - BGP `structure-converted` / `inheritance-unresolved` row를 active object issue가 아니라 suppressed field issue로 그룹화
 - Classic `pim` block interface를 PIM 객체로 파싱
+- Classic `pim` block 중간의 misindented child `exit`는 PIM context를 닫지 않는다.
 - Classic PIM normalized identity를 canonical lower-case로 저장
 - MD-CLI one-line `router ... pim interface`를 generic router interface보다 먼저 PIM으로 파싱
 - 내부 status 값은 유지하고 compare 화면 표시 label만 MVP 용어로 정리
 - MVP section summary card를 summary dashboard에 표시
-- Excel-compatible UTF-8 CSV report export 추가
+- 실제 `.xlsx` multi-sheet report export 추가
 
 효과:
 
@@ -135,7 +136,7 @@ field: interface
 - PIM part 파일이 interface 객체로 오분류되지 않는다.
 - Summary 첫 화면에서 Interface / Static-route / BGP neighbor count와 검토 필요 count를 바로 본다.
 - Section card 클릭 시 기존 object type filter로 상세 목록이 좁혀진다.
-- Export 버튼은 Excel에서 열 수 있는 CSV를 저장한다.
+- Export 버튼은 실제 `.xlsx` multi-sheet workbook을 저장한다.
 - CSV 컬럼은 section / old object / new object / status / field / old value / new value / reason / severity / action needed다.
 
 ## 아직 구현하지 않은 것
@@ -166,6 +167,10 @@ field: interface
 - context mismatch 자동 매칭 차단 완료
 - 실제 fixture 확인 완료: `New_interface_1..4` address interface raw/parsed count 일치
 - `New_interface_1.txt`의 `To-MNC#2-1` / `To-MNC#2-2` duplicate address 병합 문제 수정
+- target address/prefix 증거가 없는 interface old-only는 matcherIssue가 아니라 realMissingTarget으로 분류
+- `missing-target-address-with-description-evidence` 20건은 10G -> 100G 변경으로 사라지는 `to-mnt#*` 회선이다. target 신규 interface에 IP address가 없으므로 description 근거만으로 매치하지 않는다.
+- IP가 없는 interface는 같은 target name이 있을 때만 matcherIssue 후보로 유지
+- Classic config의 같은 interface name 주소 없는 stub은 주소 있는 interface object로 병합
 
 ### 2. Static-route 안정화
 
@@ -182,6 +187,25 @@ field: interface
 - Classic direct static-route context 보존 완료
 - MD-CLI block/one-line static-route context 보존 완료
 - context mismatch 자동 매칭 차단 완료
+- prefix가 같은 static-route의 next-hop 변경/증감은 `candidate`로 유지하되 low-confidence로 중복 집계하지 않도록 matcher score를 조정 완료
+- target에 같은 prefix가 없는 static-route old-only는 matcherIssue가 아니라 realMissingTarget으로 분류하도록 fixture scope 진단 정리 완료
+
+### 2-1. Port/LAG fixture 진단
+
+진행:
+
+- target에 같은 physical id, member overlap, description endpoint 증거가 없는 port/lag old-only는 matcherIssue가 아니라 realMissingTarget으로 분류
+- LAG/port description endpoint matcher는 compact old 표기와 split target 표기, `to-` 방향 접두어, 괄호 안 물리 포트, 포트 없는 underscore 장비 토큰을 같은 endpoint 증거로 본다.
+- Classic `port-list` TCP/UDP 항목인 DHCP `port 67/68`은 physical port 객체로 파싱하지 않는다.
+- 새 PC fixture case 1/2 port/lag unmatchedMatcherIssue: 0
+
+### 2-2. Policy placeholder fixture 진단
+
+진행:
+
+- target에 같은 route-policy/prefix-list/community identity가 없으면 parserGap가 아니라 realMissingTarget으로 분류
+- Classic policy community placeholder는 `community ... members/expression` 정의만 포함한다. SNMP community, notify-community, `community add` action은 정의 객체로 만들지 않는다.
+- 새 PC fixture case 1/2 full parserGap: 0
 
 ### 3. BGP neighbor 안정화
 
@@ -216,11 +240,13 @@ field: interface
 진행:
 
 - Classic `pim` block interface 파싱 완료
+- Classic PIM block misindented child `exit` 복구 완료
 - MD-CLI one-line `router ... pim interface` 파싱 완료
+- Target에 generic interface만 있고 PIM 설정이 없는 old PIM은 매치하지 않고 `missing-target-pim-config-with-interface-evidence`로 분리
 - 실제 fixture raw/parsed count 일치:
   - Classic: 15, 55, 49, 48
   - `New_PIM_1..4`: 50, 50, 44, 44
-- 실제 fixture PIM matched count: 47, 14, 42, 39
+- 새 PC fixture PIM matched count: case 1/2 = 47/47
 
 ### 4-1. 실제 fixture matrix 검증
 
@@ -231,6 +257,13 @@ field: interface
 - case mapping: 027 -> New_*_1, 028 -> New_*_2, 029 -> New_*_3, 030 -> New_*_4
 - scope 지원: full, bgp, static, interface, lag, port, pim
 - path override: `NCW_FIXTURE_DIR`, `--fixture-dir`
+- target 파일 exact 이름이 없고 단일 suffix 후보만 있으면 해당 파일을 사용한다.
+  - 예: `New_static_1_순서수정.txt`, `New_PIM_1_확인완료.txt`
+- validator JSON에 `fixtureScope.byType` / `fixtureScope.byReason` breakdown을 포함한다.
+  - partialTargetScope / matcherIssue / parserGap / realMissingTarget
+- 현재 PC fixture 경로:
+  - `C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config`
+  - case 1/2만 full 검증 가능. case 3/4 target part 파일은 없음.
 
 ### 5. 상태 라벨 정리
 
@@ -286,11 +319,12 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
 
 현재 출력:
 
-- UTF-8 BOM CSV
-- Excel에서 바로 열 수 있는 형식
+- 실제 `.xlsx` multi-sheet workbook
+- sheet 구성: All / Interface / Static Route / BGP / Port LAG / Service / Other
+- CSV builder는 호환용으로 유지
 - ignored / structure-converted / inheritance-unresolved row는 active export에서 제외
 - `Excel 저장` visible text button
-- Export click path contract test 완료
+- Export click path XLSX contract test 완료
 - Section card -> object list filter contract test 완료
 - Actual fixture check:
   - Source: `Gangbu-SEA027H_config.txt`
@@ -323,10 +357,49 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
 
 - branch: `work/mvp-interface-stabilization`
 - `npm.cmd run guard:legacy-core`: pass
-- `npm.cmd test`: pass, 167 pass / 1 skip
+- `npm.cmd test`: pass, 194 pass / 1 skip
 - `npm.cmd run build`: pass
 - `node scripts/validateCompareFixtures.js --all-cases --scope full --iterations 1`: pass
 - `node scripts/validateCompareFixtures.js --all-cases --scope pim --iterations 1`: pass
+- `node scripts/validateCompareFixtures.js --case 1 --scope full --iterations 1 --fixture-dir "C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config"`: pass
+- `node scripts/validateCompareFixtures.js --case 2 --scope full --iterations 1 --fixture-dir "C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config"`: pass
+- 새 PC fixture case 1/2 full/static lowConfidence: 0
+- 새 PC fixture case 1/2 static unmatchedMatcherIssue: 0
+- 새 PC fixture case 1/2 port/lag unmatchedMatcherIssue: 0
+- 새 PC fixture case 1/2 interface unmatchedMatcherIssue: 0
+- 새 PC fixture case 1/2 full unmatchedMatcherIssue: 0
+- 새 PC fixture case 1/2 full parserGap: 0
+- Added full MD-CLI log check from `C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config`:
+  - case 1 `MDconfig.log`: matched 357, oldOnly 118, newOnly 569, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 118, lowConfidence 0
+  - case 1 `MDfullcontext.log`: matched 350, oldOnly 120, newOnly 376, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 120, lowConfidence 0
+  - case 2 `MDconfig.log`: matched 355, oldOnly 125, newOnly 575, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 125, lowConfidence 0
+  - case 2 `MDfullcontext.log`: matched 348, oldOnly 127, newOnly 382, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 127, lowConfidence 0
+- Full MD-CLI log GRE source conversion:
+  - case 1: `gre-source` `220.116.146.97/30` / `tunnel-1.public:1` -> `gre-source-1` `112.188.18.2/30` / `pxc-1.b:1`
+  - case 2: `gre-source` `220.116.146.101/30` / `tunnel-1.public:1` -> `gre-source-1` `112.188.18.66/30` / `pxc-1.b:1`
+  - Nokia-only `nokia-gre-source-primary-conversion`으로 자동 매치한다. `gre-source-2`는 신규 이중화 회선으로 남긴다.
+- 새 PC fixture full realMissingTarget by type:
+  - case 1: port 66, interface 38, static-route 10, pim 8, route-policy 8, prefix-list 7, community 5, lag 4, bgp 1
+  - case 2: port 70, interface 38, static-route 9, pim 8, route-policy 8, prefix-list 7, community 6, lag 6, bgp 1
+- 새 PC fixture static-route realMissingTarget by reason:
+  - case 1: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 3, missing-target-multi-next-hop-route 2
+  - case 2: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 2, missing-target-multi-next-hop-route 2
+- 새 PC fixture policy placeholder realMissingTarget by reason:
+  - case 1: community expression 1, community members 4, ip-prefix-list 5, prefix-list 2, route-policy deny/drop 2, route-policy iCOD 2, route-policy peer 4
+  - case 2: community expression 1, community members 5, ip-prefix-list 5, prefix-list 2, route-policy deny/drop 2, route-policy iCOD 2, route-policy peer 4
+- 새 PC fixture BGP realMissingTarget by reason:
+  - case 1: missing-target-bgp-ser-peer 1
+  - case 2: missing-target-bgp-ser-peer 1
+- 새 PC fixture port/lag realMissingTarget by reason:
+  - case 1: lag missing-target-lag-members-with-description 4; port missing-target-disabled-port 65, missing-target-active-port-with-description 1
+  - case 2: lag missing-target-lag-members-with-description 6; port missing-target-disabled-port 67, missing-target-active-port-with-description 3
+- 새 PC fixture interface realMissingTarget by reason:
+  - case 1: missing-target-address-with-description-evidence 20, missing-target-gre-address 16, missing-target-system-loopback-address 2
+  - case 2: missing-target-address-with-description-evidence 20, missing-target-gre-address 16, missing-target-system-loopback-address 2
+  - description-evidence 20건은 10G -> 100G 전환으로 사라지는 회선. target interface IP가 없으면 매치 금지.
+- 새 PC fixture PIM realMissingTarget by reason:
+  - case 1: missing-target-pim-config-with-interface-evidence 4, missing-target-type 4
+  - case 2: missing-target-pim-config-with-interface-evidence 4, missing-target-type 4
 
 ## 집에서 이어받는 명령
 

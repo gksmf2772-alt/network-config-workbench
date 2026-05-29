@@ -271,10 +271,26 @@ function buildFixtureScopeAnalysis(plan = [], fixtureScope = null) {
     const isParserGap = ["qos-policy", "filter", "route-policy", "prefix-list", "community"].includes(type);
 
     if (isParserGap) {
+      if (!hasPolicyPlaceholderTargetIdentity(item.oldObject, newObjects)) {
+        realMissingUnmatched.push(item);
+        continue;
+      }
       parserGapUnmatched.push(item);
     } else if (partialTarget && (!targetCount || sourceCount > targetCount)) {
       partialTargetUnmatched.push(item);
     } else if (targetCount && ["port", "lag", "interface", "sap", "subscriber-interface", "group-interface", "static-route"].includes(type)) {
+      if (type === "static-route" && !hasStaticRouteTargetPrefix(item.oldObject, newObjects)) {
+        realMissingUnmatched.push(item);
+        continue;
+      }
+      if (type === "interface" && !hasInterfaceTargetEvidence(item.oldObject, newObjects)) {
+        realMissingUnmatched.push(item);
+        continue;
+      }
+      if (["port", "lag"].includes(type) && !hasPortLagTargetEvidence(type, item.oldObject, newObjects)) {
+        realMissingUnmatched.push(item);
+        continue;
+      }
       matcherIssueUnmatched.push(item);
     } else {
       realMissingUnmatched.push(item);
@@ -309,7 +325,443 @@ function buildFixtureScopeAnalysis(plan = [], fixtureScope = null) {
     unmatchedDueLikelyMatcherIssue: matcherIssueUnmatched.length,
     unmatchedDueParserGap: parserGapUnmatched.length,
     unmatchedDueRealMissingTarget: realMissingUnmatched.length,
+    byType: {
+      partialTargetScope: fixtureUnmatchedTypeBreakdown(partialTargetUnmatched),
+      matcherIssue: fixtureUnmatchedTypeBreakdown(matcherIssueUnmatched),
+      parserGap: fixtureUnmatchedTypeBreakdown(parserGapUnmatched),
+      realMissingTarget: fixtureUnmatchedTypeBreakdown(realMissingUnmatched),
+    },
+    byReason: {
+      realMissingTarget: fixtureUnmatchedReasonBreakdown(realMissingUnmatched, newObjects),
+    },
   };
+}
+
+function fixtureUnmatchedTypeBreakdown(items = []) {
+  return [...countMap(items, (item) => item.objectType || getObjectType(item.oldObject || item.newObject)).entries()]
+    .map(([objectType, count]) => ({ objectType, count }))
+    .sort((left, right) => right.count - left.count || left.objectType.localeCompare(right.objectType));
+}
+
+function fixtureUnmatchedReasonBreakdown(items = [], newObjects = []) {
+  const counts = new Map();
+
+  for (const item of items) {
+    const objectType = item.objectType || getObjectType(item.oldObject || item.newObject);
+    const reason = fixtureRealMissingReason(item, newObjects);
+    const key = `${objectType}\u0000${reason}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([key, count]) => {
+      const [objectType, reason] = key.split("\u0000");
+      return { objectType, reason, count };
+    })
+    .sort((left, right) =>
+      left.objectType.localeCompare(right.objectType) ||
+      left.reason.localeCompare(right.reason)
+    );
+}
+
+function fixtureRealMissingReason(item = {}, newObjects = []) {
+  const type = item.objectType || getObjectType(item.oldObject || item.newObject);
+  const oldObject = item.oldObject || {};
+
+  if (type === "static-route") return fixtureStaticRouteRealMissingReason(oldObject);
+
+  if (type === "interface") {
+    if (interfaceAddress(oldObject)) {
+      if (isSystemLoopbackInterface(oldObject)) return "missing-target-system-loopback-address";
+      if (isGreInterface(oldObject)) return "missing-target-gre-address";
+      return hasInterfaceDescriptionTargetEvidence(oldObject, newObjects)
+        ? "missing-target-address-with-description-evidence"
+        : "missing-target-address";
+    }
+    if (interfaceName(oldObject)) return "missing-target-name";
+    return "missing-target-identity";
+  }
+
+  if (["port", "lag"].includes(type)) return fixturePortLagRealMissingReason(type, oldObject);
+
+  if (type === "pim" && hasPimInterfaceTargetEvidence(oldObject, newObjects)) {
+    return "missing-target-pim-config-with-interface-evidence";
+  }
+
+  if (["qos-policy", "filter", "route-policy", "prefix-list", "community"].includes(type)) {
+    return fixturePolicyPlaceholderRealMissingReason(type, oldObject);
+  }
+
+  if (type === "bgp") return fixtureBgpRealMissingReason(oldObject, newObjects);
+
+  return "missing-target-type";
+}
+
+function fixtureBgpRealMissingReason(oldObject = {}, newObjects = []) {
+  const group = bgpGroupName(oldObject);
+  const peer = bgpPeerAddress(oldObject);
+  const hasTargetGroup = group && newObjects.some((object) =>
+    getObjectType(object) === "bgp" &&
+    bgpGroupName(object) === group
+  );
+
+  if (group === "ser-peer") return "missing-target-bgp-ser-peer";
+  if (group && !hasTargetGroup) return "missing-target-bgp-group";
+  if (peer) return "missing-target-bgp-peer";
+  return "missing-target-bgp-identity";
+}
+
+function bgpGroupName(object = {}) {
+  const fields = object?.fields || {};
+  return normalizeFieldValue(fields.group || object.group || "");
+}
+
+function bgpPeerAddress(object = {}) {
+  const fields = object?.fields || {};
+  return normalizeFieldValue(
+    fields.neighbor ||
+    fields.peerIp ||
+    object.peerIp ||
+    object.normalizedIdentity ||
+    object.sourceName ||
+    ""
+  );
+}
+
+function fixturePolicyPlaceholderRealMissingReason(type = "", oldObject = {}) {
+  const identity = policyPlaceholderIdentity(oldObject);
+  const rawText = objectRawText(oldObject);
+
+  if (type === "route-policy") {
+    if (/icod/i.test(identity)) return "missing-target-route-policy-icod";
+    if (/peer/i.test(identity)) return "missing-target-route-policy-peer";
+    if (/(deny|drop)/i.test(identity)) return "missing-target-route-policy-deny-drop";
+    return "missing-target-route-policy-identity";
+  }
+
+  if (type === "prefix-list") {
+    if (/^\s*ip-prefix-list\b/im.test(rawText)) return "missing-target-ip-prefix-list-definition";
+    if (/^\s*prefix-list\b/im.test(rawText)) return "missing-target-prefix-list-definition";
+    return "missing-target-prefix-list-identity";
+  }
+
+  if (type === "community") {
+    if (/\bexpression\b/i.test(rawText)) return "missing-target-community-expression-definition";
+    if (/\bmembers\b/i.test(rawText)) return "missing-target-community-members-definition";
+    return "missing-target-community-identity";
+  }
+
+  return "missing-target-identity";
+}
+
+function objectRawText(object = {}) {
+  return Array.isArray(object.rawLines) ? object.rawLines.join("\n") : "";
+}
+
+function fixtureStaticRouteRealMissingReason(oldObject = {}) {
+  const fields = oldObject?.fields || {};
+  const prefix = staticRoutePrefix(oldObject);
+  const nextHopType = normalizeFieldValue(fields["next-hop-type"] || "");
+  const tunnelNextHop = normalizeFieldValue(fields["tunnel-next-hop"] || "");
+  const nextHop = String(fields["next-hop"] || oldObject.nextHop || "");
+  const description = String(fields.description || oldObject.description || "");
+
+  if (prefix === "0.0.0.0/0" || prefix === "::/0") return "missing-target-default-route";
+  if (nextHopType === "indirect" || tunnelNextHop === "true") return "missing-target-indirect-tunnel-route";
+  if (description.toLowerCase().includes("loopback")) return "missing-target-loopback-host-route";
+  if (nextHop.split(/\s*,\s*/).filter(Boolean).length > 1) return "missing-target-multi-next-hop-route";
+  return "missing-target-prefix";
+}
+
+function isSystemLoopbackInterface(object = {}) {
+  const name = interfaceName(object);
+  return name === "system" || /^lo\d*$/i.test(name);
+}
+
+function isGreInterface(object = {}) {
+  return /^gre(?:-|$)/i.test(interfaceName(object));
+}
+
+function fixturePortLagRealMissingReason(type = "", oldObject = {}) {
+  const physicalId = portLagPhysicalId(type, oldObject);
+  const hasDescription = Boolean(String(portLagDescription(oldObject) || "").trim());
+
+  if (type === "lag") {
+    const hasMembers = portLagMembers(oldObject).length > 0;
+    if (hasMembers && hasDescription) return "missing-target-lag-members-with-description";
+    if (hasMembers) return "missing-target-lag-members";
+    if (hasDescription) return "missing-target-lag-id-with-description";
+    if (physicalId) return "missing-target-lag-id";
+    return "missing-target-lag-evidence";
+  }
+
+  if (isDisabledPortLag(oldObject)) {
+    return hasDescription
+      ? "missing-target-disabled-port-with-description"
+      : "missing-target-disabled-port";
+  }
+  if (hasDescription && isEnabledPortLag(oldObject)) return "missing-target-active-port-with-description";
+  if (hasDescription) return "missing-target-port-id-with-description";
+  if (physicalId) return "missing-target-port-id";
+  return "missing-target-port-evidence";
+}
+
+function isDisabledPortLag(object = {}) {
+  const fields = object?.fields || {};
+  const adminState = normalizeFieldValue(fields["admin-state"] || fields.state || object.adminState || object.state || "");
+  if (["disabled", "disable", "shutdown"].includes(adminState)) return true;
+
+  return objectRawText(object)
+    .split(/\r?\n/)
+    .some((line) => /^\s*shutdown\s*$/i.test(line));
+}
+
+function isEnabledPortLag(object = {}) {
+  const fields = object?.fields || {};
+  const adminState = normalizeFieldValue(fields["admin-state"] || fields.state || object.adminState || object.state || "");
+  if (["enabled", "enable", "no shutdown"].includes(adminState)) return true;
+
+  return objectRawText(object)
+    .split(/\r?\n/)
+    .some((line) => /^\s*no\s+shutdown\s*$/i.test(line));
+}
+
+function hasStaticRouteTargetPrefix(oldObject = {}, newObjects = []) {
+  const oldPrefix = staticRoutePrefix(oldObject);
+  if (!oldPrefix) return false;
+
+  return newObjects.some((object) =>
+    getObjectType(object) === "static-route" &&
+    staticRoutePrefix(object) === oldPrefix
+  );
+}
+
+function staticRoutePrefix(object = {}) {
+  const fields = object?.fields || {};
+  const identityPrefix = String(object?.normalizedIdentity || "").split("|")[0];
+  return normalizeFieldValue(
+    fields.route ||
+    fields.prefix ||
+    object.route ||
+    object.prefix ||
+    identityPrefix
+  );
+}
+
+function hasPolicyPlaceholderTargetIdentity(oldObject = {}, newObjects = []) {
+  const oldType = getObjectType(oldObject);
+  const oldIdentity = policyPlaceholderIdentity(oldObject);
+  if (!oldType || !oldIdentity) return false;
+
+  return newObjects.some((object) =>
+    getObjectType(object) === oldType &&
+    policyPlaceholderIdentity(object) === oldIdentity
+  );
+}
+
+function policyPlaceholderIdentity(object = {}) {
+  const fields = object?.fields || {};
+  return normalizeFieldValue(
+    fields.name ||
+    fields.policy ||
+    fields["policy-statement"] ||
+    fields["prefix-list"] ||
+    fields.community ||
+    object.normalizedIdentity ||
+    object.sourceName ||
+    object.name ||
+    ""
+  );
+}
+
+function hasInterfaceTargetEvidence(oldObject = {}, newObjects = []) {
+  const oldAddress = interfaceAddress(oldObject);
+  const oldName = interfaceName(oldObject);
+
+  return newObjects.some((object) => {
+    if (getObjectType(object) !== "interface") return false;
+    if (oldAddress) return interfaceAddress(object) === oldAddress;
+    return Boolean(oldName && interfaceName(object) === oldName);
+  });
+}
+
+function hasInterfaceDescriptionTargetEvidence(oldObject = {}, newObjects = []) {
+  const oldEndpoints = portLagDescriptionEndpointCandidates(interfaceDescription(oldObject));
+  if (!oldEndpoints.length) return false;
+
+  const targetEndpoints = new Set(
+    newObjects.flatMap((object) =>
+      portLagDescriptionEndpointCandidates(interfaceDescription(object))
+    )
+  );
+
+  return oldEndpoints.some((endpoint) => targetEndpoints.has(endpoint));
+}
+
+function interfaceAddress(object = {}) {
+  const fields = object?.fields || {};
+  const prefixLength = normalizeFieldValue(fields["prefix-length"] || object.prefixLength || "");
+  const address = normalizeFieldValue(
+    fields.prefix ||
+    object.prefix ||
+    fields.address ||
+    object.ipAddress ||
+    ""
+  );
+
+  if (address && prefixLength && !address.includes("/")) return `${address}/${prefixLength}`;
+  return address;
+}
+
+function interfaceName(object = {}) {
+  const fields = object?.fields || {};
+  return normalizeFieldValue(
+    fields.interface ||
+    fields.name ||
+    object.name ||
+    object.sourceName ||
+    object.normalizedIdentity ||
+    ""
+  );
+}
+
+function interfaceDescription(object = {}) {
+  const fields = object?.fields || {};
+  return fields.description || object.description || "";
+}
+
+function hasPimInterfaceTargetEvidence(oldObject = {}, newObjects = []) {
+  const oldInterface = pimInterfaceName(oldObject);
+  if (!oldInterface) return false;
+
+  return newObjects.some((object) =>
+    getObjectType(object) === "interface" &&
+    interfaceName(object) === oldInterface
+  );
+}
+
+function pimInterfaceName(object = {}) {
+  const fields = object?.fields || {};
+  return normalizeFieldValue(
+    fields.interface ||
+    object.normalizedIdentity ||
+    object.sourceName ||
+    object.name ||
+    ""
+  );
+}
+
+function hasPortLagTargetEvidence(type = "", oldObject = {}, newObjects = []) {
+  return newObjects.some((object) =>
+    getObjectType(object) === type &&
+    hasPortLagEvidence(type, oldObject, object)
+  );
+}
+
+function hasPortLagEvidence(type = "", oldObject = {}, newObject = {}) {
+  const oldPhysicalId = portLagPhysicalId(type, oldObject);
+  const newPhysicalId = portLagPhysicalId(type, newObject);
+  if (oldPhysicalId && newPhysicalId && oldPhysicalId === newPhysicalId) return true;
+
+  if (type === "lag" && hasPortLagMemberOverlap(oldObject, newObject)) return true;
+
+  const oldDescription = portLagDescription(oldObject);
+  const newDescription = portLagDescription(newObject);
+  return Boolean(
+    oldDescription &&
+    newDescription &&
+    (
+      normalizeFieldValue(oldDescription) === normalizeFieldValue(newDescription) ||
+      sharedPortLagDescriptionEndpoint(oldDescription, newDescription)
+    )
+  );
+}
+
+function portLagPhysicalId(type = "", object = {}) {
+  const fields = object?.fields || {};
+  return normalizeFieldValue(
+    fields["physical-port"] ||
+    fields.physicalPort ||
+    fields["hardware-port"] ||
+    fields["port-id"] ||
+    fields[type] ||
+    fields.port ||
+    fields.lag ||
+    object.normalizedIdentity ||
+    object.sourceName ||
+    ""
+  );
+}
+
+function portLagDescription(object = {}) {
+  const fields = object?.fields || {};
+  return fields.description || object.description || "";
+}
+
+function hasPortLagMemberOverlap(oldObject = {}, newObject = {}) {
+  const oldMembers = portLagMembers(oldObject);
+  const newMemberSet = new Set(portLagMembers(newObject));
+  return oldMembers.some((member) => newMemberSet.has(member));
+}
+
+function portLagMembers(object = {}) {
+  const fields = object?.fields || {};
+  return [
+    ...normalizePortLagList(fields.members),
+    ...normalizePortLagList(fields["member-port"]),
+    ...normalizePortLagList(fields["port-member"]),
+  ];
+}
+
+function normalizePortLagList(value) {
+  if (Array.isArray(value)) return value.flatMap(normalizePortLagList);
+  return String(value || "")
+    .split(/[,\s]+/)
+    .map(normalizeFieldValue)
+    .filter(Boolean);
+}
+
+function sharedPortLagDescriptionEndpoint(oldDescription = "", newDescription = "") {
+  const oldEndpoints = portLagDescriptionEndpointCandidates(oldDescription);
+  const newEndpointSet = new Set(portLagDescriptionEndpointCandidates(newDescription));
+  return oldEndpoints.some((endpoint) => newEndpointSet.has(endpoint));
+}
+
+function portLagDescriptionEndpointCandidates(description = "") {
+  const cleanDescription = String(description || "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^#+|#+$/g, "");
+
+  return [...new Set(cleanDescription
+    .split(/[,;]+/)
+    .flatMap((segment) => {
+      const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
+      return [cleanSegment, ...cleanSegment.split(/\s+/)];
+    })
+    .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
+    .filter(isLikelyPortLagDescriptionEndpoint)
+    .map(normalizePortLagDescriptionEndpoint))];
+}
+
+function isLikelyPortLagDescriptionEndpoint(segment = "") {
+  const normalized = normalizePortLagDescriptionEndpoint(segment);
+  if (!normalized) return false;
+  if (!/[a-z]/i.test(normalized) || !/\d/.test(normalized)) return false;
+  if (!normalized.includes("-")) return false;
+  if (/^(to|from|via)$/i.test(normalized)) return false;
+  if (/^(lag|port|po|te|gi|ge|xe|et|eth|ethernet|ae)[-_/]?\w*/i.test(normalized)) return false;
+  if (/^(stby|sby|standby|active|fiber)$/i.test(normalized)) return false;
+  return true;
+}
+
+function normalizePortLagDescriptionEndpoint(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase()
+    .replace(/\bganbuk\b/g, "gangbuk");
 }
 
 export function buildSectionSummary(plan = [], fieldAnalysis = {}) {

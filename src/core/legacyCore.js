@@ -110,8 +110,8 @@ import {
   renderSectionSummaryCards,
 } from "./summaryRenderer.js";
 import {
-  buildExcelReportCsv,
-  buildExcelReportFilename,
+  buildExcelReportXlsx,
+  buildExcelReportXlsxFilename,
   buildExcelReportRows,
 } from "./reportExport.js";
 import { syncPairedPaneScroll } from "./diffScrollSync.js";
@@ -16996,8 +16996,12 @@ function exportReport() {
     plan: state.lastSemanticPlan || [],
     auditFindings: dashboard.audit?.findings || state.lastStandardsAudit?.findings || [],
   });
-  const csv = buildExcelReportCsv(rows);
-  saveTextFile(buildExcelReportFilename({ comparedAt }), csv, "text/csv;charset=utf-8");
+  const workbook = buildExcelReportXlsx(rows);
+  saveTextFile(
+    buildExcelReportXlsxFilename({ comparedAt }),
+    workbook,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
   selectors.compareStatus.textContent = `Excel 리포트 ${rows.length}행 저장`;
 }
 

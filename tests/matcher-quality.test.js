@@ -148,6 +148,129 @@ test("LAG migrated name and member port maps by description endpoint", () => {
   assert.ok(match.scoreReasons.includes("description-endpoint-match"));
 });
 
+test("LAG compact old endpoint maps to split target endpoint", () => {
+  const oldDescription = "## IVC,PGangbu-IVC020_Te2/3_Po111,02020001-5029,LAG21 ##";
+  const newDescription = "## IV, PGangbu-IVC020, Te2/3, 02020001-5029, 10G, Fiber ##";
+  const match = firstMatch(
+    [
+      object("lag", "21", {
+        lag: "21",
+        description: oldDescription,
+        members: ["2/2/3"],
+      }),
+    ],
+    [
+      object("lag", "lag-I-2114", {
+        lag: "lag-I-2114",
+        description: newDescription,
+        members: ["2/1/c14/1"],
+      }),
+    ]
+  );
+
+  assert.equal(match.status, "matched");
+  assert.ok(match.score >= 85);
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+});
+
+test("LAG endpoint match ignores directional description prefix", () => {
+  const oldDescription = "##TO, lag-51(5/1/1), to-Nowon-TOU-FN19, Po10(Te6/1), ACT, 02020002-3654 ##";
+  const newDescription = "## TO, lag-A-2101(2/1/c1/1), Nowon-TOU-FN19, Po10(Te6/1), ACT, 02020002-6431, Fiber ##";
+  const match = firstMatch(
+    [
+      object("lag", "51", {
+        lag: "51",
+        description: oldDescription,
+        members: ["5/1/1"],
+      }),
+    ],
+    [
+      object("lag", "lag-A-2101", {
+        lag: "lag-A-2101",
+        description: newDescription,
+        members: ["2/1/c1/1"],
+      }),
+    ]
+  );
+
+  assert.equal(match.status, "matched");
+  assert.ok(match.score >= 85);
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+});
+
+test("LAG endpoint matches underscore numeric port to parenthesized target port", () => {
+  const oldDescription = "## OLT,10G(A),Dobong-TOU-FB06_6/1,02028880-0001,OFD#6-54 ##";
+  const newDescription = "## TO, lag-A-6108(6/1/c8/1), Dobong-TOU-FB06, Po10(Te6/1), ACT, Direct, Fiber ##";
+  const match = firstMatch(
+    [
+      object("lag", "11", {
+        lag: "11",
+        description: oldDescription,
+        members: ["10/1/1"],
+      }),
+    ],
+    [
+      object("lag", "lag-A-6108", {
+        lag: "lag-A-6108",
+        description: newDescription,
+        members: ["6/1/c8/1"],
+      }),
+    ]
+  );
+
+  assert.equal(match.status, "matched");
+  assert.ok(match.score >= 85);
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+});
+
+test("port endpoint match normalizes known Ganbuk spelling typo", () => {
+  const oldDescription = "## OLT,10B,Ganbuk-TOU-FK53_7/1_OFD#6-74 ##";
+  const newDescription = "## TO, lag-B-6205(6/2/c5/1), Gangbuk-TOU-FK53, Po11(Te7/1), SBY, 02020002-6481, Fiber ##";
+  const match = firstMatch(
+    [
+      object("port", "9/2/1", {
+        port: "9/2/1",
+        description: oldDescription,
+      }),
+    ],
+    [
+      object("port", "6/2/c5/1", {
+        port: "6/2/c5/1",
+        description: newDescription,
+      }),
+    ]
+  );
+
+  assert.equal(match.status, "matched");
+  assert.ok(match.score >= 85);
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+});
+
+test("LAG endpoint falls back to underscore device token when no port token exists", () => {
+  const oldDescription = "## OLT,10B,Nowon-TOU-FN05_8884-4390_#2-7 ##";
+  const newDescription = "## TO, lag-B-2205(2/2/c5/1), Nowon-TOU-FN05, Po11(Te7/1), SBY, 02020002-6436, Fiber ##";
+  const match = firstMatch(
+    [
+      object("lag", "171", {
+        lag: "171",
+        description: oldDescription,
+        members: ["7/2/1"],
+      }),
+    ],
+    [
+      object("lag", "lag-B-2205", {
+        lag: "lag-B-2205",
+        description: newDescription,
+        members: ["2/2/c5/1"],
+      }),
+    ]
+  );
+
+  assert.equal(match.status, "matched");
+  assert.ok(match.score >= 85);
+  assert.ok(match.scoreReasons.includes("description-endpoint-match"));
+});
+
 test("object alias policy forces known mapping", () => {
   const match = firstMatch(
     [object("port", "1/1/1", { port: "1/1/1" })],
@@ -162,6 +285,65 @@ test("object alias policy forces known mapping", () => {
   assert.equal(match.status, "matched");
   assert.equal(match.reason, "fixture-known-port-rename");
   assert.ok(match.scoreReasons.includes("object-alias-policy"));
+});
+
+test("description-only interface candidate keeps diagnostic score reason", () => {
+  const match = firstMatch(
+    [
+      object("interface", "220.116.146.97/30", {
+        interface: "gre-source",
+        address: "220.116.146.97/30",
+        description: "## gre source address ###",
+      }),
+    ],
+    [
+      object("interface", "112.188.18.2/30", {
+        interface: "gre-source-1",
+        address: "112.188.18.2/30",
+        description: "### gre source address-1 ###",
+      }),
+    ],
+  );
+
+  assert.equal(match.status, "candidate");
+  assert.ok(match.score > 0 && match.score < 80);
+  assert.ok(match.scoreReasons.includes("description-similarity"));
+});
+
+test("Nokia GRE source primary redundancy conversion auto-matches gre-source-1", () => {
+  const oldObject = {
+    ...object("interface", "220.116.146.97/30", {
+      interface: "gre-source",
+      address: "220.116.146.97/30",
+      description: "## gre source address ###",
+      sap: "tunnel-1.public:1",
+    }),
+    vendor: "nokia-classic",
+  };
+  const primaryObject = {
+    ...object("interface", "112.188.18.2/30", {
+      interface: "gre-source-1",
+      address: "112.188.18.2/30",
+      description: "### gre source address-1 ###",
+      sap: "pxc-1.b:1",
+    }),
+    vendor: "nokia-md-cli",
+  };
+  const secondaryObject = {
+    ...object("interface", "112.188.18.6/30", {
+      interface: "gre-source-2",
+      address: "112.188.18.6/30",
+      description: "### gre source address-2 ###",
+      sap: "pxc-2.b:1",
+    }),
+    vendor: "nokia-md-cli",
+  };
+  const match = firstMatch([oldObject], [secondaryObject, primaryObject]);
+
+  assert.equal(match.status, "matched");
+  assert.equal(match.newObject.fields.interface, "gre-source-1");
+  assert.ok(match.score >= 80);
+  assert.ok(match.scoreReasons.includes("nokia-gre-source-primary-conversion"));
 });
 
 test("SAP under same service maps strongly with parent evidence", () => {
@@ -253,7 +435,7 @@ test("static route next-hop changed without policy remains manual-review candida
   );
 
   assert.equal(match.status, "candidate");
-  assert.equal(match.score, 60);
+  assert.equal(match.score, 80);
   assert.ok(match.scoreReasons.includes("static-route-next-hop-mismatch"));
 });
 

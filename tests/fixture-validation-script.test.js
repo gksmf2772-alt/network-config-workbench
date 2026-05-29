@@ -74,3 +74,37 @@ test("fixture case matrix resolves all cases and target scopes", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("fixture case matrix accepts single suffixed target file variants", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ncw-fixture-suffix-cases-"));
+
+  try {
+    const fixtureDir = path.join(root, "테스트 config");
+    fs.mkdirSync(fixtureDir, { recursive: true });
+    fs.writeFileSync(path.join(fixtureDir, CASE_MATRIX[0].oldFile), "old\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "New_bgp_1.txt"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "New_static_1_sorted.txt"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "New_interface_1.txt"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "New_lag_1.txt"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "New_port_1.txt"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "New_PIM_1_checked.txt"), "new\n", "utf8");
+
+    const cases = resolveFixtureCases({
+      fixtureDir,
+      scope: "full",
+      caseId: "1",
+    });
+
+    assert.deepEqual(cases[0].newFiles, [
+      "New_bgp_1.txt",
+      "New_static_1_sorted.txt",
+      "New_interface_1.txt",
+      "New_lag_1.txt",
+      "New_port_1.txt",
+      "New_PIM_1_checked.txt",
+    ]);
+    assert.deepEqual(cases[0].newPaths.map((item) => path.basename(item)), cases[0].newFiles);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

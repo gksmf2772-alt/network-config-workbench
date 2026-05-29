@@ -133,6 +133,748 @@ test("summary dashboard exposes MVP section counts", () => {
   assert.equal(byType.bgp.reviewNeeded, 1);
 });
 
+test("static route old-only without same target prefix is real missing not matcher issue", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "static-matched",
+        status: "matched",
+        objectType: "static-route",
+        oldObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "10.0.0.0/24",
+          fields: { route: "10.0.0.0/24" },
+        },
+        newObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "10.0.0.0/24",
+          fields: { route: "10.0.0.0/24" },
+        },
+      },
+      {
+        id: "static-missing",
+        status: "old-only",
+        objectType: "static-route",
+        oldObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "10.0.1.0/24",
+          fields: { route: "10.0.1.0/24" },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedMatcherIssue, 0);
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 1);
+});
+
+test("static route real missing details split default, tunnel, loopback and multi-hop routes", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "target-static-route",
+        status: "new-only",
+        objectType: "static-route",
+        newObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "10.0.0.0/24",
+          fields: { route: "10.0.0.0/24" },
+        },
+      },
+      {
+        id: "default-route",
+        status: "old-only",
+        objectType: "static-route",
+        oldObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "0.0.0.0/0",
+          fields: { route: "0.0.0.0/0", "next-hop-type": "indirect", "tunnel-next-hop": "true" },
+        },
+      },
+      {
+        id: "indirect-tunnel",
+        status: "old-only",
+        objectType: "static-route",
+        oldObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "125.144.253.0/24",
+          fields: { route: "125.144.253.0/24", "next-hop": "125.144.5.1", "next-hop-type": "indirect", "tunnel-next-hop": "true" },
+        },
+      },
+      {
+        id: "loopback-host",
+        status: "old-only",
+        objectType: "static-route",
+        oldObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "112.188.30.8/32",
+          fields: { route: "112.188.30.8/32", "next-hop": "112.188.27.14", description: "Gangbuk-XLC008_loopback" },
+        },
+      },
+      {
+        id: "multi-next-hop",
+        status: "old-only",
+        objectType: "static-route",
+        oldObject: {
+          normalizedType: "static-route",
+          normalizedIdentity: "125.144.5.1/32",
+          fields: { route: "125.144.5.1/32", "next-hop": "14.59.4.65, 14.59.4.69" },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 4);
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "static-route", reason: "missing-target-default-route", count: 1 },
+    { objectType: "static-route", reason: "missing-target-indirect-tunnel-route", count: 1 },
+    { objectType: "static-route", reason: "missing-target-loopback-host-route", count: 1 },
+    { objectType: "static-route", reason: "missing-target-multi-next-hop-route", count: 1 },
+  ]);
+});
+
+test("interface old-only without target evidence is real missing not matcher issue", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "interface-target-different-address",
+        status: "new-only",
+        objectType: "interface",
+        newObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "10.0.0.2/30",
+          fields: { interface: "to-target", prefix: "10.0.0.2/30" },
+        },
+      },
+      {
+        id: "interface-target-same-name",
+        status: "new-only",
+        objectType: "interface",
+        newObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "to-isis-core",
+          fields: { interface: "to-isis-core" },
+        },
+      },
+      {
+        id: "interface-missing-address",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "10.0.0.1/30",
+          fields: { interface: "to-source", prefix: "10.0.0.1/30" },
+        },
+      },
+      {
+        id: "interface-missing-name",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "to-isis-edge",
+          fields: { interface: "to-isis-edge" },
+        },
+      },
+      {
+        id: "interface-same-name",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "to-isis-core",
+          fields: { interface: "to-isis-core" },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedMatcherIssue, 1);
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 2);
+});
+
+test("interface real missing details show target description evidence separately", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "interface-target-description",
+        status: "new-only",
+        objectType: "interface",
+        newObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "10.0.0.2/30",
+          fields: {
+            interface: "to-target",
+            prefix: "10.0.0.2/30",
+            description: "## Dobong-MNC161H, hu0/4/0/43 ##",
+          },
+        },
+      },
+      {
+        id: "interface-missing-address-with-description",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "10.0.0.1/30",
+          fields: {
+            interface: "to-source",
+            prefix: "10.0.0.1/30",
+            description: "## MN,Dobong-MNC161H,Te0/8/0/0 ##",
+          },
+        },
+      },
+      {
+        id: "interface-missing-address",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "10.0.1.1/30",
+          fields: {
+            interface: "to-missing",
+            prefix: "10.0.1.1/30",
+          },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedMatcherIssue, 0);
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 2);
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "interface", reason: "missing-target-address", count: 1 },
+    { objectType: "interface", reason: "missing-target-address-with-description-evidence", count: 1 },
+  ]);
+});
+
+test("interface real missing details split GRE and system loopback addresses", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "target-interface",
+        status: "new-only",
+        objectType: "interface",
+        newObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "10.0.0.2/30",
+          fields: { interface: "to-target", prefix: "10.0.0.2/30" },
+        },
+      },
+      {
+        id: "loopback-missing",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "192.168.255.2/30",
+          fields: { interface: "lo255", prefix: "192.168.255.2/30" },
+        },
+      },
+      {
+        id: "system-missing",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "61.78.43.27/32",
+          fields: { interface: "system", prefix: "61.78.43.27/32" },
+        },
+      },
+      {
+        id: "gre-missing",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "220.116.146.50/30",
+          fields: { interface: "gre-to-service-1", prefix: "220.116.146.50/30" },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 3);
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "interface", reason: "missing-target-gre-address", count: 1 },
+    { objectType: "interface", reason: "missing-target-system-loopback-address", count: 2 },
+  ]);
+});
+
+test("port and lag old-only without target evidence are real missing not matcher issue", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "port-target-same-id",
+        status: "new-only",
+        objectType: "port",
+        newObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/1",
+          fields: { port: "1/1/1" },
+        },
+      },
+      {
+        id: "lag-target-partial-member",
+        status: "new-only",
+        objectType: "lag",
+        newObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "lag-a",
+          fields: { lag: "lag-a", members: ["1/1/1", "1/1/3"] },
+        },
+      },
+      {
+        id: "port-missing",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/2",
+          fields: { port: "1/1/2" },
+        },
+      },
+      {
+        id: "port-same-id",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/1",
+          fields: { port: "1/1/1" },
+        },
+      },
+      {
+        id: "lag-missing",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "10",
+          fields: { lag: "10", members: ["2/1/1"] },
+        },
+      },
+      {
+        id: "lag-partial-member",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "11",
+          fields: { lag: "11", members: ["1/1/1", "1/1/2"] },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedMatcherIssue, 2);
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 2);
+});
+
+test("port and lag real missing details split id, description and member evidence", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "target-port",
+        status: "new-only",
+        objectType: "port",
+        newObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/1",
+          fields: { port: "1/1/1" },
+        },
+      },
+      {
+        id: "target-lag",
+        status: "new-only",
+        objectType: "lag",
+        newObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "lag-a",
+          fields: { lag: "lag-a", members: ["1/1/1"] },
+        },
+      },
+      {
+        id: "port-id-only",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/2",
+          fields: { port: "1/1/2" },
+        },
+      },
+      {
+        id: "port-with-description",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/3",
+          fields: {
+            port: "1/1/3",
+            description: "## OLT,10A,Source-OLT,Te1/1 ##",
+          },
+        },
+      },
+      {
+        id: "lag-member-only",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "10",
+          fields: { lag: "10", members: ["2/1/1"] },
+        },
+      },
+      {
+        id: "lag-member-description",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "11",
+          fields: {
+            lag: "11",
+            members: ["2/1/2"],
+            description: "## Uplink,Source-OLT,Te1/2 ##",
+          },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 4);
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "lag", reason: "missing-target-lag-members", count: 1 },
+    { objectType: "lag", reason: "missing-target-lag-members-with-description", count: 1 },
+    { objectType: "port", reason: "missing-target-port-id", count: 1 },
+    { objectType: "port", reason: "missing-target-port-id-with-description", count: 1 },
+  ]);
+});
+
+test("port real missing details split disabled and active described ports", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "target-port",
+        status: "new-only",
+        objectType: "port",
+        newObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/1",
+          fields: { port: "1/1/1" },
+        },
+      },
+      {
+        id: "disabled-port",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/2",
+          fields: { port: "1/1/2", "admin-state": "disabled" },
+        },
+      },
+      {
+        id: "disabled-described-port",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/3",
+          fields: {
+            port: "1/1/3",
+            "admin-state": "disabled",
+            description: "## disabled old link ##",
+          },
+        },
+      },
+      {
+        id: "active-described-port",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/4",
+          fields: {
+            port: "1/1/4",
+            "admin-state": "enabled",
+            description: "## active old link ##",
+          },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "port", reason: "missing-target-active-port-with-description", count: 1 },
+    { objectType: "port", reason: "missing-target-disabled-port", count: 1 },
+    { objectType: "port", reason: "missing-target-disabled-port-with-description", count: 1 },
+  ]);
+});
+
+test("policy placeholder old-only without target identity is real missing not parser gap", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "route-policy-target",
+        status: "new-only",
+        objectType: "route-policy",
+        newObject: {
+          normalizedType: "route-policy",
+          normalizedIdentity: "existing-policy",
+          fields: { name: "existing-policy" },
+        },
+      },
+      {
+        id: "route-policy-missing",
+        status: "old-only",
+        objectType: "route-policy",
+        oldObject: {
+          normalizedType: "route-policy",
+          normalizedIdentity: "missing-policy",
+          fields: { name: "missing-policy" },
+        },
+      },
+      {
+        id: "prefix-list-missing",
+        status: "old-only",
+        objectType: "prefix-list",
+        oldObject: {
+          normalizedType: "prefix-list",
+          normalizedIdentity: "missing-prefix",
+          fields: { name: "missing-prefix" },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedParserGap, 0);
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 2);
+  assert.deepEqual(dashboard.context.fixtureScope.byType.realMissingTarget, [
+    { objectType: "prefix-list", count: 1 },
+    { objectType: "route-policy", count: 1 },
+  ]);
+});
+
+test("policy placeholder real missing details split policy families", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "classic-ip-prefix-list",
+        status: "old-only",
+        objectType: "prefix-list",
+        oldObject: {
+          normalizedType: "prefix-list",
+          normalizedIdentity: "KT_DHCP+CVNET",
+          fields: { name: "KT_DHCP+CVNET" },
+          rawLines: ['ip-prefix-list "KT_DHCP+CVNET" create'],
+        },
+      },
+      {
+        id: "policy-prefix-list",
+        status: "old-only",
+        objectType: "prefix-list",
+        oldObject: {
+          normalizedType: "prefix-list",
+          normalizedIdentity: "Drop_Prefix",
+          fields: { name: "Drop_Prefix" },
+          rawLines: ['prefix-list "Drop_Prefix"'],
+        },
+      },
+      {
+        id: "community-members",
+        status: "old-only",
+        objectType: "community",
+        oldObject: {
+          normalizedType: "community",
+          normalizedIdentity: "900",
+          fields: { name: "900" },
+          rawLines: ['community "900" members "4766:900"'],
+        },
+      },
+      {
+        id: "community-expression",
+        status: "old-only",
+        objectType: "community",
+        oldObject: {
+          normalizedType: "community",
+          normalizedIdentity: "Deny-to-iCoD",
+          fields: { name: "Deny-to-iCoD" },
+          rawLines: ['community "Deny-to-iCoD" expression "4766:200 OR 4766:250"'],
+        },
+      },
+      {
+        id: "route-policy-deny-drop",
+        status: "old-only",
+        objectType: "route-policy",
+        oldObject: {
+          normalizedType: "route-policy",
+          normalizedIdentity: "bsr_drop",
+          fields: { name: "bsr_drop" },
+          rawLines: ['policy-statement "bsr_drop"'],
+        },
+      },
+      {
+        id: "route-policy-icod",
+        status: "old-only",
+        objectType: "route-policy",
+        oldObject: {
+          normalizedType: "route-policy",
+          normalizedIdentity: "TO-iCOD",
+          fields: { name: "TO-iCOD" },
+          rawLines: ['policy-statement "TO-iCOD"'],
+        },
+      },
+      {
+        id: "route-policy-peer",
+        status: "old-only",
+        objectType: "route-policy",
+        oldObject: {
+          normalizedType: "route-policy",
+          normalizedIdentity: "UP-PEER",
+          fields: { name: "UP-PEER" },
+          rawLines: ['policy-statement "UP-PEER"'],
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedParserGap, 0);
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 7);
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "community", reason: "missing-target-community-expression-definition", count: 1 },
+    { objectType: "community", reason: "missing-target-community-members-definition", count: 1 },
+    { objectType: "prefix-list", reason: "missing-target-ip-prefix-list-definition", count: 1 },
+    { objectType: "prefix-list", reason: "missing-target-prefix-list-definition", count: 1 },
+    { objectType: "route-policy", reason: "missing-target-route-policy-deny-drop", count: 1 },
+    { objectType: "route-policy", reason: "missing-target-route-policy-icod", count: 1 },
+    { objectType: "route-policy", reason: "missing-target-route-policy-peer", count: 1 },
+  ]);
+});
+
+test("PIM real missing details show generic target interface evidence separately", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "target-interface",
+        status: "new-only",
+        objectType: "interface",
+        newObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "to-pe#1-1",
+          fields: { interface: "to-pe#1-1" },
+        },
+      },
+      {
+        id: "pim-interface-only",
+        status: "old-only",
+        objectType: "pim",
+        oldObject: {
+          normalizedType: "pim",
+          normalizedIdentity: "to-pe#1-1",
+          fields: { interface: "to-pe#1-1" },
+        },
+      },
+      {
+        id: "pim-missing",
+        status: "old-only",
+        objectType: "pim",
+        oldObject: {
+          normalizedType: "pim",
+          normalizedIdentity: "system",
+          fields: { interface: "system" },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 2);
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "pim", reason: "missing-target-pim-config-with-interface-evidence", count: 1 },
+    { objectType: "pim", reason: "missing-target-type", count: 1 },
+  ]);
+});
+
+test("BGP real missing details split missing SER-PEER and generic peers", () => {
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: [
+      {
+        id: "target-bgp",
+        status: "new-only",
+        objectType: "bgp",
+        newObject: {
+          normalizedType: "bgp",
+          normalizedIdentity: "112.188.30.111",
+          fields: { neighbor: "112.188.30.111", group: "ACCESS-PEER" },
+        },
+      },
+      {
+        id: "ser-peer",
+        status: "old-only",
+        objectType: "bgp",
+        oldObject: {
+          normalizedType: "bgp",
+          normalizedIdentity: "61.78.43.28",
+          fields: { neighbor: "61.78.43.28", group: "SER-PEER" },
+        },
+      },
+      {
+        id: "generic-peer",
+        status: "old-only",
+        objectType: "bgp",
+        oldObject: {
+          normalizedType: "bgp",
+          normalizedIdentity: "192.0.2.1",
+          fields: { neighbor: "192.0.2.1", group: "LEGACY-PEER" },
+        },
+      },
+      {
+        id: "plain-peer",
+        status: "old-only",
+        objectType: "bgp",
+        oldObject: {
+          normalizedType: "bgp",
+          normalizedIdentity: "192.0.2.2",
+          fields: { neighbor: "192.0.2.2" },
+        },
+      },
+    ],
+    semanticSummary: {},
+  });
+
+  assert.equal(dashboard.counts.unmatchedRealMissingTarget, 3);
+  assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
+    { objectType: "bgp", reason: "missing-target-bgp-group", count: 1 },
+    { objectType: "bgp", reason: "missing-target-bgp-peer", count: 1 },
+    { objectType: "bgp", reason: "missing-target-bgp-ser-peer", count: 1 },
+  ]);
+});
+
 test("common field analysis excludes suppressed fields from policy-applied rate", () => {
   const oldFields = {};
   const newFields = {};

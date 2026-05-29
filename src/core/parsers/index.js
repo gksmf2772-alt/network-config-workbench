@@ -149,7 +149,7 @@ function extractPolicyPlaceholders(configText = "", vendor = "") {
       { type: "filter", match: text.match(/\bfilter\s+(?:ip|ipv6)?\s*"?([^"\s{]+)"?/i) },
       { type: "route-policy", match: text.match(/\b(?:policy-statement|route-policy)\s+"?([^"\s{]+)"?/i) },
       { type: "prefix-list", match: text.match(/\bprefix-list\s+"?([^"\s{]+)"?/i) },
-      { type: "community", match: text.match(/\bcommunity\s+"?([^"\s{]+)"?/i) },
+      { type: "community", match: matchPolicyCommunityDefinition(text) },
     ];
 
     for (const spec of specs) {
@@ -171,6 +171,10 @@ function extractPolicyPlaceholders(configText = "", vendor = "") {
   });
 
   return objects;
+}
+
+function matchPolicyCommunityDefinition(text = "") {
+  return String(text || "").match(/^community\s+"?([^"\s{]+)"?\s+(?:members|expression)\b/i);
 }
 
 function isInlineServicePolicyReference(rawLine = "", text = "", vendor = "") {

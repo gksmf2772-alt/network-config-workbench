@@ -51,6 +51,28 @@ test("MVP interface match uses address even when interface names change", () => 
   assert.equal(planItem.fieldSummary.interface.status, "changed");
 });
 
+test("MVP Classic duplicate interface stubs merge into addressed interface object", () => {
+  const oldConfig = [
+    "configure service",
+    "    ies 100 customer 1 create",
+    '        interface "to-Dobong-TOU-FD09" create',
+    "        exit",
+    '        interface "to-Dobong-TOU-FD09" create',
+    '            description "## Dobong access ##"',
+    "            address 112.188.24.89/30",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const result = parse("nokia-classic", oldConfig, "old");
+  const interfaces = result.objects.filter((item) => item.normalizedType === "interface");
+
+  assert.equal(interfaces.length, 1);
+  assert.equal(interfaces[0].normalizedIdentity, "112.188.24.89/30");
+  assert.equal(interfaces[0].fields.interface, "to-dobong-tou-fd09");
+  assert.equal(interfaces[0].fields.address, "112.188.24.89/30");
+});
+
 test("MVP interface identity preserves router context when duplicate addresses exist", () => {
   const oldConfig = [
     'configure router "Base" interface "old-base"',
@@ -340,4 +362,50 @@ test("MVP full config input extracts interface static-route and BGP objects toge
     assert.equal(newTypes.has(type), true, `new ${type}`);
     assert.equal(planByType.get(type)?.status, "matched", `plan ${type}`);
   }
+});
+
+test("Nokia Classic port-list entries do not create physical port objects", () => {
+  const oldConfig = [
+    "configure filter",
+    '    port-list "DHCP" create',
+    '        description "DHCP_Server_67_Client_68"',
+    "        port 67",
+    "        port 68",
+    "    exit",
+    "exit",
+    "port 1/1/1",
+    '    description "physical port"',
+    "exit",
+  ].join("\n");
+  const result = parse("nokia-classic", oldConfig, "old");
+  const ports = result.objects.filter((item) => item.normalizedType === "port");
+
+  assert.deepEqual(ports.map((item) => item.normalizedIdentity), ["1/1/1"]);
+});
+
+test("Nokia Classic community placeholders only include policy community definitions", () => {
+  const oldConfig = [
+    "configure system security snmp",
+    '    community "snmp-secret" hash2 r version both',
+    '    trap-target "host" address 192.0.2.10 snmpv2c notify-community "trap-secret"',
+    "exit",
+    "configure router policy-options",
+    '    community "900" members "4766:900"',
+    '    community "Deny-to-iCoD" expression "4766:200 OR 4766:250"',
+    '    policy-statement "POL"',
+    "        entry 10",
+    "            action accept",
+    '                community add "900"',
+    "            exit",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const result = parse("nokia-classic", oldConfig, "old");
+  const communities = result.objects
+    .filter((item) => item.normalizedType === "community")
+    .map((item) => item.normalizedIdentity)
+    .sort();
+
+  assert.deepEqual(communities, ["900", "Deny-to-iCoD"]);
 });

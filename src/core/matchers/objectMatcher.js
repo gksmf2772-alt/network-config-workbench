@@ -21,12 +21,14 @@ function tokenizeDescription(value) {
 }
 
 function normalizeDescriptionEndpoint(value = "") {
-  return String(value || "")
+  const normalized = String(value || "")
     .trim()
     .replace(/^#+|#+$/g, "")
     .replace(/^["']|["']$/g, "")
     .replace(/\s+/g, "")
     .toLowerCase();
+
+  return normalizeKnownEndpointTypos(normalized.replace(/^(?:to|from|via)-(?=[a-z0-9])/i, ""));
 }
 
 function isLikelyDescriptionEndpoint(segment = "") {
@@ -41,6 +43,114 @@ function isLikelyDescriptionEndpoint(segment = "") {
   if (/^(stby|sby|standby|active|fiber)$/i.test(normalized)) return false;
 
   return true;
+}
+
+function normalizeDescriptionToken(value = "") {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/[.,]+$/g, "")
+    .toLowerCase();
+
+  return normalizeKnownEndpointTypos(normalized.replace(/^(?:to|from|via)-(?=[a-z0-9])/i, ""));
+}
+
+function normalizeKnownEndpointTypos(value = "") {
+  return String(value || "").replace(/\bganbuk\b/g, "gangbuk");
+}
+
+function isLikelyEndpointDeviceToken(token = "") {
+  const normalized = normalizeDescriptionToken(token);
+  if (!isLikelyDescriptionEndpoint(normalized)) return false;
+  if (normalized.includes("_")) return false;
+  return true;
+}
+
+function endpointPortTokenCandidates(token = "") {
+  const normalized = normalizeDescriptionToken(token);
+  const candidates = new Set();
+
+  for (const match of normalized.matchAll(/\(([^()]+)\)/g)) {
+    for (const candidate of endpointPortTokenCandidates(match[1])) {
+      candidates.add(candidate);
+    }
+  }
+
+  const match = normalized.match(/^(te|xe|ge|gi|et|fe|eth|ethernet)-?(\d+(?:\/\d+){1,4})$/i);
+  if (match) {
+    const prefixAliases = {
+      ethernet: "eth",
+    };
+    const prefix = prefixAliases[match[1].toLowerCase()] || match[1].toLowerCase();
+    candidates.add(`${prefix}${match[2]}`);
+    candidates.add(match[2]);
+  }
+
+  const numericMatch = normalized.match(/^(\d+(?:\/\d+){1,4})$/);
+  if (numericMatch) {
+    candidates.add(numericMatch[1]);
+  }
+
+  return [...candidates];
+}
+
+function descriptionTokenGroups(description = "") {
+  return String(description || "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^#+|#+$/g, "")
+    .split(/[,;]+/)
+    .map((segment) =>
+      segment
+        .trim()
+        .replace(/^#+|#+$/g, "")
+        .split(/[\s_]+/)
+        .map(normalizeDescriptionToken)
+        .filter(Boolean)
+    )
+    .filter((tokens) => tokens.length);
+}
+
+function addCompositeEndpointCandidates(candidates, tokens = []) {
+  const deviceTokens = tokens.filter(isLikelyEndpointDeviceToken);
+  const portTokens = tokens.flatMap(endpointPortTokenCandidates).filter(Boolean);
+
+  for (const deviceToken of deviceTokens) {
+    for (const portToken of portTokens) {
+      candidates.add(`${normalizeDescriptionEndpoint(deviceToken)}|${portToken}`);
+    }
+  }
+}
+
+function descriptionCompositeEndpointCandidates(description = "") {
+  const groups = descriptionTokenGroups(description);
+  const candidates = new Set();
+
+  groups.forEach((tokens, index) => {
+    addCompositeEndpointCandidates(candidates, tokens);
+
+    const nextTokens = groups[index + 1] || [];
+    if (nextTokens.length) {
+      addCompositeEndpointCandidates(candidates, [...tokens, ...nextTokens]);
+    }
+  });
+
+  return [...candidates];
+}
+
+function descriptionSplitEndpointCandidates(description = "") {
+  const candidates = new Set();
+
+  for (const tokens of descriptionTokenGroups(description)) {
+    const portTokens = tokens.flatMap(endpointPortTokenCandidates);
+    if (portTokens.length) continue;
+
+    for (const deviceToken of tokens.filter(isLikelyEndpointDeviceToken)) {
+      candidates.add(normalizeDescriptionEndpoint(deviceToken));
+    }
+  }
+
+  return [...candidates];
 }
 
 function descriptionEndpointCandidates(description = "") {
@@ -58,10 +168,20 @@ function descriptionEndpointCandidates(description = "") {
       ];
     });
 
-  return [...new Set(segments
+  const candidates = new Set(segments
     .map((segment) => segment.trim().replace(/^#+|#+$/g, ""))
     .filter(isLikelyDescriptionEndpoint)
-    .map(normalizeDescriptionEndpoint))];
+    .map(normalizeDescriptionEndpoint));
+
+  for (const endpoint of descriptionCompositeEndpointCandidates(cleanDescription)) {
+    candidates.add(endpoint);
+  }
+
+  for (const endpoint of descriptionSplitEndpointCandidates(cleanDescription)) {
+    candidates.add(endpoint);
+  }
+
+  return [...candidates];
 }
 
 function sharedDescriptionEndpoint(oldDescription = "", newDescription = "") {
@@ -403,6 +523,16 @@ function normalizeValue(value) {
     .toLowerCase();
 }
 
+function isNokiaGreSourcePrimaryConversion(oldObject = {}, newObject = {}) {
+  const oldInterface = normalizeValue(getFieldValue(oldObject, "interface") || oldObject.sourceName);
+  const newInterface = normalizeValue(getFieldValue(newObject, "interface") || newObject.sourceName);
+
+  return oldObject.vendor === "nokia-classic" &&
+    newObject.vendor === "nokia-md-cli" &&
+    oldInterface === "gre-source" &&
+    newInterface === "gre-source-1";
+}
+
 function normalizeIdentityToken(value) {
   return normalizeValue(value).replace(/[{};,]+$/g, "");
 }
@@ -543,17 +673,17 @@ function scoreStaticRoutePair(oldObject, newObject, profile = {}) {
   }
 
   if (oldPrefix && newPrefix && oldPrefix === newPrefix) {
-    addWeightedScore(result, "prefix", 60, "prefix");
+    addWeightedScore(result, "prefix", 80, "prefix");
 
     if (oldNextHop && newNextHop && oldNextHop === newNextHop) {
-      addWeightedScore(result, "next-hop", 40, "next-hop");
+      addWeightedScore(result, "next-hop", 20, "next-hop");
       result.scoreReasons.push("static-route-exact-identity");
       return result;
     }
 
     if (oldNextHop && newNextHop && oldNextHop !== newNextHop) {
       if (allowsStaticRouteNextHopRewrite({ oldObject, newObject, profile })) {
-        addWeightedScore(result, "next-hop", 40, "next-hop-policy-rewrite");
+        addWeightedScore(result, "next-hop", 20, "next-hop-policy-rewrite");
         result.scoreReasons.push("static-route-next-hop-accepted-by-policy");
         return result;
       }
@@ -815,6 +945,10 @@ function scoreSemanticObjectPair(oldObject, newObject, profile = {}) {
     oldIpAddress === newIpAddress
   ) {
     addWeightedScore(result, "ipAddress", 60, "ip-address");
+  }
+
+  if (objectType === "interface" && isNokiaGreSourcePrimaryConversion(oldObject, newObject)) {
+    addWeightedScore(result, "interface", 65, "nokia-gre-source-primary-conversion");
   }
 
   const oldPeerIp = normalizeValue(
@@ -1101,6 +1235,7 @@ function findBestDescriptionMatch(oldObject, candidates) {
     status: best.score >= 85 ? "matched" : "candidate",
     reason: "description-similarity",
     score: best.score,
+    scoreReasons: ["description-similarity"],
   });
 }
 

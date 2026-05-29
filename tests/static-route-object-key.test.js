@@ -465,6 +465,29 @@ test("Nokia Classic PIM block interfaces parse as PIM objects", () => {
   assert.equal(pimObjects[0].fields["admin-state"], "enabled");
 });
 
+test("Nokia Classic PIM block survives misindented child exit", () => {
+  const result = parse("nokia-classic", [
+    "configure router",
+    "    pim",
+    '        interface "g-to-Dobong-TOU-FD13"',
+    "exit",
+    '        interface "g-to-Gangbuk-TOU-FK56"',
+    "        exit",
+    "        no shutdown",
+    "    exit",
+    "exit",
+  ].join("\n"));
+
+  const pimObjects = result.objects.filter((object) => object.normalizedType === "pim");
+  const interfaceObjects = result.objects.filter((object) => object.normalizedType === "interface");
+
+  assert.deepEqual(
+    pimObjects.map((object) => object.normalizedIdentity).sort(),
+    ["g-to-dobong-tou-fd13", "g-to-gangbuk-tou-fk56"]
+  );
+  assert.equal(interfaceObjects.length, 0);
+});
+
 test("Nokia MD-CLI one-line router PIM interface parses as PIM object", () => {
   const result = parse(
     "nokia-md-cli",
@@ -477,6 +500,22 @@ test("Nokia MD-CLI one-line router PIM interface parses as PIM object", () => {
 
   assert.equal(pimObjects.length, 1);
   assert.equal(interfaceObjects.length, 0);
+  assert.equal(pimObjects[0].normalizedIdentity, "g-to-dobong-tou-fb03");
+  assert.equal(pimObjects[0].fields.interface, "g-to-dobong-tou-fb03");
+});
+
+test("Nokia MD-CLI block router PIM interface canonicalizes identity", () => {
+  const result = parse("nokia-md-cli", [
+    'router "Base" {',
+    "    pim {",
+    '        interface "g-to-Dobong-TOU-FB03" {',
+    "        }",
+    "    }",
+    "}",
+  ].join("\n"));
+  const pimObjects = result.objects.filter((object) => object.normalizedType === "pim");
+
+  assert.equal(pimObjects.length, 1);
   assert.equal(pimObjects[0].normalizedIdentity, "g-to-dobong-tou-fb03");
   assert.equal(pimObjects[0].fields.interface, "g-to-dobong-tou-fb03");
 });
@@ -599,6 +638,130 @@ test("Nokia MD-CLI one-line service objects normalize subscriber, SAP, hosts and
   assert.equal(subscriber.fields["sub-sla-mgmt.sub-ident-policy"], "sip");
   assert.equal(subscriber.fields["sub-sla-mgmt.defaults.sla-profile"], "sla");
   assert.equal(subscriber.fields["sub-sla-mgmt.defaults.int-dest-id"], "intdest");
+});
+
+test("Nokia MD-CLI block subscriber-interface aggregates nested fields", () => {
+  const config = [
+    'service {',
+    '  ies "100" {',
+    '    subscriber-interface "to-Gangbuk-TOU-FK53" {',
+    "      admin-state enable",
+    '      description "## to-Gangbuk-TOU-FK53, Po10(Te6/1), ACT ##"',
+    "      ipv4 {",
+    "        allow-unmatching-subnets true",
+    "        address 112.188.23.77 {",
+    "          prefix-length 30",
+    "        }",
+    "      }",
+    '      group-interface "g-to-Gangbuk-TOU-FK53" {',
+    '        radius-auth-policy "RADIUS"',
+    "        ipv4 {",
+    "          neighbor-discovery {",
+    "            populate true",
+    "          }",
+    "          dhcp {",
+    "            admin-state enable",
+    "            filter 60",
+    "            server [121.128.86.26]",
+    "            trusted true",
+    "            lease-populate {",
+    "              max-leases 131071",
+    "              l2-header {",
+    "              }",
+    "            }",
+    "          }",
+    "        }",
+    "        sap lag-A-6105 {",
+    "          ingress {",
+    "            filter {",
+    '              ip "prtsr-active"',
+    "            }",
+    "          }",
+    "          egress {",
+    "            qos {",
+    "              sap-egress {",
+    '                policy-name "SEA_ACCESS_OUT"',
+    "              }",
+    "            }",
+    "          }",
+    "          cpu-protection {",
+    "            policy-id 200",
+    "            ip-src-monitoring",
+    "          }",
+    "          sub-sla-mgmt {",
+    "            admin-state enable",
+    '            sub-ident-policy "sub-id-pol"',
+    "            subscriber-limit 131071",
+    "            defaults {",
+    '              sub-profile "IN_SEA_DEFAULT"',
+    '              sla-profile "IN_SEA_DEFAULT"',
+    "              subscriber-id {",
+    "                auto-id",
+    "              }",
+    "              int-dest-id {",
+    '                string "PQ_3WFQ"',
+    "              }",
+    "            }",
+    "          }",
+    "          static-host {",
+    "            ipv4 112.188.23.78 mac 00:00:00:00:00:00 {",
+    "              admin-state enable",
+    '              sub-profile "SI_PIM"',
+    '              sla-profile "IN_SEA_DEFAULT"',
+    '              int-dest-id "PQ_3WFQ"',
+    "              subscriber-id {",
+    "                use-sap-id",
+    "              }",
+    "            }",
+    "          }",
+    "          default-host {",
+    "            ipv4 112.188.23.77 prefix-length 30 {",
+    "              next-hop 112.188.23.78",
+    "            }",
+    "          }",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", config, "new");
+  const subscriber = result.objects.find((object) => object.normalizedType === "subscriber-interface");
+
+  assert.equal(subscriber.normalizedIdentity, "to-gangbuk-tou-fk53");
+  assert.equal(subscriber.fields.address, "112.188.23.77/30");
+  assert.equal(subscriber.fields.prefix, "112.188.23.77/30");
+  assert.equal(subscriber.fields["group-interface"], "g-to-gangbuk-tou-fk53");
+  assert.equal(subscriber.fields["auth-policy"], "RADIUS");
+  assert.equal(subscriber.fields["neighbor-discovery.populate"], "true");
+  assert.equal(subscriber.fields["dhcp.admin-state"], "enabled");
+  assert.equal(subscriber.fields["dhcp.filter"], "60");
+  assert.equal(subscriber.fields["dhcp.server"], "121.128.86.26");
+  assert.equal(subscriber.fields["dhcp.trusted"], "true");
+  assert.equal(subscriber.fields["dhcp.lease-populate.max-leases"], "131071");
+  assert.equal(subscriber.fields["dhcp.lease-populate.l2-header"], "true");
+  assert.equal(subscriber.fields.sap, "lag-a-6105");
+  assert.equal(subscriber.fields["ingress-filter"], "prtsr-active");
+  assert.equal(subscriber.fields["egress-qos"], "SEA_ACCESS_OUT");
+  assert.equal(subscriber.fields["cpu-protection.policy-id"], "200");
+  assert.equal(subscriber.fields["cpu-protection.ip-src-monitoring"], "true");
+  assert.equal(subscriber.fields["sub-sla-mgmt.admin-state"], "enabled");
+  assert.equal(subscriber.fields["sub-sla-mgmt.sub-ident-policy"], "sub-id-pol");
+  assert.equal(subscriber.fields["sub-sla-mgmt.subscriber-limit"], "131071");
+  assert.equal(subscriber.fields["sub-sla-mgmt.defaults.sub-profile"], "IN_SEA_DEFAULT");
+  assert.equal(subscriber.fields["sub-sla-mgmt.defaults.sla-profile"], "IN_SEA_DEFAULT");
+  assert.equal(subscriber.fields["sub-sla-mgmt.defaults.subscriber-id"], "auto-id");
+  assert.equal(subscriber.fields["sub-sla-mgmt.defaults.int-dest-id"], "PQ_3WFQ");
+  assert.equal(subscriber.fields["static-host"], "112.188.23.78");
+  assert.equal(subscriber.fields["static-host.mac"], "00:00:00:00:00:00");
+  assert.equal(subscriber.fields["static-host.admin-state"], "enabled");
+  assert.equal(subscriber.fields["static-host.sub-profile"], "SI_PIM");
+  assert.equal(subscriber.fields["static-host.sla-profile"], "IN_SEA_DEFAULT");
+  assert.equal(subscriber.fields["static-host.int-dest-id"], "PQ_3WFQ");
+  assert.equal(subscriber.fields["static-host.subscriber-id"], "use-sap-id");
+  assert.equal(subscriber.fields["default-host"], "112.188.23.77/30");
+  assert.equal(subscriber.fields["default-host.next-hop"], "112.188.23.78");
 });
 
 test("Nokia Classic subscriber-interface maps MD-CLI subscriber-interface as one object", () => {

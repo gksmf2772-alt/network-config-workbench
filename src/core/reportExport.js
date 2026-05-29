@@ -64,12 +64,63 @@ export function buildExcelReportCsv(rows = [], columns = EXCEL_REPORT_COLUMNS) {
   return `\ufeff${lines.join("\r\n")}\r\n`;
 }
 
+export function buildExcelReportXlsx(rows = [], columns = EXCEL_REPORT_COLUMNS) {
+  const sheets = buildExcelReportSheets(rows, columns);
+  const worksheetFiles = sheets.map((sheet, index) => ({
+    path: `xl/worksheets/sheet${index + 1}.xml`,
+    content: buildWorksheetXml(sheet.rows, columns),
+  }));
+
+  return buildZipArchive([
+    { path: "[Content_Types].xml", content: buildContentTypesXml(sheets.length) },
+    { path: "_rels/.rels", content: buildRootRelationshipsXml() },
+    { path: "xl/workbook.xml", content: buildWorkbookXml(sheets) },
+    { path: "xl/_rels/workbook.xml.rels", content: buildWorkbookRelationshipsXml(sheets.length) },
+    ...worksheetFiles,
+  ]);
+}
+
+export function buildExcelReportSheets(rows = [], columns = EXCEL_REPORT_COLUMNS) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const groups = [
+    { name: "All", rows: safeRows },
+    { name: "Interface", rows: safeRows.filter((row) => row?.section === "interface") },
+    { name: "Static Route", rows: safeRows.filter((row) => row?.section === "static-route") },
+    { name: "BGP", rows: safeRows.filter((row) => row?.section === "bgp") },
+    { name: "Port LAG", rows: safeRows.filter((row) => ["port", "lag"].includes(row?.section)) },
+    { name: "Service", rows: safeRows.filter((row) =>
+      ["pim", "sap", "subscriber-interface", "group-interface"].includes(row?.section)
+    ) },
+    { name: "Other", rows: safeRows.filter((row) =>
+      row?.section &&
+      !["interface", "static-route", "bgp", "port", "lag", "pim", "sap", "subscriber-interface", "group-interface"].includes(row.section)
+    ) },
+  ];
+  const names = new Set();
+
+  return groups
+    .filter((sheet) => sheet.name === "All" || sheet.rows.length)
+    .map((sheet) => ({
+      name: uniqueSheetName(sheet.name, names),
+      rows: sheet.rows,
+      columns,
+    }));
+}
+
 export function buildExcelReportFilename({ comparedAt = Date.now() } = {}) {
   const date = new Date(comparedAt);
   const stamp = Number.isNaN(date.getTime())
     ? "unknown"
     : date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
   return `network-config-report-${stamp}.csv`;
+}
+
+export function buildExcelReportXlsxFilename({ comparedAt = Date.now() } = {}) {
+  const date = new Date(comparedAt);
+  const stamp = Number.isNaN(date.getTime())
+    ? "unknown"
+    : date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  return `network-config-report-${stamp}.xlsx`;
 }
 
 function buildObjectLevelRow(item = {}, override = {}) {
@@ -321,4 +372,240 @@ function escapeCsvCell(value = "") {
 
 function protectExcelFormula(value = "") {
   return /^[=+\-@]/.test(value.trimStart()) ? `'${value}` : value;
+}
+
+function buildWorksheetXml(rows = [], columns = EXCEL_REPORT_COLUMNS) {
+  const headerCells = columns.map((column) => column.label);
+  const dataRows = [
+    headerCells,
+    ...(Array.isArray(rows) ? rows : []).map((row) => columns.map((column) => row?.[column.key] ?? "")),
+  ];
+  const sheetRows = dataRows.map((values, rowIndex) =>
+    `<row r="${rowIndex + 1}">${values.map((value, columnIndex) =>
+      buildCellXml(rowIndex + 1, columnIndex + 1, value)
+    ).join("")}</row>`
+  ).join("");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+    '<sheetViews><sheetView workbookViewId="0"/></sheetViews>',
+    '<sheetFormatPr defaultRowHeight="15"/>',
+    '<sheetData>',
+    sheetRows,
+    '</sheetData>',
+    '</worksheet>',
+  ].join("");
+}
+
+function buildCellXml(rowNumber, columnNumber, value = "") {
+  const cellRef = `${columnName(columnNumber)}${rowNumber}`;
+  const text = protectExcelFormula(String(value ?? ""));
+  return `<c r="${cellRef}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+}
+
+function columnName(index) {
+  let value = Number(index) || 1;
+  let name = "";
+
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    value = Math.floor((value - 1) / 26);
+  }
+
+  return name;
+}
+
+function buildContentTypesXml(sheetCount = 1) {
+  const sheetOverrides = Array.from({ length: sheetCount }, (_, index) =>
+    `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+  ).join("");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+    '<Default Extension="xml" ContentType="application/xml"/>',
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+    sheetOverrides,
+    '</Types>',
+  ].join("");
+}
+
+function buildRootRelationshipsXml() {
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+    '</Relationships>',
+  ].join("");
+}
+
+function buildWorkbookXml(sheets = []) {
+  const sheetXml = sheets.map((sheet, index) =>
+    `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`
+  ).join("");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+    '<sheets>',
+    sheetXml,
+    '</sheets>',
+    '</workbook>',
+  ].join("");
+}
+
+function buildWorkbookRelationshipsXml(sheetCount = 1) {
+  const relationships = Array.from({ length: sheetCount }, (_, index) =>
+    `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`
+  ).join("");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    relationships,
+    '</Relationships>',
+  ].join("");
+}
+
+function uniqueSheetName(name = "Sheet", used = new Set()) {
+  const base = sanitizeSheetName(name) || "Sheet";
+  let candidate = base;
+  let suffix = 2;
+
+  while (used.has(candidate.toLowerCase())) {
+    const suffixText = ` ${suffix}`;
+    candidate = `${base.slice(0, 31 - suffixText.length)}${suffixText}`;
+    suffix += 1;
+  }
+
+  used.add(candidate.toLowerCase());
+  return candidate;
+}
+
+function sanitizeSheetName(name = "") {
+  return String(name || "")
+    .replace(/[\[\]:*?/\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 31);
+}
+
+function escapeXml(value = "") {
+  return String(value ?? "")
+    .replace(/[^\u0009\u000a\u000d\u0020-\ud7ff\ue000-\ufffd]/g, "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function buildZipArchive(files = []) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.path);
+    const data = file.content instanceof Uint8Array
+      ? file.content
+      : encoder.encode(String(file.content ?? ""));
+    const crc = crc32(data);
+    const localHeader = buildZipLocalHeader({ nameBytes, data, crc });
+    const centralHeader = buildZipCentralHeader({ nameBytes, data, crc, offset });
+
+    localParts.push(localHeader, data);
+    centralParts.push(centralHeader);
+    offset += localHeader.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const endRecord = buildZipEndRecord({
+    fileCount: files.length,
+    centralSize,
+    centralOffset: offset,
+  });
+
+  return concatUint8Arrays([...localParts, ...centralParts, endRecord]);
+}
+
+function buildZipLocalHeader({ nameBytes, data, crc }) {
+  const header = new Uint8Array(30 + nameBytes.length);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, 0x04034b50, true);
+  view.setUint16(4, 20, true);
+  view.setUint16(6, 0x0800, true);
+  view.setUint16(8, 0, true);
+  view.setUint32(14, crc, true);
+  view.setUint32(18, data.length, true);
+  view.setUint32(22, data.length, true);
+  view.setUint16(26, nameBytes.length, true);
+  header.set(nameBytes, 30);
+  return header;
+}
+
+function buildZipCentralHeader({ nameBytes, data, crc, offset }) {
+  const header = new Uint8Array(46 + nameBytes.length);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, 0x02014b50, true);
+  view.setUint16(4, 20, true);
+  view.setUint16(6, 20, true);
+  view.setUint16(8, 0x0800, true);
+  view.setUint16(10, 0, true);
+  view.setUint32(16, crc, true);
+  view.setUint32(20, data.length, true);
+  view.setUint32(24, data.length, true);
+  view.setUint16(28, nameBytes.length, true);
+  view.setUint32(42, offset, true);
+  header.set(nameBytes, 46);
+  return header;
+}
+
+function buildZipEndRecord({ fileCount, centralSize, centralOffset }) {
+  const record = new Uint8Array(22);
+  const view = new DataView(record.buffer);
+  view.setUint32(0, 0x06054b50, true);
+  view.setUint16(8, fileCount, true);
+  view.setUint16(10, fileCount, true);
+  view.setUint32(12, centralSize, true);
+  view.setUint32(16, centralOffset, true);
+  return record;
+}
+
+function concatUint8Arrays(parts = []) {
+  const output = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.length;
+  }
+
+  return output;
+}
+
+const CRC32_TABLE = buildCrc32Table();
+
+function buildCrc32Table() {
+  return Array.from({ length: 256 }, (_, index) => {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    return value >>> 0;
+  });
+}
+
+function crc32(data = new Uint8Array()) {
+  let crc = 0xffffffff;
+
+  for (const byte of data) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
 }

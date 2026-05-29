@@ -491,6 +491,21 @@ test("bottom manual mapping panel is not rendered by default", () => {
   assert.doesNotMatch(body, /data-diff-object-down/);
 });
 
+test("manual mapping candidates are same-type ranked and limited", () => {
+  const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const renderer = fs.readFileSync("src/core/compareRenderer.js", "utf8");
+
+  assert.match(source, /const MANUAL_CANDIDATE_LIMIT = 20/);
+  assert.match(source, /function buildManualCandidatesForObject\(sourceObject = \{\}, candidateObjects = \[\], matchedCandidateIds = new Set\(\)\)/);
+  assert.match(source, /const sameTypeCandidates = candidates\.filter\(\(candidate\) => candidate\.sameType\)/);
+  assert.match(source, /\.slice\(0, MANUAL_CANDIDATE_LIMIT\)/);
+  assert.match(source, /function manualCandidateScore\(sourceObject = \{\}, candidate = \{\}\)/);
+  assert.match(source, /reasons\.push\("same-type"\)/);
+  assert.match(source, /reasons\.push\("description-endpoint"\)/);
+  assert.match(source, /countManualCandidateCommonFields\(sourceObject, candidate\)/);
+  assert.match(renderer, /candidate\.objectType \? `<span>\$\{escapeHtml\(candidate\.objectType\)\}<\/span>` : ""/);
+});
+
 test("main comparison renderer uses operator terminology", () => {
   const plan = createComparisonPlan([
     { status: "new-only", reason: "unmatched", oldObject: null, newObject: setting({ side: "new", key: "198.51.100.40" }) },

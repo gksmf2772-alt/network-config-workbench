@@ -4334,6 +4334,8 @@ function getManualCandidateObjectId(object) {
   return object.id || object.objectId || object.sourceName || "";
 }
 
+const MANUAL_CANDIDATE_LIMIT = 20;
+
 function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = []) {
   const matchedOldIds = new Set();
   const matchedNewIds = new Set();
@@ -4358,27 +4360,7 @@ function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = [
     const status = String(item.status || "").toLowerCase();
 
     if (status === "old-only") {
-      const candidates = newObjects
-        .filter((candidate) => {
-          const candidateId = getManualCandidateObjectId(candidate);
-          return candidateId && !matchedNewIds.has(candidateId);
-        })
-        .map((candidate) => ({
-          id: getManualCandidateObjectId(candidate),
-          sourceName:
-            candidate.sourceName ||
-            candidate.id ||
-            candidate.objectId ||
-            candidate.key ||
-            candidate.normalizedKey ||
-            candidate.matchKey ||
-            candidate.name ||
-            candidate.address ||
-            candidate.prefix ||
-            "-",
-          score: "-",
-          reason: "manual-candidate",
-        }));
+      const candidates = buildManualCandidatesForObject(item.oldObject, newObjects, matchedNewIds);
 
       return {
         ...item,
@@ -4387,27 +4369,7 @@ function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = [
     }
 
     if (status === "new-only") {
-      const candidates = oldObjects
-        .filter((candidate) => {
-          const candidateId = getManualCandidateObjectId(candidate);
-          return candidateId && !matchedOldIds.has(candidateId);
-        })
-        .map((candidate) => ({
-          id: getManualCandidateObjectId(candidate),
-          sourceName:
-            candidate.sourceName ||
-            candidate.id ||
-            candidate.objectId ||
-            candidate.key ||
-            candidate.normalizedKey ||
-            candidate.matchKey ||
-            candidate.name ||
-            candidate.address ||
-            candidate.prefix ||
-            "-",
-          score: "-",
-          reason: "manual-candidate",
-        }));
+      const candidates = buildManualCandidatesForObject(item.newObject, oldObjects, matchedOldIds);
 
       return {
         ...item,
@@ -4417,6 +4379,144 @@ function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = [
 
     return item;
   });
+}
+
+function buildManualCandidatesForObject(sourceObject = {}, candidateObjects = [], matchedCandidateIds = new Set()) {
+  const candidates = candidateObjects
+    .map((candidate) => {
+      const candidateId = getManualCandidateObjectId(candidate);
+      if (!candidateId || matchedCandidateIds.has(candidateId)) return null;
+
+      const scoring = manualCandidateScore(sourceObject, candidate);
+      return {
+        id: candidateId,
+        objectType: getManualCandidateObjectType(candidate),
+        sourceName: getManualCandidateLabel(candidate),
+        score: scoring.score || "-",
+        reason: scoring.reasons.length ? scoring.reasons.join(", ") : "manual-candidate",
+        sameType: scoring.sameType,
+      };
+    })
+    .filter(Boolean);
+
+  const sameTypeCandidates = candidates.filter((candidate) => candidate.sameType);
+  const visibleCandidates = sameTypeCandidates.length ? sameTypeCandidates : candidates;
+
+  return visibleCandidates
+    .sort((left, right) =>
+      Number(right.score || 0) - Number(left.score || 0) ||
+      String(left.sourceName || "").localeCompare(String(right.sourceName || ""), undefined, { numeric: true })
+    )
+    .slice(0, MANUAL_CANDIDATE_LIMIT)
+    .map(({ sameType, ...candidate }) => candidate);
+}
+
+function manualCandidateScore(sourceObject = {}, candidate = {}) {
+  let score = 0;
+  const reasons = [];
+  const sourceType = getManualCandidateObjectType(sourceObject);
+  const candidateType = getManualCandidateObjectType(candidate);
+  const sameType = Boolean(sourceType && candidateType && sourceType === candidateType);
+
+  if (sameType) {
+    score += 60;
+    reasons.push("same-type");
+  }
+
+  const sourceIdentity = getManualCandidateIdentity(sourceObject);
+  const candidateIdentity = getManualCandidateIdentity(candidate);
+  if (sourceIdentity && candidateIdentity && sourceIdentity === candidateIdentity) {
+    score += 35;
+    reasons.push("same-identity");
+  }
+
+  if (hasManualCandidateDescriptionEndpoint(sourceObject, candidate)) {
+    score += 35;
+    reasons.push("description-endpoint");
+  }
+
+  const commonFields = countManualCandidateCommonFields(sourceObject, candidate);
+  if (commonFields > 0) {
+    score += Math.min(25, commonFields * 5);
+    reasons.push(`${commonFields} same-fields`);
+  }
+
+  return {
+    score: Math.min(100, score),
+    reasons,
+    sameType,
+  };
+}
+
+function getManualCandidateObjectType(object = {}) {
+  return canonicalizeComparableLine(
+    object?.normalizedType ||
+    object?.type ||
+    object?.sourceType ||
+    splitObjectKey(object?.key || "").type ||
+    ""
+  );
+}
+
+function getManualCandidateIdentity(object = {}) {
+  return canonicalizeComparableLine(
+    object?.normalizedIdentity ||
+    object?.identity ||
+    object?.sourceName ||
+    object?.name ||
+    splitObjectKey(object?.key || "").name ||
+    ""
+  );
+}
+
+function getManualCandidateLabel(object = {}) {
+  return String(
+    object?.sourceName ||
+    object?.normalizedIdentity ||
+    object?.id ||
+    object?.objectId ||
+    object?.key ||
+    object?.normalizedKey ||
+    object?.matchKey ||
+    object?.name ||
+    object?.address ||
+    object?.prefix ||
+    "-"
+  );
+}
+
+function hasManualCandidateDescriptionEndpoint(sourceObject = {}, candidate = {}) {
+  const sourceEndpoints = objectDescriptionEndpoints(sourceObject);
+  if (!sourceEndpoints.length) return false;
+
+  const candidateEndpoints = new Set(objectDescriptionEndpoints(candidate));
+  return sourceEndpoints.some((endpoint) => candidateEndpoints.has(endpoint));
+}
+
+function countManualCandidateCommonFields(sourceObject = {}, candidate = {}) {
+  const sourceFields = getManualCandidateFields(sourceObject);
+  const candidateFields = getManualCandidateFields(candidate);
+  let count = 0;
+
+  Object.entries(sourceFields).forEach(([field, value]) => {
+    if (!value || field === "description") return;
+    if (candidateFields[field] && candidateFields[field] === value) count += 1;
+  });
+
+  return count;
+}
+
+function getManualCandidateFields(object = {}) {
+  const fields = object?.canonicalFields || object?.fields || {};
+  return Object.fromEntries(Object.entries(fields).map(([field, value]) => [
+    canonicalizeComparableLine(field),
+    normalizeManualCandidateFieldValue(value),
+  ]));
+}
+
+function normalizeManualCandidateFieldValue(value = "") {
+  if (Array.isArray(value)) return value.map(normalizeManualCandidateFieldValue).filter(Boolean).join(",");
+  return canonicalizeComparableLine(stripTrailingSyntax(value));
 }
 
 function renderSemanticPreview(precomputedRuntime = null) {

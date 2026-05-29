@@ -234,6 +234,7 @@ function renderCandidateList(candidates = [], getIds) {
           return `
             <li class="semantic-candidate-option">
               <span>${escapeHtml(candidate.sourceName || candidate.id || "-")}</span>
+              ${candidate.objectType ? `<span>${escapeHtml(candidate.objectType)}</span>` : ""}
               <span>점수: ${escapeHtml(candidate.score ?? "-")}</span>
               <span>사유: ${escapeHtml(candidate.reason || "-")}</span>
               <button type="button" class="semantic-candidate-select-btn" data-old-object-id="${escapeHtml(ids.oldObjectId)}" data-new-object-id="${escapeHtml(ids.newObjectId)}">선택</button>

@@ -122,6 +122,7 @@ BGP neighbor:
 - Nokia-only GRE source redundancy conversion 완료: `gre-source` -> `gre-source-1` primary match, `gre-source-2`는 신규 이중화 회선으로 유지
 - Excel export 진단 컬럼 추가 완료: match reason, unmatched category, diagnostic reason, match key fields, score reasons
 - UI 검토 테이블 진단 필터 추가 완료: old-only 항목의 unmatched category / diagnostic reason 검색 및 체크 필터
+- 수동 매핑 후보 축소 완료: 같은 object type 우선, identity/description endpoint/common field 점수화, 상위 20개 표시
 - port/lag realMissingTarget reason split 완료: disabled port, active port with description, active port with MD-CLI shell only, lag members with description
 - interface realMissingTarget reason split 완료: MNT description-evidence 20, GRE address 16, system/loopback address 2
 - static-route realMissingTarget reason split 완료: default, indirect tunnel, loopback host, multi next-hop

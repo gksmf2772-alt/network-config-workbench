@@ -575,6 +575,77 @@ function getPimInterfaceIdentity(object = {}) {
   );
 }
 
+function normalizeLagReference(value = "") {
+  return normalizeIdentityToken(value).split(":")[0];
+}
+
+function getSimpleDescriptionReference(object = {}) {
+  const rawDescription = getFieldValue(object, "description") || object.description || "";
+  const cleanDescription = String(rawDescription || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^#+|#+$/g, "")
+    .trim();
+
+  if (!/^[a-z0-9][a-z0-9._#-]*$/i.test(cleanDescription)) return "";
+  return normalizeIdentityToken(cleanDescription);
+}
+
+function getInterfaceIdentity(object = {}) {
+  return normalizeIdentityToken(
+    getFieldValue(object, "interface") ||
+    object?.normalizedIdentity ||
+    object?.sourceName ||
+    object?.name
+  );
+}
+
+function findLagServiceInterfaceSapMatch(oldObject, newObjects = [], usedNewIds = new Set()) {
+  if (oldObject?.normalizedType !== "lag") return null;
+
+  const serviceInterface = getSimpleDescriptionReference(oldObject);
+  if (!serviceInterface) return null;
+
+  const sapLagRefs = new Set(
+    newObjects
+      .filter((object) => object?.normalizedType === "interface")
+      .filter((object) => getInterfaceIdentity(object) === serviceInterface)
+      .map((object) => normalizeLagReference(getFieldValue(object, "sap")))
+      .filter(Boolean)
+  );
+
+  if (!sapLagRefs.size) return null;
+
+  const targetLags = new Map();
+  for (const newObject of newObjects) {
+    if (newObject?.normalizedType !== "lag") continue;
+    if (usedNewIds.has(newObject.id)) continue;
+
+    const lagRef = normalizeLagReference(
+      getFieldValue(newObject, "lag") ||
+      newObject.normalizedIdentity ||
+      newObject.sourceName
+    );
+
+    if (sapLagRefs.has(lagRef)) targetLags.set(newObject.id, newObject);
+  }
+
+  if (targetLags.size !== 1) return null;
+
+  return makeMatch({
+    oldObject,
+    newObject: [...targetLags.values()][0],
+    status: "matched",
+    reason: "lag-service-interface-sap",
+    score: 95,
+    matchKeyFields: ["description", "sap", "lag"],
+    scoreReasons: [
+      "old-lag-description-service-interface",
+      "service-interface-sap-lag",
+    ],
+  });
+}
+
 function splitStaticRouteIdentity(identity = "") {
   const [prefix = "", nextHop = ""] = String(identity || "").split("|");
   return {
@@ -1349,7 +1420,19 @@ export function matchNormalizedObjects({
     usedNewIds.add(match.newObject.id);
   }
 
-  // 4. Weighted semantic matching
+  // 4. Cross-object service relationship matching
+  for (const oldObject of oldObjects) {
+    if (usedOldIds.has(oldObject.id)) continue;
+
+    const match = findLagServiceInterfaceSapMatch(oldObject, newObjects, usedNewIds);
+    if (!match) continue;
+
+    matches.push(match);
+    usedOldIds.add(oldObject.id);
+    usedNewIds.add(match.newObject.id);
+  }
+
+  // 5. Weighted semantic matching
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -1370,7 +1453,7 @@ export function matchNormalizedObjects({
     }
   }
 
-  // 5. Description similarity matching
+  // 6. Description similarity matching
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -1392,7 +1475,7 @@ export function matchNormalizedObjects({
     }
   }
 
-  // 6. Old only
+  // 7. Old only
   for (const oldObject of oldObjects) {
     if (usedOldIds.has(oldObject.id)) continue;
 
@@ -1421,7 +1504,7 @@ export function matchNormalizedObjects({
     }
   }
 
-  // 7. New only
+  // 8. New only
   for (const newObject of newObjects) {
     if (usedNewIds.has(newObject.id)) continue;
     if (ambiguousAlternativeNewIds.has(newObject.id)) continue;

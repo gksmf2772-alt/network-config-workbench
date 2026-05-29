@@ -582,6 +582,16 @@ test("port real missing details split disabled and active described ports", () =
         },
       },
       {
+        id: "target-port-shell",
+        status: "new-only",
+        objectType: "port",
+        newObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/c5/1",
+          fields: { port: "1/1/c5/1" },
+        },
+      },
+      {
         id: "disabled-port",
         status: "old-only",
         objectType: "port",
@@ -619,12 +629,27 @@ test("port real missing details split disabled and active described ports", () =
           },
         },
       },
+      {
+        id: "active-described-port-with-mdcli-shell",
+        status: "old-only",
+        objectType: "port",
+        oldObject: {
+          normalizedType: "port",
+          normalizedIdentity: "1/1/5",
+          fields: {
+            port: "1/1/5",
+            "admin-state": "enabled",
+            description: "## active old link with shell only ##",
+          },
+        },
+      },
     ],
     semanticSummary: {},
   });
 
   assert.deepEqual(dashboard.context.fixtureScope.byReason.realMissingTarget, [
     { objectType: "port", reason: "missing-target-active-port-with-description", count: 1 },
+    { objectType: "port", reason: "missing-target-active-port-with-mdcli-port-shell", count: 1 },
     { objectType: "port", reason: "missing-target-disabled-port", count: 1 },
     { objectType: "port", reason: "missing-target-disabled-port-with-description", count: 1 },
   ]);

@@ -193,11 +193,13 @@ field: interface
 ### 2-1. Port/LAG fixture 진단
 
 - Web top diff `legacyCore` endpoint alignment mirrors the same compact-old vs split-target LAG endpoint logic, so `lag 184` maps to `lag-B-4206` by `Dobong-TOU-FD19_7/1` vs `Dobong-TOU-FD19, Po11(Te7/1)`.
+- Classic LAG description이 target service interface 이름이고, 해당 interface의 `sap`이 target LAG를 가리키면 `lag-service-interface-sap`으로 매치한다.
 
 진행:
 
 - target에 같은 physical id, member overlap, description endpoint 증거가 없는 port/lag old-only는 matcherIssue가 아니라 realMissingTarget으로 분류
 - LAG/port description endpoint matcher는 compact old 표기와 split target 표기, `to-` 방향 접두어, 괄호 안 물리 포트, 포트 없는 underscore 장비 토큰을 같은 endpoint 증거로 본다.
+- Classic port가 MD-CLI `slot/mda/cport/1` 포트 shell만 있고 description이 없으면 자동 매칭하지 않고 `missing-target-active-port-with-mdcli-port-shell`로 따로 분류한다.
 - Classic `port-list` TCP/UDP 항목인 DHCP `port 67/68`은 physical port 객체로 파싱하지 않는다.
 - 새 PC fixture case 1/2 port/lag unmatchedMatcherIssue: 0
 
@@ -377,17 +379,20 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
 - 새 PC fixture case 1/2 full parserGap: 0
 - Added full MD-CLI log check from `C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config`:
   - automated by `--md-full-logs`: case 1/2 `MDconfig` and `MDfullcontext` are discovered by SEA id + log type.
-  - case 1 `MDconfig.log`: matched 358, oldOnly 117, newOnly 568, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 117, lowConfidence 0
-  - case 1 `MDfullcontext.log`: matched 351, oldOnly 119, newOnly 375, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 119, lowConfidence 0
-  - case 2 `MDconfig.log`: matched 356, oldOnly 124, newOnly 574, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 124, lowConfidence 0
-  - case 2 `MDfullcontext.log`: matched 349, oldOnly 126, newOnly 381, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 126, lowConfidence 0
+  - case 1 `MDconfig.log`: matched 362, oldOnly 113, newOnly 564, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 113, lowConfidence 0
+  - case 1 `MDfullcontext.log`: matched 355, oldOnly 115, newOnly 371, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 115, lowConfidence 0
+  - case 2 `MDconfig.log`: matched 360, oldOnly 120, newOnly 570, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 120, lowConfidence 0
+  - case 2 `MDfullcontext.log`: matched 353, oldOnly 122, newOnly 377, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 122, lowConfidence 0
+- MD full-log port/lag realMissingTarget reason:
+  - case 1 `MDconfig`/`MDfullcontext`: port disabled 65, active description 2, mdcli-port-shell 1
+  - case 2 `MDconfig`/`MDfullcontext`: lag members-with-description 2; port disabled 67, active description 4, mdcli-port-shell 1
 - Full MD-CLI log GRE source conversion:
   - case 1: `gre-source` `220.116.146.97/30` / `tunnel-1.public:1` -> `gre-source-1` `112.188.18.2/30` / `pxc-1.b:1`
   - case 2: `gre-source` `220.116.146.101/30` / `tunnel-1.public:1` -> `gre-source-1` `112.188.18.66/30` / `pxc-1.b:1`
   - Nokia-only `nokia-gre-source-primary-conversion`으로 자동 매치한다. `gre-source-2`는 신규 이중화 회선으로 남긴다.
 - 새 PC fixture full realMissingTarget by type:
-  - case 1: port 66, interface 38, static-route 10, route-policy 8, pim 7, prefix-list 7, community 5, lag 4, bgp 1
-  - case 2: port 70, interface 38, static-route 9, route-policy 8, pim 7, prefix-list 7, community 6, lag 6, bgp 1
+  - case 1: port 66, interface 38, static-route 10, route-policy 8, pim 7, prefix-list 7, community 5, bgp 1
+  - case 2: port 70, interface 38, static-route 9, route-policy 8, pim 7, prefix-list 7, community 6, lag 2, bgp 1
 - 새 PC fixture static-route realMissingTarget by reason:
   - case 1: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 3, missing-target-multi-next-hop-route 2
   - case 2: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 2, missing-target-multi-next-hop-route 2
@@ -398,8 +403,8 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
   - case 1: missing-target-bgp-ser-peer 1
   - case 2: missing-target-bgp-ser-peer 1
 - 새 PC fixture port/lag realMissingTarget by reason:
-  - case 1: lag missing-target-lag-members-with-description 4; port missing-target-disabled-port 65, missing-target-active-port-with-description 1
-  - case 2: lag missing-target-lag-members-with-description 6; port missing-target-disabled-port 67, missing-target-active-port-with-description 3
+  - case 1: lag 0; port missing-target-disabled-port 65, missing-target-active-port-with-description 1
+  - case 2: lag missing-target-lag-members-with-description 2; port missing-target-disabled-port 67, missing-target-active-port-with-description 3
 - 새 PC fixture interface realMissingTarget by reason:
   - case 1: missing-target-address-with-description-evidence 20, missing-target-gre-address 16, missing-target-system-loopback-address 2
   - case 2: missing-target-address-with-description-evidence 20, missing-target-gre-address 16, missing-target-system-loopback-address 2

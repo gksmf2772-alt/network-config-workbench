@@ -9045,6 +9045,7 @@ function compareObjects(oldObjects, newObjects, options) {
   const oldMap = buildObjectMap(oldObjects);
   const newMap = buildObjectMap(newObjects);
   alignObjectMapsByDescriptionEndpoint(oldMap, newMap, ["lag", "port", "interface"]);
+  alignObjectMapsByLagServiceInterfaceSap(oldMap, newMap);
   const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])].sort(compareObjectKeys);
   const items = [];
 
@@ -9201,9 +9202,94 @@ function alignObjectMapsByDescriptionEndpoint(oldMap, newMap, objectTypes = []) 
   });
 }
 
+function alignObjectMapsByLagServiceInterfaceSap(oldMap, newMap) {
+  const oldLags = [...oldMap.entries()].filter(([, object]) => legacyObjectType(object) === "lag");
+  const newInterfaces = [...newMap.entries()].filter(([, object]) => legacyObjectType(object) === "interface");
+  const newLags = [...newMap.entries()].filter(([, object]) => legacyObjectType(object) === "lag");
+  const usedNewKeys = new Set();
+
+  oldLags.forEach(([oldKey, oldObject]) => {
+    if (newMap.has(oldKey)) return;
+
+    const serviceInterface = simpleDescriptionReference(oldObject);
+    if (!serviceInterface) return;
+
+    const sapLagRefs = new Set(
+      newInterfaces
+        .filter(([, object]) => legacyInterfaceIdentity(object) === serviceInterface)
+        .map(([, object]) => legacyLagReference(legacyFieldValue(object, "sap")))
+        .filter(Boolean)
+    );
+
+    if (!sapLagRefs.size) return;
+
+    const candidates = newLags.filter(([newKey, newObject]) => {
+      if (usedNewKeys.has(newKey)) return false;
+      if (!newMap.has(newKey)) return false;
+      const lagRef = legacyLagReference(
+        legacyFieldValue(newObject, "lag") ||
+        newObject.name ||
+        splitObjectKey(newKey).name
+      );
+      return sapLagRefs.has(lagRef);
+    });
+
+    if (candidates.length !== 1) return;
+
+    const [newKey, newObject] = candidates[0];
+    if (newKey === oldKey) return;
+
+    newMap.delete(newKey);
+    newMap.set(oldKey, {
+      ...newObject,
+      key: oldKey,
+      originalKey: newObject.key || newKey,
+      serviceInterfaceSapMappedFrom: newKey,
+    });
+    usedNewKeys.add(newKey);
+  });
+}
+
 function isEndpointAlignedObject(object = {}, targetTypes = new Set()) {
   const objectType = canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "");
   return targetTypes.has(objectType);
+}
+
+function legacyObjectType(object = {}) {
+  return canonicalizeComparableLine(object.type || object.normalizedType || object.sourceType || "");
+}
+
+function legacyFieldValue(object = {}, field = "") {
+  const value =
+    object?.canonicalFields?.[field] ??
+    object?.fields?.[field] ??
+    object?.[field] ??
+    "";
+
+  return canonicalizeComparableLine(stripTrailingSyntax(value));
+}
+
+function simpleDescriptionReference(object = {}) {
+  const rawDescription =
+    object?.canonicalFields?.description ||
+    object?.fields?.description ||
+    object?.description ||
+    "";
+  const cleanDescription = stripTrailingSyntax(rawDescription)
+    .replace(/^#+|#+$/g, "")
+    .trim();
+
+  if (!/^[a-z0-9][a-z0-9._#-]*$/i.test(cleanDescription)) return "";
+  return canonicalizeComparableLine(cleanDescription);
+}
+
+function legacyInterfaceIdentity(object = {}) {
+  return legacyFieldValue(object, "interface") ||
+    canonicalizeComparableLine(object.name || splitObjectKey(object.key).name);
+}
+
+function legacyLagReference(value = "") {
+  return canonicalizeComparableLine(stripTrailingSyntax(value)).split(":")[0];
 }
 
 function objectDescriptionEndpoints(object = {}) {

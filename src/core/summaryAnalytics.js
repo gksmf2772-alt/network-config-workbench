@@ -382,7 +382,7 @@ function fixtureRealMissingReason(item = {}, newObjects = []) {
     return "missing-target-identity";
   }
 
-  if (["port", "lag"].includes(type)) return fixturePortLagRealMissingReason(type, oldObject);
+  if (["port", "lag"].includes(type)) return fixturePortLagRealMissingReason(type, oldObject, newObjects);
 
   if (type === "pim" && hasPimInterfaceTargetEvidence(oldObject, newObjects)) {
     return "missing-target-pim-config-with-interface-evidence";
@@ -482,7 +482,7 @@ function isGreInterface(object = {}) {
   return /^gre(?:-|$)/i.test(interfaceName(object));
 }
 
-function fixturePortLagRealMissingReason(type = "", oldObject = {}) {
+function fixturePortLagRealMissingReason(type = "", oldObject = {}, newObjects = []) {
   const physicalId = portLagPhysicalId(type, oldObject);
   const hasDescription = Boolean(String(portLagDescription(oldObject) || "").trim());
 
@@ -500,7 +500,11 @@ function fixturePortLagRealMissingReason(type = "", oldObject = {}) {
       ? "missing-target-disabled-port-with-description"
       : "missing-target-disabled-port";
   }
-  if (hasDescription && isEnabledPortLag(oldObject)) return "missing-target-active-port-with-description";
+  if (hasDescription && isEnabledPortLag(oldObject)) {
+    return hasMdCliPortShellTarget(oldObject, newObjects)
+      ? "missing-target-active-port-with-mdcli-port-shell"
+      : "missing-target-active-port-with-description";
+  }
   if (hasDescription) return "missing-target-port-id-with-description";
   if (physicalId) return "missing-target-port-id";
   return "missing-target-port-evidence";
@@ -656,6 +660,23 @@ function hasPortLagTargetEvidence(type = "", oldObject = {}, newObjects = []) {
     getObjectType(object) === type &&
     hasPortLagEvidence(type, oldObject, object)
   );
+}
+
+function hasMdCliPortShellTarget(oldObject = {}, newObjects = []) {
+  const portCandidates = mdCliPortShellCandidates(portLagPhysicalId("port", oldObject));
+  if (!portCandidates.size) return false;
+
+  return newObjects.some((object) =>
+    getObjectType(object) === "port" &&
+    portCandidates.has(portLagPhysicalId("port", object)) &&
+    !String(portLagDescription(object) || "").trim()
+  );
+}
+
+function mdCliPortShellCandidates(port = "") {
+  const match = String(port || "").match(/^(\d+)\/(\d+)\/(\d+)$/);
+  if (!match) return new Set();
+  return new Set([`${match[1]}/${match[2]}/c${match[3]}/1`]);
 }
 
 function hasPortLagEvidence(type = "", oldObject = {}, newObject = {}) {

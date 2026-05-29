@@ -283,6 +283,60 @@ test("Classic to MD-CLI LAG FD19 endpoint maps despite renamed disabled target",
   assert.equal(plan[0].fieldSummary["admin-state"].status, "changed");
 });
 
+test("Classic LAG maps MD-CLI LAG through service interface SAP reference", () => {
+  const oldConfig = [
+    "lag 311",
+    "    description \"To-PE#1-1\"",
+    "    mode access",
+    "    access",
+    "        adapt-qos link",
+    "    exit",
+    "    port 2/2/1",
+    "    lacp active administrative-key 311",
+    "    no shutdown",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    '/configure { service ies "100" interface "To-PE#1-1" admin-state enable }',
+    '/configure { service ies "100" interface "To-PE#1-1" sap lag-P-2113 ingress qos sap-ingress policy-name "SEA_IN" }',
+    '/configure { service ies "100" interface "To-PE#1-1" ipv4 primary address 14.59.4.66 }',
+    '/configure { service ies "100" interface "To-PE#1-1" ipv4 primary prefix-length 30 }',
+    '/configure { lag "lag-P-2113" admin-state enable }',
+    '/configure { lag "lag-P-2113" description "## PE, PGangbu-PET097, xe-0/0/2, Direct, 10G, Fiber ##" }',
+    '/configure { lag "lag-P-2113" mode access }',
+    '/configure { lag "lag-P-2113" lacp mode active }',
+    '/configure { lag "lag-P-2113" lacp administrative-key 2113 }',
+    '/configure { lag "lag-P-2113" access adapt-qos mode link }',
+    '/configure { lag "lag-P-2113" port 2/1/c13/1 }',
+  ].join("\n");
+  const oldResult = normalizeConfig({
+    vendor: "nokia-classic",
+    configText: oldConfig,
+    side: "old",
+  });
+  const newResult = normalizeConfig({
+    vendor: "nokia-md-cli",
+    configText: newConfig,
+    side: "new",
+  });
+  const plan = createComparisonPlan(
+    matchNormalizedObjects({
+      oldObjects: oldResult.objects,
+      newObjects: newResult.objects,
+      profile: {},
+    }),
+    {}
+  );
+
+  const lagItem = plan.find((item) => item.objectType === "lag");
+
+  assert.equal(lagItem.status, "matched");
+  assert.equal(lagItem.oldObject.normalizedIdentity, "311");
+  assert.equal(lagItem.newObject.normalizedIdentity, "lag-P-2113");
+  assert.equal(lagItem.reason, "lag-service-interface-sap");
+  assert.ok(lagItem.scoreReasons.includes("service-interface-sap-lag"));
+});
+
 test("port endpoint match normalizes known Ganbuk spelling typo", () => {
   const oldDescription = "## OLT,10B,Ganbuk-TOU-FK53_7/1_OFD#6-74 ##";
   const newDescription = "## TO, lag-B-6205(6/2/c5/1), Gangbuk-TOU-FK53, Po11(Te7/1), SBY, 02020002-6481, Fiber ##";

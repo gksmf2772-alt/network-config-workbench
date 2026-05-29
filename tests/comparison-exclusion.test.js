@@ -337,13 +337,20 @@ test("semantic state labels use MVP operator taxonomy", () => {
 test("legacy compare aligns migrated objects by description endpoint before diff rows", () => {
   const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
   const alignCallIndex = legacy.indexOf('alignObjectMapsByDescriptionEndpoint(oldMap, newMap, ["lag", "port", "interface"]);');
+  const sapAlignCallIndex = legacy.indexOf("alignObjectMapsByLagServiceInterfaceSap(oldMap, newMap);");
   const keyBuildIndex = legacy.indexOf("const keys = [...new Set([...oldMap.keys(), ...newMap.keys()])]");
 
   assert.ok(alignCallIndex > 0);
-  assert.ok(keyBuildIndex > alignCallIndex);
+  assert.ok(sapAlignCallIndex > alignCallIndex);
+  assert.ok(keyBuildIndex > sapAlignCallIndex);
   assert.match(legacy, /function isEndpointAlignedObject\(object = \{\}, targetTypes = new Set\(\)\)/);
   assert.match(legacy, /targetTypes\.has\(objectType\)/);
   assert.match(legacy, /newMap\.delete\(newKey\);[\s\S]*newMap\.set\(oldKey/);
+  assert.match(legacy, /function alignObjectMapsByLagServiceInterfaceSap\(oldMap, newMap\)/);
+  assert.match(legacy, /const serviceInterface = simpleDescriptionReference\(oldObject\);/);
+  assert.match(legacy, /legacyInterfaceIdentity\(object\) === serviceInterface/);
+  assert.match(legacy, /legacyLagReference\(legacyFieldValue\(object, "sap"\)\)/);
+  assert.match(legacy, /serviceInterfaceSapMappedFrom: newKey/);
   assert.match(legacy, /const rule = \{ mode: \["port", "interface"\]\.includes\(type\) \? "description" : "header"/);
   assert.match(legacy, /if \(object\?\.type === "lag"\) return inferObjectIdentityFromLines\(object\);/);
   assert.match(legacy, /function extractLagNameFromLine\(line = ""\)[\s\S]*\^configure\\s\+lag/);

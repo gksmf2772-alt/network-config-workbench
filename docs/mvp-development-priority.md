@@ -118,8 +118,9 @@ BGP neighbor:
 - `scripts/validateCompareFixtures.js --all-cases --md-full-logs --iterations 1` validates current PC case 1/2 MD full logs by SEA id + log type.
 - `scripts/validateCompareFixtures.js --available-cases --scope full --iterations 1` validates only existing case files, useful for current PC case 1/2-only fixture directories.
 - Web top diff `legacyCore` LAG endpoint alignment now handles compact old vs split target description endpoints.
+- Classic LAG description -> target service interface -> target LAG SAP 경유 매칭 완료. `To-PE#1-*` / `To-PE#2-*` LAG 4건씩 자동 매치.
 - Nokia-only GRE source redundancy conversion 완료: `gre-source` -> `gre-source-1` primary match, `gre-source-2`는 신규 이중화 회선으로 유지
-- port/lag realMissingTarget reason split 완료: disabled port, active port with description, lag members with description
+- port/lag realMissingTarget reason split 완료: disabled port, active port with description, active port with MD-CLI shell only, lag members with description
 - interface realMissingTarget reason split 완료: MNT description-evidence 20, GRE address 16, system/loopback address 2
 - static-route realMissingTarget reason split 완료: default, indirect tunnel, loopback host, multi next-hop
 - policy placeholder realMissingTarget reason split 완료: community members/expression, ip-prefix-list/prefix-list, route-policy deny/drop/iCOD/peer

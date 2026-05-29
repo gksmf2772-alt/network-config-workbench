@@ -16,7 +16,10 @@ test("Excel report rows expose MVP columns and split changed, missing, added, re
         id: "if-rename",
         status: "matched",
         objectType: "interface",
+        reason: "ip-address",
         score: 100,
+        matchKeyFields: ["address"],
+        scoreReasons: ["ip-address"],
         oldObject: {
           normalizedType: "interface",
           normalizedIdentity: "to-core",
@@ -83,6 +86,11 @@ test("Excel report rows expose MVP columns and split changed, missing, added, re
   );
   assert.equal(rows[0].oldObject, "to-core");
   assert.equal(rows[0].newObject, "Te1/1/1");
+  assert.equal(rows[0].matchReason, "ip-address");
+  assert.equal(rows[0].matchKeyFields, "address");
+  assert.equal(rows[0].scoreReasons, "ip-address");
+  assert.equal(rows[1].unmatchedCategory, "realMissingTarget");
+  assert.equal(rows[1].diagnosticReason, "missing-target-prefix");
   assert.equal(rows.some((row) => row.field === "group"), false);
 });
 
@@ -102,7 +110,7 @@ test("Excel report CSV keeps fixed headers and escapes Excel-sensitive values", 
     },
   ]);
 
-  assert.ok(csv.startsWith("\ufeffsection,old object,new object,status,field,old value,new value,reason,severity,action needed"));
+  assert.ok(csv.startsWith("\ufeffsection,old object,new object,status,field,old value,new value,reason,match reason,unmatched category,diagnostic reason,match key fields,score reasons,severity,action needed"));
   assert.match(csv, /"old,if"/);
   assert.match(csv, /"new ""if"""/);
   assert.match(csv, /"'=cmd"/);

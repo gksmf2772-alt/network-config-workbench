@@ -1,4 +1,5 @@
 import { getSemanticStateLabel } from "./semanticTheme.js";
+import { createFixtureUnmatchedClassifier } from "./summaryAnalytics.js";
 
 export const EXCEL_REPORT_COLUMNS = [
   { key: "section", label: "section" },
@@ -9,6 +10,11 @@ export const EXCEL_REPORT_COLUMNS = [
   { key: "oldValue", label: "old value" },
   { key: "newValue", label: "new value" },
   { key: "reason", label: "reason" },
+  { key: "matchReason", label: "match reason" },
+  { key: "unmatchedCategory", label: "unmatched category" },
+  { key: "diagnosticReason", label: "diagnostic reason" },
+  { key: "matchKeyFields", label: "match key fields" },
+  { key: "scoreReasons", label: "score reasons" },
   { key: "severity", label: "severity" },
   { key: "actionNeeded", label: "action needed" },
 ];
@@ -24,21 +30,26 @@ export function buildExcelReportRows({
   plan = [],
   auditFindings = [],
   includeSuppressed = false,
+  fixtureScope = null,
 } = {}) {
   const rows = [];
+  const planItems = Array.isArray(plan) ? plan : [];
+  const context = {
+    classifyUnmatched: createFixtureUnmatchedClassifier(planItems, fixtureScope),
+  };
 
-  for (const item of Array.isArray(plan) ? plan : []) {
+  for (const item of planItems) {
     if (!item || (!includeSuppressed && isExcludedPlanItem(item))) continue;
     if (!includeSuppressed && isSuppressedOnlyPlanItem(item)) continue;
 
     if (isObjectLevelExportItem(item)) {
-      rows.push(buildObjectLevelRow(item));
+      rows.push(buildObjectLevelRow(item, {}, context));
       continue;
     }
 
-    const fieldRows = buildFieldLevelRows(item, includeSuppressed);
+    const fieldRows = buildFieldLevelRows(item, includeSuppressed, context);
     rows.push(...fieldRows);
-    rows.push(...buildRelationshipRows(item));
+    rows.push(...buildRelationshipRows(item, context));
 
     if (!fieldRows.length && isLowConfidenceMatch(item)) {
       rows.push(buildObjectLevelRow(item, {
@@ -46,7 +57,7 @@ export function buildExcelReportRows({
         reason: "낮은 매칭 신뢰도",
         severity: "보통",
         actionNeeded: "매칭 근거 확인",
-      }));
+      }, context));
     }
   }
 
@@ -123,7 +134,7 @@ export function buildExcelReportXlsxFilename({ comparedAt = Date.now() } = {}) {
   return `network-config-report-${stamp}.xlsx`;
 }
 
-function buildObjectLevelRow(item = {}, override = {}) {
+function buildObjectLevelRow(item = {}, override = {}, context = {}) {
   const objectType = planItemObjectType(item);
   const status = override.status || getSemanticStateLabel(item);
   return {
@@ -135,19 +146,20 @@ function buildObjectLevelRow(item = {}, override = {}) {
     oldValue: "",
     newValue: "",
     reason: override.reason || objectReason(item, status),
+    ...itemDiagnosticColumns(item, context),
     severity: override.severity || severityForStatus(status),
     actionNeeded: override.actionNeeded || actionForStatus(status),
   };
 }
 
-function buildFieldLevelRows(item = {}, includeSuppressed = false) {
+function buildFieldLevelRows(item = {}, includeSuppressed = false, context = {}) {
   return Object.entries(item.fieldSummary || {})
-    .map(([field, summary]) => buildFieldLevelRow(item, field, summary, includeSuppressed))
+    .map(([field, summary]) => buildFieldLevelRow(item, field, summary, includeSuppressed, context))
     .filter(Boolean)
     .sort((left, right) => left.field.localeCompare(right.field));
 }
 
-function buildFieldLevelRow(item = {}, rawField = "", summary = {}, includeSuppressed = false) {
+function buildFieldLevelRow(item = {}, rawField = "", summary = {}, includeSuppressed = false, context = {}) {
   const policyState = policyAppliedFieldState(summary);
   if (!includeSuppressed && policyState !== "active") return null;
 
@@ -165,12 +177,13 @@ function buildFieldLevelRow(item = {}, rawField = "", summary = {}, includeSuppr
     oldValue: fieldValue(summary, item.oldObject, field, "oldValues"),
     newValue: fieldValue(summary, item.newObject, field, "newValues"),
     reason: fieldReason(summary, status, item),
+    ...itemDiagnosticColumns(item, context),
     severity: severityForStatus(label, field),
     actionNeeded: actionForStatus(label, field),
   };
 }
 
-function buildRelationshipRows(item = {}) {
+function buildRelationshipRows(item = {}, context = {}) {
   return (item.relationshipSummary || [])
     .filter((relationship) => {
       const status = normalizeStatus(relationship?.status);
@@ -207,6 +220,21 @@ function buildAuditFindingRows(auditFindings = []) {
     }));
 }
 
+function itemDiagnosticColumns(item = {}, context = {}) {
+  const status = normalizeStatus(item.status);
+  const unmatchedClassification = isOldOnlyExportItem(status)
+    ? context.classifyUnmatched?.(item)
+    : null;
+
+  return {
+    matchReason: item.reason || "",
+    unmatchedCategory: unmatchedClassification?.category || "",
+    diagnosticReason: unmatchedClassification?.reason || "",
+    matchKeyFields: compactValues(item.matchKeyFields || []),
+    scoreReasons: compactValues(item.scoreReasons || []),
+  };
+}
+
 function isObjectLevelExportItem(item = {}) {
   const status = normalizeStatus(item.status);
   return [
@@ -221,6 +249,10 @@ function isObjectLevelExportItem(item = {}) {
     "no-target",
     "no-source",
   ].includes(status);
+}
+
+function isOldOnlyExportItem(status = "") {
+  return ["old-only", "source-only", "no-target", "unmatched-old"].includes(status);
 }
 
 function isLowConfidenceMatch(item = {}) {

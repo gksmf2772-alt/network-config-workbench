@@ -265,32 +265,18 @@ function buildFixtureScopeAnalysis(plan = [], fixtureScope = null) {
   const realMissingUnmatched = [];
 
   for (const item of oldOnly) {
-    const type = item.objectType || getObjectType(item.oldObject);
-    const sourceCount = oldTypeCounts.get(type) || 0;
-    const targetCount = newTypeCounts.get(type) || 0;
-    const isParserGap = ["qos-policy", "filter", "route-policy", "prefix-list", "community"].includes(type);
+    const classification = classifyFixtureUnmatchedItem(item, {
+      newObjects,
+      oldTypeCounts,
+      newTypeCounts,
+      partialTarget,
+    });
 
-    if (isParserGap) {
-      if (!hasPolicyPlaceholderTargetIdentity(item.oldObject, newObjects)) {
-        realMissingUnmatched.push(item);
-        continue;
-      }
+    if (classification.category === "parserGap") {
       parserGapUnmatched.push(item);
-    } else if (partialTarget && (!targetCount || sourceCount > targetCount)) {
+    } else if (classification.category === "partialTargetScope") {
       partialTargetUnmatched.push(item);
-    } else if (targetCount && ["port", "lag", "interface", "sap", "subscriber-interface", "group-interface", "static-route"].includes(type)) {
-      if (type === "static-route" && !hasStaticRouteTargetPrefix(item.oldObject, newObjects)) {
-        realMissingUnmatched.push(item);
-        continue;
-      }
-      if (type === "interface" && !hasInterfaceTargetEvidence(item.oldObject, newObjects)) {
-        realMissingUnmatched.push(item);
-        continue;
-      }
-      if (["port", "lag"].includes(type) && !hasPortLagTargetEvidence(type, item.oldObject, newObjects)) {
-        realMissingUnmatched.push(item);
-        continue;
-      }
+    } else if (classification.category === "matcherIssue") {
       matcherIssueUnmatched.push(item);
     } else {
       realMissingUnmatched.push(item);
@@ -334,6 +320,76 @@ function buildFixtureScopeAnalysis(plan = [], fixtureScope = null) {
     byReason: {
       realMissingTarget: fixtureUnmatchedReasonBreakdown(realMissingUnmatched, newObjects),
     },
+  };
+}
+
+export function createFixtureUnmatchedClassifier(plan = [], fixtureScope = null) {
+  const oldObjects = plan.map((item) => item?.oldObject).filter(Boolean);
+  const newObjects = plan.map((item) => item?.newObject).filter(Boolean);
+  const partialTarget =
+    fixtureScope?.status === "partial-assembled-target" ||
+    fixtureScope?.fixtureCompleteness === "partial-assembled-target" ||
+    fixtureScope?.partialTarget === true;
+
+  const context = {
+    newObjects,
+    oldTypeCounts: countMap(oldObjects, getObjectType),
+    newTypeCounts: countMap(newObjects, getObjectType),
+    partialTarget,
+  };
+
+  return (item = {}) => classifyFixtureUnmatchedItem(item, context);
+}
+
+function classifyFixtureUnmatchedItem(item = {}, context = {}) {
+  const type = item.objectType || getObjectType(item.oldObject);
+  const oldObject = item.oldObject || {};
+  const newObjects = context.newObjects || [];
+  const oldTypeCounts = context.oldTypeCounts || new Map();
+  const newTypeCounts = context.newTypeCounts || new Map();
+  const sourceCount = oldTypeCounts.get(type) || 0;
+  const targetCount = newTypeCounts.get(type) || 0;
+  const isParserGap = ["qos-policy", "filter", "route-policy", "prefix-list", "community"].includes(type);
+
+  if (isParserGap) {
+    if (!hasPolicyPlaceholderTargetIdentity(oldObject, newObjects)) {
+      return {
+        category: "realMissingTarget",
+        reason: fixtureRealMissingReason(item, newObjects),
+      };
+    }
+    return { category: "parserGap", reason: "" };
+  }
+
+  if (context.partialTarget && (!targetCount || sourceCount > targetCount)) {
+    return { category: "partialTargetScope", reason: "" };
+  }
+
+  if (targetCount && ["port", "lag", "interface", "sap", "subscriber-interface", "group-interface", "static-route"].includes(type)) {
+    if (type === "static-route" && !hasStaticRouteTargetPrefix(oldObject, newObjects)) {
+      return {
+        category: "realMissingTarget",
+        reason: fixtureRealMissingReason(item, newObjects),
+      };
+    }
+    if (type === "interface" && !hasInterfaceTargetEvidence(oldObject, newObjects)) {
+      return {
+        category: "realMissingTarget",
+        reason: fixtureRealMissingReason(item, newObjects),
+      };
+    }
+    if (["port", "lag"].includes(type) && !hasPortLagTargetEvidence(type, oldObject, newObjects)) {
+      return {
+        category: "realMissingTarget",
+        reason: fixtureRealMissingReason(item, newObjects),
+      };
+    }
+    return { category: "matcherIssue", reason: "" };
+  }
+
+  return {
+    category: "realMissingTarget",
+    reason: fixtureRealMissingReason(item, newObjects),
   };
 }
 

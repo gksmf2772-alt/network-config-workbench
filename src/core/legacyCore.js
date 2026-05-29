@@ -17203,6 +17203,7 @@ function exportReport() {
   const rows = buildExcelReportRows({
     plan: state.lastSemanticPlan || [],
     auditFindings: dashboard.audit?.findings || state.lastStandardsAudit?.findings || [],
+    fixtureScope: state.profileDraft?.fixturePolicy || null,
   });
   const workbook = buildExcelReportXlsx(rows);
   saveTextFile(

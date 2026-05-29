@@ -114,7 +114,8 @@ Post-edit checklist:
     - PIM raw/parsed counts now match: Classic 15,55,49,48 and New_PIM_1..4 50,50,44,44.
     - Classic PIM block keeps context after a misindented child `exit`, so following group interfaces stay PIM objects.
     - Classic PIM normalized identity is now canonical lower-case, so Classic/MD-CLI case differences auto-match.
-    - Current PC fixture PIM matched counts: case 1/2 = 47/47.
+    - PIM matcher normalizes known `Ganbuk` -> `Gangbuk` spelling typo for PIM interface identity only.
+    - Current PC fixture PIM matched counts: case 1/2 = 48/48.
     - Current PC fixture PIM old-only rows with only generic target interface evidence stay unmatched; PIM config must exist on target to match.
   - Actual fixture matrix validator:
     - `scripts/validateCompareFixtures.js --all-cases --scope full` finds sibling `network-config-workbench-home\\예제 및 테스트 설정`.
@@ -130,8 +131,8 @@ Post-edit checklist:
     - `--md-full-logs` validates current PC case 1/2 `MDconfig` and `MDfullcontext` logs by SEA id + log type.
     - `--available-cases` validates only fixture cases whose source and target files exist, so the current PC case 1/2 directory no longer fails because case 3/4 files are absent.
     - Current PC full `realMissingTarget` by type:
-      - case 1: port 66, interface 38, static-route 10, pim 8, route-policy 8, prefix-list 7, community 5, lag 4, bgp 1.
-      - case 2: port 70, interface 38, static-route 9, pim 8, route-policy 8, prefix-list 7, community 6, lag 6, bgp 1.
+      - case 1: port 66, interface 38, static-route 10, route-policy 8, pim 7, prefix-list 7, community 5, lag 4, bgp 1.
+      - case 2: port 70, interface 38, static-route 9, route-policy 8, pim 7, prefix-list 7, community 6, lag 6, bgp 1.
     - Current PC static-route `realMissingTarget` by reason:
       - case 1: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 3, missing-target-multi-next-hop-route 2.
       - case 2: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 2, missing-target-multi-next-hop-route 2.
@@ -149,8 +150,9 @@ Post-edit checklist:
       - case 2: missing-target-address-with-description-evidence 20, missing-target-gre-address 16, missing-target-system-loopback-address 2.
       - The 20 description-evidence rows are `to-mnt#*` disappearing circuits from 10G -> 100G change; keep unmatched unless target interface IP exists.
     - Current PC PIM `realMissingTarget` by reason:
-      - case 1: missing-target-pim-config-with-interface-evidence 4, missing-target-type 4.
-      - case 2: missing-target-pim-config-with-interface-evidence 4, missing-target-type 4.
+      - case 1: missing-target-pim-config-with-interface-evidence 4, missing-target-type 3.
+      - case 2: missing-target-pim-config-with-interface-evidence 4, missing-target-type 3.
+    - Current PC MD full-log PIM `realMissingTarget`: case 1/2 MDconfig and MDfullcontext = 2 each after PIM spelling typo normalization.
   - Summary dashboard now shows MVP section cards for Interface / Static-route / BGP neighbor.
   - Section cards show total, matched, review-needed, changed, missing, added, and average overlap.
   - Clicking a section card reuses the existing object type filter flow.

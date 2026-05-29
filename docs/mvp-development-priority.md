@@ -113,6 +113,7 @@ BGP neighbor:
 - case mapping 완료: 027 -> New_*_1, 028 -> New_*_2, 029 -> New_*_3, 030 -> New_*_4
 - scope별 검증 완료: full, bgp, static, interface, lag, port, pim
 - PIM identity 매칭 gap 수정 완료
+- PIM `Ganbuk` -> `Gangbuk` known spelling typo identity match 완료
 - Added MD-CLI `MDconfig.log` / `MDfullcontext.log` full-log check: case 1/2 unmatchedMatcherIssue 0, parserGap 0, lowConfidence 0
 - `scripts/validateCompareFixtures.js --all-cases --md-full-logs --iterations 1` validates current PC case 1/2 MD full logs by SEA id + log type.
 - `scripts/validateCompareFixtures.js --available-cases --scope full --iterations 1` validates only existing case files, useful for current PC case 1/2-only fixture directories.

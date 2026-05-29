@@ -244,11 +244,12 @@ field: interface
 - Classic `pim` block interface 파싱 완료
 - Classic PIM block misindented child `exit` 복구 완료
 - MD-CLI one-line `router ... pim interface` 파싱 완료
+- PIM matcher normalizes known `Ganbuk` -> `Gangbuk` spelling typo for PIM interface identity only.
 - Target에 generic interface만 있고 PIM 설정이 없는 old PIM은 매치하지 않고 `missing-target-pim-config-with-interface-evidence`로 분리
 - 실제 fixture raw/parsed count 일치:
   - Classic: 15, 55, 49, 48
   - `New_PIM_1..4`: 50, 50, 44, 44
-- 새 PC fixture PIM matched count: case 1/2 = 47/47
+- 새 PC fixture PIM matched count: case 1/2 = 48/48
 
 ### 4-1. 실제 fixture matrix 검증
 
@@ -376,17 +377,17 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
 - 새 PC fixture case 1/2 full parserGap: 0
 - Added full MD-CLI log check from `C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config`:
   - automated by `--md-full-logs`: case 1/2 `MDconfig` and `MDfullcontext` are discovered by SEA id + log type.
-  - case 1 `MDconfig.log`: matched 357, oldOnly 118, newOnly 569, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 118, lowConfidence 0
-  - case 1 `MDfullcontext.log`: matched 350, oldOnly 120, newOnly 376, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 120, lowConfidence 0
-  - case 2 `MDconfig.log`: matched 355, oldOnly 125, newOnly 575, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 125, lowConfidence 0
-  - case 2 `MDfullcontext.log`: matched 348, oldOnly 127, newOnly 382, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 127, lowConfidence 0
+  - case 1 `MDconfig.log`: matched 358, oldOnly 117, newOnly 568, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 117, lowConfidence 0
+  - case 1 `MDfullcontext.log`: matched 351, oldOnly 119, newOnly 375, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 119, lowConfidence 0
+  - case 2 `MDconfig.log`: matched 356, oldOnly 124, newOnly 574, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 124, lowConfidence 0
+  - case 2 `MDfullcontext.log`: matched 349, oldOnly 126, newOnly 381, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 126, lowConfidence 0
 - Full MD-CLI log GRE source conversion:
   - case 1: `gre-source` `220.116.146.97/30` / `tunnel-1.public:1` -> `gre-source-1` `112.188.18.2/30` / `pxc-1.b:1`
   - case 2: `gre-source` `220.116.146.101/30` / `tunnel-1.public:1` -> `gre-source-1` `112.188.18.66/30` / `pxc-1.b:1`
   - Nokia-only `nokia-gre-source-primary-conversion`으로 자동 매치한다. `gre-source-2`는 신규 이중화 회선으로 남긴다.
 - 새 PC fixture full realMissingTarget by type:
-  - case 1: port 66, interface 38, static-route 10, pim 8, route-policy 8, prefix-list 7, community 5, lag 4, bgp 1
-  - case 2: port 70, interface 38, static-route 9, pim 8, route-policy 8, prefix-list 7, community 6, lag 6, bgp 1
+  - case 1: port 66, interface 38, static-route 10, route-policy 8, pim 7, prefix-list 7, community 5, lag 4, bgp 1
+  - case 2: port 70, interface 38, static-route 9, route-policy 8, pim 7, prefix-list 7, community 6, lag 6, bgp 1
 - 새 PC fixture static-route realMissingTarget by reason:
   - case 1: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 3, missing-target-multi-next-hop-route 2
   - case 2: missing-target-default-route 1, missing-target-indirect-tunnel-route 4, missing-target-loopback-host-route 2, missing-target-multi-next-hop-route 2
@@ -404,8 +405,9 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
   - case 2: missing-target-address-with-description-evidence 20, missing-target-gre-address 16, missing-target-system-loopback-address 2
   - description-evidence 20건은 10G -> 100G 전환으로 사라지는 회선. target interface IP가 없으면 매치 금지.
 - 새 PC fixture PIM realMissingTarget by reason:
-  - case 1: missing-target-pim-config-with-interface-evidence 4, missing-target-type 4
-  - case 2: missing-target-pim-config-with-interface-evidence 4, missing-target-type 4
+  - case 1: missing-target-pim-config-with-interface-evidence 4, missing-target-type 3
+  - case 2: missing-target-pim-config-with-interface-evidence 4, missing-target-type 3
+- 새 PC MD full-log PIM realMissingTarget: case 1/2 MDconfig and MDfullcontext = 2 each
 
 ## 집에서 이어받는 명령
 

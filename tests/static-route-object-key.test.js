@@ -538,6 +538,24 @@ test("PIM interface identity auto-matches across Classic and MD-CLI case differe
   assert.equal(pimItem.score, 95);
 });
 
+test("PIM interface identity normalizes known Ganbuk spelling typo", () => {
+  const { plan } = compare([
+    "configure router",
+    "    pim",
+    '        interface "g-to-Ganbuk-TOU-FK53"',
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n"), '/configure { router "Base" pim interface "g-to-Gangbuk-TOU-FK53" }');
+
+  const pimItem = plan.find((item) => item.objectType === "pim");
+
+  assert.equal(pimItem.status, "matched");
+  assert.equal(pimItem.reason, "pim-interface-known-typo");
+  assert.equal(pimItem.score, 95);
+  assert.deepEqual(pimItem.scoreReasons, ["pim-interface-known-typo-normalized"]);
+});
+
 test("Nokia Classic indirect static route preserves next-hop for audit and migration review", () => {
   const config = [
     "static-route-entry 125.144.253.0/24",

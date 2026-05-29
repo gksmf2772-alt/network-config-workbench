@@ -453,6 +453,31 @@ function findIdentityMatch(oldObject, candidates) {
       }
     }
 
+    if (oldObject.normalizedType === "pim") {
+      const oldPimInterface = getPimInterfaceIdentity(oldObject);
+      const newPimInterface = getPimInterfaceIdentity(newObject);
+      const normalizedOldPimInterface = normalizeKnownIdentityTypos(oldPimInterface);
+      const normalizedNewPimInterface = normalizeKnownIdentityTypos(newPimInterface);
+
+      if (
+        oldPimInterface &&
+        newPimInterface &&
+        oldPimInterface !== newPimInterface &&
+        normalizedOldPimInterface &&
+        normalizedOldPimInterface === normalizedNewPimInterface
+      ) {
+        return makeMatch({
+          oldObject,
+          newObject,
+          status: "matched",
+          reason: "pim-interface-known-typo",
+          score: 95,
+          matchKeyFields: ["interface"],
+          scoreReasons: ["pim-interface-known-typo-normalized"],
+        });
+      }
+    }
+
     if (
       canUseNormalizedIdentityAsStrongMatch(oldObject) &&
       oldObject.normalizedIdentity &&
@@ -535,6 +560,19 @@ function isNokiaGreSourcePrimaryConversion(oldObject = {}, newObject = {}) {
 
 function normalizeIdentityToken(value) {
   return normalizeValue(value).replace(/[{};,]+$/g, "");
+}
+
+function normalizeKnownIdentityTypos(value = "") {
+  return normalizeKnownEndpointTypos(normalizeIdentityToken(value));
+}
+
+function getPimInterfaceIdentity(object = {}) {
+  return normalizeIdentityToken(
+    getFieldValue(object, "interface") ||
+    object?.normalizedIdentity ||
+    object?.sourceName ||
+    object?.name
+  );
 }
 
 function splitStaticRouteIdentity(identity = "") {

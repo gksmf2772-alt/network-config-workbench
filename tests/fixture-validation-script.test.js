@@ -6,10 +6,12 @@ import path from "node:path";
 
 import {
   CASE_MATRIX,
+  MD_FULL_LOG_CASES,
   TARGET_PARTS,
   findExampleDir,
   getNewFilesForScope,
   resolveFixtureCases,
+  resolveMdFullLogCases,
 } from "../scripts/validateCompareFixtures.js";
 
 test("fixture discovery finds sibling home example directory", () => {
@@ -104,6 +106,77 @@ test("fixture case matrix accepts single suffixed target file variants", () => {
       "New_PIM_1_checked.txt",
     ]);
     assert.deepEqual(cases[0].newPaths.map((item) => path.basename(item)), cases[0].newFiles);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("fixture case matrix can select only available cases", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ncw-fixture-available-cases-"));
+
+  try {
+    const fixtureDir = path.join(root, "test-config");
+    fs.mkdirSync(fixtureDir, { recursive: true });
+
+    for (const fixtureCase of CASE_MATRIX.slice(0, 2)) {
+      fs.writeFileSync(path.join(fixtureDir, fixtureCase.oldFile), "old\n", "utf8");
+      for (const prefix of Object.values(TARGET_PARTS)) {
+        fs.writeFileSync(path.join(fixtureDir, `${prefix}_${fixtureCase.newIndex}.txt`), "new\n", "utf8");
+      }
+    }
+
+    const cases = resolveFixtureCases({
+      fixtureDir,
+      scope: "full",
+      availableCases: true,
+    });
+
+    assert.deepEqual(cases.map((item) => item.id), ["1", "2"]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("MD full log fixture matrix resolves block and full-context log targets", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ncw-md-log-cases-"));
+
+  try {
+    const fixtureDir = path.join(root, "test-config");
+    fs.mkdirSync(fixtureDir, { recursive: true });
+
+    for (const fixtureCase of CASE_MATRIX.slice(0, 2)) {
+      fs.writeFileSync(path.join(fixtureDir, fixtureCase.oldFile), "old\n", "utf8");
+    }
+
+    fs.writeFileSync(path.join(fixtureDir, "2026-05-28_15-13-31_Dobong-SEA027H_full_MDconfig.log"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "2026-05-28_15-14-13_Dobong-SEA027H_full_MDfullcontext.log"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "2026-05-28_15-13-55_Dobong-SEA028D_full_MDconfig.log"), "new\n", "utf8");
+    fs.writeFileSync(path.join(fixtureDir, "2026-05-28_15-14-41_Dobong-SEA028D_full_MDfullcontext.log"), "new\n", "utf8");
+
+    const cases = resolveMdFullLogCases({
+      fixtureDir,
+      allCases: true,
+    });
+
+    assert.equal(cases.length, MD_FULL_LOG_CASES.length);
+    assert.deepEqual(cases.map((item) => item.id), [
+      "1-mdconfig",
+      "1-mdfullcontext",
+      "2-mdconfig",
+      "2-mdfullcontext",
+    ]);
+    assert.deepEqual(cases.map((item) => item.targetType), [
+      "MDconfig",
+      "MDfullcontext",
+      "MDconfig",
+      "MDfullcontext",
+    ]);
+    assert.deepEqual(cases.map((item) => path.basename(item.newPaths[0])), [
+      "2026-05-28_15-13-31_Dobong-SEA027H_full_MDconfig.log",
+      "2026-05-28_15-14-13_Dobong-SEA027H_full_MDfullcontext.log",
+      "2026-05-28_15-13-55_Dobong-SEA028D_full_MDconfig.log",
+      "2026-05-28_15-14-41_Dobong-SEA028D_full_MDfullcontext.log",
+    ]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

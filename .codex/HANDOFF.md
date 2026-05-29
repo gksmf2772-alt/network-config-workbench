@@ -72,6 +72,7 @@ Static-route:
 - MD-CLI block과 one-line 모두 non-Base router context를 static-route identity에 포함한다.
 
 Port/LAG:
+- Web top diff `legacyCore` endpoint alignment mirrors the same compact-old vs split-target LAG endpoint logic, so `lag 184` maps to `lag-B-4206` by `Dobong-TOU-FD19_7/1` vs `Dobong-TOU-FD19, Po11(Te7/1)`.
 - target에 같은 physical id, member overlap, description endpoint 증거가 없는 port/lag old-only는 matcherIssue가 아니라 realMissingTarget으로 분류한다.
 - LAG/port description endpoint matcher는 compact old 표기와 split target 표기, `to-` 방향 접두어, 괄호 안 물리 포트, 포트 없는 underscore 장비 토큰을 같은 endpoint 증거로 본다.
 - Classic `port-list` TCP/UDP 항목인 DHCP `port 67/68`은 physical port 객체로 파싱하지 않는다.
@@ -208,10 +209,13 @@ MD-CLI:
 
 - branch: `work/mvp-interface-stabilization`
 - `npm.cmd run guard:legacy-core` pass
-- `npm.cmd test` pass: 194 pass, 1 skip
+- `npm.cmd test` pass: 197 pass, 1 skip
 - `npm.cmd run build` pass
 - `node scripts/validateCompareFixtures.js --all-cases --scope full --iterations 1` pass
 - `node scripts/validateCompareFixtures.js --all-cases --scope pim --iterations 1` pass
+- `node scripts/validateCompareFixtures.js --all-cases --md-full-logs --iterations 1` pass
+- `node scripts/validateCompareFixtures.js --available-cases --scope full --iterations 1` pass
+- `node scripts/validateCompareFixtures.js --available-cases --md-full-logs --iterations 1` pass
 - `node scripts/validateCompareFixtures.js --case 1 --scope full --iterations 1 --fixture-dir "C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config"` pass
 - `node scripts/validateCompareFixtures.js --case 2 --scope full --iterations 1 --fixture-dir "C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config"` pass
 - Current PC fixture case 1/2 full/static lowConfidence: 0
@@ -221,6 +225,7 @@ MD-CLI:
 - Current PC fixture case 1/2 full unmatchedMatcherIssue: 0
 - Current PC fixture case 1/2 full parserGap: 0
 - Added full MD-CLI log check from `C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config`:
+  - automated by `--md-full-logs`: case 1/2 `MDconfig` and `MDfullcontext` are discovered by SEA id + log type.
   - case 1 `MDconfig.log`: matched 357, oldOnly 118, newOnly 569, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 118, lowConfidence 0
   - case 1 `MDfullcontext.log`: matched 350, oldOnly 120, newOnly 376, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 120, lowConfidence 0
   - case 2 `MDconfig.log`: matched 355, oldOnly 125, newOnly 575, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 125, lowConfidence 0
@@ -261,6 +266,7 @@ npm.cmd install
 npm.cmd test
 npm.cmd run build
 node scripts/validateCompareFixtures.js --all-cases --scope full --iterations 1
+node scripts/validateCompareFixtures.js --all-cases --md-full-logs --iterations 1
 ```
 
 그 다음 작업은 코드 수정 전에 이 순서로 진행한다.

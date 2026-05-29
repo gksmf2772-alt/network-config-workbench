@@ -192,6 +192,8 @@ field: interface
 
 ### 2-1. Port/LAG fixture 진단
 
+- Web top diff `legacyCore` endpoint alignment mirrors the same compact-old vs split-target LAG endpoint logic, so `lag 184` maps to `lag-B-4206` by `Dobong-TOU-FD19_7/1` vs `Dobong-TOU-FD19, Po11(Te7/1)`.
+
 진행:
 
 - target에 같은 physical id, member overlap, description endpoint 증거가 없는 port/lag old-only는 matcherIssue가 아니라 realMissingTarget으로 분류
@@ -357,10 +359,13 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
 
 - branch: `work/mvp-interface-stabilization`
 - `npm.cmd run guard:legacy-core`: pass
-- `npm.cmd test`: pass, 194 pass / 1 skip
+- `npm.cmd test`: pass, 197 pass / 1 skip
 - `npm.cmd run build`: pass
 - `node scripts/validateCompareFixtures.js --all-cases --scope full --iterations 1`: pass
 - `node scripts/validateCompareFixtures.js --all-cases --scope pim --iterations 1`: pass
+- `node scripts/validateCompareFixtures.js --all-cases --md-full-logs --iterations 1`: pass
+- `node scripts/validateCompareFixtures.js --available-cases --scope full --iterations 1`: pass
+- `node scripts/validateCompareFixtures.js --available-cases --md-full-logs --iterations 1`: pass
 - `node scripts/validateCompareFixtures.js --case 1 --scope full --iterations 1 --fixture-dir "C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config"`: pass
 - `node scripts/validateCompareFixtures.js --case 2 --scope full --iterations 1 --fixture-dir "C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config"`: pass
 - 새 PC fixture case 1/2 full/static lowConfidence: 0
@@ -370,6 +375,7 @@ MVP 사용자 표현은 다음으로 정리해야 한다.
 - 새 PC fixture case 1/2 full unmatchedMatcherIssue: 0
 - 새 PC fixture case 1/2 full parserGap: 0
 - Added full MD-CLI log check from `C:\Users\gksmf\바탕 화면\실험실\코덱스\자료\테스트 config`:
+  - automated by `--md-full-logs`: case 1/2 `MDconfig` and `MDfullcontext` are discovered by SEA id + log type.
   - case 1 `MDconfig.log`: matched 357, oldOnly 118, newOnly 569, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 118, lowConfidence 0
   - case 1 `MDfullcontext.log`: matched 350, oldOnly 120, newOnly 376, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 120, lowConfidence 0
   - case 2 `MDconfig.log`: matched 355, oldOnly 125, newOnly 575, unmatchedMatcherIssue 0, parserGap 0, realMissingTarget 125, lowConfidence 0
@@ -410,6 +416,7 @@ npm.cmd install
 npm.cmd test
 npm.cmd run build
 node scripts/validateCompareFixtures.js --all-cases --scope full --iterations 1
+node scripts/validateCompareFixtures.js --all-cases --md-full-logs --iterations 1
 ```
 
 이후 `docs/mvp-product-definition.md`와 이 문서를 먼저 읽고 이어서 진행한다.

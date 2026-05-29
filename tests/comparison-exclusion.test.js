@@ -353,6 +353,10 @@ test("legacy compare aligns migrated objects by description endpoint before diff
   assert.match(legacy, /token: "administrative-key", field: "lacp\.administrative-key"[\s\S]*token: stripTrailingSyntax\(lacpKey\[1\]\), field: "lacp\.administrative-key"/);
   assert.match(legacy, /function descriptionEndpointCandidates\(description = ""\)[\s\S]*flatMap\(\(segment\)/);
   assert.match(legacy, /cleanSegment\.split\(\/\\s\+\/\)/);
+  assert.match(legacy, /function descriptionCompositeEndpointCandidates\(description = ""\)/);
+  assert.match(legacy, /function endpointPortTokenCandidates\(token = ""\)/);
+  assert.match(legacy, /candidates\.add\(`\$\{normalizeDescriptionEndpoint\(deviceToken\)\}\|\$\{portToken\}`\)/);
+  assert.match(legacy, /normalized\.match\(\/\^\(te\|xe\|ge\|gi\|et\|fe\|eth\|ethernet\)-\?/);
 
   assert.match(legacy, /const oldEndpoints = new Set\(objectDescriptionEndpoints\(oldObject\)\);/);
   assert.match(legacy, /objectDescriptionEndpoints\(newObject\)\.some\(\(endpoint\) => oldEndpoints\.has\(endpoint\)\)/);

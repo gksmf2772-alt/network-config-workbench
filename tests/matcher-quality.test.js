@@ -223,6 +223,66 @@ test("LAG endpoint matches underscore numeric port to parenthesized target port"
   assert.ok(match.scoreReasons.includes("description-endpoint-match"));
 });
 
+test("Classic to MD-CLI LAG FD19 endpoint maps despite renamed disabled target", () => {
+  const oldConfig = [
+    "lag 184",
+    "    description \"## OLT,10B,Dobong-TOU-FD19_7/1,LAG184 ##\"",
+    "    mode access",
+    "    access",
+    "        adapt-qos link",
+    "    exit",
+    "    port 8/2/4",
+    "    lacp active administrative-key 184",
+    "    lacp-xmit-interval slow",
+    "    no shutdown",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    "lag \"lag-B-4206\" {",
+    "    admin-state disable",
+    "    description \"## TO, lag-B-4206(4/2/c6/1), Dobong-TOU-FD19, Po11(Te7/1), SBY, 02020001-6039, Fiber, JN-HD2U#1-369 ##\"",
+    "    mode access",
+    "    lacp-xmit-interval slow",
+    "    lacp {",
+    "        mode active",
+    "        administrative-key 4206",
+    "    }",
+    "    access {",
+    "        adapt-qos {",
+    "            mode link",
+    "        }",
+    "    }",
+    "    port 4/2/c6/1 {",
+    "    }",
+    "}",
+  ].join("\n");
+  const oldResult = normalizeConfig({
+    vendor: "nokia-classic",
+    configText: oldConfig,
+    side: "old",
+  });
+  const newResult = normalizeConfig({
+    vendor: "nokia-md-cli",
+    configText: newConfig,
+    side: "new",
+  });
+  const plan = createComparisonPlan(
+    matchNormalizedObjects({
+      oldObjects: oldResult.objects,
+      newObjects: newResult.objects,
+      profile: {},
+    }),
+    {}
+  );
+
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].status, "matched");
+  assert.equal(plan[0].oldObject.normalizedIdentity, "184");
+  assert.equal(plan[0].newObject.normalizedIdentity, "lag-B-4206");
+  assert.ok(plan[0].scoreReasons.includes("description-endpoint-match"));
+  assert.equal(plan[0].fieldSummary["admin-state"].status, "changed");
+});
+
 test("port endpoint match normalizes known Ganbuk spelling typo", () => {
   const oldDescription = "## OLT,10B,Ganbuk-TOU-FK53_7/1_OFD#6-74 ##";
   const newDescription = "## TO, lag-B-6205(6/2/c5/1), Gangbuk-TOU-FK53, Po11(Te7/1), SBY, 02020002-6481, Fiber ##";

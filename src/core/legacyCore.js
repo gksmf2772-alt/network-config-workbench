@@ -9220,9 +9220,11 @@ function objectDescriptionEndpoints(object = {}) {
 }
 
 function descriptionEndpointCandidates(description = "") {
-  const segments = String(description || "")
+  const cleanDescription = String(description || "")
     .replace(/^["']|["']$/g, "")
-    .replace(/^#+|#+$/g, "")
+    .replace(/^#+|#+$/g, "");
+
+  const segments = cleanDescription
     .split(/[,;]+/)
     .flatMap((segment) => {
       const cleanSegment = segment.trim().replace(/^#+|#+$/g, "");
@@ -9232,17 +9234,29 @@ function descriptionEndpointCandidates(description = "") {
       ];
     });
 
-  return [...new Set(segments
+  const candidates = new Set(segments
     .map((segment) => normalizeDescriptionEndpoint(segment))
-    .filter(isLikelyDescriptionEndpoint))];
+    .filter(isLikelyDescriptionEndpoint));
+
+  for (const endpoint of descriptionCompositeEndpointCandidates(cleanDescription)) {
+    candidates.add(endpoint);
+  }
+
+  for (const endpoint of descriptionSplitEndpointCandidates(cleanDescription)) {
+    candidates.add(endpoint);
+  }
+
+  return [...candidates];
 }
 
 function normalizeDescriptionEndpoint(value = "") {
-  return String(value || "")
+  const normalized = String(value || "")
     .trim()
     .replace(/^#+|#+$/g, "")
     .replace(/\s+/g, "")
     .toLowerCase();
+
+  return normalizeKnownEndpointTypos(normalized.replace(/^(?:to|from|via)-(?=[a-z0-9])/i, ""));
 }
 
 function isLikelyDescriptionEndpoint(value = "") {
@@ -9252,6 +9266,114 @@ function isLikelyDescriptionEndpoint(value = "") {
   if (/^(lag|port|po|te|gi|ge|xe|et|eth|ethernet|ae)[-_/]?\w*/i.test(value)) return false;
   if (/^(to|from|via|stby|sby|standby|active|fiber)$/i.test(value)) return false;
   return true;
+}
+
+function normalizeDescriptionToken(value = "") {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/[.,]+$/g, "")
+    .toLowerCase();
+
+  return normalizeKnownEndpointTypos(normalized.replace(/^(?:to|from|via)-(?=[a-z0-9])/i, ""));
+}
+
+function normalizeKnownEndpointTypos(value = "") {
+  return String(value || "").replace(/\bganbuk\b/g, "gangbuk");
+}
+
+function isLikelyEndpointDeviceToken(token = "") {
+  const normalized = normalizeDescriptionToken(token);
+  if (!isLikelyDescriptionEndpoint(normalized)) return false;
+  if (normalized.includes("_")) return false;
+  return true;
+}
+
+function endpointPortTokenCandidates(token = "") {
+  const normalized = normalizeDescriptionToken(token);
+  const candidates = new Set();
+
+  for (const match of normalized.matchAll(/\(([^()]+)\)/g)) {
+    for (const candidate of endpointPortTokenCandidates(match[1])) {
+      candidates.add(candidate);
+    }
+  }
+
+  const match = normalized.match(/^(te|xe|ge|gi|et|fe|eth|ethernet)-?(\d+(?:\/\d+){1,4})$/i);
+  if (match) {
+    const prefixAliases = {
+      ethernet: "eth",
+    };
+    const prefix = prefixAliases[match[1].toLowerCase()] || match[1].toLowerCase();
+    candidates.add(`${prefix}${match[2]}`);
+    candidates.add(match[2]);
+  }
+
+  const numericMatch = normalized.match(/^(\d+(?:\/\d+){1,4})$/);
+  if (numericMatch) {
+    candidates.add(numericMatch[1]);
+  }
+
+  return [...candidates];
+}
+
+function descriptionTokenGroups(description = "") {
+  return String(description || "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^#+|#+$/g, "")
+    .split(/[,;]+/)
+    .map((segment) =>
+      segment
+        .trim()
+        .replace(/^#+|#+$/g, "")
+        .split(/[\s_]+/)
+        .map(normalizeDescriptionToken)
+        .filter(Boolean)
+    )
+    .filter((tokens) => tokens.length);
+}
+
+function addCompositeEndpointCandidates(candidates, tokens = []) {
+  const deviceTokens = tokens.filter(isLikelyEndpointDeviceToken);
+  const portTokens = tokens.flatMap(endpointPortTokenCandidates).filter(Boolean);
+
+  for (const deviceToken of deviceTokens) {
+    for (const portToken of portTokens) {
+      candidates.add(`${normalizeDescriptionEndpoint(deviceToken)}|${portToken}`);
+    }
+  }
+}
+
+function descriptionCompositeEndpointCandidates(description = "") {
+  const groups = descriptionTokenGroups(description);
+  const candidates = new Set();
+
+  groups.forEach((tokens, index) => {
+    addCompositeEndpointCandidates(candidates, tokens);
+
+    const nextTokens = groups[index + 1] || [];
+    if (nextTokens.length) {
+      addCompositeEndpointCandidates(candidates, [...tokens, ...nextTokens]);
+    }
+  });
+
+  return [...candidates];
+}
+
+function descriptionSplitEndpointCandidates(description = "") {
+  const candidates = new Set();
+
+  for (const tokens of descriptionTokenGroups(description)) {
+    const portTokens = tokens.flatMap(endpointPortTokenCandidates);
+    if (portTokens.length) continue;
+
+    for (const deviceToken of tokens.filter(isLikelyEndpointDeviceToken)) {
+      candidates.add(normalizeDescriptionEndpoint(deviceToken));
+    }
+  }
+
+  return [...candidates];
 }
 
 function buildPairedObjectDiffRows(oldMap, newMap, keys = []) {

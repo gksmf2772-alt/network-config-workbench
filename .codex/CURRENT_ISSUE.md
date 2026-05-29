@@ -69,7 +69,7 @@ Post-edit checklist:
 - Compare renderer checked: display labels only; internal match status values and CSS state classes preserved.
 - Diff scroll sync checked: untouched.
 - Line connector rendering checked: untouched.
-- Tests run: npm.cmd run guard:legacy-core pass; npm.cmd test pass, 194 pass / 1 skip; npm.cmd run build pass.
+- Tests run: npm.cmd run guard:legacy-core pass; npm.cmd test pass, 197 pass / 1 skip; npm.cmd run build pass.
 
 ## Current implementation facts
 
@@ -89,6 +89,7 @@ Post-edit checklist:
   - Classic no-address duplicate interface stubs merge into the addressed interface object when the interface name is unambiguous.
   - Port/LAG old-only rows without target physical-id/member/description-endpoint evidence are classified as `unmatchedRealMissingTarget`.
   - Port/LAG description endpoint matching supports compact old vs split target tokens, directional `to-` prefixes, parenthesized physical ports, and underscore device fallback when no port token exists.
+  - Web top diff `legacyCore` endpoint alignment now mirrors the same compact-old vs split-target LAG endpoint logic, so `lag 184` maps to `lag-B-4206` by `Dobong-TOU-FD19_7/1` vs `Dobong-TOU-FD19, Po11(Te7/1)`.
   - Classic `port-list` TCP/UDP entries such as DHCP `port 67/68` are not parsed as physical port objects.
   - Policy placeholder old-only rows without same target identity are classified as `unmatchedRealMissingTarget`, not parser gap.
   - Classic policy community placeholders only include `community ... members/expression` definitions; SNMP communities, notify-community, and `community add` actions are not definition objects.
@@ -126,6 +127,8 @@ Post-edit checklist:
     - Current PC interface/port/lag/full scope `unmatchedMatcherIssue`: case 1/2 = 0.
     - Current PC full scope `unmatchedParserGap`: case 1/2 = 0.
     - Validator output includes `fixtureScope.byType` and `fixtureScope.byReason` for partial target, matcherIssue, parserGap, and realMissingTarget diagnostics.
+    - `--md-full-logs` validates current PC case 1/2 `MDconfig` and `MDfullcontext` logs by SEA id + log type.
+    - `--available-cases` validates only fixture cases whose source and target files exist, so the current PC case 1/2 directory no longer fails because case 3/4 files are absent.
     - Current PC full `realMissingTarget` by type:
       - case 1: port 66, interface 38, static-route 10, pim 8, route-policy 8, prefix-list 7, community 5, lag 4, bgp 1.
       - case 2: port 70, interface 38, static-route 9, pim 8, route-policy 8, prefix-list 7, community 6, lag 6, bgp 1.
@@ -181,6 +184,6 @@ Recommended next unit:
 - Current PC fixture case 1/2 static unmatchedMatcherIssue is 0 after old-only static routes without target prefix are classified as realMissingTarget.
 - Current PC fixture case 1/2 interface/port/lag/full unmatchedMatcherIssue is 0 after target-evidence classification and Classic interface stub merge.
 - Current PC fixture case 1/2 full parserGap is 0 after policy placeholder target-identity classification.
-- Added full MD-CLI `MDconfig.log` / `MDfullcontext.log` check. Case 1/2 block and one-line full logs now have unmatchedMatcherIssue 0, parserGap 0, lowConfidence 0.
+- Added full MD-CLI `MDconfig.log` / `MDfullcontext.log` check. Case 1/2 block and one-line full logs now have unmatchedMatcherIssue 0, parserGap 0, lowConfidence 0. This is automated by `node scripts/validateCompareFixtures.js --all-cases --md-full-logs --iterations 1`.
 - Full MD-CLI `gre-source` -> `gre-source-1` is Nokia-only primary redundancy conversion and auto-matches by `nokia-gre-source-primary-conversion`; `gre-source-2` remains new-only redundancy.
 - Continue fixture result drill-down from remaining realMissingTarget groups or UI polish.

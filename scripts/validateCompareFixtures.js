@@ -28,6 +28,13 @@ export const TARGET_PARTS = {
   pim: "New_PIM",
 };
 
+export const MD_FULL_LOG_CASES = [
+  { id: "1-mdconfig", caseId: "1", oldFile: "Gangbu-SEA027H_config.txt", targetType: "MDconfig", targetIncludes: ["SEA027H", "MDconfig"] },
+  { id: "1-mdfullcontext", caseId: "1", oldFile: "Gangbu-SEA027H_config.txt", targetType: "MDfullcontext", targetIncludes: ["SEA027H", "MDfullcontext"] },
+  { id: "2-mdconfig", caseId: "2", oldFile: "Gangbuk-SEA028_config.txt", targetType: "MDconfig", targetIncludes: ["SEA028D", "MDconfig"] },
+  { id: "2-mdfullcontext", caseId: "2", oldFile: "Gangbuk-SEA028_config.txt", targetType: "MDfullcontext", targetIncludes: ["SEA028D", "MDfullcontext"] },
+];
+
 const FULL_SCOPE = Object.keys(TARGET_PARTS);
 const PROFILE = {
   name: "fixture-validation",
@@ -85,12 +92,20 @@ export function main(argv = process.argv.slice(2)) {
     throw new Error("example fixture directory not found");
   }
 
-  const cases = resolveFixtureCases({
-    fixtureDir,
-    scope: options.scope,
-    caseId: options.caseId,
-    allCases: options.allCases,
-  });
+  const cases = options.mdFullLogs
+    ? resolveMdFullLogCases({
+        fixtureDir,
+        caseId: options.caseId,
+        allCases: options.allCases,
+        availableCases: options.availableCases,
+      })
+    : resolveFixtureCases({
+        fixtureDir,
+        scope: options.scope,
+        caseId: options.caseId,
+        allCases: options.allCases,
+        availableCases: options.availableCases,
+      });
   const started = Date.now();
   const firstSignatures = new Map();
   const finalResults = new Map();
@@ -102,7 +117,7 @@ export function main(argv = process.argv.slice(2)) {
         newText: fixtureCase.newPaths.map((filePath) => fs.readFileSync(filePath, "utf8")).join("\n"),
         profile: PROFILE,
       });
-      const signatureKey = `${fixtureCase.id}:${options.scope}`;
+      const signatureKey = `${fixtureCase.id}:${fixtureCase.scope || options.scope}`;
       const previousSignature = firstSignatures.get(signatureKey);
 
       if (!previousSignature) firstSignatures.set(signatureKey, result.signature);
@@ -113,7 +128,7 @@ export function main(argv = process.argv.slice(2)) {
       assertFixtureResult({
         result,
         fixtureCase,
-        scope: options.scope,
+        scope: fixtureCase.scope || options.scope,
         iteration: index + 1,
       });
       finalResults.set(signatureKey, result);
@@ -126,13 +141,14 @@ export function main(argv = process.argv.slice(2)) {
     passed: true,
     durationMs: Date.now() - started,
     fixtureDir,
-    scope: options.scope,
+    scope: options.mdFullLogs ? "md-full-logs" : options.scope,
     cases: cases.map((fixtureCase) => {
-      const result = finalResults.get(`${fixtureCase.id}:${options.scope}`);
+      const result = finalResults.get(`${fixtureCase.id}:${fixtureCase.scope || options.scope}`);
       return {
         id: fixtureCase.id,
         oldFile: fixtureCase.oldFile,
         newFiles: fixtureCase.newFiles,
+        targetType: fixtureCase.targetType || "",
         result: summarizeFixtureResult(result),
       };
     }),
@@ -164,9 +180,10 @@ export function resolveFixtureCases({
   scope = "full",
   caseId = "1",
   allCases = false,
+  availableCases = false,
 } = {}) {
   const normalizedScope = normalizeScope(scope);
-  const selected = allCases
+  const selected = allCases || availableCases
     ? CASE_MATRIX
     : [CASE_MATRIX.find((entry) => entry.id === String(caseId))].filter(Boolean);
 
@@ -174,13 +191,14 @@ export function resolveFixtureCases({
     throw new Error(`unknown fixture case: ${caseId}`);
   }
 
-  return selected.map((entry) => {
+  const resolved = selected.map((entry) => {
     const newFiles = resolveNewFilesForScope(fixtureDir, normalizedScope, entry.newIndex);
     const oldPath = path.join(fixtureDir, entry.oldFile);
     const newPaths = newFiles.map((file) => path.join(fixtureDir, file));
     const missing = [oldPath, ...newPaths].filter((filePath) => !fs.existsSync(filePath));
 
     if (missing.length) {
+      if (availableCases) return null;
       throw new Error(`missing fixture files for case ${entry.id}: ${missing.map((filePath) => path.basename(filePath)).join(", ")}`);
     }
 
@@ -192,7 +210,55 @@ export function resolveFixtureCases({
       newFiles,
       newPaths,
     };
-  });
+  }).filter(Boolean);
+
+  if (!resolved.length) {
+    throw new Error(`no available fixture cases for scope: ${normalizedScope}`);
+  }
+
+  return resolved;
+}
+
+export function resolveMdFullLogCases({
+  fixtureDir,
+  caseId = "1",
+  allCases = false,
+  availableCases = false,
+} = {}) {
+  const selected = allCases || availableCases
+    ? MD_FULL_LOG_CASES
+    : MD_FULL_LOG_CASES.filter((entry) => entry.caseId === String(caseId));
+
+  if (!selected.length) {
+    throw new Error(`unknown MD full log fixture case: ${caseId}`);
+  }
+
+  const resolved = selected.map((entry) => {
+    const oldPath = path.join(fixtureDir, entry.oldFile);
+    const newFile = resolveMdFullLogFileName(fixtureDir, entry.targetIncludes);
+    const newPaths = [path.join(fixtureDir, newFile)];
+    const missing = [oldPath, ...newPaths].filter((filePath) => !fs.existsSync(filePath));
+
+    if (missing.length) {
+      if (availableCases) return null;
+      throw new Error(`missing MD full log fixture files for ${entry.id}: ${missing.map((filePath) => path.basename(filePath)).join(", ")}`);
+    }
+
+    return {
+      ...entry,
+      label: `case ${entry.caseId} ${entry.targetType}`,
+      scope: "full",
+      oldPath,
+      newFiles: [newFile],
+      newPaths,
+    };
+  }).filter(Boolean);
+
+  if (!resolved.length) {
+    throw new Error("no available MD full log fixture cases");
+  }
+
+  return resolved;
 }
 
 export function getNewFilesForScope(scope = "full", index = "1") {
@@ -222,6 +288,22 @@ function resolveFixtureFileName(fixtureDir, fileName) {
 
   if (candidates.length === 1) return candidates[0];
   return fileName;
+}
+
+function resolveMdFullLogFileName(fixtureDir, targetIncludes = []) {
+  if (!fs.existsSync(fixtureDir)) return `${targetIncludes.join("_")}.log`;
+  const loweredIncludes = targetIncludes.map((item) => String(item || "").toLowerCase());
+  const candidates = fs.readdirSync(fixtureDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((entryName) => {
+      const lowered = entryName.toLowerCase();
+      return path.extname(entryName).toLowerCase() === ".log" &&
+        loweredIncludes.every((token) => lowered.includes(token));
+    })
+    .sort((left, right) => left.localeCompare(right));
+
+  return candidates[0] || `${targetIncludes.join("_")}.log`;
 }
 
 function runFixtureComparison({ oldText, newText, profile }) {
@@ -429,6 +511,8 @@ function readCliOptions(argv) {
     scope: normalizeScope(readStringArg(argv, "--scope", "full")),
     caseId: readStringArg(argv, "--case", "1"),
     allCases: argv.includes("--all-cases"),
+    availableCases: argv.includes("--available-cases"),
+    mdFullLogs: argv.includes("--md-full-logs"),
   };
 }
 
@@ -450,7 +534,8 @@ function buildCommandSummary(options) {
   return [
     "node scripts/validateCompareFixtures.js",
     `--iterations ${options.iterations}`,
-    options.allCases ? "--all-cases" : `--case ${options.caseId}`,
+    options.availableCases ? "--available-cases" : (options.allCases ? "--all-cases" : `--case ${options.caseId}`),
+    options.mdFullLogs ? "--md-full-logs" : "",
     options.scope === "full" ? "" : `--scope ${options.scope}`,
   ].filter(Boolean).join(" ");
 }

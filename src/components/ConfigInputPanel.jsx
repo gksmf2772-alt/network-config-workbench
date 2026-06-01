@@ -5,6 +5,7 @@ import {
   Eraser,
   FileCode2,
   GitCompare,
+  Maximize2,
   RotateCcw,
   Settings,
   SlidersHorizontal,
@@ -204,6 +205,16 @@ export default function ConfigInputPanel() {
                 <span data-compare-loading-text>비교 중</span>
               </span>
               <AppButton id="alignBtn" type="button" variant="secondary">설정 정렬</AppButton>
+              <AppButton
+                id="compareExpandBtn"
+                className="compare-expanded-toggle"
+                type="button"
+                variant="secondary"
+                aria-pressed="false"
+              >
+                <Maximize2 />
+                <span data-compare-expanded-label>확대 보기</span>
+              </AppButton>
               <AppIconButton id="restoreInitialBtn" type="button" title="초기 입력 원복"><RotateCcw /></AppIconButton>
               <AppButton id="exportReportBtn" type="button" variant="secondary"><Download />Excel 저장</AppButton>
               <AppIconButton id="clearAllBtn" type="button" title="전체 비우기"><Eraser /></AppIconButton>

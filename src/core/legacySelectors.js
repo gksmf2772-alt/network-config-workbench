@@ -59,6 +59,7 @@ export function createLegacySelectors(doc = document) {
     toggleControlsBtn: doc.querySelector("#toggleControlsBtn"),
     compareBtn: doc.querySelector("#compareBtn"),
     alignBtn: doc.querySelector("#alignBtn"),
+    compareExpandBtn: doc.querySelector("#compareExpandBtn"),
     exportReportBtn: doc.querySelector("#exportReportBtn"),
     summaryTabBtn: doc.querySelector("#summaryTabBtn"),
     objectsTabBtn: doc.querySelector("#objectsTabBtn"),

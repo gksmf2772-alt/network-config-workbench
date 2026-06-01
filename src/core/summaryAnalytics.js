@@ -1059,6 +1059,7 @@ export function buildReviewItems(plan = [], fixtureScope = null) {
   };
 
   const classifyUnmatched = createFixtureUnmatchedClassifier(plan, fixtureScope);
+  const mappingDiagnosticContext = createMappingDiagnosticContext(plan);
 
   plan.forEach((item) => {
     if (!isActivePlanItem(item)) {
@@ -1074,7 +1075,10 @@ export function buildReviewItems(plan = [], fixtureScope = null) {
     if (hasSuppressedPolicyEvidence(item)) {
       review.suppressed.push(buildSuppressedReviewItem(item));
     }
-    const base = buildReviewBase(item);
+    const base = {
+      ...buildReviewBase(item),
+      mappingDiagnostic: buildMappingDiagnostic(item, mappingDiagnosticContext),
+    };
     if (item.status === "old-only") {
       const classification = classifyUnmatched(item);
       review.unmatchedOld.push({
@@ -1154,6 +1158,188 @@ export function buildReviewItems(plan = [], fixtureScope = null) {
   ].slice(0, 12);
 
   return review;
+}
+
+export function buildPlanItemMappingDiagnostic(item = {}, plan = []) {
+  return buildMappingDiagnostic(item, createMappingDiagnosticContext(plan));
+}
+
+function createMappingDiagnosticContext(plan = []) {
+  return {
+    oldObjects: plan.map((item) => item?.oldObject).filter(Boolean),
+    newObjects: plan.map((item) => item?.newObject).filter(Boolean),
+  };
+}
+
+function buildMappingDiagnostic(item = {}, context = {}) {
+  const status = String(item.status || "").toLowerCase();
+  const scoreReasons = Array.isArray(item.scoreReasons) ? item.scoreReasons.filter(Boolean) : [];
+
+  if (status === "old-only" || status === "new-only") {
+    return buildUnmatchedMappingDiagnostic(item, context);
+  }
+
+  if (Array.isArray(item.ambiguousAlternatives) && item.ambiguousAlternatives.length) {
+    const candidates = item.ambiguousAlternatives.slice(0, 3).map((candidate) => {
+      const key = candidate.objectKey || candidate.normalizedIdentity || candidate.sourceName || candidate.id || "-";
+      return candidate.score != null ? `${key} ${toScore(candidate.score)}%` : key;
+    });
+    return compactMappingDiagnostic({
+      code: "ambiguous-candidates",
+      label: "후보 다수",
+      details: candidates.length ? [`후보 ${candidates.join(", ")}`] : [],
+      scoreReasons,
+    });
+  }
+
+  const score = Number(item.score || 0);
+  if (score > 0 && score < 80 && item.oldObject && item.newObject) {
+    const reasonLabels = scoreReasons.map(mappingScoreReasonLabel).filter(Boolean).slice(0, 2);
+    return compactMappingDiagnostic({
+      code: "low-confidence",
+      label: reasonLabels[0] || "일치도 낮음",
+      details: [
+        `score ${toScore(score)}%`,
+        ...reasonLabels.slice(1),
+      ],
+      scoreReasons,
+    });
+  }
+
+  if (scoreReasons.length) {
+    const reasonLabels = scoreReasons.map(mappingScoreReasonLabel).filter(Boolean);
+    return compactMappingDiagnostic({
+      code: "match-evidence",
+      label: reasonLabels[0] || "매핑 근거",
+      details: reasonLabels.slice(1, 3),
+      scoreReasons,
+    });
+  }
+
+  return null;
+}
+
+function buildUnmatchedMappingDiagnostic(item = {}, context = {}) {
+  const status = String(item.status || "").toLowerCase();
+  const sourceObject = status === "new-only" ? item.newObject : item.oldObject;
+  const oppositeObjects = status === "new-only" ? context.oldObjects || [] : context.newObjects || [];
+  const sourceType = item.objectType || getObjectType(sourceObject);
+  const sameTypeCandidates = oppositeObjects.filter((object) => getObjectType(object) === sourceType);
+  const candidates = sameTypeCandidates.length ? sameTypeCandidates : oppositeObjects;
+  const best = findClosestMappingCandidate(sourceObject, candidates);
+  const sameIdentity = sameTypeCandidates.some((object) =>
+    normalizeFieldValue(objectIdentity(object)) === normalizeFieldValue(objectIdentity(sourceObject))
+  );
+  const details = [];
+
+  if (!oppositeObjects.length) {
+    return compactMappingDiagnostic({
+      code: "no-opposite-config",
+      label: "상대 설정 없음",
+      details: [],
+    });
+  }
+
+  if (!sameTypeCandidates.length) {
+    details.push(`상대 타입 ${unique(oppositeObjects.map(getObjectType)).slice(0, 3).join(", ") || "-"}`);
+    if (best) details.push(mappingCandidateDetail(best));
+    return compactMappingDiagnostic({
+      code: "section-type-mismatch",
+      label: "섹션/타입 불일치",
+      details,
+    });
+  }
+
+  if (!sameIdentity) {
+    details.push(`같은 타입 후보 ${sameTypeCandidates.length}개`);
+    if (best) details.push(mappingCandidateDetail(best));
+    return compactMappingDiagnostic({
+      code: "object-key-mismatch",
+      label: "설정 키 불일치",
+      details,
+    });
+  }
+
+  if (best) details.push(mappingCandidateDetail(best));
+  return compactMappingDiagnostic({
+    code: "same-key-not-selected",
+    label: "동일 키 후보 확인 필요",
+    details,
+  });
+}
+
+function findClosestMappingCandidate(sourceObject = {}, candidates = []) {
+  return candidates
+    .map((candidate) => scoreMappingCandidate(sourceObject, candidate))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) =>
+      right.score - left.score ||
+      right.sameFields - left.sameFields ||
+      left.differentFields - right.differentFields ||
+      String(left.key).localeCompare(String(right.key))
+    )[0] || null;
+}
+
+function scoreMappingCandidate(sourceObject = {}, candidateObject = {}) {
+  const sourceType = getObjectType(sourceObject);
+  const candidateType = getObjectType(candidateObject);
+  const sourceIdentity = normalizeFieldValue(objectIdentity(sourceObject));
+  const candidateIdentity = normalizeFieldValue(objectIdentity(candidateObject));
+  const sourceFields = normalizeFields(sourceObject.fields || sourceObject.canonicalFields || {});
+  const candidateFields = normalizeFields(candidateObject.fields || candidateObject.canonicalFields || {});
+  const commonFieldNames = Object.keys(sourceFields).filter((field) => candidateFields[field] !== undefined);
+  const sameFields = commonFieldNames.filter((field) => normalizeFieldValue(sourceFields[field]) === normalizeFieldValue(candidateFields[field])).length;
+  const differentFields = commonFieldNames.length - sameFields;
+  const typeScore = sourceType && sourceType === candidateType ? 25 : 0;
+  const identityScore = sourceIdentity && sourceIdentity === candidateIdentity ? 45 : 0;
+  const fieldScore = Math.min(30, sameFields * 8);
+  const penalty = Math.min(20, differentFields * 4);
+
+  return {
+    object: candidateObject,
+    key: objectKey(candidateObject, candidateType),
+    score: Math.max(0, typeScore + identityScore + fieldScore - penalty),
+    sameFields,
+    differentFields,
+    commonFields: commonFieldNames.length,
+  };
+}
+
+function mappingCandidateDetail(candidate = {}) {
+  const object = candidate.object || {};
+  const type = getObjectType(object);
+  const identity = objectIdentity(object);
+  return `근접 후보 ${type} ${identity} · 공통 ${candidate.sameFields} · 차이 ${candidate.differentFields}`;
+}
+
+function compactMappingDiagnostic(diagnostic = {}) {
+  if (!diagnostic?.label) return null;
+  const details = unique((diagnostic.details || []).map((entry) => String(entry || "").trim()).filter(Boolean)).slice(0, 3);
+  return {
+    code: diagnostic.code || "",
+    label: diagnostic.label,
+    details,
+    scoreReasons: diagnostic.scoreReasons || [],
+    text: [diagnostic.label, ...details].filter(Boolean).join(" · "),
+  };
+}
+
+function unique(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function mappingScoreReasonLabel(reason = "") {
+  const text = String(reason || "");
+  const lower = text.toLowerCase();
+  if (!lower) return "";
+  if (lower.includes("ambiguous")) return "후보 다수";
+  if (lower.includes("conflicting-parent")) return "부모 관계 불일치";
+  if (lower.includes("missing-parent")) return "부모 관계 누락";
+  if (lower.includes("next-hop-mismatch")) return "next-hop 불일치";
+  if (lower.includes("description-similarity")) return "설명 유사";
+  if (lower.includes("same-policy")) return "정책값 일부 일치";
+  if (lower.includes("identity") || lower === "prefix" || lower === "peer-ip") return "핵심 키 일치";
+  return text;
 }
 
 function isSuppressedOnlyPlanItem(item = {}) {

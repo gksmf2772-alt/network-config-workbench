@@ -149,6 +149,8 @@ test("object review has muted section tabs and compact quick actions", () => {
   assert.match(legacy, /addExclusionForSelectedObjectReview/);
   assert.match(legacy, /registerObjectReviewExceptionTarget/);
   assert.match(css, /\.section-filter-tab\.active/);
+  assert.match(css, /scroll-snap-type: x proximity/);
+  assert.match(css, /overscroll-behavior-x: contain/);
   assert.match(css, /\.plan-review-item\.selected/);
   assert.match(css, /\.object-quick-context/);
   assert.match(css, /background: #f3f7fb/);
@@ -162,13 +164,30 @@ test("compare tab exposes dedicated section scope controls", () => {
 
   assert.match(panel, /compareScopeSummary/);
   assert.match(panel, /compareSectionTabs/);
+  assert.match(panel, /compareExpandBtn/);
+  assert.match(panel, /data-compare-expanded-label/);
   assert.match(selectors, /compareSectionTabs: doc\.querySelector\("#compareSectionTabs"\)/);
   assert.match(selectors, /compareScopeSummary: doc\.querySelector\("#compareScopeSummary"\)/);
+  assert.match(selectors, /compareExpandBtn: doc\.querySelector\("#compareExpandBtn"\)/);
   assert.match(legacy, /handleCompareSectionTabClick/);
   assert.match(legacy, /renderCompareSectionTabs/);
   assert.match(legacy, /renderSectionFilterTabs\(selectors\.compareSectionTabs, \{ disableEmpty: true \}\)/);
   assert.match(legacy, /focusFirstCompareObjectInSection/);
+  assert.match(legacy, /COMPARE_EXPANDED_VIEW_STORAGE_KEY/);
+  assert.match(legacy, /toggleCompareExpandedView/);
+  assert.match(legacy, /setCompareExpandedView/);
+  assert.match(legacy, /handleSectionTabsWheel/);
+  assert.match(legacy, /refreshSectionTabsOverflowState/);
+  assert.match(legacy, /updateSectionTabsOverflowState/);
+  assert.match(legacy, /scrollActiveSectionTabIntoView/);
   assert.match(css, /compare-scope-shell/);
+  assert.match(css, /compare-expanded-view/);
+  assert.match(css, /compare-expanded-toggle/);
+  assert.match(css, /section-filter-tabs-overflowing/);
+  assert.match(css, /mask-image: linear-gradient/);
+  assert.match(css, /#compareTab\.active \.compare-area \.editor-grid/);
+  assert.match(css, /#compareTab\.active \.editor-grid\.diff-connectors-active/);
+  assert.match(css, /display: none !important/);
   assert.match(css, /grid-template-rows: auto auto minmax\(0, 1fr\)/);
 });
 
@@ -204,6 +223,8 @@ test("report tab has quick actions for summary review graph and export", () => {
   assert.match(legacy, /REPORT_REVIEW_VIEW_STORAGE_KEY/);
   assert.match(legacy, /data-report-review-view="compact"/);
   assert.match(legacy, /data-report-review-view="full"/);
+  assert.match(legacy, /data-report-review-view-current/);
+  assert.match(legacy, /전체 옵션 \$\{escapeHtml\(fieldColumns\.length\)\}개/);
   assert.match(legacy, /setReportReviewViewMode/);
   assert.match(legacy, /renderReportReviewFieldSummaryHeader/);
   assert.match(legacy, /renderReportReviewDetailRow/);
@@ -223,10 +244,21 @@ test("report tab has quick actions for summary review graph and export", () => {
   assert.match(legacy, /toggleReportReviewDetail/);
   assert.match(legacy, /data-review-field-summary/);
   assert.match(legacy, /compareIssueSource/);
+  assert.match(legacy, /data-return-issue-source/);
+  assert.match(legacy, /returnToCompareIssueSource/);
+  assert.match(legacy, /getCompareIssueReturnLabel/);
+  assert.match(legacy, /returnToObjectReviewTarget/);
+  assert.match(legacy, /returnToReportReviewTarget/);
+  assert.match(legacy, /returnToReportGraphTarget/);
+  assert.match(legacy, /returnTab: "objects"/);
+  assert.match(legacy, /returnSection: "review"/);
+  assert.match(legacy, /returnSection: "graph"/);
   assert.match(css, /\.report-quick-actions/);
   assert.match(css, /\.report-quick-context/);
   assert.match(css, /\.report-review-save-state/);
   assert.match(css, /\.report-review-view-toggle/);
+  assert.match(css, /\.report-review-view-control/);
+  assert.match(css, /\.report-review-view-current/);
   assert.match(css, /data-report-view-mode="full"/);
   assert.match(css, /report-review-option-column/);
   assert.match(css, /\.report-review-field-summary-cell/);
@@ -237,4 +269,6 @@ test("report tab has quick actions for summary review graph and export", () => {
   assert.match(css, /\[data-report-review-row\]/);
   assert.match(compareCss, /semantic-object-block-wrapper\.object-active/);
   assert.match(summaryCss, /data-compare-issue-source\^="report"/);
+  assert.match(summaryCss, /\.compare-issue-context-actions/);
+  assert.match(summaryCss, /\.compare-issue-context-return/);
 });

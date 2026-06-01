@@ -5,6 +5,7 @@ import fs from "node:fs";
 import {
   buildFieldOverlapAnalysis,
   buildGraphData,
+  buildPlanItemMappingDiagnostic,
   buildReviewItems,
   buildSummaryDashboardData,
 } from "../src/core/summaryAnalytics.js";
@@ -1171,10 +1172,55 @@ test("review items expose unmatched, ambiguous, low confidence, and relationship
   assert.equal(review.unmatchedNew.length, 1);
   assert.equal(review.unmatchedOld[0].unmatchedCategory, "realMissingTarget");
   assert.equal(review.unmatchedOld[0].diagnosticReason, "missing-target-bgp-peer");
+  assert.equal(review.unmatchedOld[0].mappingDiagnostic.code, "section-type-mismatch");
   assert.equal(review.ambiguous.length, 1);
+  assert.equal(review.ambiguous[0].mappingDiagnostic.code, "ambiguous-candidates");
   assert.equal(review.lowConfidence.length, 1);
+  assert.equal(review.lowConfidence[0].mappingDiagnostic.code, "ambiguous-candidates");
   assert.equal(review.relationshipChanges.length, 1);
   assert.ok(review.critical.length >= 2);
+});
+
+test("mapping diagnostics classify unmatched same-type key mismatches", () => {
+  const diagnosticPlan = [
+    {
+      id: "old-if",
+      status: "old-only",
+      objectType: "interface",
+      oldObject: {
+        id: "old-if-a",
+        normalizedType: "interface",
+        normalizedIdentity: "to-a",
+        fields: {
+          interface: "to-a",
+          address: "10.0.0.1/31",
+          description: "uplink-a",
+        },
+      },
+    },
+    {
+      id: "new-if",
+      status: "new-only",
+      objectType: "interface",
+      newObject: {
+        id: "new-if-b",
+        normalizedType: "interface",
+        normalizedIdentity: "to-b",
+        fields: {
+          interface: "to-b",
+          address: "10.0.0.1/31",
+          description: "uplink-a",
+        },
+      },
+    },
+  ];
+  const review = buildReviewItems(diagnosticPlan);
+  const direct = buildPlanItemMappingDiagnostic(diagnosticPlan[0], diagnosticPlan);
+
+  assert.equal(review.unmatchedOld[0].mappingDiagnostic.code, "object-key-mismatch");
+  assert.match(review.unmatchedOld[0].mappingDiagnostic.text, /근접 후보 interface to-b/);
+  assert.equal(review.unmatchedNew[0].mappingDiagnostic.code, "object-key-mismatch");
+  assert.equal(direct.code, "object-key-mismatch");
 });
 
 test("graph data creates mapping and relationship edges", () => {

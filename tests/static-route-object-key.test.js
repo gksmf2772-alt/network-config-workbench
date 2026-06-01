@@ -785,6 +785,253 @@ test("Nokia MD-CLI block subscriber-interface aggregates nested fields", () => {
   assert.equal(subscriber.fields["default-host.next-hop"], "112.188.23.78");
 });
 
+test("Nokia MD-CLI block subscriber-interface keeps multiple group and SAP branches merged", () => {
+  const config = [
+    "service {",
+    '  ies "100" {',
+    '    subscriber-interface "sub-doc" {',
+    "      admin-state enable",
+    '      group-interface "grp-a" {',
+    '        radius-auth-policy "RAD-A"',
+    "        ipv4 {",
+    "          dhcp {",
+    "            admin-state enable",
+    "            filter 10",
+    "            server [1.1.1.1]",
+    "            trusted true",
+    "          }",
+    "        }",
+    "        sap lag-1 {",
+    "          ingress {",
+    "            filter {",
+    '              ip "F-A"',
+    "            }",
+    "          }",
+    "          egress {",
+    "            qos {",
+    "              sap-egress {",
+    '                policy-name "QOUT-A"',
+    "              }",
+    "            }",
+    "          }",
+    "          sub-sla-mgmt {",
+    '            sub-ident-policy "sip-a"',
+    "          }",
+    "        }",
+    "      }",
+    '      group-interface "grp-b" {',
+    '        radius-auth-policy "RAD-B"',
+    "        ipv4 {",
+    "          dhcp {",
+    "            admin-state enable",
+    "            filter 20",
+    "            server [2.2.2.2]",
+    "            trusted true",
+    "          }",
+    "        }",
+    "        sap lag-2 {",
+    "          ingress {",
+    "            filter {",
+    '              ip "F-B"',
+    "            }",
+    "          }",
+    "          egress {",
+    "            qos {",
+    "              sap-egress {",
+    '                policy-name "QOUT-B"',
+    "              }",
+    "            }",
+    "          }",
+    "          sub-sla-mgmt {",
+    '            sub-ident-policy "sip-b"',
+    "          }",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", config, "new");
+  const subscriber = result.objects.find((object) => object.normalizedType === "subscriber-interface");
+
+  assert.deepEqual(result.objects.map((object) => object.normalizedType), ["subscriber-interface"]);
+  assert.equal(subscriber.normalizedIdentity, "sub-doc");
+  assert.equal(subscriber.fields["group-interface"], "grp-a, grp-b");
+  assert.equal(subscriber.fields.sap, "lag-1, lag-2");
+  assert.equal(subscriber.fields["auth-policy"], "RAD-A, RAD-B");
+  assert.equal(subscriber.fields["dhcp.filter"], "10, 20");
+  assert.equal(subscriber.fields["dhcp.server"], "1.1.1.1, 2.2.2.2");
+  assert.equal(subscriber.fields["ingress-filter"], "F-A, F-B");
+  assert.equal(subscriber.fields["egress-qos"], "QOUT-A, QOUT-B");
+  assert.equal(subscriber.fields["sub-sla-mgmt.sub-ident-policy"], "sip-a, sip-b");
+});
+
+test("Nokia Classic subscriber-interface maps MD-CLI block subscriber-interface with multiple groups as one object", () => {
+  const oldConfig = [
+    'subscriber-interface "sub-doc" create',
+    '    group-interface "grp-a" create',
+    "        dhcp",
+    "            filter 10",
+    "            server 1.1.1.1",
+    "            trusted",
+    "            no shutdown",
+    "        exit",
+    '        authentication-policy "RAD-A"',
+    "        sap lag-1 create",
+    "            ingress",
+    "                filter ip F-A",
+    "            exit",
+    "            egress",
+    "                qos QOUT-A",
+    "            exit",
+    "            sub-sla-mgmt",
+    '                sub-ident-policy "sip-a"',
+    "                no shutdown",
+    "            exit",
+    "        exit",
+    "    exit",
+    '    group-interface "grp-b" create',
+    "        dhcp",
+    "            filter 20",
+    "            server 2.2.2.2",
+    "            trusted",
+    "            no shutdown",
+    "        exit",
+    '        authentication-policy "RAD-B"',
+    "        sap lag-2 create",
+    "            ingress",
+    "                filter ip F-B",
+    "            exit",
+    "            egress",
+    "                qos QOUT-B",
+    "            exit",
+    "            sub-sla-mgmt",
+    '                sub-ident-policy "sip-b"',
+    "                no shutdown",
+    "            exit",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    "service {",
+    '  ies "100" {',
+    '    subscriber-interface "sub-doc" {',
+    '      group-interface "grp-a" {',
+    '        radius-auth-policy "RAD-A"',
+    "        ipv4 {",
+    "          dhcp {",
+    "            admin-state enable",
+    "            filter 10",
+    "            server [1.1.1.1]",
+    "            trusted true",
+    "          }",
+    "        }",
+    "        sap lag-1 {",
+    "          ingress {",
+    "            filter {",
+    '              ip "F-A"',
+    "            }",
+    "          }",
+    "          egress {",
+    "            qos {",
+    "              sap-egress {",
+    '                policy-name "QOUT-A"',
+    "              }",
+    "            }",
+    "          }",
+    "          sub-sla-mgmt {",
+    "            admin-state enable",
+    '            sub-ident-policy "sip-a"',
+    "          }",
+    "        }",
+    "      }",
+    '      group-interface "grp-b" {',
+    '        radius-auth-policy "RAD-B"',
+    "        ipv4 {",
+    "          dhcp {",
+    "            admin-state enable",
+    "            filter 20",
+    "            server [2.2.2.2]",
+    "            trusted true",
+    "          }",
+    "        }",
+    "        sap lag-2 {",
+    "          ingress {",
+    "            filter {",
+    '              ip "F-B"',
+    "            }",
+    "          }",
+    "          egress {",
+    "            qos {",
+    "              sap-egress {",
+    '                policy-name "QOUT-B"',
+    "              }",
+    "            }",
+    "          }",
+    "          sub-sla-mgmt {",
+    "            admin-state enable",
+    '            sub-ident-policy "sip-b"',
+    "          }",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const oldTypes = result.oldResult.objects.map((object) => object.normalizedType);
+  const newTypes = result.newResult.objects.map((object) => object.normalizedType);
+  const subscriberPlan = result.plan.find((item) => item.objectType === "subscriber-interface");
+
+  assert.deepEqual(oldTypes, ["subscriber-interface"]);
+  assert.deepEqual(newTypes, ["subscriber-interface"]);
+  assert.equal(subscriberPlan.status, "matched");
+  assert.equal(subscriberPlan.fieldSummary["group-interface"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary.sap.status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["auth-policy"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.filter"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.server"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["ingress-filter"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["egress-qos"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["sub-sla-mgmt.sub-ident-policy"].status, "equal");
+  assert.equal(result.plan.some((item) => ["group-interface", "sap", "sub-sla-mgmt", "filter"].includes(item.objectType)), false);
+});
+
+test("synthetic subscriber fixture keeps nested group interfaces inside subscriber object", () => {
+  const oldConfig = fs.readFileSync("validation/fixtures/synthetic/nokia-classic-subscriber-multi-group.conf", "utf8");
+  const newConfig = fs.readFileSync("validation/fixtures/synthetic/nokia-mdcli22-subscriber-multi-group.conf", "utf8");
+  const result = compare(oldConfig, newConfig);
+  const subscriberPlan = result.plan.find((item) => item.objectType === "subscriber-interface");
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan: result.plan,
+    semanticSummary: { totalObjects: result.plan.length, matched: result.plan.filter((item) => item.status === "matched").length },
+    profileName: "synthetic-subscriber-fixture",
+  });
+
+  assert.deepEqual(result.oldResult.objects.map((object) => object.normalizedType), ["subscriber-interface"]);
+  assert.deepEqual(result.newResult.objects.map((object) => object.normalizedType), ["subscriber-interface"]);
+  assert.equal(result.plan.length, 1);
+  assert.equal(subscriberPlan.status, "matched");
+  assert.equal(subscriberPlan.fieldSummary["group-interface"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary.sap.status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["auth-policy"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.filter"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.server"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["ingress-filter"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["egress-qos"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["sub-sla-mgmt.sub-ident-policy"].status, "equal");
+  assert.equal(result.plan.some((item) => ["group-interface", "sap", "sub-sla-mgmt"].includes(item.objectType)), false);
+  assert.equal(dashboard.counts.matched, 1);
+  assert.equal(dashboard.counts.oldOnly, 0);
+  assert.equal(dashboard.counts.newOnly, 0);
+  assert.equal(dashboard.review.unmatchedOld.length, 0);
+  assert.equal(dashboard.review.unmatchedNew.length, 0);
+});
+
 test("Nokia Classic subscriber-interface maps MD-CLI block subscriber-interface as one object", () => {
   const oldConfig = [
     'subscriber-interface "to-Nowon-TOU-FN17" create',

@@ -24,6 +24,7 @@ import {
 } from "./compareVisualStatus.js";
 
 import {
+  buildPlanItemMappingDiagnostic,
   buildSummaryDashboardData,
 } from "./summaryAnalytics.js";
 import {
@@ -140,6 +141,7 @@ const objectTypes = [
   "community",
 ];
 const lineActions = ["same", "added", "ignore", "missing", "required", "required-field"];
+const COMPARE_EXPANDED_VIEW_STORAGE_KEY = "network-config-workbench.compare-expanded-view.v1";
 
 const selectors = createLegacySelectors();
 
@@ -598,6 +600,7 @@ async function init() {
   renderProfileEditor();
   bindEvents();
   loadUiPreferences();
+  restoreCompareExpandedView();
   updateLineNumbers();
   await refreshHistorySelect();
   await refreshProfileSelect();
@@ -630,6 +633,7 @@ function bindEvents() {
   selectors.toggleControlsBtn.addEventListener("click", toggleCompareControls);
   selectors.compareBtn.addEventListener("click", runCompare);
   selectors.alignBtn.addEventListener("click", alignNewConfigToOldOrder);
+  selectors.compareExpandBtn?.addEventListener("click", toggleCompareExpandedView);
   selectors.exportReportBtn.addEventListener("click", exportReport);
   selectors.summaryTabBtn?.addEventListener("click", () => setResultTab("summary"));
   selectors.objectsTabBtn?.addEventListener("click", () => setResultTab("objects"));
@@ -638,6 +642,8 @@ function bindEvents() {
   selectors.objectSortSelect?.addEventListener("input", renderObjectNavigator);
   selectors.objectSectionTabs?.addEventListener("click", handleObjectSectionTabClick);
   selectors.compareSectionTabs?.addEventListener("click", handleCompareSectionTabClick);
+  selectors.objectSectionTabs?.addEventListener("wheel", handleSectionTabsWheel, { passive: false });
+  selectors.compareSectionTabs?.addEventListener("wheel", handleSectionTabsWheel, { passive: false });
   selectors.objectQuickActions?.addEventListener("click", handleObjectQuickAction);
   selectors.reportQuickActions?.addEventListener("click", handleReportQuickAction);
   selectors.restoreInitialBtn?.addEventListener("click", restoreInitialConfigSnapshot);
@@ -685,6 +691,7 @@ function bindEvents() {
   window.addEventListener("resize", scheduleSemanticObjectStartAlignment);
   window.addEventListener("resize", scheduleSettledDiffConnectorRender);
   window.addEventListener("resize", scheduleProfileExampleConnectorRender);
+  window.addEventListener("resize", refreshSectionTabsOverflowState);
   setupDiffConnectorResizeObserver();
   setupDiffConnectorMutationObserver();
   ensureConnectorSvgDelegation();
@@ -3921,6 +3928,40 @@ function toggleCompareControls() {
   scheduleSettledDiffConnectorRender();
 }
 
+function restoreCompareExpandedView() {
+  let enabled = false;
+  try {
+    enabled = window.localStorage?.getItem(COMPARE_EXPANDED_VIEW_STORAGE_KEY) === "expanded";
+  } catch {}
+  setCompareExpandedView(enabled, { persist: false });
+}
+
+function toggleCompareExpandedView() {
+  const enabled = !selectors.compareTab?.classList.contains("compare-expanded-view");
+  setCompareExpandedView(enabled);
+}
+
+function setCompareExpandedView(enabled, options = {}) {
+  const active = Boolean(enabled);
+  selectors.compareTab?.classList.toggle("compare-expanded-view", active);
+  if (selectors.compareExpandBtn) {
+    selectors.compareExpandBtn.classList.toggle("active", active);
+    selectors.compareExpandBtn.setAttribute("aria-pressed", active ? "true" : "false");
+    selectors.compareExpandBtn.title = active ? "확대 보기 해제" : "비교창 확대 보기";
+    selectors.compareExpandBtn.setAttribute("aria-label", selectors.compareExpandBtn.title);
+    const label = selectors.compareExpandBtn.querySelector("[data-compare-expanded-label]");
+    if (label) label.textContent = active ? "확대 해제" : "확대 보기";
+  }
+  if (options.persist !== false) {
+    try {
+      window.localStorage?.setItem(COMPARE_EXPANDED_VIEW_STORAGE_KEY, active ? "expanded" : "normal");
+    } catch {}
+  }
+  scheduleSemanticObjectWidthSync();
+  scheduleSemanticObjectStartAlignment();
+  scheduleSettledDiffConnectorRender();
+}
+
 const OBJECT_SECTION_FILTERS = [
   { scope: "all", label: "전체", types: null },
   { scope: "interface", label: "Interface", types: ["interface"] },
@@ -3947,6 +3988,14 @@ function handleCompareSectionTabClick(event) {
   const button = event.target.closest("[data-section-scope]");
   if (!button || button.disabled) return;
   setObjectSectionScope(button.dataset.sectionScope || "all", { focusCompare: true });
+}
+
+function handleSectionTabsWheel(event) {
+  const container = event.currentTarget;
+  if (!container || container.scrollWidth <= container.clientWidth) return;
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  container.scrollLeft += event.deltaY;
+  event.preventDefault();
 }
 
 async function handleObjectQuickAction(event) {
@@ -4066,6 +4115,28 @@ function renderSectionFilterTabs(container, options = {}) {
       </button>
     `;
   }).join("");
+  updateSectionTabsOverflowState(container);
+  scrollActiveSectionTabIntoView(container);
+}
+
+function refreshSectionTabsOverflowState() {
+  updateSectionTabsOverflowState(selectors.objectSectionTabs);
+  updateSectionTabsOverflowState(selectors.compareSectionTabs);
+}
+
+function updateSectionTabsOverflowState(container) {
+  if (!container) return;
+  requestAnimationFrame(() => {
+    container.classList.toggle("section-filter-tabs-overflowing", container.scrollWidth > container.clientWidth + 2);
+  });
+}
+
+function scrollActiveSectionTabIntoView(container) {
+  const activeButton = container?.querySelector(".section-filter-tab.active");
+  if (!activeButton || container.scrollWidth <= container.clientWidth) return;
+  requestAnimationFrame(() => {
+    activeButton.scrollIntoView({ block: "nearest", inline: "center" });
+  });
 }
 
 function renderCompareScopeSummary() {
@@ -4223,6 +4294,8 @@ function setPlanReviewCompareContext(item = {}) {
     panelKey: item.status || "object-review",
     objectType,
     objectKey,
+    returnTab: "objects",
+    returnTargetId: item.id || "",
     oldKey: item.oldObject ? exceptionObjectKeyFromPlanItem({ oldObject: item.oldObject }, objectType) : "",
     newKey: item.newObject ? exceptionObjectKeyFromPlanItem({ newObject: item.newObject }, objectType) : "",
     displayName: `${objectType || "object"} ${planReviewName(item)}`.trim(),
@@ -5495,11 +5568,13 @@ function renderReviewItem(panelKey, item = {}) {
     item.missingOldFields ? `기존 누락 ${item.missingOldFields}` : "",
     item.missingNewFields ? `신규 누락 ${item.missingNewFields}` : "",
   ].filter(Boolean).join(" · ");
+  const mappingDiagnostic = renderReviewMappingDiagnostic(item.mappingDiagnostic);
   return `
     <article class="summary-review-item" data-summary-review-kind="${escapeHtml(panelKey)}">
       <div>
         <strong>${escapeHtml(item.objectType)} ${escapeHtml(item.label || "-")}</strong>
         <span>${escapeHtml(item.reason || "")}</span>
+        ${mappingDiagnostic}
         ${fields ? `<small>${escapeHtml(fields)}</small>` : ""}
         ${item.score ? `<small>일치도 ${escapeHtml(item.score)}%</small>` : ""}
         ${renderCandidatePreview(item.candidates)}
@@ -5510,6 +5585,16 @@ function renderReviewItem(panelKey, item = {}) {
       </div>
     </article>
   `;
+}
+
+function renderReviewMappingDiagnostic(diagnostic = null) {
+  const text = mappingDiagnosticText(diagnostic);
+  return text ? `<small class="summary-review-diagnostic">진단 ${escapeHtml(text)}</small>` : "";
+}
+
+function mappingDiagnosticText(diagnostic = null) {
+  if (!diagnostic) return "";
+  return diagnostic.text || [diagnostic.label, ...(diagnostic.details || [])].filter(Boolean).join(" · ");
 }
 
 function isSettingExclusionPanel(panelKey = "") {
@@ -6425,9 +6510,27 @@ function openIssueInCompare(targetId = "") {
     showWorkbenchToast("이동할 검토 항목 없음", "error");
     return;
   }
-  state.activeIssueContext = { ...target, targetId: issueTargetId || targetId };
+  state.activeIssueContext = {
+    ...target,
+    targetId: issueTargetId || targetId,
+    returnTab: target.returnTab || "summary",
+    returnPanelKey: target.panelKey || "",
+  };
   scrollToDiffObject(target.objectKey || target.oldKey || target.newKey || "");
   renderCompareIssueContextBanner();
+}
+
+function getCompareIssueReturnLabel(target = {}) {
+  const source = String(target.source || "");
+  if (source === "object-review") return "객체 검토로";
+  if (source === "report-review") return "리포트 검토로";
+  if (source === "report-graph") return "그래프로";
+  return "요약으로";
+}
+
+function canReturnToCompareIssueSource(target = {}) {
+  const source = String(target.source || "");
+  return source === "object-review" || source === "report-review" || source === "report-graph" || Boolean(target.returnTab);
 }
 
 function renderCompareIssueContextBanner() {
@@ -6460,22 +6563,83 @@ function renderCompareIssueContextBanner() {
       ? "리포트에서 선택한 객체를 비교창에 표시"
       : "예외는 하단 의미 기반 비교에서 선택";
   banner.dataset.compareIssueSource = target.source || "summary";
+  const returnButton = canReturnToCompareIssueSource(target)
+    ? `<button type="button" class="compare-issue-context-return" data-return-issue-source>${escapeHtml(getCompareIssueReturnLabel(target))}</button>`
+    : "";
   banner.innerHTML = `
     <div>
       <strong>${escapeHtml(sourceLabel)}</strong>
       <span>${escapeHtml(target.displayName || target.description || target.objectKey || "-")}</span>
       <small>${escapeHtml(readableReviewReason(target.panelKey, target.title || ""))} · ${escapeHtml(target.field || "-")}</small>
     </div>
-    <div>
+    <div class="compare-issue-context-actions">
       <span class="small-note">${escapeHtml(guidance)}</span>
+      ${returnButton}
       <button type="button" data-clear-issue-context>선택 해제</button>
     </div>
   `;
+  banner.querySelector("[data-return-issue-source]")?.addEventListener("click", returnToCompareIssueSource);
   banner.querySelector("[data-clear-issue-context]")?.addEventListener("click", () => {
     state.activeIssueContext = null;
     document.querySelectorAll(".object-active").forEach((line) => line.classList.remove("object-active"));
     renderCompareIssueContextBanner();
   });
+}
+
+function returnToCompareIssueSource() {
+  const target = state.activeIssueContext;
+  if (!target) return;
+  const source = String(target.source || "");
+  if (source === "object-review" || target.returnTab === "objects") {
+    returnToObjectReviewTarget(target);
+    return;
+  }
+  if (source === "report-graph") {
+    returnToReportGraphTarget(target);
+    return;
+  }
+  if (source === "report-review" || target.returnTab === "report") {
+    returnToReportReviewTarget(target);
+    return;
+  }
+  setResultTab("summary");
+  focusSummaryReviewPanel(target.returnPanelKey || target.panelKey || "");
+}
+
+function returnToObjectReviewTarget(target = {}) {
+  setActiveTab("objects", { skipConfirm: true });
+  const itemId = target.returnTargetId || target.planId || target.targetId || "";
+  if (itemId) selectObjectReviewItem(itemId);
+  const row = selectors.objectList?.querySelector(`[data-plan-review-select="${cssEscape(itemId)}"]`)
+    || selectors.objectList?.querySelector(`[data-object-key="${cssEscape(target.objectKey || "")}"]`);
+  if (!row) return;
+  row.scrollIntoView({ block: "center", inline: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  row.classList.add("summary-panel-pulse");
+  window.setTimeout(() => row.classList.remove("summary-panel-pulse"), 900);
+}
+
+function returnToReportReviewTarget(target = {}) {
+  scrollToReportSection("review");
+  highlightReportReviewActionResult({
+    action: "returned",
+    section: "review",
+    label: "비교창에서 복귀",
+    objectKey: target.objectKey || target.oldKey || target.newKey || target.targetId || "",
+    objectType: target.objectType || target.settingType || "",
+    field: target.field || "",
+  });
+}
+
+function returnToReportGraphTarget(target = {}) {
+  scrollToReportSection("graph");
+  const graphRoot = selectors.overviewReport?.querySelector("[data-graph-root]");
+  const nodeId = target.returnTargetId || target.targetId || "";
+  const node = nodeId ? graphRoot?.querySelector(`[data-graph-node="${cssEscape(nodeId)}"]`) : null;
+  if (!node) return;
+  setGraphFocus(graphRoot, nodeId);
+  node.scrollIntoView({ block: "center", inline: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  node.classList.add("summary-panel-pulse");
+  window.setTimeout(() => node.classList.remove("summary-panel-pulse"), 900);
 }
 
 async function addExceptionFromTarget(targetId = "", exceptionScope = "object", triggerButton = null) {
@@ -15158,6 +15322,7 @@ function renderPlanReviewItem(item = {}) {
   const reviewCount = planReviewIssueCount(item, counts);
   const stateKind = planReviewStateKind(item);
   const lineLabel = planReviewLineLabel(item);
+  const mappingDiagnostic = planReviewMappingDiagnostic(item);
   return `
     <div class="object-item plan-review-item ${selected ? "selected" : ""}" data-plan-review-select="${escapeHtml(item.id || "")}" data-object-key="${escapeHtml(objectKey)}" data-review-status="${escapeHtml(stateKind)}">
       <button type="button" class="object-nav-main" data-plan-review-select="${escapeHtml(item.id || "")}">
@@ -15167,6 +15332,7 @@ function renderPlanReviewItem(item = {}) {
         </span>
         <span class="small-note">${escapeHtml(planReviewSideLabel(item))} | ${escapeHtml(lineLabel)} | score ${escapeHtml(item.score ?? "-")}</span>
         ${description ? `<span class="object-item-description" title="${escapeHtml(description)}">${escapeHtml(description)}</span>` : ""}
+        ${mappingDiagnostic ? `<span class="plan-review-diagnostic" title="${escapeHtml(mappingDiagnostic)}">진단 ${escapeHtml(mappingDiagnostic)}</span>` : ""}
         <span class="object-field-chips">
           <span>변경 ${escapeHtml(counts.changed)}</span>
           <span>누락 ${escapeHtml(counts.missing)}</span>
@@ -15177,6 +15343,13 @@ function renderPlanReviewItem(item = {}) {
       <button type="button" class="object-compare-btn" data-object-navigate="${escapeHtml(objectKey)}">비교</button>
     </div>
   `;
+}
+
+function planReviewMappingDiagnostic(item = {}) {
+  const status = String(item.status || "").toLowerCase();
+  const score = Number(item.score || 0);
+  if (status === "matched" && !isReviewNeededPlanItem(item) && (!score || score >= 80)) return "";
+  return mappingDiagnosticText(buildPlanItemMappingDiagnostic(item, state.lastSemanticPlan || []));
 }
 
 function getFilteredPlanReviewItems(
@@ -15640,9 +15813,12 @@ function renderReportReviewTable(review = {}) {
     <div class="report-review-root" data-report-review-root data-report-view-mode="compact">
       <div class="report-review-tools">
         <input type="search" data-report-review-search placeholder="전체 검색" aria-label="검토 테이블 전체 검색" />
-        <div class="report-review-view-toggle" role="group" aria-label="검토 테이블 보기">
-          <button type="button" data-report-review-view="compact" class="active" aria-pressed="true">핵심 보기</button>
-          <button type="button" data-report-review-view="full" aria-pressed="false">전체 옵션</button>
+        <div class="report-review-view-control">
+          <div class="report-review-view-toggle" role="group" aria-label="검토 테이블 보기">
+            <button type="button" data-report-review-view="compact" class="active" aria-pressed="true" aria-label="핵심 보기: 주요 컬럼과 변경 요약만 표시">핵심 보기</button>
+            <button type="button" data-report-review-view="full" aria-pressed="false" aria-label="전체 옵션 보기: 모든 필드 컬럼 표시">${fieldColumns.length ? `전체 옵션 ${escapeHtml(fieldColumns.length)}개` : "전체 옵션"}</button>
+          </div>
+          <span class="report-review-view-current" data-report-review-view-current>핵심 보기: 주요 컬럼 + 변경 요약</span>
         </div>
         <button type="button" data-report-review-clear>초기화</button>
         <span data-report-review-count>${escapeHtml(rows.length)}/${escapeHtml(rows.length)}</span>
@@ -16085,7 +16261,9 @@ function getReportReviewDescription(item = {}) {
 }
 
 function getReportReviewDiagnostic(item = {}) {
+  const mappingText = mappingDiagnosticText(item.mappingDiagnostic);
   const values = [
+    mappingText,
     item.unmatchedCategory || "",
     item.diagnosticReason || "",
   ].filter(Boolean);
@@ -16408,6 +16586,12 @@ function openReportObjectInCompare(element = null) {
       source: "report-review",
       targetId: row.dataset.reportReviewJump || objectKey,
       objectKey,
+      objectType: row.dataset.reviewType || "",
+      oldKey: row.dataset.reviewOldKey || "",
+      newKey: row.dataset.reviewNewKey || "",
+      returnTab: "report",
+      returnSection: "review",
+      returnTargetId: row.dataset.reportReviewDetail || "",
       panelKey: row.dataset.reviewGroup || "report-review",
       displayName: `${row.dataset.reviewType || "object"} ${row.dataset.reviewKey || objectKey}`.trim(),
       description: row.dataset.reviewDescription || "",
@@ -16420,6 +16604,9 @@ function openReportObjectInCompare(element = null) {
       source: "report-graph",
       targetId: node.dataset.graphNode || objectKey,
       objectKey,
+      returnTab: "report",
+      returnSection: "graph",
+      returnTargetId: node.dataset.graphNode || "",
       panelKey: "relationship-graph",
       displayName: title,
       description: title,
@@ -16769,11 +16956,17 @@ function setReportReviewViewMode(root, mode = "compact", options = {}) {
   if (!root) return;
   const normalized = mode === "full" ? "full" : "compact";
   root.dataset.reportViewMode = normalized;
+  const current = root.querySelector("[data-report-review-view-current]");
   root.querySelectorAll("[data-report-review-view]").forEach((button) => {
     const active = button.dataset.reportReviewView === normalized;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", active ? "true" : "false");
   });
+  if (current) {
+    current.textContent = normalized === "full"
+      ? "전체 옵션: 모든 필드 컬럼 표시"
+      : "핵심 보기: 주요 컬럼 + 변경 요약";
+  }
   if (normalized === "full") collapseReportReviewDetails(root);
   if (options.persist !== false) {
     try {

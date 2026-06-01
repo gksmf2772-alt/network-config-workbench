@@ -459,7 +459,7 @@ function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName =
       currentGroup = canonicalServiceName(match[1]);
       currentSap = "";
       direction = "";
-      fields["group-interface"] = currentGroup;
+      appendCsvField(fields, "group-interface", currentGroup);
       stack.push("group-interface");
       return;
     }
@@ -476,15 +476,15 @@ function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName =
     match = text.match(/^static-host\s+(?:ip\s+)?(\S+)/i);
     if (match) {
       const host = stripQuotes(match[1]);
-      fields["static-host"] = host;
+      appendCsvField(fields, "static-host", host);
       stack.push("static-host");
       return;
     }
 
     match = text.match(/^default-host\s+(\S+)(?:\s+next-hop\s+(\S+))?/i);
     if (match) {
-      fields["default-host"] = stripQuotes(match[1]);
-      if (match[2]) fields["default-host.next-hop"] = stripQuotes(match[2]);
+      appendCsvField(fields, "default-host", match[1]);
+      if (match[2]) appendCsvField(fields, "default-host.next-hop", match[2]);
       return;
     }
 
@@ -543,7 +543,7 @@ function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName =
 
     match = text.match(/^authentication-policy\s+(.+)$/i);
     if (match) {
-      fields["authentication-policy"] = stripQuotes(match[1]);
+      appendCsvField(fields, "authentication-policy", match[1]);
       return;
     }
 
@@ -574,13 +574,13 @@ function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName =
     if (topScope() === "dhcp") {
       match = text.match(/^filter\s+(\S+)/i);
       if (match) {
-        fields["dhcp.filter"] = stripQuotes(match[1]);
+        appendCsvField(fields, "dhcp.filter", match[1]);
         return;
       }
 
       match = text.match(/^server\s+(\S+)/i);
       if (match) {
-        fields["dhcp.server"] = stripQuotes(match[1]);
+        appendCsvField(fields, "dhcp.server", match[1]);
         return;
       }
 
@@ -592,7 +592,7 @@ function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName =
       match = text.match(/^lease-populate\s+l2-header(?:\s+(\S+))?/i);
       if (match) {
         fields["dhcp.lease-populate.l2-header"] = "true";
-        if (match[1]) fields["dhcp.lease-populate.max-leases"] = stripQuotes(match[1]);
+        if (match[1]) appendCsvField(fields, "dhcp.lease-populate.max-leases", match[1]);
         return;
       }
     }
@@ -600,37 +600,37 @@ function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName =
     if (topScope() === "sub-sla-mgmt") {
       match = text.match(/^def-inter-dest-id\s+string\s+(.+)$/i);
       if (match) {
-        fields["sub-sla-mgmt.defaults.int-dest-id"] = stripQuotes(match[1]);
+        appendCsvField(fields, "sub-sla-mgmt.defaults.int-dest-id", match[1]);
         return;
       }
 
       match = text.match(/^def-sub-id\s+(\S+)/i);
       if (match) {
-        fields["sub-sla-mgmt.defaults.subscriber-id"] = stripQuotes(match[1]);
+        appendCsvField(fields, "sub-sla-mgmt.defaults.subscriber-id", match[1]);
         return;
       }
 
       match = text.match(/^def-sub-profile\s+(.+)$/i);
       if (match) {
-        fields["sub-sla-mgmt.defaults.sub-profile"] = stripQuotes(match[1]);
+        appendCsvField(fields, "sub-sla-mgmt.defaults.sub-profile", match[1]);
         return;
       }
 
       match = text.match(/^def-sla-profile\s+(.+)$/i);
       if (match) {
-        fields["sub-sla-mgmt.defaults.sla-profile"] = stripQuotes(match[1]);
+        appendCsvField(fields, "sub-sla-mgmt.defaults.sla-profile", match[1]);
         return;
       }
 
       match = text.match(/^sub-ident-policy\s+(.+)$/i);
       if (match) {
-        fields["sub-sla-mgmt.sub-ident-policy"] = stripQuotes(match[1]);
+        appendCsvField(fields, "sub-sla-mgmt.sub-ident-policy", match[1]);
         return;
       }
 
       match = text.match(/^multi-sub-sap\s+(\S+)/i);
       if (match) {
-        fields["sub-sla-mgmt.subscriber-limit"] = stripQuotes(match[1]);
+        appendCsvField(fields, "sub-sla-mgmt.subscriber-limit", match[1]);
         return;
       }
     }
@@ -638,24 +638,24 @@ function collectClassicSubscriberInterfaceFields(rawLines = [], subscriberName =
     if (topScope() === "static-host") {
       match = text.match(/^inter-dest-id\s+(.+)$/i);
       if (match) {
-        fields["static-host.int-dest-id"] = stripQuotes(match[1]);
+        appendCsvField(fields, "static-host.int-dest-id", match[1]);
         return;
       }
 
       match = text.match(/^sla-profile\s+(.+)$/i);
       if (match) {
-        fields["static-host.sla-profile"] = stripQuotes(match[1]);
+        appendCsvField(fields, "static-host.sla-profile", match[1]);
         return;
       }
 
       match = text.match(/^sub-profile\s+(.+)$/i);
       if (match) {
-        fields["static-host.sub-profile"] = stripQuotes(match[1]);
+        appendCsvField(fields, "static-host.sub-profile", match[1]);
         return;
       }
 
       if (/^subscriber-sap-id$/i.test(text)) {
-        fields["static-host.subscriber-id"] = "subscriber-sap-id";
+        appendCsvField(fields, "static-host.subscriber-id", "subscriber-sap-id");
       }
     }
   });

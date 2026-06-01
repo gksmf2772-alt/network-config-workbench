@@ -2,6 +2,19 @@ function clean(value = "") {
   return String(value || "").trim().replace(/^["']|["']$/g, "");
 }
 
+function cleanCsv(value = "", { lowercase = false, stripBrackets = false } = {}) {
+  return clean(value)
+    .split(/\s*,\s*/)
+    .map((item) => {
+      let next = clean(item);
+      if (stripBrackets) next = next.replace(/^\[|\]$/g, "");
+      if (lowercase) next = next.toLowerCase();
+      return next;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
 function canonicalRoutingContext(fields = {}, { includeRouter = false } = {}) {
   const explicitContext = clean(fields["routing-context"] || fields.vrf || fields.vprn || "").toLowerCase();
   if (explicitContext) return explicitContext;
@@ -161,7 +174,7 @@ export function normalizeNokiaSemanticFields(fields = {}) {
   });
 
   if (next["dhcp.server"]) {
-    next["dhcp.server"] = clean(next["dhcp.server"]).replace(/^\[|\]$/g, "").toLowerCase();
+    next["dhcp.server"] = cleanCsv(next["dhcp.server"], { lowercase: true, stripBrackets: true });
   }
 
   if (next["sub-sla-mgmt.defaults.subscriber-id"] === "use-auto-id") {

@@ -747,6 +747,7 @@ test("Nokia MD-CLI block subscriber-interface aggregates nested fields", () => {
   ].join("\n");
 
   const result = parse("nokia-md-cli", config, "new");
+  assert.deepEqual(result.objects.map((object) => object.normalizedType), ["subscriber-interface"]);
   const subscriber = result.objects.find((object) => object.normalizedType === "subscriber-interface");
 
   assert.equal(subscriber.normalizedIdentity, "to-gangbuk-tou-fk53");
@@ -782,6 +783,72 @@ test("Nokia MD-CLI block subscriber-interface aggregates nested fields", () => {
   assert.equal(subscriber.fields["static-host.subscriber-id"], "use-sap-id");
   assert.equal(subscriber.fields["default-host"], "112.188.23.77/30");
   assert.equal(subscriber.fields["default-host.next-hop"], "112.188.23.78");
+});
+
+test("Nokia Classic subscriber-interface maps MD-CLI block subscriber-interface as one object", () => {
+  const oldConfig = [
+    'subscriber-interface "to-Nowon-TOU-FN17" create',
+    "    address 112.188.27.101/30",
+    '    group-interface "g-to-Nowon-TOU-FN17" create',
+    "        dhcp",
+    "            filter 60",
+    "            server 121.128.86.26",
+    "            trusted",
+    "            no shutdown",
+    "        exit",
+    '        authentication-policy "RADIUS"',
+    "        sap lag-53 create",
+    "            sub-sla-mgmt",
+    '                sub-ident-policy "sub-id-pol"',
+    "                no shutdown",
+    "            exit",
+    "        exit",
+    "    exit",
+    "exit",
+  ].join("\n");
+  const newConfig = [
+    "service {",
+    '  ies "100" {',
+    '    subscriber-interface "to-Nowon-TOU-FN17" {',
+    "      ipv4 {",
+    "        address 112.188.27.101 {",
+    "          prefix-length 30",
+    "        }",
+    "      }",
+    '      group-interface "g-to-Nowon-TOU-FN17" {',
+    '        radius-auth-policy "RADIUS"',
+    "        ipv4 {",
+    "          dhcp {",
+    "            admin-state enable",
+    "            filter 60",
+    "            server [121.128.86.26]",
+    "            trusted true",
+    "          }",
+    "        }",
+    "        sap lag-53 {",
+    "          sub-sla-mgmt {",
+    "            admin-state enable",
+    '            sub-ident-policy "sub-id-pol"',
+    "          }",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = compare(oldConfig, newConfig);
+  const oldTypes = result.oldResult.objects.map((object) => object.normalizedType);
+  const newTypes = result.newResult.objects.map((object) => object.normalizedType);
+  const subscriberPlan = result.plan.find((item) => item.objectType === "subscriber-interface");
+
+  assert.deepEqual(oldTypes, ["subscriber-interface"]);
+  assert.deepEqual(newTypes, ["subscriber-interface"]);
+  assert.equal(subscriberPlan.status, "matched");
+  assert.equal(subscriberPlan.fieldSummary["group-interface"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["dhcp.filter"].status, "equal");
+  assert.equal(subscriberPlan.fieldSummary["sub-sla-mgmt.sub-ident-policy"].status, "equal");
+  assert.equal(result.plan.some((item) => ["group-interface", "sap", "sub-sla-mgmt", "filter"].includes(item.objectType)), false);
 });
 
 test("Nokia Classic subscriber-interface maps MD-CLI subscriber-interface as one object", () => {

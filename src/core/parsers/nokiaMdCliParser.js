@@ -1245,6 +1245,7 @@ function parseMdCliServiceObjects(lines) {
   const stack = [];
   let pendingDefaultHost = null;
   let pendingStaticHost = null;
+  const isSubscriberChildContext = () => Boolean(context.subscriber);
   const isPlainInterfaceContext = () => Boolean(
     context.interface &&
     !context.subscriber &&
@@ -1325,6 +1326,7 @@ function parseMdCliServiceObjects(lines) {
       context.group = canonicalServiceName(match[1]);
       context.sap = "";
       stack.push("group-interface");
+      if (isSubscriberChildContext()) return;
       objects.push(createMdServiceObject({
         type: "group-interface",
         name: context.group,
@@ -1344,6 +1346,7 @@ function parseMdCliServiceObjects(lines) {
       context.sap = canonicalServiceName(match[1]);
       stack.push("sap");
       if (context.interfaceAddressBlock && !context.subscriber && !context.group) return;
+      if (isSubscriberChildContext()) return;
       if (isPlainInterfaceContext()) {
         objects.push(createMdServiceObject({
           type: "interface",
@@ -1375,6 +1378,7 @@ function parseMdCliServiceObjects(lines) {
     match = text.match(/^ip\s+"?([^"\s{]+)"?/i);
     if (match && stack.includes("filter") && stack.includes("ingress") && context.sap) {
       if (context.interfaceAddressBlock && !context.subscriber && !context.group) return;
+      if (isSubscriberChildContext()) return;
       if (isPlainInterfaceContext()) {
         objects.push(createMdServiceObject({
           type: "interface",
@@ -1407,6 +1411,7 @@ function parseMdCliServiceObjects(lines) {
     match = text.match(/^policy-name\s+"?([^"\s{]+)"?/i);
     if (match && stack.includes("sap-egress") && context.sap) {
       if (context.interfaceAddressBlock && !context.subscriber && !context.group) return;
+      if (isSubscriberChildContext()) return;
       if (isPlainInterfaceContext()) {
         objects.push(createMdServiceObject({
           type: "interface",
@@ -1438,6 +1443,7 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^radius-auth-policy\s+"?([^"\s{]+)"?/i);
     if (match && context.group) {
+      if (isSubscriberChildContext()) return;
       objects.push(createMdServiceObject({
         type: "group-interface",
         name: context.group,
@@ -1453,6 +1459,7 @@ function parseMdCliServiceObjects(lines) {
     }
 
     if (/^admin-state\s+disable$/i.test(text) && stack.includes("redirects") && context.group) {
+      if (isSubscriberChildContext()) return;
       objects.push(createMdServiceObject({
         type: "icmp-options",
         name: buildHierarchyKey([context.subscriber, context.group]),
@@ -1469,6 +1476,7 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^allow-unmatching-subnets\s+(true|false)$/i);
     if (match && context.group) {
+      if (isSubscriberChildContext()) return;
       objects.push(createMdServiceObject({
         type: "dhcp",
         name: buildHierarchyKey([context.subscriber, context.group]),
@@ -1506,6 +1514,7 @@ function parseMdCliServiceObjects(lines) {
 
     match = text.match(/^next-hop\s+(\S+)/i);
     if (match && pendingDefaultHost) {
+      if (isSubscriberChildContext()) return;
       objects.push(createMdServiceObject({
         type: "default-host",
         name: pendingDefaultHost,
@@ -1522,6 +1531,7 @@ function parseMdCliServiceObjects(lines) {
     }
 
     if (match && pendingStaticHost) {
+      if (isSubscriberChildContext()) return;
       objects.push(createMdServiceObject({
         type: "static-host",
         name: pendingStaticHost,
@@ -1538,18 +1548,20 @@ function parseMdCliServiceObjects(lines) {
     }
 
     if (/^sub-sla-mgmt\s*\{/i.test(text) && context.sap) {
-      objects.push(createMdServiceObject({
-        type: "sub-sla-mgmt",
-        name: context.sap,
-        fields: {
-          "subscriber-interface": context.subscriber,
-          "group-interface": context.group,
-          sap: context.sap,
-          "sub-sla-mgmt": "present",
-        },
-        rawLines: findMdCliBlockLines(lines, index),
-        index,
-      }));
+      if (!isSubscriberChildContext()) {
+        objects.push(createMdServiceObject({
+          type: "sub-sla-mgmt",
+          name: context.sap,
+          fields: {
+            "subscriber-interface": context.subscriber,
+            "group-interface": context.group,
+            sap: context.sap,
+            "sub-sla-mgmt": "present",
+          },
+          rawLines: findMdCliBlockLines(lines, index),
+          index,
+        }));
+      }
     }
 
     const openCount = (text.match(/\{/g) || []).length;

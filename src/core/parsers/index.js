@@ -138,11 +138,17 @@ function withPolicyPlaceholders(objects = [], context = {}) {
 function extractPolicyPlaceholders(configText = "", vendor = "") {
   const lines = String(configText || "").split(/\r?\n/);
   const objects = [];
+  const mdCliScope = [];
 
   lines.forEach((rawLine, index) => {
     const text = rawLine.trim();
-    if (!text) return;
-    const inlineServiceReference = isInlineServicePolicyReference(rawLine, text, vendor);
+    if (!text) {
+      updateMdCliPlaceholderScope(mdCliScope, text, vendor);
+      return;
+    }
+    const inlineServiceReference =
+      isInlineServicePolicyReference(rawLine, text, vendor) ||
+      isMdCliBlockServicePolicyReference(mdCliScope, vendor);
 
     const specs = [
       { type: "qos-policy", match: text.match(/\b(?:qos-policy|sap-ingress|sap-egress)\s+"?([^"\s{]+)"?/i) },
@@ -168,9 +174,35 @@ function extractPolicyPlaceholders(configText = "", vendor = "") {
       }));
       break;
     }
+    updateMdCliPlaceholderScope(mdCliScope, text, vendor);
   });
 
   return objects;
+}
+
+function updateMdCliPlaceholderScope(scope = [], text = "", vendor = "") {
+  if (vendor !== PARSER_IDS.NOKIA_MD_CLI) return;
+  if (/^\/?configure\s*\{/i.test(text)) return;
+
+  const closeCount = (String(text || "").match(/\}/g) || []).length;
+  for (let count = 0; count < closeCount; count += 1) scope.pop();
+
+  const openCount = (String(text || "").match(/\{/g) || []).length;
+  const scopeName = String(text || "").match(/^([a-z0-9-]+)/i)?.[1]?.toLowerCase() || "block";
+  for (let count = 0; count < openCount; count += 1) {
+    scope.push(count === 0 ? scopeName : "block");
+  }
+}
+
+function isMdCliBlockServicePolicyReference(scope = [], vendor = "") {
+  if (vendor !== PARSER_IDS.NOKIA_MD_CLI) return false;
+  return scope.includes("service") &&
+    (
+      scope.includes("subscriber-interface") ||
+      scope.includes("group-interface") ||
+      scope.includes("sap") ||
+      scope.includes("interface")
+    );
 }
 
 function matchPolicyCommunityDefinition(text = "") {

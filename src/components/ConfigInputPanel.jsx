@@ -210,6 +210,16 @@ export default function ConfigInputPanel() {
             </AppToolbar>
           </motion.div>
 
+          <div className="compare-scope-shell" aria-label="비교 섹션 범위">
+            <div className="compare-scope-head">
+              <div className="compare-scope-copy">
+                <strong>비교 범위</strong>
+                <span id="compareScopeSummary">비교 실행 후 섹션별 확인</span>
+              </div>
+              <div id="compareSectionTabs" className="section-filter-tabs compare-section-tabs" role="tablist" aria-label="비교 섹션 필터" />
+            </div>
+          </div>
+
           <div className="editor-grid">
             <svg id="diffObjectBackgroundSvg" className="diff-object-background-overlay" aria-hidden="true" />
             <ConfigEditor side="old" title="기존 Config" icon={FileCode2} />

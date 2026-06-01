@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, ExternalLink, RotateCcw, Search } from "lucide-react";
+import { Download, ExternalLink, EyeOff, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { AppButton } from "./ui/AppButton.jsx";
 import { AppSelect } from "./ui/AppSelect.jsx";
@@ -19,6 +19,7 @@ export default function ObjectMatchTable() {
           <h2>객체 검토</h2>
         </div>
         <AppToolbar id="objectQuickActions" className="object-quick-actions" aria-label="객체 검토 빠른 작업">
+          <div id="objectQuickContext" className="object-quick-context">선택 항목 없음</div>
           <AppButton type="button" variant="secondary" data-object-action="open-compare">
             <ExternalLink className="h-4 w-4" />
             비교 보기
@@ -26,6 +27,14 @@ export default function ObjectMatchTable() {
           <AppButton type="button" variant="secondary" data-object-action="export">
             <Download className="h-4 w-4" />
             내보내기
+          </AppButton>
+          <AppButton type="button" variant="secondary" data-object-action="add-exception">
+            <ShieldCheck className="h-4 w-4" />
+            예외 추가
+          </AppButton>
+          <AppButton type="button" variant="secondary" data-object-action="exclude-setting">
+            <EyeOff className="h-4 w-4" />
+            비교 제외
           </AppButton>
           <AppButton type="button" variant="secondary" data-object-action="reset-filter">
             <RotateCcw className="h-4 w-4" />

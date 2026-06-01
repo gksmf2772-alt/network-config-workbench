@@ -12,7 +12,7 @@
 }
 
 #compareTab.active .compare-area {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -90,6 +90,56 @@
 #compareTab.active .compare-profile-inline button {
   min-height: 32px;
   padding: 0 12px;
+}
+
+#compareTab.active .compare-scope-shell {
+  min-width: 0;
+  padding: 0 2px;
+}
+
+#compareTab.active .compare-scope-head {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 7px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+}
+
+#compareTab.active .compare-scope-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+#compareTab.active .compare-scope-copy strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+#compareTab.active .compare-scope-copy span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#compareTab.active .compare-section-tabs {
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 0;
+}
+
+#compareTab.active .compare-section-tabs .section-filter-tab {
+  min-height: 30px;
+  padding: 0 8px;
 }
 
 #compareTab.active .compare-loading-indicator {
@@ -325,9 +375,32 @@
   padding: 1px 6px !important;
 }
 
+#compareTab.active .embedded-diff .diff-line.object-active {
+  position: relative;
+  z-index: 2;
+  background: #ecfeff !important;
+  box-shadow:
+    inset 5px 0 0 #0891b2,
+    0 0 0 2px rgba(8, 145, 178, 0.24) !important;
+}
+
 #compareTab.active .embedded-diff .semantic-diff-config-line {
   grid-template-columns: 28px max-content auto !important;
   padding-left: 4px !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-active .semantic-diff-object-block {
+  position: relative;
+  z-index: 2;
+  border-color: rgba(8, 145, 178, 0.72) !important;
+  background: #ecfeff !important;
+  box-shadow:
+    inset 5px 0 0 #0891b2,
+    0 0 0 3px rgba(8, 145, 178, 0.22) !important;
+}
+
+#compareTab.active .embedded-diff .semantic-object-block-wrapper.object-flash .semantic-diff-object-block {
+  animation: objectFlash 1.4s ease-out;
 }
 
 #compareTab.active .embedded-diff .diff-line.object-status-old-only,
@@ -895,6 +968,15 @@
     grid-template-columns: 1fr 1fr;
   }
 
+  .report-panel-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .report-quick-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
   .summary-status-header,
   .summary-workspace-grid,
   .report-graph-head {
@@ -908,6 +990,14 @@
 
   .field-overlap-hero {
     grid-template-columns: 1fr;
+  }
+
+  #compareTab.active .compare-scope-head {
+    grid-template-columns: 1fr;
+  }
+
+  #compareTab.active .compare-section-tabs {
+    justify-content: flex-start;
   }
 
   .report-review-table {

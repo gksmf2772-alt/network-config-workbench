@@ -594,6 +594,7 @@ async function init() {
   selectors.newInput.value = defaultSamples.newConfig;
   resetInitialConfigSnapshot();
   renderObjectToggles();
+  renderCompareSectionTabs();
   renderProfileEditor();
   bindEvents();
   loadUiPreferences();
@@ -603,6 +604,8 @@ async function init() {
   await renderSavedProfiles();
   commitProfileSnapshot();
   renderSummaryEmptyState();
+  renderObjectQuickContext();
+  renderReportQuickContext();
   showEditMode();
   const fontReady = document.fonts?.ready;
   if (fontReady?.then) {
@@ -634,7 +637,9 @@ function bindEvents() {
   selectors.objectSearchInput?.addEventListener("input", renderObjectNavigator);
   selectors.objectSortSelect?.addEventListener("input", renderObjectNavigator);
   selectors.objectSectionTabs?.addEventListener("click", handleObjectSectionTabClick);
+  selectors.compareSectionTabs?.addEventListener("click", handleCompareSectionTabClick);
   selectors.objectQuickActions?.addEventListener("click", handleObjectQuickAction);
+  selectors.reportQuickActions?.addEventListener("click", handleReportQuickAction);
   selectors.restoreInitialBtn?.addEventListener("click", restoreInitialConfigSnapshot);
   selectors.restoreOldBtn?.addEventListener("click", () => restoreInitialConfigSnapshot("old"));
   selectors.restoreNewBtn?.addEventListener("click", () => restoreInitialConfigSnapshot("new"));
@@ -844,7 +849,10 @@ function setActiveTab(tab, options = {}) {
   selectors.reportTab?.classList.toggle("active", report);
   if (objects) renderObjectNavigator();
   if (report) renderOverviewReport(state.lastReport);
-  if (compare) scheduleSettledDiffConnectorRender();
+  if (compare) {
+    renderCompareSectionTabs();
+    scheduleSettledDiffConnectorRender();
+  }
   return true;
 }
 
@@ -3901,6 +3909,7 @@ function markCompareStale() {
   showEditMode();
   selectors.compareStatus.textContent = "비교 필요";
   selectors.lastComparedAt.textContent = "마지막 비교 이후 변경됨";
+  renderCompareScopeSummary();
 }
 
 function toggleCompareControls() {
@@ -3934,15 +3943,26 @@ function handleObjectSectionTabClick(event) {
   setObjectSectionScope(button.dataset.sectionScope || "all");
 }
 
-function handleObjectQuickAction(event) {
+function handleCompareSectionTabClick(event) {
+  const button = event.target.closest("[data-section-scope]");
+  if (!button || button.disabled) return;
+  setObjectSectionScope(button.dataset.sectionScope || "all", { focusCompare: true });
+}
+
+async function handleObjectQuickAction(event) {
   const button = event.target.closest("[data-object-action]");
-  if (!button) return;
+  if (!button || button.disabled) return;
   const action = button.dataset.objectAction || "";
   if (action === "open-compare") {
-    if (setActiveTab("compare", { skipConfirm: true }) && state.lastReport) {
-      showDiffMode();
-      scheduleSettledDiffConnectorRender();
-    }
+    openSelectedObjectReviewInCompare();
+    return;
+  }
+  if (action === "add-exception") {
+    await addExceptionForSelectedObjectReview(button);
+    return;
+  }
+  if (action === "exclude-setting") {
+    await addExclusionForSelectedObjectReview(button);
     return;
   }
   if (action === "export") {
@@ -3955,10 +3975,62 @@ function handleObjectQuickAction(event) {
   }
 }
 
-function setObjectSectionScope(scope = "all") {
+function handleReportQuickAction(event) {
+  const button = event.target.closest("[data-report-action]");
+  if (!button || button.disabled) return;
+  const action = button.dataset.reportAction || "";
+  if (action === "export") {
+    exportReport();
+    return;
+  }
+  scrollToReportSection(action);
+}
+
+function renderReportQuickContext(report = state.lastReport) {
+  if (!selectors.reportQuickActions) return;
+  const dashboard = report ? (state.lastDashboardData || buildCurrentDashboardData(report, state.lastSemanticSummary)) : null;
+  const review = dashboard?.review || {};
+  const reviewCount = dashboard ? buildReportReviewRows(review).length : 0;
+  const auditCount = dashboard?.audit?.findings?.length || 0;
+  const total = report?.summary?.total || 0;
+
+  if (selectors.reportQuickContext) {
+    selectors.reportQuickContext.innerHTML = report
+      ? `
+        <span>리포트</span>
+        <strong>차이 ${escapeHtml(total)}</strong>
+        <small>검토 ${escapeHtml(reviewCount)} · 점검 ${escapeHtml(auditCount)}</small>
+      `
+      : `<span>리포트</span><strong>없음</strong><small>비교 실행 필요</small>`;
+  }
+
+  ["summary", "review", "graph", "export"].forEach((action) => {
+    const button = selectors.reportQuickActions?.querySelector(`[data-report-action="${cssEscape(action)}"]`);
+    if (!button) return;
+    button.disabled = !report;
+    button.setAttribute("aria-disabled", report ? "false" : "true");
+  });
+}
+
+function scrollToReportSection(section = "summary") {
+  if (!state.lastReport) {
+    showWorkbenchToast("리포트 없음", "error");
+    return;
+  }
+  setActiveTab("report", { skipConfirm: true });
+  const target = selectors.overviewReport?.querySelector(`[data-report-section="${cssEscape(section)}"]`);
+  if (!target) return;
+  target.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  target.classList.add("summary-panel-pulse");
+  window.setTimeout(() => target.classList.remove("summary-panel-pulse"), 900);
+}
+
+function setObjectSectionScope(scope = "all", options = {}) {
   state.activeObjectSectionScope = getObjectSectionFilter(scope).scope;
   renderObjectSectionTabs();
+  renderCompareSectionTabs();
   renderObjectNavigator();
+  if (options.focusCompare) focusFirstCompareObjectInSection();
 }
 
 function getObjectSectionFilter(scope = "all") {
@@ -3970,20 +4042,194 @@ function getSectionFilterForObjectType(type = "") {
 }
 
 function renderObjectSectionTabs() {
-  if (!selectors.objectSectionTabs) return;
+  renderSectionFilterTabs(selectors.objectSectionTabs);
+}
+
+function renderCompareSectionTabs() {
+  renderSectionFilterTabs(selectors.compareSectionTabs, { disableEmpty: true });
+  renderCompareScopeSummary();
+}
+
+function renderSectionFilterTabs(container, options = {}) {
+  if (!container) return;
   const activeScope = state.activeObjectSectionScope || "all";
-  selectors.objectSectionTabs.innerHTML = OBJECT_SECTION_FILTERS.map((filter) => {
+  container.innerHTML = OBJECT_SECTION_FILTERS.map((filter) => {
     const { total, review } = getObjectSectionCounts(filter);
     const active = filter.scope === activeScope;
+    const disabled = Boolean(options.disableEmpty && filter.scope !== "all" && total === 0);
     const badge = review > 0 ? `<span class="section-filter-badge">${escapeHtml(review)}</span>` : "";
     return `
-      <button type="button" class="section-filter-tab ${active ? "active" : ""}" data-section-scope="${escapeHtml(filter.scope)}" role="tab" aria-selected="${active}">
+      <button type="button" class="section-filter-tab ${active ? "active" : ""}" data-section-scope="${escapeHtml(filter.scope)}" role="tab" aria-selected="${active}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
         <span>${escapeHtml(filter.label)}</span>
         <strong>${escapeHtml(total)}</strong>
         ${badge}
       </button>
     `;
   }).join("");
+}
+
+function renderCompareScopeSummary() {
+  if (!selectors.compareScopeSummary) return;
+  const filter = getObjectSectionFilter(state.activeObjectSectionScope || "all");
+  const { total, review } = getObjectSectionCounts(filter);
+  if (!state.lastReport && !total) {
+    selectors.compareScopeSummary.textContent = "비교 실행 후 섹션별 확인";
+    return;
+  }
+  const stale = state.compareDirty ? " · 재비교 필요" : "";
+  selectors.compareScopeSummary.textContent = `${filter.label} · 객체 ${total} · 검토 ${review}${stale}`;
+}
+
+function focusFirstCompareObjectInSection() {
+  if (!selectors.compareTab?.classList.contains("active")) return;
+  const target = getFilteredPlanReviewItems("", "identity")[0];
+  const objectKey = target ? planReviewObjectKey(target) : findFirstReportObjectKeyInActiveSection();
+  if (objectKey) scrollToDiffObject(objectKey);
+}
+
+function findFirstReportObjectKeyInActiveSection() {
+  if (!state.lastReport) return "";
+  const object = [...(state.lastReport.oldObjects || []), ...(state.lastReport.newObjects || [])]
+    .filter((item) => item.type !== "global")
+    .find(objectMatchesActiveSection);
+  return object?.key || "";
+}
+
+function renderObjectQuickContext(visibleItems = null) {
+  if (!selectors.objectQuickActions) return;
+  const items = Array.isArray(visibleItems) ? visibleItems : getFilteredPlanReviewItems("", selectors.objectSortSelect?.value || "identity");
+  const selected = getActivePlanReviewItem(items, { fallback: false });
+  const hasReport = Boolean(state.lastReport);
+  const hasSelection = Boolean(selected);
+  const exclusionAllowed = hasSelection && isSettingExclusionStatus(selected.status);
+
+  if (selectors.objectQuickContext) {
+    selectors.objectQuickContext.innerHTML = selected
+      ? `
+        <span>선택</span>
+        <strong>${escapeHtml(planReviewName(selected))}</strong>
+        <small>${escapeHtml(planReviewStatusLabel(selected))} · 검토 ${escapeHtml(planReviewIssueCount(selected))}</small>
+      `
+      : `<span>선택</span><strong>항목 없음</strong><small>검토 항목 선택 필요</small>`;
+  }
+
+  setObjectQuickActionDisabled("open-compare", !hasReport || !hasSelection);
+  setObjectQuickActionDisabled("add-exception", !hasReport || !hasSelection || !getPrimaryPlanReviewField(selected));
+  setObjectQuickActionDisabled("exclude-setting", !hasReport || !exclusionAllowed);
+  setObjectQuickActionDisabled("export", !hasReport);
+}
+
+function setObjectQuickActionDisabled(action = "", disabled = false) {
+  const button = selectors.objectQuickActions?.querySelector(`[data-object-action="${cssEscape(action)}"]`);
+  if (!button) return;
+  button.disabled = disabled;
+  button.setAttribute("aria-disabled", disabled ? "true" : "false");
+}
+
+function getActivePlanReviewItem(items = null, options = {}) {
+  const planItems = Array.isArray(items) ? items : getFilteredPlanReviewItems("", selectors.objectSortSelect?.value || "identity");
+  const selected = planItems.find((item) => item.id === state.activeObjectReviewItemId);
+  return selected || (options.fallback ? planItems[0] : null) || null;
+}
+
+async function addExceptionForSelectedObjectReview(triggerButton = null) {
+  const item = getActivePlanReviewItem(null, { fallback: true });
+  if (!item) {
+    showWorkbenchToast("선택된 검토 항목 없음", "error");
+    return;
+  }
+  const targetId = registerObjectReviewExceptionTarget(item);
+  if (!targetId) {
+    showWorkbenchToast("예외로 등록할 변경 필드 없음", "error");
+    return;
+  }
+  await addExceptionFromTarget(targetId, "object", triggerButton);
+}
+
+async function addExclusionForSelectedObjectReview(triggerButton = null) {
+  const item = getActivePlanReviewItem(null, { fallback: true });
+  if (!item) {
+    showWorkbenchToast("선택된 검토 항목 없음", "error");
+    return;
+  }
+  if (!isSettingExclusionStatus(item.status)) {
+    showWorkbenchToast("비교 제외는 누락/추가 항목에서 사용", "info");
+    return;
+  }
+  const targetId = registerSemanticSettingExclusionTarget(item, "object-review");
+  await addExclusionFromTarget(targetId, "setting", triggerButton);
+}
+
+function registerObjectReviewExceptionTarget(item = {}) {
+  const primary = getPrimaryPlanReviewField(item);
+  if (!primary) return "";
+  const [field, summary] = primary;
+  const objectType = planItemObjectType(item);
+  const objectKey = planReviewObjectKey(item);
+  const changeType = normalizeExceptionChangeType(summary?.effectiveStatus || summary?.status || item.status || "");
+  const targetId = createId();
+  const displayName = buildSemanticExceptionDisplayName(item, objectType, objectKey);
+  state.exceptionTargets.set(targetId, {
+    targetId,
+    source: "object-review",
+    targetType: "object-review",
+    issueId: [item.id || objectKey, field, changeType].join(":"),
+    planId: item.id || "",
+    panelKey: changeType || item.status || "object-review",
+    ruleId: semanticExceptionRuleId(objectType, field, changeType),
+    category: "semantic-compare",
+    objectType,
+    objectKey,
+    oldKey: item.oldObject ? exceptionObjectKeyFromPlanItem({ oldObject: item.oldObject }, objectType) : "",
+    newKey: item.newObject ? exceptionObjectKeyFromPlanItem({ newObject: item.newObject }, objectType) : "",
+    side: "both",
+    field,
+    findingType: changeType,
+    issueType: "field-difference",
+    changeType,
+    status: changeType,
+    title: `${field} ${getSemanticFieldStatusLabel(summary)}`,
+    description: displayName,
+    displayName,
+    oldValue: firstSummaryValue(summary?.oldValues),
+    newValue: firstSummaryValue(summary?.newValues),
+  });
+  return targetId;
+}
+
+function getPrimaryPlanReviewField(item = {}) {
+  const entries = Object.entries(item?.fieldSummary || {});
+  if (!entries.length) return null;
+  return entries.find(([, summary]) => isPlanReviewFieldActionable(summary, item.status))
+    || entries.find(([, summary]) => normalizeExceptionChangeType(summary?.effectiveStatus || summary?.status || "") !== "same")
+    || null;
+}
+
+function isPlanReviewFieldActionable(summary = {}, fallbackStatus = "") {
+  const status = normalizeExceptionChangeType(summary?.effectiveStatus || summary?.status || fallbackStatus);
+  return ["added", "missing", "changed", "structure-converted", "inheritance-unresolved"].includes(status);
+}
+
+function setPlanReviewCompareContext(item = {}) {
+  if (!item) return;
+  const primary = getPrimaryPlanReviewField(item);
+  const field = primary?.[0] || "";
+  const objectType = planItemObjectType(item);
+  const objectKey = planReviewObjectKey(item);
+  state.activeIssueContext = {
+    source: "object-review",
+    targetId: item.id || objectKey,
+    planId: item.id || "",
+    panelKey: item.status || "object-review",
+    objectType,
+    objectKey,
+    oldKey: item.oldObject ? exceptionObjectKeyFromPlanItem({ oldObject: item.oldObject }, objectType) : "",
+    newKey: item.newObject ? exceptionObjectKeyFromPlanItem({ newObject: item.newObject }, objectType) : "",
+    displayName: `${objectType || "object"} ${planReviewName(item)}`.trim(),
+    description: planReviewDescription(item),
+    field,
+    title: planReviewStatusLabel(item),
+  };
 }
 
 function getObjectSectionCounts(filter = OBJECT_SECTION_FILTERS[0]) {
@@ -4013,6 +4259,11 @@ function isReviewNeededPlanItem(item = {}) {
 function objectMatchesActiveSection(object = {}) {
   const filter = getObjectSectionFilter(state.activeObjectSectionScope || "all");
   return sectionFilterMatchesType(filter, String(object.type || object.normalizedType || ""));
+}
+
+function planItemMatchesActiveSection(item = {}) {
+  const filter = getObjectSectionFilter(state.activeObjectSectionScope || "all");
+  return sectionFilterMatchesType(filter, planItemObjectType(item));
 }
 
 function setProfileStatus(message, kind = "info") {
@@ -4352,6 +4603,8 @@ async function runCompare() {
       ? `차이 ${report.items.length}건`
       : "차이 없음";
     selectors.lastComparedAt.textContent = `마지막 비교: ${formatDate(Date.now())}`;
+    renderObjectSectionTabs();
+    renderCompareSectionTabs();
   } catch (error) {
     handleCompareError(error);
   } finally {
@@ -6032,8 +6285,7 @@ function bindSummaryActions() {
   selectors.summaryCards?.querySelectorAll("[data-field-type-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       if (selectors.objectSearchInput) selectors.objectSearchInput.value = "";
-      state.activeObjectSectionScope = getSectionFilterForObjectType(button.dataset.fieldTypeFilter || "").scope;
-      renderObjectNavigator();
+      setObjectSectionScope(getSectionFilterForObjectType(button.dataset.fieldTypeFilter || "").scope);
       setResultTab("objects");
     });
   });
@@ -6196,14 +6448,26 @@ function renderCompareIssueContextBanner() {
     grid.appendChild(banner);
   }
   const target = state.activeIssueContext;
+  const sourceLabels = {
+    "object-review": "객체 검토에서 이동한 항목",
+    "report-review": "리포트 검토에서 이동한 항목",
+    "report-graph": "리포트 그래프에서 이동한 항목",
+  };
+  const sourceLabel = sourceLabels[target.source] || "요약에서 이동한 항목";
+  const guidance = target.source === "object-review"
+    ? "상단 Quick Actions로 예외/비교 제외 처리"
+    : target.source?.startsWith?.("report-")
+      ? "리포트에서 선택한 객체를 비교창에 표시"
+      : "예외는 하단 의미 기반 비교에서 선택";
+  banner.dataset.compareIssueSource = target.source || "summary";
   banner.innerHTML = `
     <div>
-      <strong>요약에서 이동한 항목</strong>
+      <strong>${escapeHtml(sourceLabel)}</strong>
       <span>${escapeHtml(target.displayName || target.description || target.objectKey || "-")}</span>
       <small>${escapeHtml(readableReviewReason(target.panelKey, target.title || ""))} · ${escapeHtml(target.field || "-")}</small>
     </div>
     <div>
-      <span class="small-note">예외는 하단 의미 기반 비교에서 선택</span>
+      <span class="small-note">${escapeHtml(guidance)}</span>
       <button type="button" data-clear-issue-context>선택 해제</button>
     </div>
   `;
@@ -6245,10 +6509,7 @@ async function addExceptionFromTarget(targetId = "", exceptionScope = "object", 
 
     await saveProfile();
     await syncActiveSessionProfileReference();
-    if (state.lastReport) {
-      runCompare();
-      setResultTab("summary");
-    }
+    await refreshAfterProfileRuleChange(target, triggerButton);
     const message = duplicate
       ? "이미 등록된 예외"
       : exception.scope === "profile"
@@ -6298,10 +6559,7 @@ async function addExclusionFromTarget(targetId = "", exclusionScope = "setting",
 
     await saveProfile();
     await syncActiveSessionProfileReference();
-    if (state.lastReport) {
-      runCompare();
-      setResultTab("summary");
-    }
+    await refreshAfterProfileRuleChange(target, triggerButton);
     const message = duplicate
       ? "이미 등록된 비교 제외 규칙"
       : exclusion.scope === "profile"
@@ -6318,6 +6576,165 @@ async function addExclusionFromTarget(targetId = "", exclusionScope = "setting",
       triggerButton.textContent = previousText || "비교 제외";
     }
   }
+}
+
+async function refreshAfterProfileRuleChange(target = {}, triggerButton = null) {
+  if (!state.lastReport) return;
+  const destination = getProfileRuleReturnDestination(target, triggerButton);
+  state.pendingReportReviewAction = destination.tab === "report"
+    ? buildReportReviewActionMarker(target, triggerButton, destination.section || "review")
+    : null;
+  await runCompare();
+  if (destination.tab === "report") {
+    scrollToReportSection(destination.section || "review");
+    highlightPendingReportReviewAction();
+    return;
+  }
+  setResultTab(destination.tab || "summary");
+}
+
+function getProfileRuleReturnDestination(target = {}, triggerButton = null) {
+  const source = String(target?.source || "");
+  const reportSection = triggerButton?.closest?.("[data-report-section]");
+  const fromReport = source.startsWith("report-")
+    || Boolean(triggerButton?.closest?.("[data-report-review-root], [data-report-review-detail-row], [data-report-section]"));
+  if (!fromReport) return { tab: "summary", section: "" };
+  return {
+    tab: "report",
+    section: reportSection?.dataset?.reportSection || (source === "report-audit" ? "audit" : "review"),
+  };
+}
+
+function buildReportReviewActionMarker(target = {}, triggerButton = null, section = "review") {
+  const ruleTarget = target.target || {};
+  const action = triggerButton?.dataset?.removeException
+    ? "removed"
+    : triggerButton?.dataset?.addExclusion || target.type === "comparison-exclusion"
+      ? "excluded"
+      : "excepted";
+  const objectKey = firstSummaryValue([
+    target.objectKey,
+    target.oldKey,
+    target.newKey,
+    target.settingKey,
+    target.displayName,
+    ruleTarget.objectKey,
+    ruleTarget.settingKey,
+    ruleTarget.createdFromObjectKey,
+    ruleTarget.displayName,
+  ]);
+  const objectType = firstSummaryValue([
+    target.objectType,
+    target.settingType,
+    ruleTarget.objectType,
+    ruleTarget.settingType,
+  ]);
+  const field = firstSummaryValue([
+    target.field,
+    target.fieldPath,
+    ruleTarget.fieldPath,
+  ]);
+  const labels = {
+    excepted: "예외 적용됨",
+    excluded: "비교 제외 적용됨",
+    removed: "규칙 해제됨",
+  };
+  return {
+    action,
+    section,
+    objectKey,
+    objectType,
+    field,
+    policyId: target.id || target.policyId || "",
+    expectedGroup: action === "excepted" ? "예외 처리됨" : action === "excluded" ? "비교 제외됨" : "",
+    label: labels[action] || "처리 완료",
+  };
+}
+
+function highlightPendingReportReviewAction() {
+  const marker = state.pendingReportReviewAction;
+  state.pendingReportReviewAction = null;
+  if (!marker) return;
+  highlightReportReviewActionResult(marker);
+}
+
+function highlightReportReviewActionResult(marker = {}) {
+  const root = selectors.overviewReport?.querySelector("[data-report-review-root]");
+  if (!root) return;
+  const row = findReportReviewActionRow(root, marker);
+  if (!row) {
+    setReportReviewSaveState(root, `${marker.label}: 대상 행 확인 필요`, "attention");
+    return;
+  }
+  if (row.hidden) {
+    setReportReviewSaveState(root, `${marker.label}: 현재 필터에 숨김`, "attention");
+    return;
+  }
+
+  row.classList.add("report-review-action-highlight");
+  row.dataset.reportActionApplied = marker.action || "applied";
+  const detail = root.querySelector(`[data-report-review-detail-row="${cssEscape(row.dataset.reportReviewDetail || "")}"]`);
+  detail?.classList.add("report-review-action-highlight");
+  row.scrollIntoView({ block: "center", inline: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  setReportReviewSaveState(root, `${marker.label}: ${marker.objectKey || marker.objectType || "-"}`, "applied");
+  window.setTimeout(() => {
+    row.classList.remove("report-review-action-highlight");
+    detail?.classList.remove("report-review-action-highlight");
+    row.removeAttribute("data-report-action-applied");
+  }, 1800);
+}
+
+function findReportReviewActionRow(root, marker = {}) {
+  const rows = [...root.querySelectorAll("[data-report-review-row]")];
+  if (!rows.length) return null;
+  const scored = rows
+    .map((row) => ({ row, score: scoreReportReviewActionRow(row, marker) }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => {
+      if (left.row.hidden !== right.row.hidden) return left.row.hidden ? 1 : -1;
+      return right.score - left.score;
+    });
+  return scored[0]?.row || null;
+}
+
+function scoreReportReviewActionRow(row, marker = {}) {
+  let score = 0;
+  const targetType = canonicalizeComparableLine(marker.objectType);
+  const targetField = normalizeReportReviewFieldName(marker.field);
+  const targetKeys = buildReportReviewActionKeySet(marker.objectKey);
+  const rowKeys = buildReportReviewActionKeySet([
+    row.dataset.reportReviewJump,
+    row.dataset.reviewObjectKey,
+    row.dataset.reviewOldKey,
+    row.dataset.reviewNewKey,
+    row.dataset.reviewKey,
+  ]);
+  const keyMatch = [...targetKeys].some((targetKey) =>
+    [...rowKeys].some((rowKey) => rowKey === targetKey || rowKey.includes(targetKey) || targetKey.includes(rowKey))
+  );
+  if (targetKeys.size && keyMatch) score += 10;
+  if (marker.expectedGroup && row.dataset.reviewGroup === marker.expectedGroup) score += 5;
+  if (targetType && canonicalizeComparableLine(row.dataset.reviewType) === targetType) score += 2;
+  if (targetField && splitReportReviewTokens(row.dataset.reviewFields).includes(targetField)) score += 1;
+  if (marker.policyId && row.dataset.reviewPolicyId === marker.policyId) score += 3;
+  return score;
+}
+
+function buildReportReviewActionKeySet(values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  const result = new Set();
+  list.forEach((value) => {
+    const normalized = canonicalizeComparableLine(value);
+    if (!normalized) return;
+    result.add(normalized);
+    normalized.split("|").forEach((part) => {
+      const item = canonicalizeComparableLine(part);
+      if (item) result.add(item);
+    });
+    const [, suffix] = normalized.split(":");
+    if (suffix) result.add(canonicalizeComparableLine(suffix));
+  });
+  return result;
 }
 
 function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object") {
@@ -6597,10 +7014,7 @@ async function removeProfileException(exceptionId = "", triggerButton = null) {
     state.profileDraft.exceptions = exceptions.filter((item) => item.id !== exceptionId);
     await saveProfile();
     await syncActiveSessionProfileReference();
-    if (state.lastReport) {
-      runCompare();
-      setResultTab("summary");
-    }
+    await refreshAfterProfileRuleChange(target, triggerButton);
     setProfileStatus(`${actionLabel} 완료`, "saved");
     showWorkbenchToast(`${actionLabel}됨. 활성 검토 항목으로 복원됨.`, "success");
   } catch (error) {
@@ -14671,10 +15085,30 @@ function compactReportValue(value) {
 }
 
 function renderObjectNavigator(rebind = true) {
-  if (!selectors.objectList || !state.lastReport) return;
+  if (!selectors.objectList || !state.lastReport) {
+    renderObjectQuickContext([]);
+    return;
+  }
   renderObjectSectionTabs();
   const query = canonicalizeComparableLine(selectors.objectSearchInput?.value || "");
   const sortMode = selectors.objectSortSelect?.value || "identity";
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+
+  if (plan.length) {
+    const items = getFilteredPlanReviewItems(query, sortMode);
+
+    if (!items.some((item) => item.id === state.activeObjectReviewItemId)) {
+      state.activeObjectReviewItemId = items[0]?.id || "";
+    }
+
+    selectors.objectList.innerHTML = items.length
+      ? items.map(renderPlanReviewItem).join("")
+      : `<div class="small-note">검색 조건에 맞는 검토 항목이 없습니다.</div>`;
+    renderObjectQuickContext(items);
+    if (rebind) bindDiffObjectNavigation();
+    return;
+  }
+
   const objects = [...state.lastReport.oldObjects, ...state.lastReport.newObjects]
     .filter((object) => object.type !== "global")
     .filter(objectMatchesActiveSection)
@@ -14684,6 +15118,7 @@ function renderObjectNavigator(rebind = true) {
   selectors.objectList.innerHTML = objects.length
     ? objects.map(renderNavigatorObjectItem).join("")
     : `<div class="small-note">검색 조건에 맞는 객체가 없습니다.</div>`;
+  renderObjectQuickContext([]);
   if (rebind) bindDiffObjectNavigation();
 }
 
@@ -14713,6 +15148,189 @@ function renderNavigatorObjectItem(object) {
       <button type="button" class="object-delete-btn" data-object-delete="${escapeHtml(object.key)}" data-object-source="${escapeHtml(object.source)}">삭제</button>
     </div>
   `;
+}
+
+function renderPlanReviewItem(item = {}) {
+  const objectKey = planReviewObjectKey(item);
+  const selected = state.activeObjectReviewItemId === item.id;
+  const description = planReviewDescription(item);
+  const counts = planReviewFieldCounts(item);
+  const reviewCount = planReviewIssueCount(item, counts);
+  const stateKind = planReviewStateKind(item);
+  const lineLabel = planReviewLineLabel(item);
+  return `
+    <div class="object-item plan-review-item ${selected ? "selected" : ""}" data-plan-review-select="${escapeHtml(item.id || "")}" data-object-key="${escapeHtml(objectKey)}" data-review-status="${escapeHtml(stateKind)}">
+      <button type="button" class="object-nav-main" data-plan-review-select="${escapeHtml(item.id || "")}">
+        <span class="plan-review-topline">
+          <span class="semantic-status-badge semantic-state-${escapeHtml(stateKind)}">${escapeHtml(planReviewStatusLabel(item))}</span>
+          <strong>${escapeHtml(item.objectType || "object")} ${escapeHtml(planReviewName(item))}</strong>
+        </span>
+        <span class="small-note">${escapeHtml(planReviewSideLabel(item))} | ${escapeHtml(lineLabel)} | score ${escapeHtml(item.score ?? "-")}</span>
+        ${description ? `<span class="object-item-description" title="${escapeHtml(description)}">${escapeHtml(description)}</span>` : ""}
+        <span class="object-field-chips">
+          <span>변경 ${escapeHtml(counts.changed)}</span>
+          <span>누락 ${escapeHtml(counts.missing)}</span>
+          <span>추가 ${escapeHtml(counts.added)}</span>
+          <span>검토 ${escapeHtml(reviewCount)}</span>
+        </span>
+      </button>
+      <button type="button" class="object-compare-btn" data-object-navigate="${escapeHtml(objectKey)}">비교</button>
+    </div>
+  `;
+}
+
+function getFilteredPlanReviewItems(
+  query = canonicalizeComparableLine(selectors.objectSearchInput?.value || ""),
+  sortMode = selectors.objectSortSelect?.value || "identity"
+) {
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+  return plan
+    .filter(planItemMatchesActiveSection)
+    .filter((item) => !query || planItemMatchesSearch(item, query))
+    .sort((left, right) => comparePlanReviewItems(left, right, sortMode));
+}
+
+function planReviewObjectKey(item = {}) {
+  const object = item.oldObject || item.newObject || {};
+  return object.key || exceptionObjectKeyFromPlanItem(item, item.objectType || object.type || "object");
+}
+
+function planReviewName(item = {}) {
+  const object = item.oldObject || item.newObject || {};
+  return object.sourceName ||
+    object.name ||
+    object.normalizedIdentity ||
+    object.identity ||
+    object.id ||
+    item.id ||
+    "-";
+}
+
+function planReviewDescription(item = {}) {
+  const oldDescription = objectDescriptionForDisplay(item.oldObject || {});
+  const newDescription = objectDescriptionForDisplay(item.newObject || {});
+  if (oldDescription && newDescription && oldDescription !== newDescription) return `${oldDescription} -> ${newDescription}`;
+  return oldDescription || newDescription || "";
+}
+
+function planReviewSideLabel(item = {}) {
+  if (item.oldObject && item.newObject) return "기존 ↔ 신규";
+  if (item.oldObject) return "기존 only";
+  if (item.newObject) return "신규 only";
+  return "-";
+}
+
+function planReviewLineLabel(item = {}) {
+  const oldLine = item.oldObject ? `기존 ${item.oldObject.startLine || "-"}-${item.oldObject.endLine || "-"}` : "";
+  const newLine = item.newObject ? `신규 ${item.newObject.startLine || "-"}-${item.newObject.endLine || "-"}` : "";
+  return [oldLine, newLine].filter(Boolean).join(" / ") || "라인 -";
+}
+
+function planReviewStatusLabel(item = {}) {
+  if (item.comparisonExcluded || item.excluded) return "제외";
+  if (item.policySuppressed) return "예외";
+  return ({
+    matched: "일치",
+    candidate: "검토",
+    ambiguous: "검토",
+    "low-confidence": "검토",
+    "old-only": "누락",
+    "new-only": "추가",
+    manual: "수동",
+  })[String(item.status || "").toLowerCase()] || String(item.status || "-");
+}
+
+function planReviewStateKind(item = {}) {
+  if (item.comparisonExcluded || item.excluded) return "excluded";
+  if (item.policySuppressed) return "suppressed";
+  const status = String(item.status || "").toLowerCase();
+  if (status === "matched" && isReviewNeededPlanItem(item)) return "partial";
+  if (status === "matched" || status === "manual") return "matched";
+  if (["candidate", "ambiguous", "low-confidence"].includes(status)) return "ambiguous";
+  return "unmatched";
+}
+
+function planReviewFieldCounts(item = {}) {
+  const counts = { changed: 0, missing: 0, added: 0 };
+  Object.values(item.fieldSummary || {}).forEach((summary = {}) => {
+    const status = String(summary.effectiveStatus || summary.status || "").toLowerCase();
+    if (["changed", "structure-converted", "group-inherited", "inheritance-unresolved"].includes(status)) counts.changed += 1;
+    else if (["missing", "old-only"].includes(status)) counts.missing += 1;
+    else if (["added", "new-only"].includes(status)) counts.added += 1;
+  });
+  return counts;
+}
+
+function planReviewIssueCount(item = {}, counts = planReviewFieldCounts(item)) {
+  return counts.changed +
+    counts.missing +
+    counts.added +
+    Number(item.policyViolationCount || 0) +
+    Number(item.auditFindingCount || 0) +
+    planReviewRelationshipIssueCount(item.relationshipSummary || []) +
+    (["candidate", "ambiguous", "low-confidence", "old-only", "new-only"].includes(String(item.status || "").toLowerCase()) ? 1 : 0);
+}
+
+function planReviewRelationshipIssueCount(relationships = []) {
+  return relationships.filter((relationship) => {
+    const status = String(relationship?.status || "").toLowerCase();
+    return status && !["matched", "equal", "present"].includes(status);
+  }).length;
+}
+
+function planItemMatchesSearch(item = {}, query = "") {
+  const text = planReviewSearchText(item);
+  const compact = compactSearchText(text);
+  return query.split(/\s+/).filter(Boolean).every((part) => {
+    const normalizedPart = canonicalizeComparableLine(part);
+    const compactPart = compactSearchText(normalizedPart);
+    return text.includes(normalizedPart) || compact.includes(compactPart);
+  });
+}
+
+function planReviewSearchText(item = {}) {
+  const fieldText = Object.entries(item.fieldSummary || {})
+    .map(([field, summary]) => `${field} ${summary?.oldValues || ""} ${summary?.newValues || ""}`)
+    .join(" ");
+  return canonicalizeComparableLine([
+    item.objectType,
+    item.status,
+    item.reason,
+    planReviewName(item),
+    planReviewDescription(item),
+    planReviewObjectKey(item),
+    item.oldObject?.key,
+    item.newObject?.key,
+    item.oldObject?.sourceName,
+    item.newObject?.sourceName,
+    item.oldObject?.normalizedIdentity,
+    item.newObject?.normalizedIdentity,
+    fieldText,
+    ...(item.oldLines || []),
+    ...(item.newLines || []),
+  ].filter(Boolean).join(" "));
+}
+
+function comparePlanReviewItems(left = {}, right = {}, sortMode = "identity") {
+  if (sortMode === "source" || sortMode === "line") {
+    const sourceRank = planReviewSideLabel(left).localeCompare(planReviewSideLabel(right));
+    if (sourceRank) return sourceRank;
+  }
+  if (sortMode === "line") {
+    return planReviewStartLine(left) - planReviewStartLine(right);
+  }
+  if (sortMode === "field") {
+    const leftReview = planReviewIssueCount(left);
+    const rightReview = planReviewIssueCount(right);
+    if (leftReview !== rightReview) return rightReview - leftReview;
+  }
+  const typeRank = String(left.objectType || "").localeCompare(String(right.objectType || ""));
+  if (typeRank) return typeRank;
+  return planReviewName(left).localeCompare(planReviewName(right), undefined, { numeric: true });
+}
+
+function planReviewStartLine(item = {}) {
+  return Number(item.oldObject?.startLine || item.newObject?.startLine || 0);
 }
 
 function objectFieldEntries(object) {
@@ -14830,8 +15448,23 @@ function bindDiffObjectNavigation() {
   selectors.reportList.querySelectorAll("[data-object-navigate], [data-object-key]").forEach((item) => {
     item.addEventListener("click", () => scrollToDiffObject(item.dataset.objectNavigate || item.dataset.objectKey));
   });
+  selectors.objectList.querySelectorAll("[data-plan-review-select]").forEach((item) => {
+    item.addEventListener("click", (event) => {
+      if (event.target.closest("[data-object-navigate]")) return;
+      selectObjectReviewItem(item.dataset.planReviewSelect || "");
+    });
+  });
   selectors.objectList.querySelectorAll("[data-object-navigate]").forEach((button) => {
-    button.addEventListener("click", () => scrollToDiffObject(button.dataset.objectNavigate));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const reviewItem = button.closest("[data-plan-review-select]");
+      if (reviewItem) {
+        selectObjectReviewItem(reviewItem.dataset.planReviewSelect || "");
+        const target = getActivePlanReviewItem(null, { fallback: true });
+        if (target) setPlanReviewCompareContext(target);
+      }
+      scrollToDiffObject(button.dataset.objectNavigate);
+    });
   });
   selectors.objectList.querySelectorAll("[data-object-delete]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -14841,11 +15474,37 @@ function bindDiffObjectNavigation() {
   });
 }
 
+function selectObjectReviewItem(itemId = "") {
+  state.activeObjectReviewItemId = itemId;
+  selectors.objectList?.querySelectorAll("[data-plan-review-select]").forEach((row) => {
+    row.classList.toggle("selected", row.dataset.planReviewSelect === itemId);
+  });
+  renderObjectQuickContext();
+}
+
+function openSelectedObjectReviewInCompare() {
+  const selected = (state.lastSemanticPlan || []).find((item) => item.id === state.activeObjectReviewItemId);
+  const fallback = getFilteredPlanReviewItems()[0];
+  const target = selected || fallback;
+  if (!target) {
+    if (setActiveTab("compare", { skipConfirm: true }) && state.lastReport) {
+      showDiffMode();
+      scheduleSettledDiffConnectorRender();
+    }
+    return;
+  }
+  state.activeObjectReviewItemId = target.id || "";
+  setPlanReviewCompareContext(target);
+  renderObjectQuickContext();
+  scrollToDiffObject(planReviewObjectKey(target));
+}
+
 function renderOverviewReport(report) {
   if (!selectors.overviewReport) return;
   if (!report) {
+    renderReportQuickContext(null);
     selectors.overviewReport.innerHTML = `
-      <section class="overview-section">
+      <section class="overview-section" data-report-section="empty">
         <div class="summary-empty-state">
           <strong>리포트 없음</strong>
           <span>비교 실행 후 리포트가 표시됨.</span>
@@ -14858,8 +15517,9 @@ function renderOverviewReport(report) {
   const byType = groupBy(objects, (object) => object.type);
   const dashboard = buildCurrentDashboardData(report);
   const { fieldAnalysis, review, graph, severity, context, lineSummary, audit } = dashboard;
+  renderReportQuickContext(report);
   selectors.overviewReport.innerHTML = `
-    <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}">
+    <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}" data-report-section="summary">
       <div>
         <span class="summary-kicker">통합 리포트</span>
         <h3>${escapeHtml(severity.label)}</h3>
@@ -14871,7 +15531,7 @@ function renderOverviewReport(report) {
         <span>${escapeHtml(context.profileName || "프로파일 없음")}</span>
       </div>
     </section>
-    <section class="overview-section">
+    <section class="overview-section" data-report-section="metrics">
       <h3>운영 요약</h3>
       <div class="overview-grid overview-summary-grid">
         <div class="overview-card"><strong>${report.summary.total}</strong><span>전체 차이</span></div>
@@ -14882,11 +15542,11 @@ function renderOverviewReport(report) {
         <div class="overview-card"><strong>${escapeHtml(review.ambiguous.length)}</strong><span>확인 필요 후보</span></div>
       </div>
     </section>
-    <section class="overview-section report-review-section">
+    <section class="overview-section report-review-section" data-report-section="review">
       <h3>검토 테이블</h3>
       ${renderReportReviewTable(review)}
     </section>
-    <section class="overview-section report-audit-section">
+    <section class="overview-section report-audit-section" data-report-section="audit">
       <h3>표준 점검 리포트</h3>
       ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
         ? renderAuditReportSections(audit)
@@ -14898,11 +15558,11 @@ function renderOverviewReport(report) {
         ? renderCoverageDiagnostics(context.coverageDiagnostics)
         : `<div class="small-note">고급 진단 숨김. 전체 진단 모드에서 확인.</div>`}
     </section>
-    <section class="overview-section report-field-section">
+    <section class="overview-section report-field-section" data-report-section="fields">
       <h3>공통 필드 분석</h3>
       ${renderFieldOverlapSummary(fieldAnalysis)}
     </section>
-    <section class="overview-section report-graph-section">
+    <section class="overview-section report-graph-section" data-report-section="graph">
       <div class="report-graph-head">
         <div>
           <h3>관계 그래프</h3>
@@ -14916,7 +15576,7 @@ function renderOverviewReport(report) {
       </div>
       ${renderRelationshipGraph(graph)}
     </section>
-    <section class="overview-section">
+    <section class="overview-section" data-report-section="counts">
       <h3>설정 수</h3>
       <div class="overview-grid">
         ${[...byType.entries()].sort(([left], [right]) => objectTypeRank(left) - objectTypeRank(right)).map(([type, list]) => {
@@ -14926,7 +15586,7 @@ function renderOverviewReport(report) {
         }).join("") || `<div class="small-note">비교 결과가 없습니다.</div>`}
       </div>
     </section>
-    <section class="overview-section">
+    <section class="overview-section" data-report-section="distribution">
       <h3>주요 필드 분포</h3>
       ${renderFieldDistributionSummary(objects)}
     </section>
@@ -14973,13 +15633,20 @@ function renderReportReviewTable(review = {}) {
   const fieldColumns = getReportReviewFieldColumns(rows);
   const filterOptions = getReportReviewFilterOptions(rows, fieldColumns);
   const valueOptions = getReportReviewChecklistOptions(rows, fieldColumns);
+  const compactColumnCount = 7;
+  const totalColumnCount = compactColumnCount + fieldColumns.length + 2;
 
   return `
-    <div class="report-review-root" data-report-review-root>
+    <div class="report-review-root" data-report-review-root data-report-view-mode="compact">
       <div class="report-review-tools">
         <input type="search" data-report-review-search placeholder="전체 검색" aria-label="검토 테이블 전체 검색" />
+        <div class="report-review-view-toggle" role="group" aria-label="검토 테이블 보기">
+          <button type="button" data-report-review-view="compact" class="active" aria-pressed="true">핵심 보기</button>
+          <button type="button" data-report-review-view="full" aria-pressed="false">전체 옵션</button>
+        </div>
         <button type="button" data-report-review-clear>초기화</button>
         <span data-report-review-count>${escapeHtml(rows.length)}/${escapeHtml(rows.length)}</span>
+        <span class="report-review-save-state" data-report-review-save-state>필터 자동 저장</span>
       </div>
       <div class="report-review-table-wrap">
       <table class="report-review-field-table">
@@ -14988,27 +15655,38 @@ function renderReportReviewTable(review = {}) {
             <th>${renderReportReviewHeaderSelect("구분", "group", filterOptions.groups, valueOptions.group)}</th>
             <th>${renderReportReviewHeaderSelect("설정 종류", "type", filterOptions.types, valueOptions.type)}</th>
             <th>${renderReportReviewHeaderSearch("설정 키", "key", valueOptions.key)}</th>
-            <th>${renderReportReviewHeaderSearch("description", "description", valueOptions.description)}</th>
+            <th class="report-review-compact-column">${renderReportReviewFieldSummaryHeader(filterOptions.fields, filterOptions.statuses)}</th>
+            <th class="report-review-option-column">${renderReportReviewHeaderSearch("description", "description", valueOptions.description)}</th>
             <th>${renderReportReviewHeaderSearch("사유", "reason", valueOptions.reason)}</th>
             <th>${renderReportReviewHeaderSearch("진단", "diagnostic", valueOptions.diagnostic)}</th>
-            ${fieldColumns.map((field) => `<th>${renderReportReviewFieldHeader(field, filterOptions.statuses, valueOptions.fields.get(field) || [])}</th>`).join("")}
-            <th>${renderReportReviewHeaderSearch("일치도", "score", valueOptions.score)}</th>
+            ${fieldColumns.map((field) => `<th class="report-review-option-column">${renderReportReviewFieldHeader(field, filterOptions.statuses, valueOptions.fields.get(field) || [])}</th>`).join("")}
+            <th class="report-review-option-column">${renderReportReviewHeaderSearch("일치도", "score", valueOptions.score)}</th>
             <th><div class="report-review-th"><div class="report-review-th-bar"><span>동작</span></div></div></th>
           </tr>
         </thead>
         <tbody>
-          ${rows.length ? rows.map((item) => {
+          ${rows.length ? rows.map((item, index) => {
             const jumpKey = item.oldKey || item.newKey || item.objectKey || "";
             const meta = getReportReviewRowMeta(item);
             const objectKey = item.label || item.objectKey || "-";
             const description = getReportReviewDescription(item);
             const diagnostic = getReportReviewDiagnostic(item);
+            const detailId = `report-review-detail-${index}`;
+            const fieldSummary = getReportReviewFieldSummaryText(item);
+            const stableObjectKey = item.objectKey || item.oldKey || item.newKey || objectKey || jumpKey || "";
             return `
               <tr
                 data-report-review-row
+                data-report-review-jump="${escapeHtml(jumpKey)}"
+                data-report-review-detail="${escapeHtml(detailId)}"
+                data-report-detail-expanded="false"
                 data-review-group="${escapeHtml(item.group || "")}"
                 data-review-type="${escapeHtml(item.objectType || "")}"
                 data-review-key="${escapeHtml(objectKey)}"
+                data-review-object-key="${escapeHtml(stableObjectKey)}"
+                data-review-old-key="${escapeHtml(item.oldKey || "")}"
+                data-review-new-key="${escapeHtml(item.newKey || "")}"
+                data-review-policy-id="${escapeHtml(item.policyId || "")}"
                 data-review-description="${escapeHtml(description.searchText)}"
                 data-review-description-option="${escapeHtml(reportReviewOptionValue(description.value))}"
                 data-review-reason="${escapeHtml(item.reason || "")}"
@@ -15017,17 +15695,19 @@ function renderReportReviewTable(review = {}) {
                 data-review-diagnostic-option="${escapeHtml(reportReviewOptionValue(diagnostic.value))}"
                 data-review-score="${escapeHtml(item.score || "")}"
                 data-review-score-option="${escapeHtml(reportReviewOptionValue(item.score || ""))}"
+                data-review-field-summary="${escapeHtml(fieldSummary)}"
                 data-review-fields="${escapeHtml(meta.fields.join(" "))}"
                 data-review-statuses="${escapeHtml(meta.statuses.join(" "))}"
                 data-review-search="${escapeHtml(meta.searchText)}">
                 <td>${escapeHtml(item.group)}</td>
                 <td>${escapeHtml(item.objectType || "-")}</td>
-                <td><strong>${escapeHtml(objectKey)}</strong></td>
+                ${renderReportReviewKeyCell(objectKey, description)}
+                ${renderReportReviewFieldSummaryCell(item, fieldColumns, detailId)}
                 ${renderReportReviewDescriptionCell(description)}
                 <td>${escapeHtml(item.reason || "-")}</td>
                 <td>${escapeHtml(diagnostic.value || "-")}</td>
-                ${fieldColumns.map((field) => renderReportReviewFieldCell(item, field)).join("")}
-                <td>${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>
+                ${fieldColumns.map((field) => renderReportReviewFieldCell(item, field, "report-review-option-column")).join("")}
+                <td class="report-review-option-column">${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>
                 <td>
                   <div class="report-review-actions">
                     <button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button>
@@ -15036,8 +15716,9 @@ function renderReportReviewTable(review = {}) {
                   </div>
                 </td>
               </tr>
+              ${renderReportReviewDetailRow(item, detailId, totalColumnCount, jumpKey)}
             `;
-          }).join("") : `<tr><td colspan="${fieldColumns.length + 8}" class="report-review-empty">검토 항목 없음</td></tr>`}
+          }).join("") : `<tr><td colspan="${totalColumnCount}" class="report-review-empty">검토 항목 없음</td></tr>`}
         </tbody>
       </table>
       <div class="report-review-filter-empty" data-report-review-filter-empty hidden>조건에 맞는 검토 항목 없음</div>
@@ -15096,11 +15777,12 @@ function reportReviewObjectDedupKey(item = {}) {
 }
 
 function renderReportReviewHeaderSearch(title = "", key = "", options = []) {
+  const panelId = reportReviewFilterPanelId(key, title);
   const panelStyle = reportReviewFilterPanelStyle([title, ...options]);
   return `
     <div class="report-review-th">
-      ${renderReportReviewHeaderBar(title)}
-      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
+      ${renderReportReviewHeaderBar(title, panelId)}
+      <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(title)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
         <input type="search" data-report-column-search="${escapeHtml(key)}" placeholder="검색" aria-label="${escapeHtml(title)} 검색" />
         ${renderReportReviewValueChecklist(title, key, options)}
       </div>
@@ -15109,11 +15791,12 @@ function renderReportReviewHeaderSearch(title = "", key = "", options = []) {
 }
 
 function renderReportReviewHeaderSelect(title = "", key = "", options = [], valueOptions = options) {
+  const panelId = reportReviewFilterPanelId(key, title);
   const panelStyle = reportReviewFilterPanelStyle([title, ...options, ...valueOptions]);
   return `
     <div class="report-review-th">
-      ${renderReportReviewHeaderBar(title)}
-      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
+      ${renderReportReviewHeaderBar(title, panelId)}
+      <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(title)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
         <select data-report-column-filter="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 필터">
           <option value="all">전체</option>
           ${options.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}
@@ -15125,6 +15808,7 @@ function renderReportReviewHeaderSelect(title = "", key = "", options = [], valu
 }
 
 function renderReportReviewFieldHeader(field = "", statuses = [], valueOptions = []) {
+  const panelId = reportReviewFilterPanelId(`field-${field}`, field);
   const panelStyle = reportReviewFilterPanelStyle([
     field,
     ...statuses.map(reportFieldStatusLabel),
@@ -15132,8 +15816,8 @@ function renderReportReviewFieldHeader(field = "", statuses = [], valueOptions =
   ]);
   return `
     <div class="report-review-th report-review-field-th">
-      ${renderReportReviewHeaderBar(field)}
-      <div class="report-review-filter-panel" data-report-filter-panel style="${escapeHtml(panelStyle)}" hidden>
+      ${renderReportReviewHeaderBar(field, panelId)}
+      <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(field)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
         <input type="search" data-report-field-search="${escapeHtml(field)}" placeholder="값 검색" aria-label="${escapeHtml(field)} 값 검색" />
         <select data-report-field-status-filter="${escapeHtml(field)}" aria-label="${escapeHtml(field)} 상태 필터">
           <option value="all">상태 전체</option>
@@ -15143,6 +15827,36 @@ function renderReportReviewFieldHeader(field = "", statuses = [], valueOptions =
       </div>
     </div>
   `;
+}
+
+function renderReportReviewFieldSummaryHeader(fields = [], statuses = []) {
+  const panelId = reportReviewFilterPanelId("fieldSummary", "변경 요약");
+  const panelStyle = reportReviewFilterPanelStyle([
+    "변경 요약",
+    ...fields,
+    ...statuses.map(reportFieldStatusLabel),
+  ]);
+  return `
+    <div class="report-review-th report-review-summary-th">
+      ${renderReportReviewHeaderBar("변경 요약", panelId)}
+      <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="변경 요약 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
+        <input type="search" data-report-column-search="fieldSummary" placeholder="필드/값 검색" aria-label="변경 요약 검색" />
+        <select data-report-review-filter="field" aria-label="필드 필터">
+          <option value="all">필드 전체</option>
+          ${fields.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}
+        </select>
+        <select data-report-review-filter="status" aria-label="상태 필터">
+          <option value="all">상태 전체</option>
+          ${statuses.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(reportFieldStatusLabel(value))}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function reportReviewFilterPanelId(key = "", title = "") {
+  const normalized = canonicalizeComparableLine(key || title).replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return `report-filter-${normalized || "column"}`;
 }
 
 function reportReviewFilterPanelStyle(values = []) {
@@ -15157,13 +15871,13 @@ function reportReviewFilterPanelStyle(values = []) {
 function renderReportReviewValueChecklist(title = "", key = "", options = []) {
   if (!options.length) return "";
   return `
-    <div class="report-review-checklist" data-report-checklist="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 값 필터">
+    <div class="report-review-checklist" data-report-checklist="${escapeHtml(key)}" role="group" aria-label="${escapeHtml(title)} 값 필터">
       <input type="search" data-report-check-search placeholder="항목 검색" aria-label="${escapeHtml(title)} 항목 검색" />
       <label class="report-review-check-option report-review-check-all">
         <input type="checkbox" data-report-check-all="${escapeHtml(key)}" checked />
         <span>(모두 선택)</span>
       </label>
-      <div class="report-review-check-options">
+      <div class="report-review-check-options" role="group" aria-label="${escapeHtml(title)} 값 선택">
         ${options.map((value) => {
           const optionValue = reportReviewOptionValue(value);
           return `
@@ -15178,11 +15892,12 @@ function renderReportReviewValueChecklist(title = "", key = "", options = []) {
   `;
 }
 
-function renderReportReviewHeaderBar(title = "") {
+function renderReportReviewHeaderBar(title = "", panelId = "") {
+  const controls = panelId ? ` aria-controls="${escapeHtml(panelId)}"` : "";
   return `
     <div class="report-review-th-bar">
       <span>${escapeHtml(title)}</span>
-      <button type="button" class="report-review-filter-toggle" data-report-filter-toggle data-report-filter-title="${escapeHtml(title)}" aria-expanded="false" aria-label="${escapeHtml(title)} 필터 열기">
+      <button type="button" class="report-review-filter-toggle" data-report-filter-toggle data-report-filter-title="${escapeHtml(title)}" aria-expanded="false"${controls} aria-label="${escapeHtml(title)} 필터 열기">
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <path d="M2 3h12L9.5 8.2v3.6l-3 1.7V8.2L2 3z" fill="currentColor" />
         </svg>
@@ -15381,18 +16096,193 @@ function getReportReviewDiagnostic(item = {}) {
   };
 }
 
+function renderReportReviewKeyCell(objectKey = "", description = {}) {
+  return `
+    <td class="report-review-key-cell">
+      <strong>${escapeHtml(objectKey || "-")}</strong>
+      ${description.value ? `<small class="report-review-compact-inline" title="${escapeHtml(description.value)}">${escapeHtml(description.value)}</small>` : ""}
+    </td>
+  `;
+}
+
+function renderReportReviewFieldSummaryCell(item = {}, fieldColumns = [], detailId = "") {
+  const rows = getReportReviewSummaryFieldRows(item);
+  const detailRows = getReportReviewDetailFieldRows(item);
+  const total = detailRows.length;
+  return `
+    <td class="report-review-field-summary-cell report-review-compact-column">
+      <div class="report-review-field-chip-list">
+        ${rows.length ? rows.map(renderReportReviewFieldChip).join("") : `<span class="report-review-field-chip muted">필드 변경 없음</span>`}
+        ${total > rows.length ? `<span class="report-review-field-more">+${escapeHtml(total - rows.length)}</span>` : ""}
+        ${item.score ? `<span class="report-review-score-chip">${escapeHtml(item.score)}%</span>` : ""}
+      </div>
+      <button type="button" class="report-review-detail-toggle" data-report-detail-toggle data-report-detail-count="${escapeHtml(total)}" aria-expanded="false" aria-controls="${escapeHtml(detailId)}">
+        상세 ${escapeHtml(total)}
+      </button>
+      <span class="report-review-field-meta-list" hidden>
+        ${fieldColumns.map((field) => renderReportReviewFieldMeta(item, field)).join("")}
+      </span>
+    </td>
+  `;
+}
+
+function getReportReviewFieldSummaryText(item = {}) {
+  return getReportReviewDetailFieldRows(item)
+    .map((row) => {
+      const field = normalizeReportReviewFieldName(row.field);
+      const oldValue = maskReportFieldValue(field, row.oldValue);
+      const newValue = maskReportFieldValue(field, row.newValue);
+      const status = String(row.status || "").toLowerCase();
+      return [field, status, reportFieldStatusLabel(status), oldValue, newValue].join(" ");
+    })
+    .join(" ")
+    .toLowerCase();
+}
+
+function getReportReviewDetailFieldRows(item = {}) {
+  return (item.fieldRows || [])
+    .map((row) => ({ ...row, normalizedField: normalizeReportReviewFieldName(row.field) }))
+    .filter((row) => row.normalizedField);
+}
+
+function getReportReviewSummaryFieldRows(item = {}) {
+  const rows = getReportReviewDetailFieldRows(item).filter((row) => row.normalizedField !== "description");
+  const changed = rows.filter((row) => !["same", "equal", "present"].includes(String(row.status || "").toLowerCase()));
+  return (changed.length ? changed : rows).slice(0, 3);
+}
+
+function renderReportReviewFieldChip(row = {}) {
+  const field = row.normalizedField || normalizeReportReviewFieldName(row.field);
+  const status = String(row.status || "").toLowerCase();
+  return `
+    <span class="report-review-field-chip report-field-status-${escapeHtml(status || "unknown")}" title="${escapeHtml(field)}">
+      <strong>${escapeHtml(field || "-")}</strong>
+      <small>${escapeHtml(reportFieldStatusLabel(status))}</small>
+    </span>
+  `;
+}
+
+function renderReportReviewFieldMeta(item = {}, field = "") {
+  const row = findReportReviewFieldRow(item, field);
+  if (!row) {
+    return `<span data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="" data-field-option="${escapeHtml(REPORT_REVIEW_EMPTY_OPTION)}"></span>`;
+  }
+
+  const oldValue = maskReportFieldValue(field, row.oldValue);
+  const newValue = maskReportFieldValue(field, row.newValue);
+  const status = String(row.status || "").toLowerCase();
+  const label = reportFieldStatusLabel(status);
+  const value = formatReportFieldValue(status, oldValue, newValue);
+  const searchText = [value, label, oldValue, newValue, status].map((entry) => String(entry || "").toLowerCase()).join(" ");
+
+  return `
+    <span
+      data-report-field-cell="${escapeHtml(field)}"
+      data-field-status="${escapeHtml(status)}"
+      data-field-search="${escapeHtml(searchText)}"
+      data-field-option="${escapeHtml(reportReviewOptionValue(value))}"></span>
+  `;
+}
+
+function renderReportReviewDetailRow(item = {}, detailId = "", colspan = 7, jumpKey = "") {
+  const rows = getReportReviewDetailFieldRows(item);
+  const panelKey = reportReviewPanelKey(item);
+  const objectKey = item.label || item.objectKey || "-";
+  const description = getReportReviewDescription(item);
+  const diagnostic = getReportReviewDiagnostic(item);
+  return `
+    <tr
+      class="report-review-detail-row"
+      data-report-review-detail-row="${escapeHtml(detailId)}"
+      data-report-review-jump="${escapeHtml(jumpKey)}"
+      data-review-group="${escapeHtml(item.group || "")}"
+      data-review-type="${escapeHtml(item.objectType || "")}"
+      data-review-key="${escapeHtml(objectKey)}"
+      data-review-description="${escapeHtml(description.searchText)}"
+      data-review-reason="${escapeHtml(item.reason || "")}"
+      data-review-fields="${escapeHtml(rows.map((row) => row.normalizedField).filter(Boolean).join(" "))}"
+      id="${escapeHtml(detailId)}"
+      hidden>
+      <td colspan="${escapeHtml(colspan)}">
+        <div class="report-review-detail-panel">
+          <div class="report-review-detail-head">
+            <div>
+              <strong>상세 필드</strong>
+              <span>${escapeHtml(rows.length)}개</span>
+              ${item.score ? `<span>일치도 ${escapeHtml(item.score)}%</span>` : ""}
+              ${diagnostic.value ? `<span>${escapeHtml(diagnostic.value)}</span>` : ""}
+            </div>
+            ${renderReportReviewDetailActions(item, jumpKey, panelKey)}
+          </div>
+          <div class="report-review-detail-grid">
+            ${rows.length ? rows.map(renderReportReviewDetailField).join("") : `<span class="small-note">상세 필드 없음</span>`}
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderReportReviewDetailActions(item = {}, jumpKey = "", panelKey = "") {
+  const hasPolicy = Boolean(item.policyId);
+  const exceptionTargetId = !hasPolicy ? registerReviewExceptionTarget(panelKey, item, "report-review-detail") : "";
+  const exclusionTargetId = !hasPolicy && ["unmatched-old", "unmatched-new"].includes(panelKey)
+    ? registerReviewSettingExclusionTarget(panelKey, item, "report-review-detail")
+    : "";
+  return `
+    <div class="report-review-detail-actions">
+      <button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button>
+      ${exceptionTargetId ? `<button type="button" data-add-exception="${escapeHtml(exceptionTargetId)}" data-exception-fixed-scope="object">예외 추가</button>` : ""}
+      ${exclusionTargetId ? `<button type="button" data-add-exclusion="${escapeHtml(exclusionTargetId)}" data-exclusion-fixed-scope="setting">이 설정 제외</button>` : ""}
+      ${item.group === "비교 제외됨" && item.policyId ? `<button type="button" data-remove-exception="${escapeHtml(item.policyId)}">비교 제외 해제</button>` : ""}
+      ${item.group === "예외 처리됨" && item.policyId ? `<button type="button" data-remove-exception="${escapeHtml(item.policyId)}">예외 해제</button>` : ""}
+    </div>
+  `;
+}
+
+function reportReviewPanelKey(item = {}) {
+  const group = String(item.group || "");
+  const status = String(item.status || "").toLowerCase();
+  if (group.includes("기존") || ["old-only", "unmatched-old", "source-only"].includes(status)) return "unmatched-old";
+  if (group.includes("신규") || ["new-only", "unmatched-new", "target-only"].includes(status)) return "unmatched-new";
+  if (group.includes("매핑 후보") || ["candidate", "ambiguous"].includes(status)) return "ambiguous";
+  if (group.includes("낮은") || status === "low-confidence") return "low-confidence";
+  if (group.includes("연결") || status === "relationship") return "relationship";
+  if (group.includes("비교 제외") || group.includes("예외") || group.includes("정책 제외")) return "excluded";
+  return "abnormal";
+}
+
+function renderReportReviewDetailField(row = {}) {
+  const field = row.normalizedField || normalizeReportReviewFieldName(row.field);
+  const status = String(row.status || "").toLowerCase();
+  const oldValue = maskReportFieldValue(field, row.oldValue);
+  const newValue = maskReportFieldValue(field, row.newValue);
+  return `
+    <div class="report-review-detail-field report-field-status-${escapeHtml(status || "unknown")}">
+      <div>
+        <strong>${escapeHtml(field || "-")}</strong>
+        <span>${escapeHtml(reportFieldStatusLabel(status))}</span>
+      </div>
+      <dl>
+        <div><dt>기존</dt><dd>${escapeHtml(oldValue || "-")}</dd></div>
+        <div><dt>신규</dt><dd>${escapeHtml(newValue || "-")}</dd></div>
+      </dl>
+    </div>
+  `;
+}
+
 function renderReportReviewDescriptionCell(description = {}) {
   return `
-    <td class="report-field-cell report-review-description-cell" data-report-description-cell data-field-search="${escapeHtml(description.searchText || "")}">
+    <td class="report-field-cell report-review-description-cell report-review-option-column" data-report-description-cell data-field-search="${escapeHtml(description.searchText || "")}">
       <span title="${escapeHtml(description.value || "")}">${escapeHtml(description.value || "-")}</span>
     </td>
   `;
 }
 
-function renderReportReviewFieldCell(item = {}, field = "") {
+function renderReportReviewFieldCell(item = {}, field = "", extraClass = "") {
   const row = findReportReviewFieldRow(item, field);
   if (!row) {
-    return `<td class="report-field-empty" data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="" data-field-option="${escapeHtml(REPORT_REVIEW_EMPTY_OPTION)}">-</td>`;
+    return `<td class="report-field-empty ${escapeHtml(extraClass)}" data-report-field-cell="${escapeHtml(field)}" data-field-status="" data-field-search="" data-field-option="${escapeHtml(REPORT_REVIEW_EMPTY_OPTION)}">-</td>`;
   }
 
   const oldValue = maskReportFieldValue(field, row.oldValue);
@@ -15404,7 +16294,7 @@ function renderReportReviewFieldCell(item = {}, field = "") {
 
   return `
     <td
-      class="report-field-cell report-field-status-${escapeHtml(status || "unknown")}"
+      class="report-field-cell report-field-status-${escapeHtml(status || "unknown")} ${escapeHtml(extraClass)}"
       data-report-field-cell="${escapeHtml(field)}"
       data-field-status="${escapeHtml(status)}"
       data-field-search="${escapeHtml(searchText)}"
@@ -15508,13 +16398,44 @@ function renderRelationshipGraph(graph = {}) {
   `;
 }
 
+function openReportObjectInCompare(element = null) {
+  const row = element?.closest?.("[data-report-review-row], [data-report-review-detail-row]");
+  const node = element?.closest?.("[data-graph-node]");
+  const objectKey = element?.dataset?.objectJump || row?.dataset.reportReviewJump || node?.dataset.objectJump || "";
+  if (!objectKey) return;
+  if (row) {
+    state.activeIssueContext = {
+      source: "report-review",
+      targetId: row.dataset.reportReviewJump || objectKey,
+      objectKey,
+      panelKey: row.dataset.reviewGroup || "report-review",
+      displayName: `${row.dataset.reviewType || "object"} ${row.dataset.reviewKey || objectKey}`.trim(),
+      description: row.dataset.reviewDescription || "",
+      field: row.dataset.reviewFields?.split(/\s+/).filter(Boolean)[0] || "",
+      title: row.dataset.reviewReason || row.dataset.reviewGroup || "리포트 검토 항목",
+    };
+  } else if (node) {
+    const title = node.querySelector("title")?.textContent || node.dataset.graphSearch || objectKey;
+    state.activeIssueContext = {
+      source: "report-graph",
+      targetId: node.dataset.graphNode || objectKey,
+      objectKey,
+      panelKey: "relationship-graph",
+      displayName: title,
+      description: title,
+      field: "",
+      title: "관계 그래프",
+    };
+  }
+  scrollToDiffObject(objectKey);
+}
+
 function bindReportGraphInteractions() {
   if (!selectors.overviewReport) return;
   bindReportReviewTableInteractions();
   selectors.overviewReport.querySelectorAll("[data-object-jump]").forEach((item) => {
     item.addEventListener("click", () => {
-      const objectKey = item.dataset.objectJump;
-      if (objectKey) scrollToDiffObject(objectKey);
+      openReportObjectInCompare(item);
     });
   });
   selectors.overviewReport.querySelectorAll("[data-field-type-filter]").forEach((button) => {
@@ -15544,8 +16465,7 @@ function bindReportGraphInteractions() {
     });
     graphRoot.addEventListener("click", (event) => {
       const node = event.target.closest?.("[data-object-jump]");
-      const objectKey = node?.dataset.objectJump;
-      if (objectKey) scrollToDiffObject(objectKey);
+      if (node) openReportObjectInCompare(node);
     });
   }
 
@@ -15558,6 +16478,9 @@ function bindReportGraphInteractions() {
     graphRoot?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   });
 }
+
+const REPORT_REVIEW_FILTER_STORAGE_KEY = "network-config-workbench.report-review-filters.v1";
+const REPORT_REVIEW_VIEW_STORAGE_KEY = "network-config-workbench.report-review-view.v1";
 
 let reportReviewFilterAbortController = null;
 
@@ -15581,18 +16504,29 @@ function bindReportReviewTableInteractions() {
   const checklistAlls = [...root.querySelectorAll("[data-report-check-all]")];
   const checklistSearches = [...root.querySelectorAll("[data-report-check-search]")];
   const filterToggles = [...root.querySelectorAll("[data-report-filter-toggle]")];
+  const viewButtons = [...root.querySelectorAll("[data-report-review-view]")];
   const rows = [...root.querySelectorAll("[data-report-review-row]")];
   const tableWrap = root.querySelector(".report-review-table-wrap");
   const fieldValueFilterFields = [...new Set([...root.querySelectorAll("[data-report-checklist]")]
     .map((item) => item.dataset.reportChecklist || "")
     .filter((key) => key.startsWith("field:"))
     .map((key) => key.slice("field:".length)))];
+  restoreReportReviewViewMode(root);
+  restoreReportReviewFilterState(root);
   root.querySelectorAll("[data-add-exception]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       const targetId = button.dataset.addException || "";
-      const scope = root.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      const scope = button.dataset.exceptionFixedScope
+        || root.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value
+        || "object";
       addExceptionFromTarget(targetId, scope, button);
+    });
+  });
+  root.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
     });
   });
   root.querySelectorAll("[data-remove-exception]").forEach((button) => {
@@ -15601,8 +16535,20 @@ function bindReportReviewTableInteractions() {
       removeProfileException(button.dataset.removeException || "", button);
     });
   });
+  root.querySelectorAll("[data-report-detail-toggle]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleReportReviewDetail(root, button);
+    });
+  });
+  rows.forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, input, select, label, [data-report-filter-toggle], [data-report-filter-panel]")) return;
+      openReportObjectInCompare(row);
+    });
+  });
 
-  const apply = () => {
+  const apply = (options = {}) => {
     const query = String(search?.value || "").trim().toLowerCase();
     const values = Object.fromEntries(filters.map((filter) => [
       filter.dataset.reportReviewFilter,
@@ -15641,6 +16587,7 @@ function bindReportReviewTableInteractions() {
       const reasonMatch = !columnQueries.reason || String(row.dataset.reviewReason || "").toLowerCase().includes(columnQueries.reason);
       const diagnosticMatch = !columnQueries.diagnostic || String(row.dataset.reviewDiagnostic || "").toLowerCase().includes(columnQueries.diagnostic);
       const scoreMatch = !columnQueries.score || String(row.dataset.reviewScore || "").toLowerCase().includes(columnQueries.score);
+      const fieldSummaryMatch = !columnQueries.fieldSummary || String(row.dataset.reviewFieldSummary || "").toLowerCase().includes(columnQueries.fieldSummary);
       const groupValueMatch = reportReviewChecklistMatches(checklistSelections, "group", row.dataset.reviewGroup);
       const typeValueMatch = reportReviewChecklistMatches(checklistSelections, "type", row.dataset.reviewType);
       const keyValueMatch = reportReviewChecklistMatches(checklistSelections, "key", row.dataset.reviewKey);
@@ -15670,6 +16617,7 @@ function bindReportReviewTableInteractions() {
         reasonMatch &&
         diagnosticMatch &&
         scoreMatch &&
+        fieldSummaryMatch &&
         groupValueMatch &&
         typeValueMatch &&
         keyValueMatch &&
@@ -15682,6 +16630,7 @@ function bindReportReviewTableInteractions() {
         fieldValueMatch &&
         queryMatch;
       row.hidden = !visible;
+      syncReportReviewDetailRow(root, row, visible);
       if (visible) visibleCount += 1;
     });
 
@@ -15689,6 +16638,7 @@ function bindReportReviewTableInteractions() {
     if (empty) empty.hidden = visibleCount > 0 || rows.length === 0;
     updateReportReviewFilterIndicators(root);
     positionOpenReportReviewFilter(root);
+    saveReportReviewFilterState(root, options.saveMessage);
   };
 
   search?.addEventListener("input", apply);
@@ -15730,9 +16680,15 @@ function bindReportReviewTableInteractions() {
       if (panel && willOpen) {
         panel.hidden = false;
         button.setAttribute("aria-expanded", "true");
+        button.setAttribute("aria-label", `${button.dataset.reportFilterTitle || "열"} 필터 닫기`);
         positionReportReviewFilterPanel(button, panel);
         panel.querySelector("input, select")?.focus();
       }
+    });
+  });
+  viewButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setReportReviewViewMode(root, button.dataset.reportReviewView || "compact");
     });
   });
   tableWrap?.addEventListener("scroll", () => positionOpenReportReviewFilter(root), filterListenerOptions);
@@ -15741,6 +16697,12 @@ function bindReportReviewTableInteractions() {
   root.addEventListener("click", (event) => {
     if (event.target.closest(".report-review-th")) return;
     closeReportReviewFilterPanels(root);
+  });
+  root.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const panel = event.target.closest("[data-report-filter-panel]");
+    closeReportReviewFilterPanels(root);
+    if (panel?.id) root.querySelector(`[aria-controls="${cssEscape(panel.id)}"]`)?.focus();
   });
   clear?.addEventListener("click", () => {
     if (search) search.value = "";
@@ -15764,10 +16726,177 @@ function bindReportReviewTableInteractions() {
       item.hidden = false;
     });
     closeReportReviewFilterPanels(root);
-    apply();
+    apply({ saveMessage: "필터 초기화됨" });
   });
   root.querySelectorAll("[data-report-checklist]").forEach(updateReportChecklistAllState);
   apply();
+}
+
+function toggleReportReviewDetail(root, button) {
+  const row = button?.closest("[data-report-review-row]");
+  if (!root || !row) return;
+  const nextExpanded = row.dataset.reportDetailExpanded !== "true";
+  row.dataset.reportDetailExpanded = nextExpanded ? "true" : "false";
+  button.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+  syncReportReviewDetailRow(root, row, !row.hidden);
+}
+
+function syncReportReviewDetailRow(root, row, visible = true) {
+  const detailId = row?.dataset.reportReviewDetail || "";
+  if (!root || !row || !detailId) return;
+  const detail = root.querySelector(`[data-report-review-detail-row="${cssEscape(detailId)}"]`);
+  const button = row.querySelector("[data-report-detail-toggle]");
+  const expanded = row.dataset.reportDetailExpanded === "true";
+  if (detail) detail.hidden = !visible || !expanded;
+  if (button) {
+    const count = button.dataset.reportDetailCount || "0";
+    button.textContent = expanded ? "상세 닫기" : `상세 ${count}`;
+    button.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+}
+
+function restoreReportReviewViewMode(root) {
+  let mode = "compact";
+  try {
+    mode = window.localStorage?.getItem(REPORT_REVIEW_VIEW_STORAGE_KEY) || "compact";
+  } catch {
+    mode = "compact";
+  }
+  setReportReviewViewMode(root, mode, { persist: false });
+}
+
+function setReportReviewViewMode(root, mode = "compact", options = {}) {
+  if (!root) return;
+  const normalized = mode === "full" ? "full" : "compact";
+  root.dataset.reportViewMode = normalized;
+  root.querySelectorAll("[data-report-review-view]").forEach((button) => {
+    const active = button.dataset.reportReviewView === normalized;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  if (normalized === "full") collapseReportReviewDetails(root);
+  if (options.persist !== false) {
+    try {
+      window.localStorage?.setItem(REPORT_REVIEW_VIEW_STORAGE_KEY, normalized);
+    } catch {
+      // Ignore preference persistence failures; table view still changes in-session.
+    }
+  }
+  closeReportReviewFilterPanels(root);
+}
+
+function collapseReportReviewDetails(root) {
+  root?.querySelectorAll("[data-report-review-row]").forEach((row) => {
+    row.dataset.reportDetailExpanded = "false";
+    syncReportReviewDetailRow(root, row, !row.hidden);
+  });
+}
+
+function restoreReportReviewFilterState(root) {
+  if (!root) return;
+  const state = loadReportReviewFilterState();
+  if (!state) return;
+  const search = root.querySelector("[data-report-review-search]");
+  if (search) search.value = state.search || "";
+  restoreReportSelectValues(root, "[data-report-review-filter]", "reportReviewFilter", state.filters);
+  restoreReportSelectValues(root, "[data-report-column-filter]", "reportColumnFilter", state.columnFilters);
+  restoreReportInputValues(root, "[data-report-column-search]", "reportColumnSearch", state.columnSearches);
+  restoreReportInputValues(root, "[data-report-field-search]", "reportFieldSearch", state.fieldSearches);
+  restoreReportSelectValues(root, "[data-report-field-status-filter]", "reportFieldStatusFilter", state.fieldStatusFilters);
+  restoreReportInputValues(root, "[data-report-check-search]", "reportCheckSearch", state.checklistSearches);
+  restoreReportChecklistValues(root, state.checklists);
+  root.querySelectorAll("[data-report-check-search]").forEach((input) => {
+    const query = String(input.value || "").trim().toLowerCase();
+    input.closest("[data-report-checklist]")?.querySelectorAll("[data-report-check-item]").forEach((item) => {
+      item.hidden = query && !String(item.dataset.reportCheckLabel || "").includes(query);
+    });
+  });
+}
+
+function loadReportReviewFilterState() {
+  try {
+    return JSON.parse(window.localStorage?.getItem(REPORT_REVIEW_FILTER_STORAGE_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function setReportReviewSaveState(root, message, stateName = "") {
+  const status = root?.querySelector("[data-report-review-save-state]");
+  if (status) {
+    status.textContent = message;
+    if (stateName) status.dataset.state = stateName;
+    else status.removeAttribute("data-state");
+  }
+}
+
+function saveReportReviewFilterState(root, statusMessage = "필터 자동 저장") {
+  if (!root) return;
+  const payload = {
+    version: 1,
+    search: root.querySelector("[data-report-review-search]")?.value || "",
+    filters: collectReportControlValues(root, "[data-report-review-filter]", "reportReviewFilter"),
+    columnFilters: collectReportControlValues(root, "[data-report-column-filter]", "reportColumnFilter"),
+    columnSearches: collectReportControlValues(root, "[data-report-column-search]", "reportColumnSearch"),
+    fieldSearches: collectReportControlValues(root, "[data-report-field-search]", "reportFieldSearch"),
+    fieldStatusFilters: collectReportControlValues(root, "[data-report-field-status-filter]", "reportFieldStatusFilter"),
+    checklistSearches: collectReportControlValues(root, "[data-report-check-search]", "reportCheckSearch"),
+    checklists: collectReportChecklistValues(root),
+  };
+  try {
+    window.localStorage?.setItem(REPORT_REVIEW_FILTER_STORAGE_KEY, JSON.stringify(payload));
+    setReportReviewSaveState(root, statusMessage);
+  } catch {
+    setReportReviewSaveState(root, "필터 저장 불가");
+  }
+}
+
+function collectReportControlValues(root, selector, dataKey) {
+  return Object.fromEntries([...root.querySelectorAll(selector)]
+    .map((control) => [control.dataset[dataKey] || "", control.value || ""])
+    .filter(([key]) => key));
+}
+
+function collectReportChecklistValues(root) {
+  return Object.fromEntries([...root.querySelectorAll("[data-report-checklist]")]
+    .map((checklist) => {
+      const key = checklist.dataset.reportChecklist || "";
+      const selected = [...checklist.querySelectorAll("[data-report-check-value]:checked")]
+        .map((input) => input.value);
+      return [key, selected];
+    })
+    .filter(([key]) => key));
+}
+
+function restoreReportSelectValues(root, selector, dataKey, values = {}) {
+  if (!values || typeof values !== "object") return;
+  root.querySelectorAll(selector).forEach((control) => {
+    const key = control.dataset[dataKey] || "";
+    const value = values[key];
+    if (value == null) return;
+    if (Array.from(control.options || []).some((option) => option.value === value)) control.value = value;
+  });
+}
+
+function restoreReportInputValues(root, selector, dataKey, values = {}) {
+  if (!values || typeof values !== "object") return;
+  root.querySelectorAll(selector).forEach((control) => {
+    const key = control.dataset[dataKey] || "";
+    if (values[key] != null) control.value = values[key];
+  });
+}
+
+function restoreReportChecklistValues(root, values = {}) {
+  if (!values || typeof values !== "object") return;
+  root.querySelectorAll("[data-report-checklist]").forEach((checklist) => {
+    const key = checklist.dataset.reportChecklist || "";
+    const selected = Array.isArray(values[key]) ? new Set(values[key]) : null;
+    if (!selected) return;
+    checklist.querySelectorAll("[data-report-check-value]").forEach((input) => {
+      input.checked = selected.has(input.value);
+    });
+    updateReportChecklistAllState(checklist);
+  });
 }
 
 function closeReportReviewFilterPanels(root) {
@@ -15777,6 +16906,8 @@ function closeReportReviewFilterPanels(root) {
   });
   root.querySelectorAll("[data-report-filter-toggle]").forEach((item) => {
     item.setAttribute("aria-expanded", "false");
+    const title = item.dataset.reportFilterTitle || "열";
+    item.setAttribute("aria-label", item.hasAttribute("data-filter-active") ? `${title} 필터 적용됨` : `${title} 필터 열기`);
   });
 }
 
@@ -15819,7 +16950,8 @@ function updateReportReviewFilterIndicators(root) {
     const active = isReportReviewFilterPanelActive(panel);
     const title = button.dataset.reportFilterTitle || "열";
     button.toggleAttribute("data-filter-active", active);
-    button.setAttribute("aria-label", active ? `${title} 필터 적용됨` : `${title} 필터 열기`);
+    const expanded = button.getAttribute("aria-expanded") === "true";
+    button.setAttribute("aria-label", expanded ? `${title} 필터 닫기` : active ? `${title} 필터 적용됨` : `${title} 필터 열기`);
   });
 }
 
@@ -17551,6 +18683,7 @@ function exportReport() {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
   selectors.compareStatus.textContent = `Excel 리포트 ${rows.length}행 저장`;
+  showWorkbenchToast(`Excel 리포트 ${rows.length}행 저장`, "success");
 }
 
 function saveTextFile(filename, content, type = "text/plain;charset=utf-8") {

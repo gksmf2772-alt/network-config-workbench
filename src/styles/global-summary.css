@@ -182,6 +182,58 @@
   color: #5b21b6;
 }
 
+.semantic-state-suppressed,
+.semantic-state-excluded {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.plan-review-item {
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.plan-review-item.selected {
+  border-color: #9db4d3;
+  background: #f8fbff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.plan-review-topline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plan-review-topline strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-compare-btn {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.object-compare-btn:hover {
+  border-color: #9db4d3;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .diff-line.semantic-state-matched,
 .diff-line.semantic-state-manual,
 .diff-line.semantic-state-partial,
@@ -525,6 +577,36 @@ textarea[id$="ConfigInput"],
   justify-content: flex-end;
 }
 
+.object-quick-context {
+  display: grid;
+  grid-template-columns: auto minmax(80px, 150px) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.object-quick-context strong,
+.object-quick-context small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-quick-context strong {
+  color: #0f172a;
+}
+
+.object-quick-context small {
+  color: #64748b;
+}
+
 .object-quick-actions .app-button {
   height: 34px;
   min-height: 34px;
@@ -538,6 +620,11 @@ textarea[id$="ConfigInput"],
 .object-quick-actions .app-button:hover {
   background: #f8fafc;
   color: #0f172a;
+}
+
+.object-quick-actions .app-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .section-filter-tabs {
@@ -576,6 +663,11 @@ textarea[id$="ConfigInput"],
   background: #f3f7fb;
   color: #0f172a;
   box-shadow: inset 0 -2px 0 #2563eb;
+}
+
+.section-filter-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .section-filter-badge {
@@ -1541,6 +1633,13 @@ textarea[id$="ConfigInput"],
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
   transform: translateX(-50%);
   pointer-events: auto;
+}
+
+.compare-issue-context-banner[data-compare-issue-source^="report"] {
+  border-color: rgba(8, 145, 178, 0.72);
+  box-shadow:
+    0 10px 28px rgba(15, 23, 42, 0.12),
+    0 0 0 3px rgba(8, 145, 178, 0.16);
 }
 
 .compare-issue-context-banner div:first-child {

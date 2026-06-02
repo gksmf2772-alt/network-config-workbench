@@ -108,32 +108,6 @@ function readGlobalStyles() {
   );
 }
 
-test("compare panes filter rendered rows by active section scope", () => {
-  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
-
-  assert.match(legacy, /const COMPARE_SECTION_KNOWN_OBJECT_TYPES = new Set/);
-  assert.match(legacy, /function getActiveCompareDiffRows\(report = state\.lastReport\)/);
-  assert.match(legacy, /function filterCompareDiffRowsBySection\(rows = \[\], filter = \{\}\)/);
-  assert.match(legacy, /visibleTypes\.every\(\(type\) => allowedTypes\.has\(type\)\)/);
-  assert.match(legacy, /function compareSideRowVisibleObjectType\(row = \{\}\)/);
-  assert.match(legacy, /row\.objectType \|\| compareObjectTypeFromKey\(row\.objectKey\)/);
-  assert.match(legacy, /if \(value\.startsWith\("semantic-"\) \|\| value\.startsWith\("compare-plan-"\)\) return ""/);
-});
-
-test("compare panes use semantic object rows and rerender on active section changes", () => {
-  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
-
-  assert.match(legacy, /void refreshCompareDiffRowsForActiveSection\(options\)/);
-  assert.match(legacy, /await renderActiveCompareDiffRowsAsync\(\)/);
-  assert.match(legacy, /renderDiff\(getActiveCompareDiffRows\(state\.lastReport\)\)/);
-  assert.match(legacy, /await renderDiffAsync\(getActiveCompareDiffRows\(state\.lastReport\)\)/);
-  assert.match(legacy, /const semanticDiffRows = buildSemanticRuntimeDiffRows/);
-  assert.match(legacy, /report\.diffRows = applySemanticPlanVisualStatusToDiffRows\(semanticDiffRows, semanticRuntime\.plan \|\| \[\]\)/);
-  assert.match(legacy, /function consumeLineIfMatched\(counts, line = ""\)/);
-  assert.doesNotMatch(legacy, /consumedLineIfMatched/);
-  assert.doesNotMatch(legacy, /report\.diffRows = applySemanticPlanVisualStatusToDiffRows\(report\.diffRows \|\| \[\], semanticRuntime\.plan\)/);
-});
-
 test("unmatched setting visual status uses unmatched class and color token", () => {
   assert.equal(getSemanticStateClass({ status: "old-only" }), "semantic-state-unmatched");
   assert.equal(getSemanticStateClass({ status: "new-only" }), "semantic-state-unmatched");

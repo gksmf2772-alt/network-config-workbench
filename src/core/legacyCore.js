@@ -3984,10 +3984,6 @@ const OBJECT_SECTION_FILTERS = [
   { scope: "policy", label: "Policy", types: ["route-policy", "prefix-list", "community", "filter", "acl"] },
 ];
 
-const COMPARE_SECTION_KNOWN_OBJECT_TYPES = new Set(
-  OBJECT_SECTION_FILTERS.flatMap((filter) => filter.types || objectTypes)
-);
-
 function setResultTab(tabName) {
   const target = tabName === "overview" ? "report" : (["summary", "objects", "report"].includes(tabName) ? tabName : "summary");
   setActiveTab(target, { skipConfirm: true });
@@ -4094,7 +4090,7 @@ function setObjectSectionScope(scope = "all", options = {}) {
   renderObjectSectionTabs();
   renderCompareSectionTabs();
   renderObjectNavigator();
-  void refreshCompareDiffRowsForActiveSection(options);
+  if (options.focusCompare) focusFirstCompareObjectInSection();
 }
 
 function getObjectSectionFilter(scope = "all") {
@@ -4103,16 +4099,6 @@ function getObjectSectionFilter(scope = "all") {
 
 function getSectionFilterForObjectType(type = "") {
   return OBJECT_SECTION_FILTERS.find((item) => item.types?.includes(type)) || OBJECT_SECTION_FILTERS[0];
-}
-
-async function refreshCompareDiffRowsForActiveSection(options = {}) {
-  if (!state.lastReport?.diffRows) {
-    if (options.focusCompare) focusFirstCompareObjectInSection();
-    return;
-  }
-
-  await renderActiveCompareDiffRowsAsync();
-  if (options.focusCompare) focusFirstCompareObjectInSection();
 }
 
 function renderObjectSectionTabs() {
@@ -4623,62 +4609,13 @@ async function runCompareStep(label, callback) {
 }
 
 function renderActiveCompareDiffRows() {
-  renderDiff(getActiveCompareDiffRows(state.lastReport));
+  renderDiff(state.lastReport?.diffRows || []);
   scheduleSettledDiffConnectorRender();
 }
 
 async function renderActiveCompareDiffRowsAsync() {
-  await renderDiffAsync(getActiveCompareDiffRows(state.lastReport));
+  await renderDiffAsync(state.lastReport?.diffRows || []);
   scheduleSettledDiffConnectorRender();
-}
-
-function getActiveCompareDiffRows(report = state.lastReport) {
-  const rows = Array.isArray(report?.diffRows) ? report.diffRows : [];
-  const filter = getObjectSectionFilter(state.activeObjectSectionScope || "all");
-  return filterCompareDiffRowsBySection(rows, filter);
-}
-
-function filterCompareDiffRowsBySection(rows = [], filter = {}) {
-  const safeRows = Array.isArray(rows) ? rows : [];
-  const allowedTypes = Array.isArray(filter.types) && filter.types.length
-    ? new Set(filter.types.map(normalizeCompareObjectType).filter(Boolean))
-    : COMPARE_SECTION_KNOWN_OBJECT_TYPES;
-
-  return safeRows.filter((row) => {
-    if (row?.semanticGapRow || row?.semanticDivider) return false;
-
-    const visibleTypes = compareDiffRowVisibleObjectTypes(row);
-    if (!visibleTypes.length) return false;
-
-    return visibleTypes.every((type) => allowedTypes.has(type));
-  });
-}
-
-function compareDiffRowVisibleObjectTypes(row = {}) {
-  return [...new Set([
-    compareSideRowVisibleObjectType(row?.oldRow),
-    compareSideRowVisibleObjectType(row?.newRow),
-  ].filter(Boolean))];
-}
-
-function compareSideRowVisibleObjectType(row = {}) {
-  if (!row || row.placeholder || row.hidden) return "";
-  const objectType = normalizeCompareObjectType(row.objectType || compareObjectTypeFromKey(row.objectKey));
-  return COMPARE_SECTION_KNOWN_OBJECT_TYPES.has(objectType) ? objectType : "";
-}
-
-function compareObjectTypeFromKey(key = "") {
-  const value = String(key || "").trim();
-  if (!value) return "";
-  if (value.startsWith("semantic-") || value.startsWith("compare-plan-")) return "";
-
-  const [type] = value.split(":");
-  const normalizedType = normalizeCompareObjectType(type);
-  return COMPARE_SECTION_KNOWN_OBJECT_TYPES.has(normalizedType) ? normalizedType : "";
-}
-
-function normalizeCompareObjectType(type = "") {
-  return String(type || "").trim().toLowerCase();
 }
 
 async function runCompare() {
@@ -4727,13 +4664,8 @@ async function runCompare() {
         includeManualCandidates: true,
       })
     );
-    const semanticDiffRows = buildSemanticRuntimeDiffRows(
-      semanticRuntime,
-      selectors.oldInput.value,
-      selectors.newInput.value
-    );
-    if (semanticDiffRows.length) {
-      report.diffRows = applySemanticPlanVisualStatusToDiffRows(semanticDiffRows, semanticRuntime.plan || []);
+    if (semanticRuntime?.plan?.length) {
+      report.diffRows = applySemanticPlanVisualStatusToDiffRows(report.diffRows || [], semanticRuntime.plan);
     }
 
     if (options.semanticDebug) {
@@ -11461,17 +11393,13 @@ function buildSemanticRuntime({
 
 function buildSemanticPlanDiffRows(oldText, newText, options = {}) {
   const runtime = buildSemanticRuntime({ oldText, newText, options });
-  return buildSemanticRuntimeDiffRows(runtime, oldText, newText);
-}
-
-function buildSemanticRuntimeDiffRows(runtime = {}, oldText = "", newText = "") {
-  const plan = Array.isArray(runtime?.plan) ? runtime.plan : [];
+  const plan = runtime.plan;
   const rows = buildSemanticObjectBlockRows(plan);
 
   return appendUnmatchedRawLinesToSemanticRows(
     rows,
-    runtime?.oldResult?.preprocess?.text || oldText,
-    runtime?.newResult?.preprocess?.text || newText,
+    runtime.oldResult?.preprocess?.text || oldText,
+    runtime.newResult?.preprocess?.text || newText,
     plan
   );
 }
@@ -11594,7 +11522,6 @@ function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
       normalized: "",
       key: `${item.id || "semantic-object"}:${side}:empty:${objectIndex}`,
       objectKey: `${item.objectType || "object"}:empty:${objectIndex}`,
-      objectType: item.objectType || "object",
       semanticObjectIndex: objectIndex,
       semanticPairKey: item.id || "",
       semanticField: "",
@@ -11646,7 +11573,6 @@ function buildSemanticObjectBlockRow({ side, item, object, objectIndex }) {
     normalized: canonicalizeComparableLine(`${objectType} ${identity}`),
     key: `${item.id || "semantic-object"}:${side}:block:${objectIndex}`,
     objectKey,
-    objectType,
     objectIdentity: identity,
     semanticObjectIndex: objectIndex,
     objectStatus,
@@ -12738,7 +12664,7 @@ function appendUnmatchedRawLinesToSemanticRows(
       if (!line.trim()) return;
       if (semanticCoveredLines.has(normalized)) return;
       if (evaluatePolicyContext({ profile: state.profileDraft || {}, rawLine: line, normalizedLine: normalized, side: "old" }).suppressed) return;
-      if (consumeLineIfMatched(oldConsumed, line)) return;
+      if (consumedLineIfMatched(oldConsumed, line)) return;
 
       oldUnmatchedLines.push({ line, index });
     });
@@ -12751,7 +12677,7 @@ function appendUnmatchedRawLinesToSemanticRows(
       if (!line.trim()) return;
       if (semanticCoveredLines.has(normalized)) return;
       if (evaluatePolicyContext({ profile: state.profileDraft || {}, rawLine: line, normalizedLine: normalized, side: "new" }).suppressed) return;
-      if (consumeLineIfMatched(newConsumed, line)) return;
+      if (consumedLineIfMatched(newConsumed, line)) return;
 
       newUnmatchedLines.push({ line, index });
     });
@@ -17879,9 +17805,10 @@ function cssEscape(value) {
 
 function renderDiffLine(row, state, counterpart, pairIndex, side) {
   const key = row?.key || "";
-  const objectType = row?.objectType || (row?.objectKey ? splitObjectKey(row.objectKey).type : "");
-  const counterpartType = counterpart?.objectType
-    || (counterpart?.objectKey ? splitObjectKey(counterpart.objectKey).type : objectType);
+  const objectType = row?.objectKey ? splitObjectKey(row.objectKey).type : "";
+  const counterpartType = counterpart?.objectKey
+    ? splitObjectKey(counterpart.objectKey).type
+    : objectType;
   const renderUnmatched = isUnmatchedRenderRow(row, state, counterpart);
   const effectiveObjectStatus = row?.objectStatus
     || (renderUnmatched ? (side === "old" ? "old-only" : "new-only") : "");

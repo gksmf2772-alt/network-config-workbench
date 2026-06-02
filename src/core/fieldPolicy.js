@@ -27,7 +27,7 @@ const DEFAULT_FIELD_POLICIES = {
   },
 };
 
-function normalizeProfileValidationPolicies(profile = {}) {
+function normalizeProfileValidationPolicies(profile = {}, context = {}) {
   const policies = profile.validationPolicies || {};
   const normalized = {};
 
@@ -37,6 +37,7 @@ function normalizeProfileValidationPolicies(profile = {}) {
     if (Array.isArray(entries)) {
       for (const entry of entries) {
         if (!entry?.field) continue;
+        if (!policyEntryAppliesToContext(entry, objectType, context)) continue;
         normalized[objectType][entry.field] = entry.policy || "compare";
       }
     } else if (entries && typeof entries === "object") {
@@ -47,13 +48,17 @@ function normalizeProfileValidationPolicies(profile = {}) {
   return normalized;
 }
 
-function findProfilePolicyEntry(objectType, field, profile = {}) {
+function findProfilePolicyEntry(objectType, field, profile = {}, context = {}) {
   const entries = profile.validationPolicies?.[objectType];
   const normalizedField = String(field || "").trim();
   if (!normalizedField) return null;
 
   if (Array.isArray(entries)) {
-    return entries.find((entry) => String(entry?.field || "").trim() === normalizedField) || null;
+    const matches = entries.filter((entry) =>
+      String(entry?.field || "").trim() === normalizedField &&
+      policyEntryAppliesToContext(entry, objectType, context)
+    );
+    return matches.find(isObjectScopedPolicyEntry) || matches[0] || null;
   }
 
   if (entries && typeof entries === "object" && entries[normalizedField]) {
@@ -66,13 +71,13 @@ function findProfilePolicyEntry(objectType, field, profile = {}) {
   return null;
 }
 
-export function getProfilePolicyEntry(objectType, field, profile = {}) {
-  return findProfilePolicyEntry(objectType, field, profile);
+export function getProfilePolicyEntry(objectType, field, profile = {}, context = {}) {
+  return findProfilePolicyEntry(objectType, field, profile, context);
 }
 
-export function getFieldPoliciesForObjectType(objectType, profile = {}) {
+export function getFieldPoliciesForObjectType(objectType, profile = {}, context = {}) {
   const defaults = DEFAULT_FIELD_POLICIES[objectType] || {};
-  const profilePolicies = normalizeProfileValidationPolicies(profile)[objectType] || {};
+  const profilePolicies = normalizeProfileValidationPolicies(profile, context)[objectType] || {};
 
   return {
     ...defaults,
@@ -80,8 +85,8 @@ export function getFieldPoliciesForObjectType(objectType, profile = {}) {
   };
 }
 
-export function getPolicyForField(objectType, field, profile = {}) {
-  const policies = getFieldPoliciesForObjectType(objectType, profile);
+export function getPolicyForField(objectType, field, profile = {}, context = {}) {
+  const policies = getFieldPoliciesForObjectType(objectType, profile, context);
   return policies[field] || "compare";
 }
 
@@ -89,15 +94,18 @@ export function applyFieldPolicies({
   objectType,
   fieldSummary = {},
   profile = {},
+  oldObject = null,
+  newObject = null,
 } = {}) {
-  const policies = getFieldPoliciesForObjectType(objectType, profile);
+  const context = buildPolicyContext({ objectType, oldObject, newObject });
+  const policies = getFieldPoliciesForObjectType(objectType, profile, context);
 
   const result = {};
   const violations = [];
 
   for (const [field, summary] of Object.entries(fieldSummary)) {
     const policy = policies[field] || "compare";
-    const policyEntry = findProfilePolicyEntry(objectType, field, profile);
+    const policyEntry = findProfilePolicyEntry(objectType, field, profile, context);
     const exceptionAllowed = policy === "exception" && isExceptionAllowed(summary, policyEntry);
 
     const item = {
@@ -184,6 +192,54 @@ export function applyFieldPolicies({
     violations,
     violationCount: violations.length,
   };
+}
+
+function buildPolicyContext({ objectType = "", oldObject = null, newObject = null } = {}) {
+  const keys = [
+    objectKeyForFieldPolicy(oldObject, objectType),
+    objectKeyForFieldPolicy(newObject, objectType),
+  ].filter(Boolean);
+  return {
+    objectType,
+    objectKey: keys[0] || "",
+    objectKeys: keys,
+  };
+}
+
+function objectKeyForFieldPolicy(object = {}, objectType = "") {
+  if (!object) return "";
+  return object.key || `${objectType}:${object.normalizedIdentity || object.identity || object.sourceName || object.id || ""}`;
+}
+
+function policyEntryAppliesToContext(entry = {}, objectType = "", context = {}) {
+  if (!isObjectScopedPolicyEntry(entry)) return true;
+  const entryType = String(entry.objectType || entry.settingType || objectType || "").trim();
+  if (entryType && objectType && entryType !== objectType) return false;
+  const expected = String(entry.objectKey || entry.settingKey || "").trim();
+  if (!expected) return true;
+  const keys = Array.isArray(context.objectKeys) && context.objectKeys.length
+    ? context.objectKeys
+    : [context.objectKey].filter(Boolean);
+  return keys.some((key) => policyKeyMatches(key, expected));
+}
+
+function isObjectScopedPolicyEntry(entry = {}) {
+  return String(entry.scope || "").toLowerCase() === "object" ||
+    Boolean(entry.objectKey || entry.settingKey);
+}
+
+function policyKeyMatches(actual = "", expected = "") {
+  const left = normalizePolicyKey(actual);
+  const right = normalizePolicyKey(expected);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function normalizePolicyKey(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 function isExceptionAllowed(summary = {}, policyEntry = null) {

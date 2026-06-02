@@ -143,8 +143,9 @@ export function evaluatePolicySuppression({
   }
 
   if (normalizedField) {
-    const policyEntry = getProfilePolicyEntry(objectType, normalizedField, profile);
-    const policy = policyEntry?.policy || getPolicyForField(objectType, normalizedField, profile);
+    const policyContext = { objectKey, objectKeys: [objectKey].filter(Boolean) };
+    const policyEntry = getProfilePolicyEntry(objectType, normalizedField, profile, policyContext);
+    const policy = policyEntry?.policy || getPolicyForField(objectType, normalizedField, profile, policyContext);
     if (policy === "ignore") {
       return {
         ignored: true,
@@ -260,9 +261,14 @@ export function profileExceptionMatchesContext(exception = {}, context = {}) {
   if (profileScope && !expectedObjectType) return false;
   if (!matchesExact(expectedObjectType, context.objectType)) return false;
   if (!matchesFieldValue(match.fieldPath || target.fieldPath || exception.fieldPath || exception.field, context.field, exactObjectScope)) return false;
-  if (!matchesRuleValue(match.ruleId || target.ruleId || exception.ruleId, context.ruleId, exactObjectScope)) return false;
+  if (!matchesRuleValue(match.ruleId || target.ruleId || exception.ruleId, context.ruleId, exactObjectScope, context.field)) return false;
   if (!matchesContextValue(match.category || target.category || exception.category, context.category, exactObjectScope)) return false;
-  if (!profileScope && !matchesContextValue(match.findingType || target.findingType || exception.findingType, context.findingType, exactObjectScope)) return false;
+  if (!profileScope && !matchesFindingTypeValue(
+    match.findingType || target.findingType || exception.findingType,
+    context.findingType,
+    exactObjectScope,
+    { match, target, exception, context }
+  )) return false;
   if (!matchesContextValue(match.issueType || target.issueType || exception.issueType, context.issueType, exactObjectScope)) return false;
   if (!profileScope && !matchesContextValue(match.vendorPair || target.vendorPair || exception.vendorPair, context.vendorPair, true)) return false;
   if (!matchesChangeType(match.changeType || target.changeType || target.status || exception.changeType, context.changeType)) return false;
@@ -662,6 +668,16 @@ function matchesContextValue(expected = "", actual = "", optionalWhenActualBlank
   return normalizedExpected === normalizedActual;
 }
 
+function matchesFindingTypeValue(expected = "", actual = "", optionalWhenActualBlank = false, data = {}) {
+  if (matchesContextValue(expected, actual, optionalWhenActualBlank)) return true;
+  const normalizedExpected = normalizeComparableLine(expected);
+  const fieldPath = data.match?.fieldPath || data.target?.fieldPath || data.exception?.fieldPath || data.exception?.field || "";
+  const expectedChangeType = data.match?.changeType || data.target?.changeType || data.target?.status || data.exception?.changeType || "";
+  return Boolean(fieldPath) &&
+    ["matched", "candidate"].includes(normalizedExpected) &&
+    matchesChangeType(expectedChangeType, data.context?.changeType || "");
+}
+
 function matchesFieldValue(expected = "", actual = "", optionalWhenActualBlank = false) {
   const expectedAliases = canonicalFieldAliases(expected);
   if (!expectedAliases.length) return true;
@@ -670,12 +686,21 @@ function matchesFieldValue(expected = "", actual = "", optionalWhenActualBlank =
   return actualAliases.some((field) => expectedAliases.includes(field));
 }
 
-function matchesRuleValue(expected = "", actual = "", optionalWhenActualBlank = false) {
+function matchesRuleValue(expected = "", actual = "", optionalWhenActualBlank = false, field = "") {
   const normalizedExpected = canonicalRuleId(expected);
   if (!normalizedExpected) return true;
   const normalizedActual = canonicalRuleId(actual);
   if (!normalizedActual && optionalWhenActualBlank) return true;
-  return normalizedExpected === normalizedActual;
+  if (normalizedExpected === normalizedActual) return true;
+  return Boolean(field) && isFieldDifferenceRuleAlias(normalizedExpected, normalizedActual);
+}
+
+function isFieldDifferenceRuleAlias(left = "", right = "") {
+  return new Set([left, right]).size === 2 &&
+    [left, right].every((ruleId) =>
+      ruleId === "semantic-compare.field-difference" ||
+      ruleId === "semantic-compare.important-field-change"
+    );
 }
 
 function matchesChangeType(expected = "", actual = "") {

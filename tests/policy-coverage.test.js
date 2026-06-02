@@ -16,6 +16,7 @@ import {
   evaluatePolicyContext,
   profileExceptionMatchesContext,
 } from "../src/core/policyEvaluator.js";
+import { applyFieldPolicies } from "../src/core/fieldPolicy.js";
 import { preprocessConfigInput } from "../src/core/routerLogPreprocessor.js";
 import { buildGraphData, buildSummaryDashboardData } from "../src/core/summaryAnalytics.js";
 import { VENDOR_IDS } from "../src/core/vendorPresets.js";
@@ -499,6 +500,134 @@ test("profile field exception without object type does not become global", () =>
   }), false);
 });
 
+test("exact value change exception only suppresses the saved A to B transition", () => {
+  const exception = {
+    id: "ex-profile-max-leases-32767-to-131071",
+    scope: "profile",
+    enabled: true,
+    match: {
+      mode: "profile-field-rule",
+      objectType: "subscriber-interface",
+      fieldPath: "dhcp.lease-populate.max-leases",
+      category: "semantic-compare",
+      issueType: "field-difference",
+      changeType: "changed",
+      changeTypes: ["changed"],
+      valueMode: "exact",
+      oldValuePattern: "32767",
+      newValuePattern: "131071",
+    },
+  };
+  const baseContext = {
+    side: "both",
+    objectType: "subscriber-interface",
+    objectKey: "subscriber-interface:sub-a",
+    field: "dhcp.lease-populate.max-leases",
+    category: "semantic-compare",
+    issueType: "field-difference",
+    changeType: "changed",
+  };
+
+  assert.equal(profileExceptionMatchesContext(exception, {
+    ...baseContext,
+    oldValue: "32767",
+    newValue: "131071",
+  }), true);
+  assert.equal(profileExceptionMatchesContext(exception, {
+    ...baseContext,
+    oldValue: "32767",
+    newValue: "65535",
+  }), false);
+  assert.equal(profileExceptionMatchesContext(exception, {
+    ...baseContext,
+    oldValue: "",
+    newValue: "131071",
+    changeType: "added",
+  }), false);
+  assert.equal(evaluatePolicyContext({
+    profile: { exceptions: [exception] },
+    ...baseContext,
+    oldValue: "32767",
+    newValue: "65535",
+  }).suppressed, false);
+});
+
+test("ingress-filter legacy exact exception marks report field row as applied and removable", () => {
+  const oldObject = {
+    id: "old-subscriber-ingress-filter",
+    normalizedType: "subscriber-interface",
+    normalizedIdentity: "to-ivc02_1",
+    fields: {
+      "subscriber-interface": "to-ivc02_1",
+      "ingress-filter": "130",
+    },
+    rawLines: [
+      "subscriber-interface to-ivc02_1",
+      "ingress filter ip 130",
+    ],
+  };
+  const newObject = {
+    id: "new-subscriber-ingress-filter",
+    normalizedType: "subscriber-interface",
+    normalizedIdentity: "to-ivc02_1",
+    fields: {
+      "subscriber-interface": "to-ivc02_1",
+      "ingress-filter": "COD_IN",
+    },
+    rawLines: [
+      "subscriber-interface to-ivc02_1",
+      'ingress filter ip "COD_IN"',
+    ],
+  };
+  const profile = {
+    exceptions: [{
+      id: "ex-ingress-filter-change",
+      scope: "object",
+      enabled: true,
+      match: {
+        mode: "exact-object-field-rule",
+        objectType: "subscriber-interface",
+        objectKey: "subscriber-interface:to-ivc02_1",
+        fieldPath: "ingress-filter",
+        ruleId: "semantic-compare.field-difference",
+        category: "semantic-compare",
+        findingType: "matched",
+        issueType: "field-difference",
+        changeType: "changed",
+        changeTypes: ["changed"],
+        valueMode: "exact",
+        oldValuePattern: "130",
+        newValuePattern: "COD_IN",
+      },
+    }],
+  };
+  const plan = createComparisonPlan([{
+    status: "matched",
+    reason: "manual",
+    score: 100,
+    oldObject,
+    newObject,
+  }], profile);
+  const ingressSummary = plan[0].fieldSummary["ingress-filter"];
+  const dashboard = buildSummaryDashboardData({
+    report: { summary: {}, diffRows: [] },
+    plan,
+    semanticSummary: {},
+  });
+  const suppressedItem = dashboard.review.suppressed.find((item) =>
+    item.objectType === "subscriber-interface" && item.objectKey === "subscriber-interface:to-ivc02_1"
+  );
+  const appliedRow = suppressedItem?.fieldRows.find((row) => row.field === "ingress-filter");
+
+  assert.equal(ingressSummary.effectiveStatus, "ignored");
+  assert.equal(ingressSummary.ignored, true);
+  assert.equal(ingressSummary.policyHits.some((hit) => hit.policyId === "ex-ingress-filter-change"), true);
+  assert.equal(appliedRow?.applied, true);
+  assert.equal(appliedRow?.policyId, "ex-ingress-filter-change");
+  assert.equal(appliedRow?.status, "ignored");
+  assert.equal(dashboard.review.abnormal.length, 0);
+});
+
 test("advanced ignore policy suppresses ignored field from abnormal list", () => {
   const profile = {
     validationPolicies: {
@@ -539,6 +668,52 @@ test("advanced ignore policy suppresses ignored field from abnormal list", () =>
   assert.equal(metric.ignored, true);
   assert.equal(metric.effectiveStatus, "ignored");
   assert.equal(dashboard.review.abnormal.length, 0);
+});
+
+test("object scoped field policies only affect the selected object", () => {
+  const profile = {
+    validationPolicies: {
+      interface: [
+        {
+          field: "admin-state",
+          policy: "ignore",
+          scope: "object",
+          objectKey: "interface:target",
+        },
+        {
+          field: "sap",
+          policy: "required",
+          scope: "object",
+          objectKey: "interface:target",
+        },
+      ],
+    },
+  };
+  const changedField = {
+    status: "changed",
+    oldValues: ["disabled"],
+    newValues: ["enabled"],
+  };
+
+  const target = applyFieldPolicies({
+    objectType: "interface",
+    fieldSummary: { "admin-state": changedField },
+    profile,
+    oldObject: { normalizedIdentity: "target" },
+    newObject: { normalizedIdentity: "target" },
+  });
+  const other = applyFieldPolicies({
+    objectType: "interface",
+    fieldSummary: { "admin-state": changedField },
+    profile,
+    oldObject: { normalizedIdentity: "other" },
+    newObject: { normalizedIdentity: "other" },
+  });
+
+  assert.equal(target.fieldSummary["admin-state"].ignored, true);
+  assert.equal(target.fieldSummary.sap.violation, true);
+  assert.equal(other.fieldSummary["admin-state"].violation, true);
+  assert.equal(other.fieldSummary.sap, undefined);
 });
 
 test("coverage is not false zero for parsed Classic to MD-CLI BGP objects", () => {
@@ -1042,9 +1217,12 @@ test("summary and graph use suppressed canonical state for profile exception", (
 
   assert.equal(countActiveFieldIssues(before.plan, "group"), 2);
   assert.equal(countActiveFieldIssues(after.plan, "group"), 0);
-  assert.equal(after.dashboard.review.abnormal.every((item) =>
-    item.fieldRows.every((row) => row.field !== "group")
-  ), true);
+  const appliedGroupRows = after.dashboard.review.abnormal.flatMap((item) =>
+    item.fieldRows.filter((row) => row.field === "group")
+  );
+
+  assert.equal(appliedGroupRows.length, 2);
+  assert.equal(appliedGroupRows.every((row) => row.applied && row.status === "structure-converted"), true);
   assert.equal(after.dashboard.review.suppressed.length, 2);
   assert.equal(after.dashboard.review.suppressed.every((item) =>
     item.fieldRows.some((row) => row.field === "group")

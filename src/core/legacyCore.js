@@ -1825,12 +1825,23 @@ function renderPolicyRow(row, index) {
           ["exception", "예외 허용"],
         ].map(([value, label]) => `<option value="${value}" ${row.policy === value ? "selected" : ""}>${label}</option>`).join("")}
       </select>
+      <select data-policy-index="${index}" data-policy-key="scope" title="적용 범위">
+        ${[
+          ["profile", "프로파일 전체"],
+          ["object", "이 객체만"],
+        ].map(([value, label]) => `<option value="${value}" ${normalizeValidationPolicyScope(row) === value ? "selected" : ""}>${label}</option>`).join("")}
+      </select>
+      <input data-policy-index="${index}" data-policy-key="objectKey" value="${escapeHtml(row.objectKey || row.settingKey || "")}" placeholder="객체 key(선택)" />
       <input data-policy-index="${index}" data-policy-key="oldValues" value="${escapeHtml(row.oldValues || "")}" placeholder="기존 허용값: 700,701" />
       <input data-policy-index="${index}" data-policy-key="newValue" value="${escapeHtml(row.newValue || "")}" placeholder="신규 기준값: 700" />
       <input data-policy-index="${index}" data-policy-key="message" value="${escapeHtml(row.message || "")}" placeholder="요약 로그(선택)" />
       <button type="button" data-policy-remove="${index}">삭제</button>
     </div>
   `;
+}
+
+function normalizeValidationPolicyScope(row = {}) {
+  return isObjectScopedValidationPolicy(row) ? "object" : "profile";
 }
 
 function renderNormalizeEditor() {
@@ -6301,9 +6312,18 @@ function isImportantExceptionField(objectType = "", field = "") {
     "admin-state",
     "description",
     "sap",
+    "ingress-filter",
+    "egress-filter",
+    "ingress-qos",
+    "egress-qos",
     "port",
     "lag",
     "interface",
+    "address",
+    "icmp.mask-reply",
+    "icmp.redirects",
+    "icmp.ttl-expired",
+    "icmp.unreachables",
   ].includes(normalizedField);
 }
 
@@ -6673,7 +6693,7 @@ async function addExceptionFromTarget(targetId = "", exceptionScope = "object", 
 
     await saveProfile();
     await syncActiveSessionProfileReference();
-    await refreshAfterProfileRuleChange(target, triggerButton);
+    await refreshAfterProfileRuleChange(target, triggerButton, { ask: true, actionLabel: "예외 추가" });
     const message = duplicate
       ? "이미 등록된 예외"
       : exception.scope === "profile"
@@ -6723,7 +6743,7 @@ async function addExclusionFromTarget(targetId = "", exclusionScope = "setting",
 
     await saveProfile();
     await syncActiveSessionProfileReference();
-    await refreshAfterProfileRuleChange(target, triggerButton);
+    await refreshAfterProfileRuleChange(target, triggerButton, { ask: true, actionLabel: "비교 제외 추가" });
     const message = duplicate
       ? "이미 등록된 비교 제외 규칙"
       : exclusion.scope === "profile"
@@ -6742,8 +6762,190 @@ async function addExclusionFromTarget(targetId = "", exclusionScope = "setting",
   }
 }
 
-async function refreshAfterProfileRuleChange(target = {}, triggerButton = null) {
+async function addReportFieldRuleFromTarget(targetId = "", root = null, triggerButton = null) {
+  const target = state.exceptionTargets?.get?.(targetId);
+  if (!target) {
+    setProfileStatus("규칙 대상 없음", "error");
+    showWorkbenchToast("규칙 대상 없음", "error");
+    return;
+  }
+
+  const action = root?.querySelector(`[data-report-field-rule-action="${cssEscape(targetId)}"]`)?.value || "none";
+  const scope = root?.querySelector(`[data-report-field-rule-scope="${cssEscape(targetId)}"]`)?.value || "object";
+  const required = Boolean(root?.querySelector(`[data-report-field-rule-required="${cssEscape(targetId)}"]`)?.checked);
+  const exception = action === "none" ? null : buildReportFieldExceptionFromTarget(target, action, scope);
+  const requiredPolicy = required ? buildReportRequiredPolicyFromTarget(target, scope) : null;
+
+  if (!exception && !requiredPolicy) {
+    showWorkbenchToast("추가할 규칙 없음", "error");
+    return;
+  }
+
+  const impact = {
+    exception: exception ? estimateExceptionImpact(exception) : 0,
+    required: requiredPolicy ? estimateRequiredPolicyImpact(requiredPolicy) : 0,
+  };
+  if (!confirmReportFieldRuleCreate(target, { action, scope, required, impact })) return;
+
+  const previousText = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "추가 중...";
+  }
+
+  try {
+    if (!Array.isArray(state.profileDraft.exceptions)) state.profileDraft.exceptions = [];
+    if (!state.profileDraft.validationPolicies || typeof state.profileDraft.validationPolicies !== "object") {
+      state.profileDraft.validationPolicies = createDefaultValidationPolicies();
+    }
+    if (!Array.isArray(state.profileDraft.validationPolicies[target.objectType])) {
+      state.profileDraft.validationPolicies[target.objectType] = [];
+    }
+
+    const added = [];
+    if (exception) {
+      const duplicateException = state.profileDraft.exceptions.some((item) => sameProfileException(item, exception));
+      if (!duplicateException) {
+        state.profileDraft.exceptions.push(exception);
+        added.push("예외");
+      }
+    }
+    if (requiredPolicy) {
+      const policies = state.profileDraft.validationPolicies[target.objectType];
+      const duplicatePolicy = policies.some((item) => sameValidationPolicy(item, requiredPolicy));
+      if (!duplicatePolicy) {
+        policies.push(requiredPolicy);
+        added.push("필수");
+      }
+    }
+
+    await saveProfile();
+    await syncActiveSessionProfileReference();
+    await refreshAfterProfileRuleChange(target, triggerButton, { ask: true, actionLabel: "리포트 규칙 추가" });
+    const message = added.length ? `${added.join("/")} 규칙 추가됨` : "이미 등록된 규칙";
+    setProfileStatus(`${message}: ${target.displayName || target.field || "-"}`, added.length ? "saved" : "info");
+    showWorkbenchToast(`${message}.`, added.length ? "success" : "info");
+  } catch (error) {
+    setProfileStatus(`규칙 추가 실패: ${error?.message || error}`, "error");
+    showWorkbenchToast(`규칙 추가 실패: ${error?.message || error}`, "error");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText || "규칙 추가";
+    }
+  }
+}
+
+function buildReportFieldExceptionFromTarget(target = {}, action = "ignore", scope = "object") {
+  const valueMatch = buildReportFieldRuleValueMatch(target, action);
+  const changeType = action === "ignore"
+    ? normalizeExceptionChangeType(target.changeType || target.status || target.findingType)
+    : normalizeExceptionChangeType(action);
+  const override = {
+    ...target,
+    findingType: changeType,
+    changeType,
+    status: changeType,
+    title: reportFieldRuleActionLabel(action),
+    ...valueMatch,
+  };
+  return buildProfileExceptionFromTarget(override, scope === "profile" ? "profile" : "object");
+}
+
+function buildReportFieldRuleValueMatch(target = {}, action = "ignore") {
+  const oldValue = String(target.oldValue ?? "").trim();
+  const newValue = String(target.newValue ?? "").trim();
+  const changeType = normalizeExceptionChangeType(action === "ignore"
+    ? target.changeType || target.status || target.findingType
+    : action);
+  const oldValuePattern = ["changed", "missing"].includes(changeType) ? oldValue : "";
+  const newValuePattern = ["changed", "added"].includes(changeType) ? newValue : "";
+  if (!oldValuePattern && !newValuePattern) return {};
+  return {
+    valueMode: "exact",
+    oldValuePattern,
+    newValuePattern,
+  };
+}
+
+function buildReportRequiredPolicyFromTarget(target = {}, scope = "object") {
+  const objectType = String(target.objectType || "").trim();
+  const field = canonicalizeComparableLine(target.field || "");
+  if (!objectType || !field) return null;
+  const objectScoped = scope !== "profile";
+  const objectKey = String(target.objectKey || target.oldKey || target.newKey || "").trim();
+  if (objectScoped && !objectKey) return null;
+  return {
+    field,
+    policy: "required",
+    scope: objectScoped ? "object" : "profile",
+    objectType,
+    settingType: objectType,
+    objectKey: objectScoped ? objectKey : "",
+    settingKey: objectScoped ? objectKey : "",
+    createdFromObjectKey: objectScoped ? "" : objectKey,
+    createdFromSource: "report-review-field",
+    oldValues: "",
+    newValue: "",
+    message: `${objectScoped ? "이 객체" : "현재 프로파일"} 필수: ${target.displayName || target.objectKey || objectType} ${field}`,
+  };
+}
+
+function sameValidationPolicy(left = {}, right = {}) {
+  return [
+    "field",
+    "policy",
+    "scope",
+    "objectType",
+    "settingType",
+    "objectKey",
+    "settingKey",
+  ].every((key) => canonicalizeComparableLine(left[key] || "") === canonicalizeComparableLine(right[key] || ""));
+}
+
+function estimateRequiredPolicyImpact(policy = {}) {
+  const plan = Array.isArray(state.lastSemanticPlan) ? state.lastSemanticPlan : [];
+  if (!plan.length) return 1;
+  return plan.filter((item) => {
+    const objectType = planItemObjectType(item);
+    if (objectType !== policy.objectType) return false;
+    if (!validationPolicyAppliesToObject(policy, item.oldObject || item.newObject || {}, objectType, item.newObject || item.oldObject || null)) return false;
+    const summary = item.fieldSummary?.[policy.field];
+    return !summary || normalizeExceptionChangeType(summary.effectiveStatus || summary.status || "") === "missing";
+  }).length || 1;
+}
+
+function confirmReportFieldRuleCreate(target = {}, { action = "none", scope = "object", required = false, impact = {} } = {}) {
+  const scopeLabel = scope === "profile" ? "프로파일 전체" : "이 객체만";
+  return window.confirm([
+    "리포트 규칙 추가",
+    `범위: ${scopeLabel}`,
+    `대상: ${target.displayName || target.objectKey || "-"}`,
+    `설정 종류: ${target.objectType || "-"}`,
+    `설정 항목: ${target.field || "-"}`,
+    action !== "none" ? `처리: ${reportFieldRuleActionLabel(action)} (${impact.exception || 1}개 예상)` : "",
+    required ? `필수 규칙: 추가 (${impact.required || 1}개 예상)` : "",
+  ].filter(Boolean).join("\n"));
+}
+
+function reportFieldRuleActionLabel(action = "") {
+  return ({
+    ignore: "예외",
+    missing: "삭제",
+    changed: "변경",
+    added: "추가",
+    none: "없음",
+  })[action] || action;
+}
+
+async function refreshAfterProfileRuleChange(target = {}, triggerButton = null, options = {}) {
   if (!state.lastReport) return;
+  if (options.ask && !confirmRerunAfterProfileRuleChange(options.actionLabel || "규칙 변경")) {
+    markCompareStale();
+    renderProfileEditor();
+    showWorkbenchToast("프로파일 저장됨. 재비교는 실행하지 않음.", "info");
+    return;
+  }
   const destination = getProfileRuleReturnDestination(target, triggerButton);
   state.pendingReportReviewAction = destination.tab === "report"
     ? buildReportReviewActionMarker(target, triggerButton, destination.section || "review")
@@ -6755,6 +6957,10 @@ async function refreshAfterProfileRuleChange(target = {}, triggerButton = null) 
     return;
   }
   setResultTab(destination.tab || "summary");
+}
+
+function confirmRerunAfterProfileRuleChange(actionLabel = "규칙 변경") {
+  return window.confirm(`${actionLabel} 완료 후 다시 비교할까요?\n취소하면 프로파일만 저장되고 현재 비교 결과는 재비교 필요 상태로 남습니다.`);
 }
 
 function getProfileRuleReturnDestination(target = {}, triggerButton = null) {
@@ -6913,6 +7119,9 @@ function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object")
   const changeType = normalizeExceptionChangeType(target.changeType || target.status || findingType);
   const matchFindingType = objectScoped ? findingType : changeType;
   const displayName = String(target.displayName || target.description || objectKey || "").trim();
+  const valueMode = String(target.valueMode || "any").trim() || "any";
+  const oldValuePattern = String(target.oldValuePattern ?? "").trim();
+  const newValuePattern = String(target.newValuePattern ?? "").trim();
 
   if (!objectType && !objectKey && !field && !ruleId && !findingType) return null;
 
@@ -6957,8 +7166,9 @@ function buildProfileExceptionFromTarget(target = {}, exceptionScope = "object")
       issueType,
       changeType,
       changeTypes: [...new Set([changeType, target.status, changeType === "structure-converted" ? "added" : ""].filter(Boolean))],
-      valueMode: "any",
-      newValuePattern: exceptionScope === "profile" ? "*" : "",
+      valueMode,
+      oldValuePattern,
+      newValuePattern: valueMode === "any" && exceptionScope === "profile" ? "*" : newValuePattern,
       vendorPair,
     },
     enabled: true,
@@ -7040,6 +7250,9 @@ function sameProfileException(left = {}, right = {}) {
     ["findingType", leftMatch.findingType || leftTarget.findingType, rightMatch.findingType || rightTarget.findingType],
     ["issueType", leftMatch.issueType || leftTarget.issueType, rightMatch.issueType || rightTarget.issueType],
     ["changeType", leftMatch.changeType || leftTarget.changeType, rightMatch.changeType || rightTarget.changeType],
+    ["valueMode", leftMatch.valueMode || left.valueMode, rightMatch.valueMode || right.valueMode],
+    ["oldValuePattern", leftMatch.oldValuePattern || left.oldValuePattern, rightMatch.oldValuePattern || right.oldValuePattern],
+    ["newValuePattern", leftMatch.newValuePattern || left.newValuePattern, rightMatch.newValuePattern || right.newValuePattern],
     ["matchStatus", leftMatch.matchStatus || leftTarget.matchStatus || leftTarget.status, rightMatch.matchStatus || rightTarget.matchStatus || rightTarget.status],
   ];
   if (leftScope !== "profile" || rightScope !== "profile") {
@@ -9551,9 +9764,32 @@ function applySemanticPolicyNormalize(field, value, objectType, source, profile)
   return value;
 }
 
-function findProfilePolicyForField(objectType, field, profile) {
+function findProfilePolicyForField(objectType, field, profile, object = null) {
   return (profile?.validationPolicies?.[objectType] || [])
-    .find((policy) => canonicalizeComparableLine(policy.field || "") === field);
+    .filter((policy) => canonicalizeComparableLine(policy.field || "") === field)
+    .filter((policy) => validationPolicyAppliesToObject(policy, object, objectType))
+    .sort((left, right) => Number(isObjectScopedValidationPolicy(right)) - Number(isObjectScopedValidationPolicy(left)))[0] || null;
+}
+
+function validationPolicyAppliesToObject(policy = {}, object = null, objectType = "", counterpart = null) {
+  if (!isObjectScopedValidationPolicy(policy)) return true;
+  const expectedType = String(policy.objectType || policy.settingType || objectType || "").trim();
+  if (expectedType && objectType && expectedType !== objectType) return false;
+  const expectedKey = String(policy.objectKey || policy.settingKey || "").trim();
+  if (!expectedKey) return true;
+  return [object, counterpart].some((item) => validationPolicyKeyMatches(item, objectType, expectedKey));
+}
+
+function isObjectScopedValidationPolicy(policy = {}) {
+  return String(policy.scope || "").toLowerCase() === "object" ||
+    Boolean(policy.objectKey || policy.settingKey);
+}
+
+function validationPolicyKeyMatches(object = null, objectType = "", expectedKey = "") {
+  if (!object) return false;
+  const actual = canonicalizeComparableLine(object.key || `${objectType}:${object.normalizedIdentity || object.identity || object.sourceName || object.id || ""}`);
+  const expected = canonicalizeComparableLine(expectedKey);
+  return Boolean(actual && expected && (actual === expected || actual.includes(expected) || expected.includes(actual)));
 }
 
 function collectSemanticComparableLines(object, profile, source) {
@@ -10502,7 +10738,7 @@ function canonicalComparableFields(object, profile = state.profileDraft) {
   };
   return Object.entries(fields).reduce((result, [field, value]) => {
     const normalizedField = canonicalizeComparableLine(field);
-    const policy = findProfilePolicyForField(object.type, normalizedField, profile)?.policy
+    const policy = findProfilePolicyForField(object.type, normalizedField, profile, object)?.policy
       || profile?.objects?.[object.type]?.policies?.[normalizedField]
       || "compare";
     if (!normalizedField || value === undefined || value === "" || policy === "ignore" || policy === "exception") return result;
@@ -10570,6 +10806,7 @@ function buildPolicyRequiredItems(oldObject, newObject, profile) {
   return policies.flatMap((policy) => {
     const field = canonicalizeComparableLine(policy.field || "");
     if (!field || !["required", "presence", "conditional"].includes(policy.policy)) return [];
+    if (!validationPolicyAppliesToObject(policy, oldObject, oldObject.type, newObject)) return [];
     const oldHasField = hasObjectField(oldObject, field, profile);
     const newHasField = hasObjectField(newObject, field, profile);
     if (!oldHasField && !newHasField) return [];
@@ -16393,7 +16630,7 @@ function renderReportReviewDetailRow(item = {}, detailId = "", colspan = 7, jump
             ${renderReportReviewDetailActions(item, jumpKey, panelKey)}
           </div>
           <div class="report-review-detail-grid">
-            ${rows.length ? rows.map(renderReportReviewDetailField).join("") : `<span class="small-note">상세 필드 없음</span>`}
+            ${rows.length ? rows.map((row) => renderReportReviewDetailField(row, item, panelKey)).join("") : `<span class="small-note">상세 필드 없음</span>`}
           </div>
         </div>
       </td>
@@ -16430,23 +16667,148 @@ function reportReviewPanelKey(item = {}) {
   return "abnormal";
 }
 
-function renderReportReviewDetailField(row = {}) {
+function renderReportReviewDetailField(row = {}, item = {}, panelKey = "") {
   const field = row.normalizedField || normalizeReportReviewFieldName(row.field);
   const status = String(row.status || "").toLowerCase();
+  const savedException = findReportReviewFieldSavedException(row, item, field, status);
+  const applied = reportReviewFieldRuleApplied(row, item) || Boolean(savedException);
+  const policyId = reportReviewFieldPolicyId(row, item) || savedException?.id || "";
+  const policyReason = row.policyReason || savedException?.reasonKo || savedException?.reason || (savedException ? "규칙 저장됨. 재비교 필요" : "규칙 적용됨");
   const oldValue = maskReportFieldValue(field, row.oldValue);
   const newValue = maskReportFieldValue(field, row.newValue);
+  const targetId = registerReviewExceptionTarget(panelKey, item, "report-review-field", {
+    ...row,
+    field,
+    status,
+    oldValue,
+    newValue,
+  });
+  const action = defaultReportFieldRuleAction(status);
   return `
-    <div class="report-review-detail-field report-field-status-${escapeHtml(status || "unknown")}">
+    <div class="report-review-detail-field report-field-status-${escapeHtml(status || "unknown")}${applied ? " report-review-detail-field-applied" : ""}" data-report-field-applied="${applied ? "true" : "false"}">
       <div>
-        <strong>${escapeHtml(field || "-")}</strong>
-        <span>${escapeHtml(reportFieldStatusLabel(status))}</span>
+        <strong title="${escapeHtml(field || "-")}">${escapeHtml(field || "-")}</strong>
+        <span title="${escapeHtml(reportFieldStatusLabel(status))}">${escapeHtml(reportFieldStatusLabel(status))}</span>
+        ${applied && policyId ? `
+          <button type="button" class="report-review-rule-remove" data-remove-exception="${escapeHtml(policyId)}" aria-label="규칙 해제" title="규칙 해제">
+            ${renderRuleRemoveIcon()}
+          </button>
+        ` : applied ? `
+          <span class="report-review-rule-applied-marker" aria-label="규칙 적용됨" title="${escapeHtml(policyReason)}">
+            ${renderRuleAppliedIcon()}
+          </span>
+        ` : `<details class="report-review-rule-popover" data-report-field-rule-popover="${escapeHtml(targetId)}">
+          <summary aria-label="규칙 추가" title="규칙 추가">
+            ${renderRulePopoverIcon()}
+          </summary>
+          <div class="report-review-rule-builder" data-report-field-rule="${escapeHtml(targetId)}">
+            <label>
+              <span>처리</span>
+              <select data-report-field-rule-action="${escapeHtml(targetId)}">
+                ${reportFieldRuleActions.map(([value, label]) => `<option value="${value}" ${value === action ? "selected" : ""}>${label}</option>`).join("")}
+              </select>
+            </label>
+            <label>
+              <span>범위</span>
+              <select data-report-field-rule-scope="${escapeHtml(targetId)}">
+                <option value="object">이 객체만</option>
+                <option value="profile">프로파일 전체</option>
+              </select>
+            </label>
+            <label class="report-review-required-toggle">
+              <input type="checkbox" data-report-field-rule-required="${escapeHtml(targetId)}" />
+              <span>필수</span>
+            </label>
+            <button type="button" data-add-report-field-rule="${escapeHtml(targetId)}">규칙 추가</button>
+          </div>
+        </details>`}
       </div>
       <dl>
-        <div><dt>기존</dt><dd>${escapeHtml(oldValue || "-")}</dd></div>
-        <div><dt>신규</dt><dd>${escapeHtml(newValue || "-")}</dd></div>
+        <div><dt>기존</dt><dd title="${escapeHtml(oldValue || "-")}">${escapeHtml(oldValue || "-")}</dd></div>
+        <div><dt>신규</dt><dd title="${escapeHtml(newValue || "-")}">${escapeHtml(newValue || "-")}</dd></div>
       </dl>
     </div>
   `;
+}
+
+function reportReviewFieldRuleApplied(row = {}, item = {}) {
+  const status = String(row.status || "").toLowerCase();
+  return Boolean(row.applied || row.suppressed || row.policyId || row.policyState === "suppressed" || status === "ignored" || item.group === "예외 처리됨" || item.group === "정책 제외됨");
+}
+
+function reportReviewFieldPolicyId(row = {}, item = {}) {
+  return String(row.policyId || item.policyId || "").trim();
+}
+
+function findReportReviewFieldSavedException(row = {}, item = {}, field = "", status = "") {
+  const exceptions = Array.isArray(state.profileDraft?.exceptions) ? state.profileDraft.exceptions : [];
+  if (!exceptions.length || !field || !item.objectType) return null;
+  const changeType = normalizeExceptionChangeType(status || row.status || "");
+  const objectKeys = [
+    item.oldKey,
+    item.newKey,
+    item.objectKey,
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+  const keys = objectKeys.length ? [...new Set(objectKeys)] : [""];
+  const baseContext = {
+    side: normalizeExceptionSide(item.side || "both"),
+    objectType: item.objectType || "",
+    field,
+    fieldValue: row.newValue || row.oldValue || "",
+    ruleId: semanticExceptionRuleId(item.objectType || "", field, changeType),
+    category: "semantic-compare",
+    findingType: changeType,
+    issueType: "field-difference",
+    changeType,
+    oldValue: row.oldValue || "",
+    newValue: row.newValue || "",
+    vendorPair: [state.profileDraft?.oldVendor, state.profileDraft?.newVendor].filter(Boolean).join("->"),
+  };
+  for (const exception of exceptions) {
+    if (exception?.type === "comparison-exclusion") continue;
+    if (keys.some((objectKey) => profileExceptionMatchesContext(exception, { ...baseContext, objectKey }))) {
+      return exception;
+    }
+  }
+  return null;
+}
+
+function renderRulePopoverIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 5v14"></path>
+      <path d="M5 12h14"></path>
+    </svg>
+  `;
+}
+
+function renderRuleRemoveIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 12h14"></path>
+    </svg>
+  `;
+}
+
+function renderRuleAppliedIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5"></path>
+    </svg>
+  `;
+}
+
+const reportFieldRuleActions = [
+  ["none", "없음"],
+  ["ignore", "예외"],
+  ["missing", "삭제"],
+  ["changed", "변경"],
+  ["added", "추가"],
+];
+
+function defaultReportFieldRuleAction(status = "") {
+  const changeType = normalizeExceptionChangeType(status);
+  return ["missing", "changed", "added"].includes(changeType) ? changeType : "ignore";
 }
 
 function renderReportReviewDescriptionCell(description = {}) {
@@ -16700,6 +17062,18 @@ function bindReportReviewTableInteractions() {
     .map((key) => key.slice("field:".length)))];
   restoreReportReviewViewMode(root);
   restoreReportReviewFilterState(root);
+  root.querySelectorAll("[data-report-field-rule-popover]").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      closeOtherReportFieldRulePopovers(root, details);
+    });
+  });
+  root.querySelectorAll("[data-add-report-field-rule]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addReportFieldRuleFromTarget(button.dataset.addReportFieldRule || "", root, button);
+    });
+  });
   root.querySelectorAll("[data-add-exception]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -16730,7 +17104,7 @@ function bindReportReviewTableInteractions() {
   });
   rows.forEach((row) => {
     row.addEventListener("click", (event) => {
-      if (event.target.closest("button, input, select, label, [data-report-filter-toggle], [data-report-filter-panel]")) return;
+      if (event.target.closest("button, input, select, label, summary, details, [data-report-field-rule], [data-report-filter-toggle], [data-report-filter-panel]")) return;
       openReportObjectInCompare(row);
     });
   });
@@ -16917,6 +17291,12 @@ function bindReportReviewTableInteractions() {
   });
   root.querySelectorAll("[data-report-checklist]").forEach(updateReportChecklistAllState);
   apply();
+}
+
+function closeOtherReportFieldRulePopovers(root, activeDetails = null) {
+  root?.querySelectorAll("[data-report-field-rule-popover][open]").forEach((details) => {
+    if (details !== activeDetails) details.open = false;
+  });
 }
 
 function toggleReportReviewDetail(root, button) {
@@ -18628,6 +19008,13 @@ function normalizeValidationPolicies(value) {
       .map((item) => ({
         field: canonicalizeComparableLine(item.field || ""),
         policy: ["compare", "required", "presence", "conditional", "ignore", "exception"].includes(item.policy) ? item.policy : "compare",
+        scope: item.scope === "object" || item.objectKey || item.settingKey ? "object" : "profile",
+        objectType: canonicalizeComparableLine(item.objectType || item.settingType || type),
+        settingType: canonicalizeComparableLine(item.settingType || item.objectType || type),
+        objectKey: typeof item.objectKey === "string" ? item.objectKey : (typeof item.settingKey === "string" ? item.settingKey : ""),
+        settingKey: typeof item.settingKey === "string" ? item.settingKey : (typeof item.objectKey === "string" ? item.objectKey : ""),
+        createdFromObjectKey: typeof item.createdFromObjectKey === "string" ? item.createdFromObjectKey : "",
+        createdFromSource: typeof item.createdFromSource === "string" ? item.createdFromSource : "",
         oldValues: typeof item.oldValues === "string" ? item.oldValues : "",
         newValue: typeof item.newValue === "string" ? item.newValue : "",
         message: typeof item.message === "string" ? item.message : "",

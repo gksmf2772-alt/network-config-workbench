@@ -973,7 +973,7 @@ test("profile exception changes common field analysis and type breakdown", () =>
         ignored: true,
         oldValues: ["old-group"],
         newValues: ["new-group"],
-        policyHits: [{ sourcePolicy: "profile-exception" }],
+        policyHits: [{ sourcePolicy: "profile-exception", policyId: "ex-group-change" }],
       },
       "admin-state": {
         field: "admin-state",
@@ -993,12 +993,13 @@ test("profile exception changes common field analysis and type breakdown", () =>
   assert.equal(analysis.aggregate.differentFields, 1);
   assert.equal(bgp.changedFields, 1);
   assert.equal(bgp.suppressedFields, 1);
-  assert.deepEqual(
-    review.abnormal[0].fieldRows
-      .filter((row) => !["same", "equal", "present"].includes(row.status))
-      .map((row) => row.field),
-    ["admin-state"]
-  );
+  const visibleReviewRows = review.abnormal[0].fieldRows
+    .filter((row) => !["same", "equal", "present"].includes(row.status));
+  const appliedGroupRow = visibleReviewRows.find((row) => row.field === "group");
+
+  assert.deepEqual(visibleReviewRows.map((row) => row.field), ["group", "admin-state"]);
+  assert.equal(appliedGroupRow.applied, true);
+  assert.equal(appliedGroupRow.policyId, "ex-group-change");
 });
 
 test("profile policy ignored field is not labelled as user exception", () => {

@@ -87,7 +87,7 @@
 
 .policy-row {
   display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) 150px minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(160px, 1fr) auto;
+  grid-template-columns: minmax(120px, 0.9fr) 140px 130px minmax(140px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(160px, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: 10px;

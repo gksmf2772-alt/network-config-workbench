@@ -1126,7 +1126,7 @@ function evaluateSemanticFieldPolicyContext({
       field: candidate,
       fieldValue,
       ...semanticContext,
-      findingType,
+      findingType: semanticContext.findingType || findingType,
       ...rest,
     });
     if (!fallback) fallback = result;
@@ -1723,6 +1723,8 @@ export function createObjectComparePlan(
     objectType,
     fieldSummary: rawFieldSummary,
     profile,
+    oldObject: match.oldObject || null,
+    newObject: match.newObject || null,
   });
   const policyResult = applyLineExceptionSuppressionToFieldPolicy({
     policyResult: rawPolicyResult,

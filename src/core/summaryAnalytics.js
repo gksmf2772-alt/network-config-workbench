@@ -1770,13 +1770,26 @@ function reviewObjectLabel(item = {}, fallbackObject = {}) {
 function buildReviewTableFieldRows(item = {}, overlap = null, options = {}) {
   const includeIgnored = Boolean(options.includeIgnored);
   const summaryRows = Object.entries(item.fieldSummary || {})
-    .filter(([field, value]) => includeIgnored || isDescriptionFieldName(field) || policyAppliedFieldState(value) === "active")
-    .map(([field, value]) => ({
-      field: normalizeReviewFieldName(field, value),
-      status: String(value?.effectiveStatus || value?.status || "").toLowerCase(),
-      oldValue: compactFieldValues(value?.oldValues),
-      newValue: compactFieldValues(value?.newValues),
-    }))
+    .map(([field, value]) => {
+      const policyState = policyAppliedFieldState(value);
+      return {
+        field: normalizeReviewFieldName(field, value),
+        status: String(value?.effectiveStatus || value?.status || "").toLowerCase(),
+        oldValue: compactFieldValues(value?.oldValues),
+        newValue: compactFieldValues(value?.newValues),
+        policyState,
+        applied: policyState === "suppressed",
+        suppressed: policyState === "suppressed",
+        policyId: fieldSummaryPolicyId(value),
+        policySource: fieldSummaryPolicySource(value),
+        policyReason: fieldSummaryPolicyReason(value),
+      };
+    })
+    .filter((row) => {
+      if (!row.field) return false;
+      if (row.policyState === "excluded") return false;
+      return includeIgnored || isDescriptionFieldName(row.field) || row.policyState === "active" || row.policyState === "suppressed";
+    })
     .filter((row) => row.field);
 
   if (summaryRows.length) return ensureDescriptionReviewFieldRow(summaryRows, item);
@@ -1800,6 +1813,32 @@ function buildReviewTableFieldRows(item = {}, overlap = null, options = {}) {
     oldValue: sourceSide === "old" ? displayFieldValue(field, value) : "",
     newValue: sourceSide === "new" ? displayFieldValue(field, value) : "",
   })), item);
+}
+
+function fieldSummaryPolicyId(summary = {}) {
+  const direct = summary?.policyId || summary?.policy?.id || "";
+  if (direct) return direct;
+  const hit = Array.isArray(summary?.policyHits)
+    ? summary.policyHits.find((entry) => entry?.policyId)
+    : null;
+  return hit?.policyId || "";
+}
+
+function fieldSummaryPolicySource(summary = {}) {
+  const direct = summary?.sourcePolicy || summary?.policySource || "";
+  if (direct) return direct;
+  const hit = Array.isArray(summary?.policyHits)
+    ? summary.policyHits.find((entry) => entry?.sourcePolicy || entry?.policySource || entry?.source)
+    : null;
+  return hit?.sourcePolicy || hit?.policySource || hit?.source || "";
+}
+
+function fieldSummaryPolicyReason(summary = {}) {
+  if (summary?.policyReason) return summary.policyReason;
+  const hit = Array.isArray(summary?.policyHits)
+    ? summary.policyHits.find((entry) => entry?.reason)
+    : null;
+  return hit?.reason || "";
 }
 
 function ensureDescriptionReviewFieldRow(rows = [], item = {}) {

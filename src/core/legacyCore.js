@@ -4090,7 +4090,7 @@ function setObjectSectionScope(scope = "all", options = {}) {
   renderObjectSectionTabs();
   renderCompareSectionTabs();
   renderObjectNavigator();
-  if (options.focusCompare) focusFirstCompareObjectInSection();
+  void refreshCompareDiffRowsForActiveSection(options);
 }
 
 function getObjectSectionFilter(scope = "all") {
@@ -4099,6 +4099,16 @@ function getObjectSectionFilter(scope = "all") {
 
 function getSectionFilterForObjectType(type = "") {
   return OBJECT_SECTION_FILTERS.find((item) => item.types?.includes(type)) || OBJECT_SECTION_FILTERS[0];
+}
+
+async function refreshCompareDiffRowsForActiveSection(options = {}) {
+  if (!state.lastReport?.diffRows) {
+    if (options.focusCompare) focusFirstCompareObjectInSection();
+    return;
+  }
+
+  await renderActiveCompareDiffRowsAsync();
+  if (options.focusCompare) focusFirstCompareObjectInSection();
 }
 
 function renderObjectSectionTabs() {
@@ -4609,13 +4619,53 @@ async function runCompareStep(label, callback) {
 }
 
 function renderActiveCompareDiffRows() {
-  renderDiff(state.lastReport?.diffRows || []);
+  renderDiff(getActiveCompareDiffRows(state.lastReport));
   scheduleSettledDiffConnectorRender();
 }
 
 async function renderActiveCompareDiffRowsAsync() {
-  await renderDiffAsync(state.lastReport?.diffRows || []);
+  await renderDiffAsync(getActiveCompareDiffRows(state.lastReport));
   scheduleSettledDiffConnectorRender();
+}
+
+function getActiveCompareDiffRows(report = state.lastReport) {
+  const rows = Array.isArray(report?.diffRows) ? report.diffRows : [];
+  const filter = getObjectSectionFilter(state.activeObjectSectionScope || "all");
+  return filterCompareDiffRowsBySection(rows, filter);
+}
+
+function filterCompareDiffRowsBySection(rows = [], filter = {}) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!Array.isArray(filter.types) || !filter.types.length) return safeRows;
+
+  const allowedTypes = new Set(filter.types.map(normalizeCompareObjectType).filter(Boolean));
+  return safeRows.filter((row) => {
+    const visibleTypes = compareDiffRowVisibleObjectTypes(row);
+    if (!visibleTypes.length) return false;
+    return visibleTypes.every((type) => allowedTypes.has(type));
+  });
+}
+
+function compareDiffRowVisibleObjectTypes(row = {}) {
+  return [...new Set([
+    compareSideRowVisibleObjectType(row?.oldRow),
+    compareSideRowVisibleObjectType(row?.newRow),
+  ].filter(Boolean))];
+}
+
+function compareSideRowVisibleObjectType(row = {}) {
+  if (!row || row.placeholder || row.hidden) return "";
+  const objectType = compareObjectTypeFromKey(row.objectKey);
+  return objectTypes.includes(objectType) ? objectType : "";
+}
+
+function compareObjectTypeFromKey(key = "") {
+  const objectType = normalizeCompareObjectType(splitObjectKey(key).type);
+  return objectTypes.includes(objectType) ? objectType : "";
+}
+
+function normalizeCompareObjectType(type = "") {
+  return String(type || "").trim().toLowerCase();
 }
 
 async function runCompare() {

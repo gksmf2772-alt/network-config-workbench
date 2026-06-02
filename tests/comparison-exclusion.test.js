@@ -108,6 +108,20 @@ function readGlobalStyles() {
   );
 }
 
+test("compare section tabs filter existing line diff rows without semantic block replacement", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /function getActiveCompareDiffRows\(report = state\.lastReport\)/);
+  assert.match(legacy, /function filterCompareDiffRowsBySection\(rows = \[\], filter = \{\}\)/);
+  assert.match(legacy, /visibleTypes\.every\(\(type\) => allowedTypes\.has\(type\)\)/);
+  assert.match(legacy, /void refreshCompareDiffRowsForActiveSection\(options\)/);
+  assert.match(legacy, /renderDiff\(getActiveCompareDiffRows\(state\.lastReport\)\)/);
+  assert.match(legacy, /await renderDiffAsync\(getActiveCompareDiffRows\(state\.lastReport\)\)/);
+  assert.match(legacy, /report\.diffRows = applySemanticPlanVisualStatusToDiffRows\(report\.diffRows \|\| \[\], semanticRuntime\.plan\)/);
+  assert.doesNotMatch(legacy, /const semanticDiffRows = buildSemanticRuntimeDiffRows/);
+  assert.doesNotMatch(legacy, /function buildSemanticRuntimeDiffRows/);
+});
+
 test("unmatched setting visual status uses unmatched class and color token", () => {
   assert.equal(getSemanticStateClass({ status: "old-only" }), "semantic-state-unmatched");
   assert.equal(getSemanticStateClass({ status: "new-only" }), "semantic-state-unmatched");

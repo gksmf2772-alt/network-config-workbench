@@ -155,3 +155,38 @@
 
 ### Preview
 - `npm.cmd run preview`
+
+## 2026-06-02 Compare Section Filter Correction
+
+### Current work
+- Task: restore the compare pane visual style and make each compare section tab render only its own setting type.
+- Branch: `work/mvp-interface-stabilization`
+- Fix commit: `fb069bf fix: filter compare pane by active section`
+- Related files: `src/core/legacyCore.js`, `tests/comparison-exclusion.test.js`
+
+### Root cause
+- The previous fix changed the compare pane source from existing line diff rows to semantic object block rows, which changed the visual presentation.
+- After reverting that change, the remaining defect was that section tabs changed `state.activeObjectSectionScope` but did not rerender the compare panes from a section-filtered row list.
+
+### Decision
+- Keep `report.diffRows` as the existing line diff data.
+- Do not introduce `buildSemanticRuntimeDiffRows` or semantic object block replacement for the compare pane.
+- Filter rows at render time with `getActiveCompareDiffRows()`, using the visible `oldRow/newRow.objectKey` type.
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/comparison-exclusion.test.js`: 19 pass.
+- `npm.cmd run guard:legacy-core`: pass.
+- Chrome CDP UI verification with fixture files:
+  - `interface`: only `interface`.
+  - `static-route`: only `static-route`.
+  - `bgp`: only `bgp`, 448 `.diff-line`, 0 `.semantic-object-block-wrapper`.
+  - `port-lag`: only `port`, `lag`.
+  - `pim`: only `pim`.
+- Screenshot: `docs/verification/screenshots/2026-06-02/compare-section-filter/after-bgp-line-diff.png`.
+- `npm.cmd test`: pass, 226 pass / 1 skip.
+- `npm.cmd run build`: pass, existing Vite chunk size warning remains.
+
+### Next handoff
+- Dev server URL: `http://127.0.0.1:5173/`.
+- Before changing compare pane rendering again, verify that selected section tabs keep `.diff-line` rendering and do not render semantic object block wrappers.

@@ -71,6 +71,16 @@ Post-edit checklist:
 - Line connector rendering checked: untouched.
 - Tests run: npm.cmd run guard:legacy-core pass; npm.cmd test pass, 197 pass / 1 skip; npm.cmd run build pass.
 
+2026-06-02 section compare correction:
+- Reverted the prior semantic-object-block diff source change through commits `14878f7` and `7468da7`.
+- Root cause: compare section tabs updated `state.activeObjectSectionScope`, but the compare panes kept rendering the full `report.diffRows` array.
+- Fix commit: `fb069bf fix: filter compare pane by active section`.
+- Fix scope: keep existing line diff rows and filter them at render time by visible `oldRow/newRow.objectKey` type.
+- Visual guard: no `buildSemanticRuntimeDiffRows` replacement path is present; `report.diffRows` still uses `applySemanticPlanVisualStatusToDiffRows`.
+- Browser verification: fixture compare via Chrome CDP confirmed `interface`, `static-route`, `bgp`, `port-lag`, and `pim` scopes only render their allowed object types. BGP scope rendered 448 `.diff-line` rows and 0 `.semantic-object-block-wrapper` rows.
+- Screenshot: `docs/verification/screenshots/2026-06-02/compare-section-filter/after-bgp-line-diff.png`.
+- Tests run: `node --check src/core/legacyCore.js`; `node --test tests/comparison-exclusion.test.js`; `npm.cmd run guard:legacy-core`; `npm.cmd test` pass 226 / skip 1; `npm.cmd run build` pass with existing Vite chunk size warning.
+
 ## Current implementation facts
 
 - Product goal is documented in `docs/mvp-product-definition.md`.

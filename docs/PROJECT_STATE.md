@@ -1,17 +1,5 @@
 # Project State
 
-## 2026-06-02 Compare Section Isolation Update
-- Task: compare pane section tabs now render only their own setting object types.
-- Branch: `work/mvp-interface-stabilization`.
-- Commit: `ec536b6 fix: isolate compare section rows`.
-- Changed files: `src/core/legacyCore.js`, `tests/comparison-exclusion.test.js`.
-- Decision: compare panes use semantic object diff rows as the render source instead of legacy line diff rows.
-- Decision: active section filtering removes rows whose visible object types are outside the tab's allowed type set.
-- Decision: raw unmatched rows and decorative semantic divider rows are not shown in section panes.
-- DOM verification: `Gangbu-SEA027H_config.txt` plus `New_bgp_1`, `New_static_1`, `New_interface_1`, `New_lag_1`, `New_port_1`, `New_PIM_1`.
-- DOM result: all=[bgp, interface, lag, pim, port, static-route, subscriber-interface], interface=[interface], static-route=[static-route], bgp=[bgp], port-lag=[lag, port], service-sap=[subscriber-interface], pim=[pim], policy=[community, prefix-list, route-policy], failures=0.
-- Automated verification: `node --check src/core/legacyCore.js`, `node --test tests/comparison-exclusion.test.js`, `npm.cmd run guard:legacy-core`, `npm.cmd test`, `npm.cmd run build` passed.
-
 ## 1. 프로젝트 개요
 - 목적: 기존/신규 네트워크 설정을 객체와 필드 단위로 비교하고, 리포트/프로파일/검증 규칙을 통해 변경 검토를 지원한다.
 - 주요 사용자: 네트워크 마이그레이션 또는 설정 검토 담당자.

@@ -1,28 +1,5 @@
 # Verification Guide
 
-## 2026-06-02 Compare Section Isolation Verification
-
-### Scenario
-- Load `Gangbu-SEA027H_config.txt` as old config.
-- Load concatenated target split files: `New_bgp_1`, `New_static_1`, `New_interface_1`, `New_lag_1`, `New_port_1`, `New_PIM_1`.
-- Run compare in `Nokia Classic -> Nokia MD-CLI`.
-- Click every compare section tab and inspect visible DOM rows under `#oldDiffPane` and `#newDiffPane`.
-
-### Expected Result
-- `BGP` shows only `data-object-type="bgp"`.
-- `Static Route` shows only `static-route`.
-- `Interface` shows only `interface`.
-- `Port/LAG` shows only `port` and `lag`.
-- `PIM` shows only `pim`.
-- `Service/SAP` shows only service/SAP object types.
-- `Policy` shows only policy object types.
-- No `UNMATCHED RAW CONFIG`, `dst-port`, `src-port`, or `port-list` raw rows appear in section panes.
-
-### Actual Result
-- Passed in headless Chrome DOM verification on 2026-06-02.
-- Observed types: all=[bgp, interface, lag, pim, port, static-route, subscriber-interface], interface=[interface], static-route=[static-route], bgp=[bgp], port-lag=[lag, port], service-sap=[subscriber-interface], pim=[pim], policy=[community, prefix-list, route-policy].
-- Failures: 0.
-
 ## 1. 자동 검증 명령
 
 ### Install

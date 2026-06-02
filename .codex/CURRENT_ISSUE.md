@@ -28,10 +28,10 @@ Affected stability-map boundary:
 - `src/core/parsers/nokiaMdCliParser.js` MD-CLI router PIM one-line precedence only.
 - `src/core/summaryAnalytics.js` MVP section summary counts only.
 - `src/core/summaryRenderer.js` MVP section summary cards only.
-- `src/core/legacyCore.js` section summary insertion, Excel XLSX export button wiring, and compare pane section row isolation only.
+- `src/core/legacyCore.js` section summary insertion and Excel XLSX export button wiring only.
 - `src/core/reportExport.js` Excel-compatible CSV and XLSX report generation only.
 - `src/components/ConfigInputPanel.jsx` export button tooltip only.
-- `tests/comparison-exclusion.test.js` status label and compare section row isolation contract coverage.
+- `tests/comparison-exclusion.test.js` status label contract coverage.
 - `tests/bgp-effective-neighbor.test.js` BGP inheritance contract coverage.
 - `tests/static-route-object-key.test.js` parser contract coverage.
 - `tests/mvp-core-scope.test.js` MVP contract coverage.
@@ -69,7 +69,7 @@ Post-edit checklist:
 - Compare renderer checked: display labels only; internal match status values and CSS state classes preserved.
 - Diff scroll sync checked: untouched.
 - Line connector rendering checked: untouched.
-- Tests run: node --check src/core/legacyCore.js pass; node --test tests/comparison-exclusion.test.js pass, 20 pass; npm.cmd run guard:legacy-core pass; browser DOM section verification pass for all/interface/static-route/bgp/port-lag/service-sap/pim/policy on Gangbu-SEA027H + New_*_1 split fixtures; npm.cmd test pass, 227 pass / 1 skip; npm.cmd run build pass.
+- Tests run: npm.cmd run guard:legacy-core pass; npm.cmd test pass, 197 pass / 1 skip; npm.cmd run build pass.
 
 ## Current implementation facts
 

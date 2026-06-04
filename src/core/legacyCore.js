@@ -5710,9 +5710,17 @@ const reviewIssueMeta = {
 function renderSummaryIssueWorkspace(review = {}) {
   const rows = buildSummaryIssueRows(review, state.lastSemanticPlan || []);
   const firstTargetId = rows[0]?.targetId || "";
+  const typeGroups = buildSummaryIssueTypeGroups(rows);
+  const totalActiveIssues = rows.reduce((sum, row) => sum + Number(row.activeIssueCount || 0), 0);
+  const totalSuppressedIssues = rows.reduce((sum, row) => sum + Number(row.suppressedIssueCount || 0), 0);
+  const totalExcludedIssues = rows.reduce((sum, row) => sum + Number(row.excludedIssueCount || 0), 0);
   return `
     <div class="summary-issue-workspace" data-summary-issue-root>
       <div class="summary-issue-toolbar">
+        <div class="summary-issue-toolbar-title">
+          <strong>그룹별 검토</strong>
+          <span>전체 ${escapeHtml(rows.length)}개 설정 · 활성 검토 ${escapeHtml(totalActiveIssues)}개 · 예외 ${escapeHtml(totalSuppressedIssues)}개 · 비교 제외 ${escapeHtml(totalExcludedIssues)}개</span>
+        </div>
         <div class="summary-issue-counts">
           ${Object.entries(reviewIssueMeta).map(([key, meta]) => {
             const count = rows.filter((row) => row.panelKey === key).length;
@@ -5724,6 +5732,12 @@ function renderSummaryIssueWorkspace(review = {}) {
           <input type="search" data-summary-issue-search placeholder="설정, 사유, 항목 검색" />
         </label>
       </div>
+      ${typeGroups.length ? `
+        <div class="summary-issue-type-groups" data-summary-issue-type-groups>
+          <button type="button" class="active" data-summary-issue-type-filter="">전체 <strong>${escapeHtml(rows.length)}</strong><span>검토 ${escapeHtml(totalActiveIssues)}</span></button>
+          ${typeGroups.map((group) => renderSummaryIssueTypeGroupButton(group)).join("")}
+        </div>
+      ` : ""}
       <div class="summary-issue-layout">
         <div class="summary-issue-list" data-summary-issue-list>
           ${rows.length ? rows.map((row, index) => renderSummaryIssueRow(row, index === 0)).join("") : `
@@ -5732,6 +5746,10 @@ function renderSummaryIssueWorkspace(review = {}) {
               <span>현재 비교 범위에서 활성 검토 항목이 없음.</span>
             </div>
           `}
+          <div class="summary-issue-empty-filter" data-summary-issue-empty hidden>
+            <strong>필터 결과 없음</strong>
+            <span>그룹, 상태, 검색어를 조정하세요.</span>
+          </div>
         </div>
         <aside class="summary-issue-detail" data-summary-issue-detail>
           ${firstTargetId ? renderSummaryIssueDetail(firstTargetId) : `<div class="summary-empty-state"><strong>선택 항목 없음</strong><span>검토 항목을 선택하면 상세가 표시됨.</span></div>`}
@@ -5744,6 +5762,53 @@ function renderSummaryIssueWorkspace(review = {}) {
 function buildSummaryIssueRows(review = {}, plan = []) {
   state.summaryIssueGroups = new Map();
   return buildObjectReviewGroups({ review, plan }).map(hydrateSummaryObjectGroup);
+}
+
+function buildSummaryIssueTypeGroups(rows = []) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = String(row.objectType || "-").trim() || "-";
+    if (!groups.has(key)) {
+      groups.set(key, {
+        objectType: key,
+        total: 0,
+        active: 0,
+        suppressed: 0,
+        excluded: 0,
+        fields: new Set(),
+      });
+    }
+    const group = groups.get(key);
+    group.total += 1;
+    group.active += Number(row.activeIssueCount || 0);
+    group.suppressed += Number(row.suppressedIssueCount || 0);
+    group.excluded += Number(row.excludedIssueCount || 0);
+    String(row.fieldText || "")
+      .split(",")
+      .map((field) => field.trim())
+      .filter(Boolean)
+      .forEach((field) => group.fields.add(field));
+  });
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      fieldCount: group.fields.size,
+    }))
+    .sort((left, right) =>
+      right.active - left.active ||
+      right.total - left.total ||
+      String(left.objectType).localeCompare(String(right.objectType))
+    );
+}
+
+function renderSummaryIssueTypeGroupButton(group = {}) {
+  return `
+    <button type="button" data-summary-issue-type-filter="${escapeHtml(group.objectType)}" title="검토 ${escapeHtml(group.active)} / 예외 ${escapeHtml(group.suppressed)} / 비교 제외 ${escapeHtml(group.excluded)}">
+      ${escapeHtml(group.objectType)}
+      <strong>${escapeHtml(group.total)}</strong>
+      <span>검토 ${escapeHtml(group.active)}</span>
+    </button>
+  `;
 }
 
 function hydrateSummaryObjectGroup(group = {}) {
@@ -5792,7 +5857,7 @@ function hydrateSummaryObjectGroup(group = {}) {
 
 function renderSummaryIssueRow(row = {}, selected = false) {
   return `
-    <article class="summary-issue-row summary-issue-${escapeHtml(row.tone)}${selected ? " selected" : ""}" data-summary-issue-target="${escapeHtml(row.targetId)}" data-summary-issue-kind="${escapeHtml(row.panelKey)}" data-summary-issue-search-text="${escapeHtml([row.statusLabel, row.objectType, row.displayName, row.reason, row.fieldText, row.valueText].join(" ").toLowerCase())}">
+    <article class="summary-issue-row summary-issue-${escapeHtml(row.tone)}${selected ? " selected" : ""}" data-summary-issue-target="${escapeHtml(row.targetId)}" data-summary-issue-kind="${escapeHtml(row.panelKey)}" data-summary-issue-type="${escapeHtml(row.objectType)}" data-summary-issue-search-text="${escapeHtml([row.statusLabel, row.objectType, row.displayName, row.reason, row.fieldText, row.valueText].join(" ").toLowerCase())}">
       <div class="summary-issue-status">${escapeHtml(row.statusLabel)}</div>
       <div class="summary-issue-main">
         <strong>${escapeHtml(row.displayName)}</strong>
@@ -5839,9 +5904,11 @@ function renderSummaryIssueDetail(targetId = "") {
             <strong>활성 검토 항목</strong>
             <span>${escapeHtml(activeRows.length)}개 설정 항목</span>
           </div>
-          ${activeRows.length ? activeRows.map((row) => renderSummaryFieldReviewCard(row, false)).join("") : `
-            <div class="summary-empty-row">활성 검토 항목 없음</div>
-          `}
+          <div class="summary-object-issue-section-body">
+            ${activeRows.length ? activeRows.map((row) => renderSummaryFieldReviewCard(row, false)).join("") : `
+              <div class="summary-empty-row">활성 검토 항목 없음</div>
+            `}
+          </div>
         </section>
         ${suppressedOnlyRows.length ? `
           <section class="summary-object-issue-section summary-object-issue-section-muted">
@@ -5849,7 +5916,9 @@ function renderSummaryIssueDetail(targetId = "") {
               <strong>예외/숨김 처리된 항목</strong>
               <span>${escapeHtml(suppressedOnlyRows.length)}개 설정 항목</span>
             </div>
-            ${suppressedOnlyRows.map((row) => renderSummaryFieldReviewCard(row, true)).join("")}
+            <div class="summary-object-issue-section-body">
+              ${suppressedOnlyRows.map((row) => renderSummaryFieldReviewCard(row, true)).join("")}
+            </div>
           </section>
         ` : ""}
       </div>
@@ -6534,6 +6603,15 @@ function bindSummaryIssueWorkspaceActions() {
       filterSummaryIssueRows(root);
     });
   });
+  root.querySelectorAll("[data-summary-issue-type-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      root.querySelectorAll("[data-summary-issue-type-filter]").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      root.dataset.issueTypeFilter = button.dataset.summaryIssueTypeFilter || "";
+      filterSummaryIssueRows(root);
+    });
+  });
 }
 
 function selectSummaryIssue(targetId = "") {
@@ -6579,15 +6657,33 @@ function bindSummaryIssueDetailActions(detail) {
 function filterSummaryIssueRows(root) {
   const query = String(root.querySelector("[data-summary-issue-search]")?.value || "").trim().toLowerCase();
   const filter = root.dataset.issueFilter || "";
+  const typeFilter = root.dataset.issueTypeFilter || "";
   let visible = 0;
+  let firstVisibleTarget = "";
+  let selectedVisible = false;
   root.querySelectorAll("[data-summary-issue-target]").forEach((row) => {
     const text = row.dataset.summaryIssueSearchText || "";
     const kind = row.dataset.summaryIssueKind || "";
-    const show = (!query || text.includes(query)) && (!filter || filter === kind);
+    const type = row.dataset.summaryIssueType || "";
+    const show = (!query || text.includes(query)) && (!filter || filter === kind) && (!typeFilter || typeFilter === type);
     row.hidden = !show;
-    if (show) visible += 1;
+    if (show) {
+      visible += 1;
+      if (!firstVisibleTarget) firstVisibleTarget = row.dataset.summaryIssueTarget || "";
+      if (row.classList.contains("selected")) selectedVisible = true;
+    }
   });
   root.classList.toggle("summary-issue-filter-empty", visible === 0);
+  const empty = root.querySelector("[data-summary-issue-empty]");
+  if (empty) empty.hidden = visible !== 0;
+  if (visible > 0 && !selectedVisible && firstVisibleTarget) {
+    selectSummaryIssue(firstVisibleTarget);
+  } else if (visible === 0) {
+    const detail = root.querySelector("[data-summary-issue-detail]");
+    if (detail) {
+      detail.innerHTML = `<div class="summary-empty-state"><strong>필터 결과 없음</strong><span>그룹, 상태, 검색어를 조정하세요.</span></div>`;
+    }
+  }
 }
 
 function openAuditFindingDetail(findingId = "") {

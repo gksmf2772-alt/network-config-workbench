@@ -326,3 +326,65 @@
 ### Remaining notes
 - Full option report view is intentionally on demand; selecting it can still take several seconds for many option columns.
 - Remaining compare time is mostly large diff pane rendering and semantic matching; deeper follow-up is diff virtualization or worker-based parser/matcher execution.
+
+## 2026-06-04 Summary UX Follow-up Note
+
+### Issue
+- In the Summary tab, the visible area can grow without a practical boundary as grouped items increase.
+- Some summary items become difficult or impossible to inspect when there are many entries.
+- Even when violations exist, it is hard for users to identify which object, field, or rule is violating expectations by group.
+- The current summary view does not give a sufficiently intuitive operational path for finding and reviewing violations from a user's perspective.
+
+### Desired direction
+- Add bounded scrolling or pagination so large summary groups do not expand the page indefinitely.
+- Provide a clearer group-level violation view that lets users quickly see where violations exist.
+- Make each violation traceable to its object, field, rule/status, and related compare detail.
+- Keep the existing visual style, but improve scanability and navigation for large result sets.
+- Treat this as a UX improvement task, not just a CSS overflow fix, because the main issue is finding and understanding violations efficiently.
+
+### Next work candidate
+- Review the Summary tab data structure and rendering flow.
+- Design a compact grouped violation list or drill-down interaction.
+- Verify with full-config comparison data where many objects and violations are present.
+
+## 2026-06-04 Summary UX Grouped Review
+
+### Current work
+- Task: improve Summary tab usability when review items and violations increase.
+- Branch: `work/mvp-interface-stabilization`
+- Related files:
+  - `src/core/legacyCore.js`
+  - `src/styles/global-summary.css`
+  - `tests/summary-renderer.test.js`
+  - `docs/verification/summary-ux-2026-06-04.md`
+  - `docs/verification/screenshots/2026-06-04/summary-ux/`
+
+### Decision
+- Keep the existing Summary tab layout and visual language.
+- Add grouped review controls inside the immediate review workspace rather than redesigning the whole Summary page.
+- Group review rows by object type, while keeping existing issue-kind filters and search.
+- Add bounded internal scrolling to the issue list, selected issue detail, and field-level issue sections.
+- Update the selected detail automatically when filtering hides the previous selection.
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/summary-renderer.test.js`: pass, 10 tests.
+- `node --test tests/summary-renderer.test.js tests/summary-analytics.test.js tests/comparison-exclusion.test.js tests/policy-coverage.test.js`: pass, 93 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `npm.cmd test`: pass, 230 pass / 1 skip.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+- Browser CDP desktop check: pass.
+  - Type group buttons rendered.
+  - Issue list max-height computed as `640px`.
+  - Detail card max-height computed as `680px`.
+- Browser CDP mobile check: pass.
+  - Issue workspace collapsed to one column at `390x900`.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-04/summary-ux/after-summary-grouped.png`
+- `docs/verification/screenshots/2026-06-04/summary-ux/after-summary-issue-groups.png`
+- `docs/verification/screenshots/2026-06-04/summary-ux/after-summary-issue-groups-mobile.png`
+
+### Remaining notes
+- Built-in sample data verified the UI contract. A larger full-config case should still be checked manually to confirm grouping remains useful when many object types and many violations are present.
+- This pass does not add pagination or virtual scrolling; it bounds the existing UI and improves group-level navigation.

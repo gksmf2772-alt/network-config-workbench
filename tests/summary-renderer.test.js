@@ -110,6 +110,22 @@ test("summary section cards are bound to object list filtering", () => {
   assert.match(legacy, /setResultTab\("objects"\);/);
 });
 
+test("summary issue workspace supports grouped violation filtering and bounded detail scroll", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+  const css = fs.readFileSync("src/styles/global-summary.css", "utf8");
+
+  assert.match(legacy, /buildSummaryIssueTypeGroups/);
+  assert.match(legacy, /data-summary-issue-type-groups/);
+  assert.match(legacy, /data-summary-issue-type-filter/);
+  assert.match(legacy, /root\.dataset\.issueTypeFilter/);
+  assert.match(legacy, /data-summary-issue-empty/);
+  assert.match(legacy, /selectSummaryIssue\(firstVisibleTarget\)/);
+  assert.match(css, /\.summary-issue-type-groups/);
+  assert.match(css, /\.summary-issue-list[\s\S]*max-height:\s*clamp\(360px,\s*64vh,\s*680px\)/);
+  assert.match(css, /\.summary-issue-detail-card[\s\S]*max-height:\s*clamp\(420px,\s*68vh,\s*780px\)/);
+  assert.match(css, /\.summary-object-issue-section-body[\s\S]*max-height:\s*clamp\(180px,\s*32vh,\s*340px\)/);
+});
+
 test("app shell exposes separated summary review compare profile and report tabs", () => {
   const shell = fs.readFileSync("src/components/AppShell.jsx", "utf8");
   const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");

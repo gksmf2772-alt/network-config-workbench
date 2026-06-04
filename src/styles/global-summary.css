@@ -1219,6 +1219,24 @@ textarea[id$="ConfigInput"],
   align-items: center;
 }
 
+.summary-issue-toolbar-title {
+  display: grid;
+  gap: 2px;
+  min-width: min(320px, 100%);
+}
+
+.summary-issue-toolbar-title strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.summary-issue-toolbar-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .summary-issue-counts {
   display: flex;
   flex-wrap: wrap;
@@ -1250,6 +1268,54 @@ textarea[id$="ConfigInput"],
   background: #ecfeff;
 }
 
+.summary-issue-type-groups {
+  display: flex;
+  gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1px 0 4px;
+  overscroll-behavior-x: contain;
+}
+
+.summary-issue-type-groups button {
+  display: inline-grid;
+  grid-template-columns: minmax(0, auto) auto;
+  gap: 2px 6px;
+  align-items: center;
+  min-width: 112px;
+  min-height: 38px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--primary-strong);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.summary-issue-type-groups button strong {
+  justify-self: end;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--panel-muted);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.summary-issue-type-groups button span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.summary-issue-type-groups button.active {
+  border-color: rgba(8, 145, 178, 0.56);
+  background: #ecfeff;
+}
+
 .summary-issue-search {
   display: flex;
   gap: 6px;
@@ -1268,7 +1334,7 @@ textarea[id$="ConfigInput"],
 
 .summary-issue-layout {
   display: grid;
-  grid-template-columns: minmax(520px, 1fr) minmax(520px, 44%);
+  grid-template-columns: minmax(460px, 1fr) minmax(420px, 42%);
   gap: 14px;
   align-items: start;
 }
@@ -1276,9 +1342,10 @@ textarea[id$="ConfigInput"],
 .summary-issue-list {
   display: grid;
   gap: 6px;
-  max-height: 520px;
+  max-height: clamp(360px, 64vh, 680px);
   overflow: auto;
   padding-right: 2px;
+  overscroll-behavior: contain;
 }
 
 .summary-issue-row {
@@ -1401,6 +1468,12 @@ textarea[id$="ConfigInput"],
   background: var(--panel);
 }
 
+.summary-issue-detail-card {
+  max-height: clamp(420px, 68vh, 780px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .summary-issue-detail-head {
   display: grid;
   gap: 3px;
@@ -1503,6 +1576,7 @@ textarea[id$="ConfigInput"],
 .summary-object-issue-section {
   display: grid;
   gap: 8px;
+  min-height: 0;
 }
 
 .summary-object-issue-section-head {
@@ -1519,6 +1593,15 @@ textarea[id$="ConfigInput"],
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.summary-object-issue-section-body {
+  display: grid;
+  gap: 8px;
+  max-height: clamp(180px, 32vh, 340px);
+  overflow: auto;
+  padding-right: 2px;
+  overscroll-behavior: contain;
 }
 
 .summary-object-issue-card {

@@ -275,3 +275,54 @@
 - Screenshot: `docs/verification/screenshots/2026-06-04/port-lag-tab-split/after-port-lag-split.png`.
 - `npm.cmd test`: pass, 229 pass / 1 skip.
 - `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+
+## 2026-06-04 Performance Rendering Optimization
+
+### Current work
+- Task: reduce perceived slowness in compare, summary, and report views for full config comparison.
+- Branch: `work/mvp-interface-stabilization`
+- Related files:
+  - `src/core/legacyCore.js`
+  - `src/core/legacyState.js`
+  - `src/core/compareRenderer.js`
+  - `src/styles/global-summary.css`
+  - `docs/verification/performance-rendering-2026-06-04.md`
+  - `docs/verification/screenshots/2026-06-04/performance-rendering/after-report-optimized.png`
+
+### Root cause
+- Report tab activation rerendered the full overview report every time.
+- The default compact report review table still created all full-option field columns and all detail rows in hidden DOM.
+- The report pane reached about `293140` DOM nodes on the measured fixture.
+- Diff rendering bound semantic-pair events per line and measured every `.diff-line` for alignment.
+- Semantic preview rendered every plan card immediately after compare.
+
+### Decision
+- Cache unchanged report overview renders by render version.
+- Keep report review compact view lightweight by default.
+- Render full option columns only on explicit full-view request.
+- Render report detail field UI only when a detail row is expanded.
+- Use event delegation for semantic pair hover/click.
+- Align only semantic object block wrappers, not every diff line.
+- Render the first `120` semantic preview cards initially and expose a full-load button.
+
+### Verification
+- Browser fixture:
+  - old `439644` chars, new `512478` chars.
+  - default report DOM reduced from about `293140` nodes to about `35459` nodes.
+  - report tab repeat activation reduced from about `11s` to about `0.3-0.6s`.
+  - report detail row lazy expansion measured about `24ms`.
+  - semantic preview full-load button measured about `0.4s` for all cards.
+- Screenshot:
+  - `docs/verification/screenshots/2026-06-04/performance-rendering/after-report-optimized.png`
+- Commands:
+  - `node --check src/core/legacyCore.js`
+  - `node --check src/core/legacyState.js`
+  - `node --check src/core/compareRenderer.js`
+  - `node --test tests/summary-renderer.test.js tests/summary-analytics.test.js tests/comparison-exclusion.test.js tests/policy-coverage.test.js tests/semantic-mapping-policy.test.js tests/matcher-quality.test.js tests/static-route-object-key.test.js`
+  - `npm.cmd run guard:legacy-core`
+  - `npm.cmd test`
+  - `npm.cmd run build`
+
+### Remaining notes
+- Full option report view is intentionally on demand; selecting it can still take several seconds for many option columns.
+- Remaining compare time is mostly large diff pane rendering and semantic matching; deeper follow-up is diff virtualization or worker-based parser/matcher execution.

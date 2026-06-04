@@ -511,6 +511,11 @@ export function renderComparisonPlanHtml(plan = [], options = {}) {
   }
 
   const summary = summarizePlan(plan);
+  const itemLimit = Number(options.itemLimit || 0);
+  const visiblePlan = itemLimit > 0 && plan.length > itemLimit
+    ? plan.slice(0, itemLimit)
+    : plan;
+  const hiddenCount = plan.length - visiblePlan.length;
 
   return `
     <div class="semantic-compare-result">
@@ -532,7 +537,7 @@ export function renderComparisonPlanHtml(plan = [], options = {}) {
         <div class="semantic-summary-item"><div class="semantic-summary-label">정책 위반</div><div class="semantic-summary-value">${summary.violations}</div></div>
       </div>
 
-      ${plan.map((item) => {
+      ${visiblePlan.map((item) => {
         const stateClass = getSemanticStateClass(item);
         const stateLabel = getSemanticStateLabel(item);
         const violations = item.policyViolationCount || 0;
@@ -584,6 +589,11 @@ export function renderComparisonPlanHtml(plan = [], options = {}) {
           </details>
         `;
       }).join("")}
+      ${hiddenCount ? `
+        <button type="button" class="semantic-preview-load-all" data-semantic-preview-load-all>
+          전체 의미 비교 ${escapeHtml(plan.length)}개 보기
+        </button>
+      ` : ""}
     </div>
   `;
 }

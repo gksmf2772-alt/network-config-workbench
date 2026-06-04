@@ -4695,6 +4695,9 @@ async function runCompare() {
     selectors.compareStatus.textContent = "비교 중";
     state.lastSemanticPlan = [];
     state.lastSemanticSummary = null;
+    state.lastSemanticRuntime = null;
+    state.semanticPreviewExpanded = false;
+    markOverviewReportDirty({ resetReviewMode: true });
 
     const options = getOptions();
 
@@ -4727,6 +4730,7 @@ async function runCompare() {
     }
 
     state.lastReport = report;
+    markOverviewReportDirty({ resetReviewMode: true });
 
     await runCompareStep("리포트 렌더링", () => renderReportV2(report));
     await runCompareStep("diff 렌더링", renderActiveCompareDiffRowsAsync);
@@ -4889,6 +4893,7 @@ function getManualCandidateObjectId(object) {
 }
 
 const MANUAL_CANDIDATE_LIMIT = 20;
+const SEMANTIC_PREVIEW_INITIAL_ITEM_LIMIT = 120;
 
 function attachManualCandidatesToPlan(plan = [], oldObjects = [], newObjects = []) {
   const matchedOldIds = new Set();
@@ -5073,7 +5078,7 @@ function normalizeManualCandidateFieldValue(value = "") {
   return canonicalizeComparableLine(stripTrailingSyntax(value));
 }
 
-function renderSemanticPreview(precomputedRuntime = null) {
+function renderSemanticPreview(precomputedRuntime = null, options = {}) {
   const container = ensureSemanticPreviewContainer();
 
   const runtime = precomputedRuntime || buildSemanticRuntime({
@@ -5082,6 +5087,8 @@ function renderSemanticPreview(precomputedRuntime = null) {
     options: getOptions(),
     includeManualCandidates: true,
   });
+  state.lastSemanticRuntime = runtime;
+  state.semanticPreviewExpanded = Boolean(options.expanded || state.semanticPreviewExpanded);
   const { oldVendor, newVendor, oldResult, newResult, plan, manualMap, audit, rawAudit, analysisContext } = runtime;
   state.lastSemanticPlan = plan;
   state.lastManualMap = manualMap || {};
@@ -5105,6 +5112,7 @@ function renderSemanticPreview(precomputedRuntime = null) {
     newVendor,
     coverageDiagnostics: state.lastCoverageDiagnostics,
   });
+  if (!options.skipReportRefresh) markOverviewReportDirty();
 
   if (selectors.semanticDebugToggle?.checked) {
     console.groupCollapsed("[semantic-object-debug]");
@@ -5131,7 +5139,7 @@ function renderSemanticPreview(precomputedRuntime = null) {
     console.groupEnd();
   }
 
-  if (state.lastReport) {
+  if (state.lastReport && !options.skipReportRefresh) {
     renderSummaryCards(state.lastReport, state.lastSemanticSummary);
     renderOverviewReport(state.lastReport);
     renderReportPolicyList(state.lastReport);
@@ -5140,6 +5148,7 @@ function renderSemanticPreview(precomputedRuntime = null) {
   }
 
   const html = renderComparisonPlanHtml(plan, {
+    itemLimit: state.semanticPreviewExpanded ? 0 : SEMANTIC_PREVIEW_INITIAL_ITEM_LIMIT,
     getFieldExceptionTargetId: (item, field) => registerSemanticFieldExceptionTarget(item, field),
     getSettingExclusionTargetId: (item) => registerSemanticSettingExclusionTarget(item, "semantic-preview"),
   });
@@ -5198,6 +5207,14 @@ function renderSemanticPreview(precomputedRuntime = null) {
       }
       renderSemanticPreview();
       scheduleSettledDiffConnectorRender();
+    });
+  });
+
+  container.querySelector("[data-semantic-preview-load-all]")?.addEventListener("click", () => {
+    state.semanticPreviewExpanded = true;
+    renderSemanticPreview(state.lastSemanticRuntime || runtime, {
+      expanded: true,
+      skipReportRefresh: true,
     });
   });
 
@@ -5383,6 +5400,17 @@ function buildCurrentDashboardData(report, semantic = state.lastSemanticSummary)
   return dashboard;
 }
 
+function markOverviewReportDirty({ resetReviewMode = false } = {}) {
+  state.reportRenderVersion = Number(state.reportRenderVersion || 0) + 1;
+  state.lastDashboardData = null;
+  if (resetReviewMode) state.reportReviewRenderMode = "compact";
+}
+
+function getDashboardDataForRender(report, semantic = state.lastSemanticSummary) {
+  if (state.lastDashboardData) return state.lastDashboardData;
+  return buildCurrentDashboardData(report, semantic);
+}
+
 function renderStandardsAuditSummary(audit = {}) {
   const summary = audit.summary || {};
   const bySeverity = summary.bySeverity || {};
@@ -5434,7 +5462,7 @@ function renderSummaryCards(report, semantic = state.lastSemanticSummary) {
   state.exceptionTargets = preserveSemanticExceptionTargets(state.exceptionTargets);
   state.summaryIssueGroups = new Map();
   const semanticSummary = semantic || {};
-  const dashboard = buildCurrentDashboardData(report, semanticSummary);
+  const dashboard = getDashboardDataForRender(report, semanticSummary);
   const { lineSummary, counts, fieldAnalysis, review, severity, context, audit } = dashboard;
   const risk = severity.level || "ok";
   const support = context.support || {};
@@ -14186,17 +14214,8 @@ function finishDiffRender() {
 
 function bindSemanticDiffInteractions() {
   ensureSemanticPairKeyboardBinding();
+  ensureSemanticPairDelegation();
   ensureLineRelationDelegation();
-  const targets = [
-    ...selectors.oldDiffPane.querySelectorAll("[data-semantic-pair-key]"),
-    ...selectors.newDiffPane.querySelectorAll("[data-semantic-pair-key]"),
-  ].filter((element) => element.dataset.semanticPairKey);
-
-  targets.forEach((element) => {
-    element.addEventListener("mouseenter", () => setSemanticPairHover(element.dataset.semanticPairKey, true));
-    element.addEventListener("mouseleave", () => setSemanticPairHover(element.dataset.semanticPairKey, false));
-    element.addEventListener("click", () => setSemanticPairSelected(element.dataset.semanticPairKey));
-  });
 }
 
 function ensureSemanticPairKeyboardBinding() {
@@ -14205,6 +14224,38 @@ function ensureSemanticPairKeyboardBinding() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") clearSemanticPairSelection();
   });
+}
+
+function ensureSemanticPairDelegation() {
+  if (state.semanticPairDelegationBound) return;
+  state.semanticPairDelegationBound = true;
+
+  [selectors.oldDiffPane, selectors.newDiffPane].filter(Boolean).forEach((pane) => {
+    pane.addEventListener("mouseover", (event) => {
+      const target = semanticPairEventTarget(event.target);
+      if (!target) return;
+      setSemanticPairHover(target.dataset.semanticPairKey, true);
+    });
+
+    pane.addEventListener("mouseout", (event) => {
+      const target = semanticPairEventTarget(event.target);
+      if (!target) return;
+      const nextTarget = semanticPairEventTarget(event.relatedTarget);
+      const pairKey = target.dataset.semanticPairKey || "";
+      if (nextTarget && nextTarget.dataset.semanticPairKey === pairKey) return;
+      setSemanticPairHover(pairKey, false);
+    });
+
+    pane.addEventListener("click", (event) => {
+      const target = semanticPairEventTarget(event.target);
+      if (!target) return;
+      setSemanticPairSelected(target.dataset.semanticPairKey);
+    });
+  });
+}
+
+function semanticPairEventTarget(target) {
+  return target?.closest?.("[data-semantic-pair-key]");
 }
 
 function ensureLineRelationDelegation() {
@@ -14468,7 +14519,7 @@ function semanticAlignElementsByPairIndex(pane) {
   const elements = new Map();
   if (!pane) return elements;
 
-  pane.querySelectorAll(".semantic-object-block-wrapper[data-pair-index], .diff-line[data-pair-index]").forEach((element) => {
+  pane.querySelectorAll(".semantic-object-block-wrapper[data-pair-index]").forEach((element) => {
     const pairIndex = element.dataset.pairIndex || "";
     if (!pairIndex) return;
     elements.set(pairIndex, element);
@@ -15706,12 +15757,9 @@ function lineTextAnchorX(rect, preferredEdge, bounds) {
 }
 
 function renderReportV2(report) {
-  renderSummaryCards(report);
-
   renderReportPolicyList(report);
 
   renderObjectNavigator(false);
-  renderOverviewReport(report);
   bindDiffObjectNavigation();
 }
 
@@ -16312,9 +16360,10 @@ function openSelectedObjectReviewInCompare() {
   scrollToDiffObject(planReviewObjectKey(target));
 }
 
-function renderOverviewReport(report) {
+function renderOverviewReport(report, options = {}) {
   if (!selectors.overviewReport) return;
   if (!report) {
+    selectors.overviewReport.dataset.reportRenderedVersion = "";
     renderReportQuickContext(null);
     selectors.overviewReport.innerHTML = `
       <section class="overview-section" data-report-section="empty">
@@ -16326,9 +16375,14 @@ function renderOverviewReport(report) {
     `;
     return;
   }
+  const renderVersion = String(state.reportRenderVersion || 0);
+  if (!options.force && selectors.overviewReport.dataset.reportRenderedVersion === renderVersion) {
+    renderReportQuickContext(report);
+    return;
+  }
   const objects = [...(report.oldObjects || []), ...(report.newObjects || [])].filter((object) => object.type !== "global");
   const byType = groupBy(objects, (object) => object.type);
-  const dashboard = buildCurrentDashboardData(report);
+  const dashboard = getDashboardDataForRender(report);
   const { fieldAnalysis, review, graph, severity, context, lineSummary, audit } = dashboard;
   renderReportQuickContext(report);
   selectors.overviewReport.innerHTML = `
@@ -16404,6 +16458,7 @@ function renderOverviewReport(report) {
       ${renderFieldDistributionSummary(objects)}
     </section>
   `;
+  selectors.overviewReport.dataset.reportRenderedVersion = renderVersion;
   bindReportGraphInteractions();
 }
 
@@ -16446,19 +16501,24 @@ function renderReportReviewTable(review = {}) {
   const fieldColumns = getReportReviewFieldColumns(rows);
   const filterOptions = getReportReviewFilterOptions(rows, fieldColumns);
   const valueOptions = getReportReviewChecklistOptions(rows, fieldColumns);
+  const renderFullColumns = state.reportReviewRenderMode === "full";
+  const viewMode = renderFullColumns ? "full" : "compact";
   const compactColumnCount = 7;
-  const totalColumnCount = compactColumnCount + fieldColumns.length + 2;
+  const optionColumnCount = renderFullColumns ? fieldColumns.length + 2 : 0;
+  const totalColumnCount = compactColumnCount + optionColumnCount;
+  state.reportReviewRows = rows;
+  state.reportReviewColumnCount = totalColumnCount;
 
   return `
-    <div class="report-review-root" data-report-review-root data-report-view-mode="compact">
+    <div class="report-review-root" data-report-review-root data-report-view-mode="${escapeHtml(viewMode)}" data-report-review-full-rendered="${renderFullColumns ? "true" : "false"}" data-report-review-column-count="${escapeHtml(totalColumnCount)}">
       <div class="report-review-tools">
         <input type="search" data-report-review-search placeholder="전체 검색" aria-label="검토 테이블 전체 검색" />
         <div class="report-review-view-control">
           <div class="report-review-view-toggle" role="group" aria-label="검토 테이블 보기">
-            <button type="button" data-report-review-view="compact" class="active" aria-pressed="true" aria-label="핵심 보기: 주요 컬럼과 변경 요약만 표시">핵심 보기</button>
-            <button type="button" data-report-review-view="full" aria-pressed="false" aria-label="전체 옵션 보기: 모든 필드 컬럼 표시">${fieldColumns.length ? `전체 옵션 ${escapeHtml(fieldColumns.length)}개` : "전체 옵션"}</button>
+            <button type="button" data-report-review-view="compact" class="${viewMode === "compact" ? "active" : ""}" aria-pressed="${viewMode === "compact" ? "true" : "false"}" aria-label="핵심 보기: 주요 컬럼과 변경 요약만 표시">핵심 보기</button>
+            <button type="button" data-report-review-view="full" class="${viewMode === "full" ? "active" : ""}" aria-pressed="${viewMode === "full" ? "true" : "false"}" aria-label="전체 옵션 보기: 모든 필드 컬럼 표시">${fieldColumns.length ? `전체 옵션 ${escapeHtml(fieldColumns.length)}개` : "전체 옵션"}</button>
           </div>
-          <span class="report-review-view-current" data-report-review-view-current>핵심 보기: 주요 컬럼 + 변경 요약</span>
+          <span class="report-review-view-current" data-report-review-view-current>${viewMode === "full" ? "전체 옵션: 모든 필드 컬럼 표시" : "핵심 보기: 주요 컬럼 + 변경 요약"}</span>
         </div>
         <button type="button" data-report-review-clear>초기화</button>
         <span data-report-review-count>${escapeHtml(rows.length)}/${escapeHtml(rows.length)}</span>
@@ -16472,11 +16532,11 @@ function renderReportReviewTable(review = {}) {
             <th>${renderReportReviewHeaderSelect("설정 종류", "type", filterOptions.types, valueOptions.type)}</th>
             <th>${renderReportReviewHeaderSearch("설정 키", "key", valueOptions.key)}</th>
             <th class="report-review-compact-column">${renderReportReviewFieldSummaryHeader(filterOptions.fields, filterOptions.statuses)}</th>
-            <th class="report-review-option-column">${renderReportReviewHeaderSearch("description", "description", valueOptions.description)}</th>
+            ${renderFullColumns ? `<th class="report-review-option-column">${renderReportReviewHeaderSearch("description", "description", valueOptions.description)}</th>` : ""}
             <th>${renderReportReviewHeaderSearch("사유", "reason", valueOptions.reason)}</th>
             <th>${renderReportReviewHeaderSearch("진단", "diagnostic", valueOptions.diagnostic)}</th>
-            ${fieldColumns.map((field) => `<th class="report-review-option-column">${renderReportReviewFieldHeader(field, filterOptions.statuses, valueOptions.fields.get(field) || [])}</th>`).join("")}
-            <th class="report-review-option-column">${renderReportReviewHeaderSearch("일치도", "score", valueOptions.score)}</th>
+            ${renderFullColumns ? fieldColumns.map((field) => `<th class="report-review-option-column">${renderReportReviewFieldHeader(field, filterOptions.statuses, valueOptions.fields.get(field) || [])}</th>`).join("") : ""}
+            ${renderFullColumns ? `<th class="report-review-option-column">${renderReportReviewHeaderSearch("일치도", "score", valueOptions.score)}</th>` : ""}
             <th><div class="report-review-th"><div class="report-review-th-bar"><span>동작</span></div></div></th>
           </tr>
         </thead>
@@ -16493,6 +16553,7 @@ function renderReportReviewTable(review = {}) {
             return `
               <tr
                 data-report-review-row
+                data-report-review-index="${escapeHtml(index)}"
                 data-report-review-jump="${escapeHtml(jumpKey)}"
                 data-report-review-detail="${escapeHtml(detailId)}"
                 data-report-detail-expanded="false"
@@ -16518,12 +16579,12 @@ function renderReportReviewTable(review = {}) {
                 <td>${escapeHtml(item.group)}</td>
                 <td>${escapeHtml(item.objectType || "-")}</td>
                 ${renderReportReviewKeyCell(objectKey, description)}
-                ${renderReportReviewFieldSummaryCell(item, fieldColumns, detailId)}
-                ${renderReportReviewDescriptionCell(description)}
+                ${renderReportReviewFieldSummaryCell(item, detailId)}
+                ${renderFullColumns ? renderReportReviewDescriptionCell(description) : ""}
                 <td>${escapeHtml(item.reason || "-")}</td>
                 <td>${escapeHtml(diagnostic.value || "-")}</td>
-                ${fieldColumns.map((field) => renderReportReviewFieldCell(item, field, "report-review-option-column")).join("")}
-                <td class="report-review-option-column">${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>
+                ${renderFullColumns ? fieldColumns.map((field) => renderReportReviewFieldCell(item, field, "report-review-option-column")).join("") : ""}
+                ${renderFullColumns ? `<td class="report-review-option-column">${item.score ? `${escapeHtml(item.score)}%` : "-"}</td>` : ""}
                 <td>
                   <div class="report-review-actions">
                     <button type="button" data-object-jump="${escapeHtml(jumpKey)}">비교 보기</button>
@@ -16532,7 +16593,7 @@ function renderReportReviewTable(review = {}) {
                   </div>
                 </td>
               </tr>
-              ${renderReportReviewDetailRow(item, detailId, totalColumnCount, jumpKey)}
+              ${renderReportReviewDetailPlaceholderRow(detailId, totalColumnCount, jumpKey)}
             `;
           }).join("") : `<tr><td colspan="${totalColumnCount}" class="report-review-empty">검토 항목 없음</td></tr>`}
         </tbody>
@@ -16923,7 +16984,7 @@ function renderReportReviewKeyCell(objectKey = "", description = {}) {
   `;
 }
 
-function renderReportReviewFieldSummaryCell(item = {}, fieldColumns = [], detailId = "") {
+function renderReportReviewFieldSummaryCell(item = {}, detailId = "") {
   const rows = getReportReviewSummaryFieldRows(item);
   const detailRows = getReportReviewDetailFieldRows(item);
   const total = detailRows.length;
@@ -16937,9 +16998,6 @@ function renderReportReviewFieldSummaryCell(item = {}, fieldColumns = [], detail
       <button type="button" class="report-review-detail-toggle" data-report-detail-toggle data-report-detail-count="${escapeHtml(total)}" aria-expanded="false" aria-controls="${escapeHtml(detailId)}">
         상세 ${escapeHtml(total)}
       </button>
-      <span class="report-review-field-meta-list" hidden>
-        ${fieldColumns.map((field) => renderReportReviewFieldMeta(item, field)).join("")}
-      </span>
     </td>
   `;
 }
@@ -17012,6 +17070,7 @@ function renderReportReviewDetailRow(item = {}, detailId = "", colspan = 7, jump
     <tr
       class="report-review-detail-row"
       data-report-review-detail-row="${escapeHtml(detailId)}"
+      data-report-review-detail-loaded="true"
       data-report-review-jump="${escapeHtml(jumpKey)}"
       data-review-group="${escapeHtml(item.group || "")}"
       data-review-type="${escapeHtml(item.objectType || "")}"
@@ -17021,23 +17080,45 @@ function renderReportReviewDetailRow(item = {}, detailId = "", colspan = 7, jump
       data-review-fields="${escapeHtml(rows.map((row) => row.normalizedField).filter(Boolean).join(" "))}"
       id="${escapeHtml(detailId)}"
       hidden>
+      ${renderReportReviewDetailContent(item, colspan, jumpKey, panelKey, rows, diagnostic)}
+    </tr>
+  `;
+}
+
+function renderReportReviewDetailPlaceholderRow(detailId = "", colspan = 7, jumpKey = "") {
+  return `
+    <tr
+      class="report-review-detail-row"
+      data-report-review-detail-row="${escapeHtml(detailId)}"
+      data-report-review-detail-loaded="false"
+      data-report-review-jump="${escapeHtml(jumpKey)}"
+      id="${escapeHtml(detailId)}"
+      hidden>
       <td colspan="${escapeHtml(colspan)}">
-        <div class="report-review-detail-panel">
-          <div class="report-review-detail-head">
-            <div>
-              <strong>상세 필드</strong>
-              <span>${escapeHtml(rows.length)}개</span>
-              ${item.score ? `<span>일치도 ${escapeHtml(item.score)}%</span>` : ""}
-              ${diagnostic.value ? `<span>${escapeHtml(diagnostic.value)}</span>` : ""}
-            </div>
-            ${renderReportReviewDetailActions(item, jumpKey, panelKey)}
-          </div>
-          <div class="report-review-detail-grid">
-            ${rows.length ? rows.map((row) => renderReportReviewDetailField(row, item, panelKey)).join("") : `<span class="small-note">상세 필드 없음</span>`}
-          </div>
-        </div>
+        <div class="small-note">상세를 펼치면 필드별 규칙 UI를 표시합니다.</div>
       </td>
     </tr>
+  `;
+}
+
+function renderReportReviewDetailContent(item = {}, colspan = 7, jumpKey = "", panelKey = reportReviewPanelKey(item), rows = getReportReviewDetailFieldRows(item), diagnostic = getReportReviewDiagnostic(item)) {
+  return `
+    <td colspan="${escapeHtml(colspan)}">
+      <div class="report-review-detail-panel">
+        <div class="report-review-detail-head">
+          <div>
+            <strong>상세 필드</strong>
+            <span>${escapeHtml(rows.length)}개</span>
+            ${item.score ? `<span>일치도 ${escapeHtml(item.score)}%</span>` : ""}
+            ${diagnostic.value ? `<span>${escapeHtml(diagnostic.value)}</span>` : ""}
+          </div>
+          ${renderReportReviewDetailActions(item, jumpKey, panelKey)}
+        </div>
+        <div class="report-review-detail-grid">
+          ${rows.length ? rows.map((row) => renderReportReviewDetailField(row, item, panelKey)).join("") : `<span class="small-note">상세 필드 없음</span>`}
+        </div>
+      </div>
+    </td>
   `;
 }
 
@@ -17702,10 +17783,82 @@ function closeOtherReportFieldRulePopovers(root, activeDetails = null) {
   });
 }
 
+function ensureReportReviewDetailRowLoaded(root, row) {
+  const detailId = row?.dataset.reportReviewDetail || "";
+  if (!root || !row || !detailId) return null;
+  const detail = root.querySelector(`[data-report-review-detail-row="${cssEscape(detailId)}"]`);
+  if (!detail || detail.dataset.reportReviewDetailLoaded === "true") return detail;
+
+  const index = Number(row.dataset.reportReviewIndex);
+  const item = Number.isFinite(index) ? state.reportReviewRows?.[index] : null;
+  if (!item) return detail;
+
+  const rows = getReportReviewDetailFieldRows(item);
+  const panelKey = reportReviewPanelKey(item);
+  const objectKey = item.label || item.objectKey || "-";
+  const description = getReportReviewDescription(item);
+  const diagnostic = getReportReviewDiagnostic(item);
+  const jumpKey = row.dataset.reportReviewJump || "";
+  const colspan = Number(root.dataset.reportReviewColumnCount || state.reportReviewColumnCount || 7);
+
+  detail.dataset.reportReviewDetailLoaded = "true";
+  detail.dataset.reportReviewJump = jumpKey;
+  detail.dataset.reviewGroup = item.group || "";
+  detail.dataset.reviewType = item.objectType || "";
+  detail.dataset.reviewKey = objectKey;
+  detail.dataset.reviewDescription = description.searchText || "";
+  detail.dataset.reviewReason = item.reason || "";
+  detail.dataset.reviewFields = rows.map((entry) => entry.normalizedField).filter(Boolean).join(" ");
+  detail.innerHTML = renderReportReviewDetailContent(item, colspan, jumpKey, panelKey, rows, diagnostic);
+  bindReportReviewDetailContentInteractions(root, detail);
+  return detail;
+}
+
+function bindReportReviewDetailContentInteractions(root, scope) {
+  scope?.querySelectorAll("[data-report-field-rule-popover]").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      closeOtherReportFieldRulePopovers(root, details);
+    });
+  });
+  scope?.querySelectorAll("[data-add-report-field-rule]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addReportFieldRuleFromTarget(button.dataset.addReportFieldRule || "", root, button);
+    });
+  });
+  scope?.querySelectorAll("[data-add-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.dataset.addException || "";
+      const scopeValue = button.dataset.exceptionFixedScope
+        || root.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value
+        || "object";
+      addExceptionFromTarget(targetId, scopeValue, button);
+    });
+  });
+  scope?.querySelectorAll("[data-add-exclusion]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addExclusionFromTarget(button.dataset.addExclusion || "", button.dataset.exclusionFixedScope || "setting", button);
+    });
+  });
+  scope?.querySelectorAll("[data-remove-exception]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeProfileException(button.dataset.removeException || "", button);
+    });
+  });
+  scope?.querySelectorAll("[data-object-jump]").forEach((button) => {
+    button.addEventListener("click", () => openReportObjectInCompare(button));
+  });
+}
+
 function toggleReportReviewDetail(root, button) {
   const row = button?.closest("[data-report-review-row]");
   if (!root || !row) return;
   const nextExpanded = row.dataset.reportDetailExpanded !== "true";
+  if (nextExpanded) ensureReportReviewDetailRowLoaded(root, row);
   row.dataset.reportDetailExpanded = nextExpanded ? "true" : "false";
   button.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
   syncReportReviewDetailRow(root, row, !row.hidden);
@@ -17717,6 +17870,7 @@ function syncReportReviewDetailRow(root, row, visible = true) {
   const detail = root.querySelector(`[data-report-review-detail-row="${cssEscape(detailId)}"]`);
   const button = row.querySelector("[data-report-detail-toggle]");
   const expanded = row.dataset.reportDetailExpanded === "true";
+  if (expanded) ensureReportReviewDetailRowLoaded(root, row);
   if (detail) detail.hidden = !visible || !expanded;
   if (button) {
     const count = button.dataset.reportDetailCount || "0";
@@ -17726,18 +17880,26 @@ function syncReportReviewDetailRow(root, row, visible = true) {
 }
 
 function restoreReportReviewViewMode(root) {
-  let mode = "compact";
-  try {
-    mode = window.localStorage?.getItem(REPORT_REVIEW_VIEW_STORAGE_KEY) || "compact";
-  } catch {
-    mode = "compact";
-  }
-  setReportReviewViewMode(root, mode, { persist: false });
+  setReportReviewViewMode(root, root?.dataset.reportViewMode || "compact", { persist: false, skipRerender: true });
 }
 
 function setReportReviewViewMode(root, mode = "compact", options = {}) {
   if (!root) return;
   const normalized = mode === "full" ? "full" : "compact";
+  const fullRendered = root.dataset.reportReviewFullRendered === "true";
+  if (!options.skipRerender && ((normalized === "full" && !fullRendered) || (normalized === "compact" && fullRendered))) {
+    state.reportReviewRenderMode = normalized;
+    markOverviewReportDirty();
+    renderOverviewReport(state.lastReport, { force: true });
+    if (options.persist !== false) {
+      try {
+        window.localStorage?.setItem(REPORT_REVIEW_VIEW_STORAGE_KEY, normalized);
+      } catch {
+        // Ignore preference persistence failures; table view still changes in-session.
+      }
+    }
+    return;
+  }
   root.dataset.reportViewMode = normalized;
   const current = root.querySelector("[data-report-review-view-current]");
   root.querySelectorAll("[data-report-review-view]").forEach((button) => {

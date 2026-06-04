@@ -190,3 +190,88 @@
 ### Next handoff
 - Dev server URL: `http://127.0.0.1:5173/`.
 - Before changing compare pane rendering again, verify that selected section tabs keep `.diff-line` rendering and do not render semantic object block wrappers.
+
+## 2026-06-04 Full Config Section Split Fix
+
+### Current work
+- Task: fix compare-pane object mapping when full device configs are pasted into old/new inputs.
+- Branch: `work/mvp-interface-stabilization`
+- Related files:
+  - `src/core/legacyCore.js`
+  - `tests/comparison-exclusion.test.js`
+  - `tests/static-route-object-key.test.js`
+  - `docs/verification/full-config-section-split-2026-06-04.md`
+  - `docs/verification/screenshots/2026-06-04/full-config-section-split/`
+
+### Root cause
+- The legacy compare-pane parser kept any indented line inside the currently open object.
+- In full MD-CLI configs, sibling objects such as `port ... {` at the same indentation could be swallowed by the previous object.
+- Generic object detection also accepted wrapper/wildcard lines such as `bgp {`, `bgp-peers`, and `neighbor ".*"` as real BGP objects.
+- PIM section `interface` lines were detected as generic `interface` objects unless the parser preserved the surrounding PIM context.
+- The MD-CLI PIM parser consumed a nested `interface {}` block without updating the surrounding PIM brace depth, so later service `interface`/`sap` blocks could be emitted as PIM raw lines.
+- For whole-device configs, the compare pane relied on the lighter legacy row parser even though the project already had vendor-specific structured parsers that understand full Nokia Classic and MD-CLI config hierarchy.
+
+### Decision
+- Keep the existing compare-pane line rendering and section tab UI.
+- Add parser-side validation for detected object starts.
+- Split same-indent sibling object starts before treating indented lines as child settings.
+- Reject BGP wildcard/template/header detections.
+- Track PIM section context so child `interface` lines become `pim` objects in full-config input.
+- Add narrow policy-family starts for `ip-prefix-list`/`prefix-list`, `policy-statement`, and `ip-filter`/`ipv6-filter`/`redirect-policy`.
+- For large or multi-section configs, convert normalized parser objects back into the existing legacy compare-row object shape instead of using ad hoc line scanning as the primary parser.
+- Rework MD-CLI PIM block parsing to collect `pim { ... }` brace blocks first, then only collect `interface { ... }` blocks inside those PIM blocks.
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --check src/core/parsers/nokiaMdCliParser.js`: pass.
+- `node --test tests/comparison-exclusion.test.js tests/static-route-object-key.test.js`: pass, 46 tests.
+- `npm.cmd run validate:compare:fixtures -- --fixture-dir "..\자료\테스트 config" --md-full-logs --case 1 --iterations 1`: pass.
+- Chrome CDP full-config UI verification with:
+  - old: `Gangbu-SEA027H_config.txt`
+  - new: `2026-05-28_15-13-31_Dobong-SEA027H_전체설정후_MDconfig.log`
+- Verified rendered section rows:
+  - All comparison: `910` items rendered, both old/new panes had rows.
+  - BGP: old `342` / new `342`, only `bgp`, no `bgp:bgp`, no `bgp-peers`, no wildcard `.*`.
+  - Static Route: old `589` / new `589`, only `static-route`.
+  - Port/LAG: old `5597` / new `5597`, only `port` and `lag`.
+  - Service/SAP: old `1985` / new `1985`, only `subscriber-interface` and `sap`.
+  - PIM: old `124` / new `124`, only `pim`; suspicious `sap`/`service`/`router` text count `0`.
+  - Policy: old `56` / new `56`, only `filter`, `route-policy`, `prefix-list`, and `community`.
+  - Interface: old `2496` / new `2496`, only `interface`.
+- Screenshots:
+  - `docs/verification/screenshots/2026-06-04/full-config-section-split/after-bgp-rows.png`
+  - `docs/verification/screenshots/2026-06-04/full-config-section-split/after-pim-rows.png`
+  - `docs/verification/screenshots/2026-06-04/full-config-section-split/after-policy-rows.png`
+  - `docs/verification/screenshots/2026-06-04/full-config-section-split/after-full-config-bgp-final.png`
+- `npm.cmd test`: pass, 229 pass / 1 skip.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+
+### Remaining notes
+- Policy parsing is intentionally narrow. Avoid adding broad `community`, bare `filter`, or `port-list` matching without a focused parser task, because those words can appear in unrelated sections.
+- Dev server URL during verification: `http://127.0.0.1:5173/`.
+
+## 2026-06-04 Port/LAG Section Tab Split
+
+### Current work
+- Task: split the combined `Port/LAG` section tab into separate `Port` and `LAG` tabs.
+- Branch: `work/mvp-interface-stabilization`
+- Related files:
+  - `src/core/legacyCore.js`
+  - `tests/summary-renderer.test.js`
+  - `docs/PROJECT_STATE.md`
+
+### Decision
+- Keep the existing section tab component and visual style.
+- Replace the single `{ scope: "port-lag", label: "Port/LAG", types: ["port", "lag"] }` filter with:
+  - `{ scope: "port", label: "Port", types: ["port"] }`
+  - `{ scope: "lag", label: "LAG", types: ["lag"] }`
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/summary-renderer.test.js`: pass, 9 tests.
+- Chrome CDP UI check: pass.
+  - Compare section tabs show `Port` and `LAG` as separate buttons.
+  - `Port/LAG` combined tab is no longer present.
+- Screenshot: `docs/verification/screenshots/2026-06-04/port-lag-tab-split/after-port-lag-split.png`.
+- `npm.cmd test`: pass, 229 pass / 1 skip.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.

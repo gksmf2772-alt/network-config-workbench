@@ -227,6 +227,39 @@ test("legacy compare path merges MD-CLI one-line port settings before paired row
   assert.match(legacy, /newSourceLineCount/);
 });
 
+test("legacy full-config parser separates sibling object starts inside indented sections", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /function isSiblingObjectStartLine/);
+  assert.match(legacy, /function detectConfigSectionContextStart/);
+  assert.match(legacy, /function detectContextualObjectStart/);
+  assert.match(legacy, /isSiblingObjectStartLine\(current, rawLine, line, options, source\)/);
+  assert.match(legacy, /shouldKeepLineInCurrentObject\(current, rawLine, normalized, options, source\)/);
+  assert.match(legacy, /detectContextualObjectStart\(normalized, sectionContext, source\)/);
+  assert.match(legacy, /currentIndent > startIndent[\s\S]*return false/);
+  assert.match(legacy, /current\.type === "bgp"[\s\S]*\^neighbor/);
+  assert.match(legacy, /current\.type === "pim"[\s\S]*\^interface/);
+  assert.match(legacy, /context\?\.type === "pim"[\s\S]*type: "pim"/);
+});
+
+test("legacy object start detection rejects full-config wildcard and policy false positives", () => {
+  const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
+
+  assert.match(legacy, /function normalizeDetectedObjectStart/);
+  assert.match(legacy, /function isValidObjectStartLineForType/);
+  assert.match(legacy, /function isWildcardObjectIdentity/);
+  assert.match(legacy, /objectType === "bgp"[\s\S]*\^bgp-peers/);
+  assert.match(legacy, /objectType === "bgp"[\s\S]*isWildcardObjectIdentity/);
+  assert.match(legacy, /objectType === "port"[\s\S]*\^port\\s\+/);
+  assert.match(legacy, /objectType === "lag"[\s\S]*\^lag\\s\+/);
+  assert.match(legacy, /objectType === "interface"[\s\S]*subscriber-interface/);
+  assert.match(legacy, /objectType === "prefix-list"[\s\S]*ip-\)\?prefix-list/);
+  assert.match(legacy, /objectType === "route-policy"[\s\S]*policy-statement/);
+  assert.match(legacy, /objectType === "filter"[\s\S]*ip-filter/);
+  assert.match(legacy, /text: rawLine/);
+  assert.doesNotMatch(legacy, /text: line,\s*objectKey: object\.key,\s*semanticField: fieldName/);
+});
+
 test("diff connector overlay is clipped to current compare viewport", () => {
   const legacy = fs.readFileSync("src/core/legacyCore.js", "utf8");
   const css = readGlobalStyles();

@@ -139,7 +139,9 @@ test("object review has muted section tabs and compact quick actions", () => {
   assert.match(table, /내보내기/);
   assert.match(table, /필터 초기화/);
   assert.match(legacy, /const OBJECT_SECTION_FILTERS = \[/);
-  assert.match(legacy, /scope: "port-lag"/);
+  assert.match(legacy, /scope: "port", label: "Port", types: \["port"\]/);
+  assert.match(legacy, /scope: "lag", label: "LAG", types: \["lag"\]/);
+  assert.doesNotMatch(legacy, /scope: "port-lag"/);
   assert.match(legacy, /function objectMatchesActiveSection/);
   assert.match(legacy, /function renderPlanReviewItem/);
   assert.match(legacy, /function planItemMatchesSearch/);

@@ -969,82 +969,28 @@ function parseMdCliInterfaces(lines) {
 }
 
 function parseMdCliPimInterfaces(lines) {
-  const objects = [];
+  return collectBraceBlocks(lines, /^pim\s*\{/i)
+    .flatMap((pimBlock, pimIndex) =>
+      collectBraceBlocks(pimBlock.lines, /^interface\s+"?([^"\s{]+)"?\s*\{/i)
+        .map((interfaceBlock, interfaceIndex) => {
+          const interfaceName = canonicalInterfaceName(interfaceBlock.name);
+          const object = createNormalizedObject({
+            id: `nokia-md-pim-${pimIndex}-${interfaceIndex}-${interfaceName}`,
+            vendor: "nokia-md-cli",
+            sourceType: "pim",
+            sourceName: interfaceName,
+            normalizedType: "pim",
+            normalizedIdentity: interfaceName,
+            rawLines: interfaceBlock.lines,
+            fields: {
+              interface: interfaceName,
+            },
+          });
 
-  let inPim = false;
-  let depth = 0;
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const raw = lines[i];
-    const trimmed = raw.trim();
-
-    if (/^pim\s*\{/i.test(trimmed)) {
-      inPim = true;
-      depth = 1;
-      continue;
-    }
-
-    if (!inPim) continue;
-
-    if (trimmed.includes("{")) {
-      depth += (trimmed.match(/\{/g) || []).length;
-    }
-
-    if (trimmed.includes("}")) {
-      depth -= (trimmed.match(/\}/g) || []).length;
-
-      if (depth <= 0) {
-        inPim = false;
-      }
-    }
-
-    const match = trimmed.match(/^interface\s+"?([^"\s]+)"?\s*\{/i);
-
-    if (!match) continue;
-
-    const interfaceName = canonicalInterfaceName(match[1]);
-
-    const blockLines = [raw];
-    let blockDepth = 1;
-
-    for (let j = i + 1; j < lines.length; j += 1) {
-      const subLine = lines[j];
-
-      blockLines.push(subLine);
-
-      if (subLine.includes("{")) {
-        blockDepth += (subLine.match(/\{/g) || []).length;
-      }
-
-      if (subLine.includes("}")) {
-        blockDepth -= (subLine.match(/\}/g) || []).length;
-      }
-
-      if (blockDepth <= 0) {
-        i = j;
-        break;
-      }
-    }
-
-    const object = createNormalizedObject({
-      id: `nokia-md-pim-${interfaceName}`,
-      vendor: "nokia-md-cli",
-      sourceType: "pim",
-      sourceName: interfaceName,
-      normalizedType: "pim",
-      normalizedIdentity: interfaceName,
-      rawLines: blockLines,
-      fields: {
-        interface: interfaceName,
-      },
-    });
-
-    object.state = "enabled";
-
-    objects.push(object);
-  }
-
-  return objects;
+          object.state = "enabled";
+          return object;
+        })
+    );
 }
 
 function parseMdCliStaticRoutes(lines) {

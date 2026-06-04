@@ -376,7 +376,7 @@ test("legacy main compare parser keeps static route blocks as route-level object
   assert.match(source, /function extractSubscriberInterfaceCanonicalFieldsFromLines\(lines = \[\], profile = state\.profileDraft\)/);
   assert.match(source, /function collectBuiltinSubscriberInterfaceObjects\(lines = \[\], options = \{\}, source = "old"\)/);
   assert.match(source, /const builtinSubscriber = collectBuiltinSubscriberInterfaceObjects\(lines, options, source\);/);
-  assert.match(source, /const INDENT_TERMINATED_OBJECT_TYPES = new Set\(\["port", "lag", "interface", "static-route", "bgp", "pim"\]\);/);
+  assert.match(source, /const INDENT_TERMINATED_OBJECT_TYPES = new Set\(\["port", "lag", "interface", "static-route", "bgp", "pim", "prefix-list", "route-policy", "filter"\]\);/);
   assert.match(source, /function shouldTerminateCurrentObject\(current, rawLine, normalizedLine\)[\s\S]*exitIndent <= startIndent/);
   assert.match(source, /canonicalType === "static-route" \|\| canonicalType === "interface" \|\| canonicalType === "subscriber-interface"/);
   assert.match(source, /function inferSemanticFieldNameForLineContext\(line, context = \{\}\)/);
@@ -520,6 +520,35 @@ test("Nokia MD-CLI block router PIM interface canonicalizes identity", () => {
   assert.equal(pimObjects.length, 1);
   assert.equal(pimObjects[0].normalizedIdentity, "g-to-dobong-tou-fb03");
   assert.equal(pimObjects[0].fields.interface, "g-to-dobong-tou-fb03");
+});
+
+test("Nokia MD-CLI PIM block does not consume following service SAP interfaces", () => {
+  const result = parse("nokia-md-cli", [
+    'router "Base" {',
+    "    pim {",
+    '        interface "To-PE#1-1" {',
+    "        }",
+    "    }",
+    "}",
+    'service vprn "100" {',
+    '    interface "To-PE#1-1" {',
+    "        admin-state enable",
+    "        sap lag-P-2113 {",
+    "            ingress {",
+    "                qos {",
+    '                    sap-ingress { policy-name "SEA_IN" }',
+    "                }",
+    "            }",
+    "        }",
+    "    }",
+    "}",
+  ].join("\n"));
+
+  const pimObjects = result.objects.filter((object) => object.normalizedType === "pim");
+
+  assert.equal(pimObjects.length, 1);
+  assert.equal(pimObjects[0].normalizedIdentity, "to-pe#1-1");
+  assert.ok(!pimObjects[0].rawLines.some((line) => /\bsap\b/i.test(line)));
 });
 
 test("PIM interface identity auto-matches across Classic and MD-CLI case differences", () => {

@@ -157,9 +157,12 @@ const vendorRules = {
     { type: "static-route", pattern: /^configure router [^ ]+ static-routes route ([\w./:-]+)/ },
     { type: "static-route", pattern: /^route\s+"?([^"\s{}]+)"?(?:\s+route-type\b|\s|\{|$)/ },
     { type: "static-route", pattern: /\broute\s+"?(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2})"?\b/ },
-    { type: "pim", pattern: /^(?:configure router pim|pim) ?([\w./:-]*)/ },
+    { type: "pim", pattern: /^(?:configure router pim|pim)(?:\s+([\w./:-]+))?(?:\s|\{|$)/ },
     { type: "bgp", pattern: /^neighbor "?([\w./:-]+)"?(?:\s|\{|$)/ },
-    { type: "bgp", pattern: /^(?:configure router bgp|router bgp|bgp) ?([\w./:-]*)/ },
+    { type: "bgp", pattern: /^(?:configure router bgp|router bgp|bgp)(?:\s+([\w./:-]+))?(?:\s|\{|$)/ },
+    { type: "prefix-list", pattern: /^(?:ip-)?prefix-list\s+"?([^"\s{}\[\]]+)"?/ },
+    { type: "route-policy", pattern: /^policy-statement\s+"?([^"\s{}]+)"?/ },
+    { type: "filter", pattern: /^(?:ip-filter|ipv6-filter|redirect-policy)\s+"?([^"\s{}]+)"?/ },
   ],
   cisco: [
     { type: "interface", pattern: /^interface ([\w./:-]+)/ },
@@ -3978,7 +3981,8 @@ const OBJECT_SECTION_FILTERS = [
   { scope: "interface", label: "Interface", types: ["interface"] },
   { scope: "static-route", label: "Static Route", types: ["static-route"] },
   { scope: "bgp", label: "BGP", types: ["bgp"] },
-  { scope: "port-lag", label: "Port/LAG", types: ["port", "lag"] },
+  { scope: "port", label: "Port", types: ["port"] },
+  { scope: "lag", label: "LAG", types: ["lag"] },
   { scope: "service-sap", label: "Service/SAP", types: ["service", "sap", "subscriber-interface", "group-interface", "static-host", "default-host"] },
   { scope: "pim", label: "PIM", types: ["pim"] },
   { scope: "policy", label: "Policy", types: ["route-policy", "prefix-list", "community", "filter", "acl"] },
@@ -7492,7 +7496,7 @@ function isObjectTerminatorLine(normalizedLine = "") {
   return line === "exit" || line === "}" || line === "!";
 }
 
-const INDENT_TERMINATED_OBJECT_TYPES = new Set(["port", "lag", "interface", "static-route", "bgp", "pim"]);
+const INDENT_TERMINATED_OBJECT_TYPES = new Set(["port", "lag", "interface", "static-route", "bgp", "pim", "prefix-list", "route-policy", "filter"]);
 
 function isStaticRouteBlockHeaderLine(normalizedLine = "") {
   const line = canonicalizeComparableLine(normalizedLine);
@@ -7556,7 +7560,7 @@ function isInsideConfigBlock(current) {
  * - 하위 설정 라인이 port/interface/route/neighbor 같은 키워드로 시작해도 새 객체로 분리하지 않는다.
  * - exit/!/} 는 현재 객체 종료 라인이므로 현재 객체에 포함시킨 뒤 flush한다.
  */
-function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
+function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine, options = null, source = "old") {
   if (!isInsideConfigBlock(current)) return false;
 
   const line = canonicalizeComparableLine(normalizedLine);
@@ -7570,6 +7574,10 @@ function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
     return false;
   }
 
+  if (current.type === "pim" && /^interface\s+"?[^"\s{}]+/.test(line)) {
+    return false;
+  }
+
   if (
     current.type === "static-route" &&
     current.rawLines?.length &&
@@ -7580,10 +7588,67 @@ function shouldKeepLineInCurrentObject(current, rawLine, normalizedLine) {
 
   if (isObjectTerminatorLine(line)) return true;
 
+  if (isSiblingObjectStartLine(current, rawLine, line, options, source)) {
+    return false;
+  }
+
   // 가장 중요한 공통 규칙: 들여쓰기 된 라인은 현재 객체 내부 설정이다.
   if (hasLeadingIndent(rawLine)) return true;
 
   return false;
+}
+
+function isSiblingObjectStartLine(current, rawLine, normalizedLine, options = null, source = "old") {
+  if (!options || !isInsideConfigBlock(current)) return false;
+  if (!normalizedLine || isObjectTerminatorLine(normalizedLine)) return false;
+
+  const rawLines = Array.isArray(current.rawLines) ? current.rawLines : [];
+  const startIndent = rawLines.length ? lineIndent(rawLines[0]) : lineIndent(rawLine);
+  const currentIndent = lineIndent(rawLine);
+
+  if (currentIndent > startIndent) return false;
+
+  const detected = detectObjectStart(normalizedLine, options, source);
+  if (!detected) return false;
+
+  return Boolean(detected.type && detected.name);
+}
+
+function detectConfigSectionContextStart(rawLine, normalizedLine) {
+  const line = canonicalizeComparableLine(normalizedLine);
+  if (isPimSectionHeaderLine(line)) {
+    return { type: "pim", indent: lineIndent(rawLine) };
+  }
+  return null;
+}
+
+function shouldLeaveConfigSectionContext(context, rawLine, normalizedLine) {
+  if (!context) return false;
+  const line = canonicalizeComparableLine(normalizedLine);
+  if (!line) return false;
+  if (isObjectTerminatorLine(line) && lineIndent(rawLine) <= Number(context.indent || 0)) return true;
+  const nextContext = detectConfigSectionContextStart(rawLine, normalizedLine);
+  return Boolean(nextContext && nextContext.type !== context.type && lineIndent(rawLine) <= Number(context.indent || 0));
+}
+
+function isPimSectionHeaderLine(normalizedLine = "") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  if (!line || /\binterface\s+/.test(line)) return false;
+  if (/^pim-policy\b/.test(line)) return false;
+  return /^(?:configure\s+router\s+pim|pim)(?:\s*\{|$)/.test(line) ||
+    /^\/?configure\s*(?:\{\s*)?(?:router\s+\S+\s+)?pim(?:\s*\{|$)/.test(line);
+}
+
+function detectContextualObjectStart(normalizedLine, context = null, source = "old") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  if (!line) return null;
+
+  if ((context?.type === "pim" && /^interface\s+/.test(line)) || /\bpim\b.*\binterface\s+/.test(line)) {
+    const name = extractKnownFieldValue(line, "interface") || extractObjectNameFromLine(line);
+    return normalizeDetectedObjectStart({ type: "pim", name }, line, source);
+  }
+
+  return null;
 }
 
 function lineIndent(rawLine = "") {
@@ -7713,12 +7778,16 @@ function collectBuiltinSubscriberInterfaceObjects(lines = [], options = {}, sour
 
 function parseConfig(text, options, source) {
   try {
+    const structuredObjects = parseConfigWithStructuredParser(text, options, source);
+    if (structuredObjects.length) return structuredObjects;
+
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const objects = [];
   const builtinSubscriber = collectBuiltinSubscriberInterfaceObjects(lines, options, source);
   const consumedSubscriberLines = builtinSubscriber.consumedLineIndexes;
   objects.push(...builtinSubscriber.objects);
   let current = null;
+  let sectionContext = null;
   const flushCurrent = () => {
     if (!current) return;
     objects.push(finalizeObject(current, options, source));
@@ -7733,12 +7802,39 @@ function parseConfig(text, options, source) {
 
     const normalized = normalizeLine(rawLine, options);
 
+    if (shouldLeaveConfigSectionContext(sectionContext, rawLine, normalized)) {
+      sectionContext = null;
+    }
+
     // 현재 객체 내부의 하위 설정 라인은 canonical object / detected object로 분리하지 않는다.
-    if (shouldKeepLineInCurrentObject(current, rawLine, normalized)) {
+    if (shouldKeepLineInCurrentObject(current, rawLine, normalized, options, source)) {
       if (appendLineToParsedObject(current, rawLine, normalized)) {
         flushCurrent();
       }
 
+      return;
+    }
+
+    const nextSectionContext = detectConfigSectionContextStart(rawLine, normalized);
+    if (nextSectionContext) {
+      flushCurrent();
+      sectionContext = nextSectionContext;
+      return;
+    }
+
+    const contextualDetected = detectContextualObjectStart(normalized, sectionContext, source);
+    if (contextualDetected) {
+      flushCurrent();
+      current = {
+        type: source === "new" ? mapNewObjectTypeToOld(contextualDetected.type, options.profile.mappings) : contextualDetected.type,
+        sourceType: contextualDetected.type,
+        name: contextualDetected.name,
+        key: buildObjectKey(contextualDetected.type, contextualDetected.name, source, options.profile.mappings),
+        startLine: index + 1,
+        lines: [normalized],
+        rawLines: [rawLine],
+        blockDepth: 0,
+      };
       return;
     }
 
@@ -7785,6 +7881,155 @@ function parseConfig(text, options, source) {
     console.error(`parseConfig failed (${source})`, error);
     throw error;
   }
+}
+
+function parseConfigWithStructuredParser(text, options, source) {
+  if (!shouldUseStructuredParserForCompare(text, options, source)) return [];
+
+  try {
+    const vendor = structuredParserVendorForSource(options, source);
+    const result = normalizeConfig({
+      vendor,
+      profile: options.profile || state.profileDraft || {},
+      configText: text,
+      side: source,
+    });
+    const objects = normalizedParserObjectsToLegacyObjects(result.objects || [], text, options, source);
+    if (!objects.length) return [];
+    return options.sortObjects ? sortObjects(objects) : objects;
+  } catch (error) {
+    console.warn("structured parser compare fallback", error);
+    return [];
+  }
+}
+
+function shouldUseStructuredParserForCompare(text, options, source) {
+  const vendor = structuredParserVendorForSource(options, source);
+  if (!vendor || vendor === "arista-eos") return false;
+
+  const lineCount = String(text || "").split(/\r?\n/).length;
+  if (lineCount >= 300) return true;
+
+  const normalized = String(text || "").toLowerCase();
+  const sectionHints = [
+    /\bconfigure\s+router\b/,
+    /\bconfigure\s+service\b/,
+    /\bconfigure\s+port\b/,
+    /\bconfigure\s+lag\b/,
+    /^\/configure\s*\{/m,
+    /^\s*(?:router|service|port|lag|pim|bgp|filter|policy-options)\b/m,
+  ];
+  return sectionHints.filter((pattern) => pattern.test(normalized)).length >= 2;
+}
+
+function structuredParserVendorForSource(options, source) {
+  const profile = options?.profile || state.profileDraft || {};
+  return source === "new"
+    ? profile.newVendor || profile.vendorPreset?.newVendor || ""
+    : profile.oldVendor || profile.vendorPreset?.oldVendor || "";
+}
+
+function normalizedParserObjectsToLegacyObjects(objects = [], text = "", options = {}, source = "old") {
+  const lineIndexHints = buildStructuredParserLineIndexHints(text);
+  const selectedObjects = Array.isArray(options.selectedObjects) && options.selectedObjects.length
+    ? options.selectedObjects
+    : objectTypes;
+  const converted = objects
+    .map((object, index) => normalizedParserObjectToLegacyObject(object, options, source, index, lineIndexHints))
+    .filter((object) => object && selectedObjects.includes(object.type));
+  return mergeFinalizedObjectsByCanonicalKey(
+    converted.map((object) => normalizeMergedObjectIdentity(object, options, source)),
+    options,
+    source
+  );
+}
+
+function buildStructuredParserLineIndexHints(text = "") {
+  const lines = String(text || "").split(/\r?\n/);
+  const consumed = new Set();
+  return {
+    find(rawLines = []) {
+      const first = String(rawLines?.[0] || "").trim();
+      if (!first) return 1;
+      const found = lines.findIndex((line, index) => !consumed.has(index) && String(line || "").trim() === first);
+      if (found < 0) return 1;
+      rawLines.forEach((_, offset) => consumed.add(found + offset));
+      return found + 1;
+    },
+  };
+}
+
+function normalizedParserObjectToLegacyObject(object = {}, options = {}, source = "old", index = 0, lineIndexHints = null) {
+  const normalizedType = normalizeStructuredObjectType(object.normalizedType || object.sourceType || "");
+  if (!normalizedType || normalizedType === "global") return null;
+
+  const rawLines = Array.isArray(object.rawLines)
+    ? object.rawLines.map((line) => String(line || ""))
+    : [];
+  if (!rawLines.length) return null;
+
+  const canonicalType = source === "new"
+    ? mapNewObjectTypeToOld(normalizedType, options.profile?.mappings || [])
+    : normalizedType;
+  const identity = structuredObjectIdentity(object, canonicalType, index);
+  if (!identity) return null;
+
+  const startLine = lineIndexHints?.find(rawLines) || 1;
+  const lines = rawLines.map((line) => normalizeLine(line, options));
+  const canonicalFields = normalizeStructuredParserFields(object.fields || {});
+  const fieldOccurrences = rawLines.flatMap((line, rawLineIndex) =>
+    extractFieldOccurrencesFromLine(line, canonicalType, rawLineIndex)
+  );
+  const comparableText = semanticObjectToComparableLines({
+    type: canonicalType,
+    source,
+    fields: canonicalFields,
+  }, options.profile || state.profileDraft, source).map(canonicalizeComparableLine).join("\n");
+
+  return {
+    type: canonicalType,
+    sourceType: normalizedType,
+    name: identity,
+    key: `${canonicalType}:${identity}`,
+    source,
+    startLine,
+    endLine: startLine + rawLines.length - 1,
+    lines,
+    rawLines,
+    canonicalFields,
+    fields: canonicalFields,
+    fieldOccurrences,
+    comparableText,
+    structuredParser: true,
+  };
+}
+
+function normalizeStructuredObjectType(type = "") {
+  return canonicalizeComparableLine(type);
+}
+
+function structuredObjectIdentity(object = {}, objectType = "", index = 0) {
+  const fields = normalizeStructuredParserFields(object.fields || {});
+  const identity =
+    object.normalizedIdentity ||
+    object.sourceName ||
+    fields[defaultObjectFieldForType(objectType)] ||
+    fields.name ||
+    object.id ||
+    `${objectType || "object"}-${index + 1}`;
+  return cleanObjectIdentity(identity);
+}
+
+function normalizeStructuredParserFields(fields = {}) {
+  return Object.entries(fields || {}).reduce((result, [field, value]) => {
+    const normalizedField = canonicalizeComparableLine(field);
+    if (!normalizedField || value === undefined || value === null || value === "") return result;
+    const normalizedValue = Array.isArray(value)
+      ? value.map((item) => String(item ?? "").trim()).filter(Boolean).join(", ")
+      : String(value);
+    if (normalizedValue) result[normalizedField] = normalizedValue;
+    return result;
+  }, {});
 }
 
 function tokenizeConfigLine(line) {
@@ -8798,26 +9043,114 @@ function shouldIgnoreLine(normalizedLine, rawLine, options, source) {
 function detectObjectStart(line, options, source = "old") {
   const normalized = canonicalizeComparableLine(line);
   const builtinSubscriber = detectBuiltinSubscriberInterfaceStart(normalized, source);
-  if (builtinSubscriber) return builtinSubscriber;
+  const validatedBuiltinSubscriber = normalizeDetectedObjectStart(builtinSubscriber, normalized, source);
+  if (validatedBuiltinSubscriber) return validatedBuiltinSubscriber;
 
   const profileObjectDetected = detectSemanticProfileObjectStart(normalized, options, source);
-  if (profileObjectDetected) return profileObjectDetected;
+  const validatedProfileObject = normalizeDetectedObjectStart(profileObjectDetected, normalized, source);
+  if (validatedProfileObject) return validatedProfileObject;
 
   const semanticDetected = detectSemanticRuleObjectStart(normalized, options, source);
-  if (semanticDetected) return semanticDetected;
+  const validatedSemantic = normalizeDetectedObjectStart(semanticDetected, normalized, source);
+  if (validatedSemantic) return validatedSemantic;
 
   const parserDetected = detectParserRuleObjectStart(normalized, { ...options, source });
-  if (parserDetected) return parserDetected;
+  const validatedParser = normalizeDetectedObjectStart(parserDetected, normalized, source);
+  if (validatedParser) return validatedParser;
 
   const profileDetected = detectProfileObjectStart(normalized, options, source);
-  if (profileDetected) return profileDetected;
+  const validatedProfile = normalizeDetectedObjectStart(profileDetected, normalized, source);
+  if (validatedProfile) return validatedProfile;
 
   const rules = vendorRules[options.vendor] || vendorRules.nokia;
   for (const rule of rules) {
     const match = normalized.match(rule.pattern);
-    if (match) return { type: rule.type, name: match[1] || normalized };
+    const detected = match ? normalizeDetectedObjectStart({ type: rule.type, name: match[1] || normalized }, normalized, source) : null;
+    if (detected) return detected;
   }
   return null;
+}
+
+function normalizeDetectedObjectStart(detected, normalizedLine, source = "old") {
+  if (!detected) return null;
+
+  const type = canonicalizeComparableLine(detected.type || "");
+  const name = stripTrailingSyntax(detected.name || "").replace(/^"|"$/g, "");
+  if (!type || !name) return null;
+  if (!isValidObjectStartLineForType(type, normalizedLine, name, source)) return null;
+
+  return {
+    ...detected,
+    type,
+    name,
+  };
+}
+
+function isValidObjectStartLineForType(type, normalizedLine, name, source = "old") {
+  const line = canonicalizeComparableLine(normalizedLine);
+  const objectType = canonicalizeComparableLine(type);
+  const identity = canonicalizeComparableLine(stripTrailingSyntax(name || ""));
+  if (!line || !identity || isWildcardObjectIdentity(identity)) return false;
+
+  if (objectType === "port") {
+    return /^port\s+/.test(line) ||
+      /^configure\s+port\s+/.test(line) ||
+      /^\/?configure\s*(?:\{\s*)?port\s+/.test(line);
+  }
+
+  if (objectType === "lag") {
+    return /^lag\s+/.test(line) ||
+      /^configure\s+lag\s+/.test(line) ||
+      /^\/?configure\s*(?:\{\s*)?lag\s+/.test(line);
+  }
+
+  if (objectType === "interface") {
+    if (/^(?:subscriber-interface|group-interface)\s+/.test(line)) return false;
+    return /^interface\s+/.test(line) ||
+      /^configure\s+router(?:\s+\S+)?\s+interface\s+/.test(line) ||
+      /^\/?configure\s*(?:\{\s*)?(?:router\s+\S+\s+)?interface\s+/.test(line);
+  }
+
+  if (objectType === "subscriber-interface") {
+    return /\bsubscriber-interface\s+/.test(line);
+  }
+
+  if (objectType === "group-interface") {
+    return /\bgroup-interface\s+/.test(line);
+  }
+
+  if (objectType === "static-route") {
+    return isStaticRouteBlockHeaderLine(line);
+  }
+
+  if (objectType === "bgp") {
+    if (/^bgp-peers\b/.test(line)) return false;
+    if (/^neighbor\s+/.test(line) || /\bbgp\b.*\bneighbor\s+/.test(line)) return true;
+    return /^(?:configure\s+router\s+bgp|router\s+bgp|bgp)\s+[^\s{}]+/.test(line);
+  }
+
+  if (objectType === "pim") {
+    return /^interface\s+/.test(line) || /\bpim\b.*\binterface\s+/.test(line);
+  }
+
+  if (objectType === "prefix-list") {
+    return /^(?:ip-)?prefix-list\s+"?[^"\s{}\[\]]+/.test(line);
+  }
+
+  if (objectType === "route-policy") {
+    return /^policy-statement\s+"?[^"\s{}]+/.test(line);
+  }
+
+  if (objectType === "filter") {
+    return /^(?:ip-filter|ipv6-filter|redirect-policy)\s+"?[^"\s{}]+/.test(line);
+  }
+
+  return true;
+}
+
+function isWildcardObjectIdentity(value = "") {
+  const normalized = canonicalizeComparableLine(stripTrailingSyntax(value));
+  return !normalized || normalized === "*" || normalized === ".*" || normalized.includes("*");
 }
 
 function detectBuiltinSubscriberInterfaceStart(normalizedLine = "", source = "old") {
@@ -13586,20 +13919,31 @@ function buildSemanticDiffRows(text, options, source) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   let currentType = "global";
   let currentObjectKey = "global:global";
+  let currentStartIndent = 0;
+  let sectionContext = null;
   return lines.map((rawLine, index) => {
     const normalized = normalizeLine(rawLine, options);
-    const detected = detectObjectStart(normalized, options, source);
+    if (shouldLeaveConfigSectionContext(sectionContext, rawLine, normalized)) {
+      sectionContext = null;
+    }
+    const nextSectionContext = detectConfigSectionContextStart(rawLine, normalized);
+    if (nextSectionContext) {
+      sectionContext = nextSectionContext;
+    }
+    const detected = detectContextualObjectStart(normalized, sectionContext, source) || detectObjectStart(normalized, options, source);
     const currentStub = {
       type: currentType,
       sourceType: currentType,
       key: currentObjectKey,
+      rawLines: currentType === "global" ? [] : [" ".repeat(currentStartIndent)],
     };
 
-    const keepInCurrent = shouldKeepLineInCurrentObject(currentStub, rawLine, normalized);
+    const keepInCurrent = shouldKeepLineInCurrentObject(currentStub, rawLine, normalized, options, source);
 
     if (detected && !keepInCurrent) {
       currentType = source === "new" ? mapNewObjectTypeToOld(detected.type, options.profile.mappings) : detected.type;
       currentObjectKey = buildObjectKey(detected.type, detected.name, source, options.profile.mappings);
+      currentStartIndent = lineIndent(rawLine);
     }
     if (currentType === "static-route" && isStructuralLine(normalized)) {
       return {
@@ -13624,11 +13968,20 @@ function buildSemanticDiffRows(text, options, source) {
     if (rule?.action === "missing" && source === "old") key = `__missing__:${index}`;
     if (rule?.action === "required-field") key = `${currentObjectKey}|${extractFieldName(policyMapped || mapped) || buildSemanticLineKey(policyMapped || mapped, currentType)}`;
     return {
-      number: "",
-      text: line,
-      objectKey: object.key,
-      semanticField: fieldName,
-      semanticObjectStart: lineIndex === 0, };
+      number: index + 1,
+      text: rawLine,
+      key,
+      objectKey: currentObjectKey,
+      normalized: canonicalizeComparableLine(policyMapped || mapped),
+      semanticField: currentType === "global"
+        ? inferSemanticFieldName(normalized)
+        : inferSemanticFieldNameForLineContext(rawLine, {
+          objectType: currentType,
+          rawLines: lines,
+          lineIndex: index,
+        }),
+      semanticObjectStart: Boolean(detected && !keepInCurrent),
+    };
   }).filter(Boolean);
 }
 

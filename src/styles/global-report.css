@@ -1128,24 +1128,286 @@
   margin: 0;
 }
 
+.report-graph-tools button,
+.report-graph-layout-toggle button,
+.report-graph-view-toggle button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.report-graph-tools button:hover,
+.report-graph-layout-toggle button:hover,
+.report-graph-view-toggle button:hover {
+  border-color: rgba(14, 116, 144, 0.42);
+}
+
+.report-graph-layout-toggle,
+.report-graph-view-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.report-graph-layout-toggle button,
+.report-graph-view-toggle button {
+  min-height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.report-graph-layout-toggle button.active,
+.report-graph-view-toggle button.active,
+.report-graph-view-toggle button[aria-pressed="true"],
+.report-graph-tools [data-graph-detail-toggle][aria-pressed="true"] {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.report-graph-advanced {
+  flex: 0 0 auto;
+}
+
+.report-graph-advanced[open] {
+  flex-basis: 100%;
+}
+
+.report-graph-advanced summary {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.report-graph-advanced[open] summary {
+  margin-bottom: 6px;
+}
+
+.report-graph-type-filters {
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.report-graph-type-toggle {
+  transition: opacity 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.report-graph-type-toggle:has(input:checked) {
+  border-color: rgba(14, 116, 144, 0.34);
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.report-graph-type-toggle:has(input:not(:checked)) {
+  opacity: 0.58;
+}
+
+.report-graph-mode-toggle {
+  color: var(--text);
+}
+
+.report-graph-mode-toggle:has(input:not(:checked)) {
+  opacity: 0.62;
+}
+
+.graph-page-panel {
+  min-height: 0;
+}
+
+.graph-page-report {
+  min-height: 0;
+}
+
+.report-graph-section-standalone {
+  min-height: min(74vh, 860px);
+}
+
 .report-graph {
-  overflow: auto;
-  max-height: 560px;
+  height: clamp(600px, calc(100vh - 180px), 820px);
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(14, 116, 144, 0.04) 0 33%, rgba(5, 150, 105, 0.04) 33% 72%, rgba(217, 119, 6, 0.04) 72% 100%),
     var(--panel-muted);
+  transition: height 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
-.report-graph svg {
+.report-graph-standalone {
+  height: clamp(640px, calc(100vh - 170px), 920px);
+}
+
+.report-graph.graph-expanded {
+  height: clamp(760px, calc(100vh - 120px), 1120px);
+  border-color: rgba(14, 116, 144, 0.36);
+  box-shadow: inset 0 0 0 1px rgba(14, 116, 144, 0.12);
+}
+
+.report-graph-flow-root {
+  width: 100%;
+  min-width: 1040px;
+  height: 100%;
+  min-height: 0;
+}
+
+.report-graph-standalone .report-graph-flow-root {
+  height: 100%;
+}
+
+.report-graph.graph-expanded .report-graph-flow-root {
+  height: 100%;
+}
+
+.report-graph .react-flow {
+  min-width: 1040px;
+  background: transparent;
+  font-family: inherit;
+}
+
+.report-graph .react-flow__minimap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.report-graph .react-flow__controls {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.report-graph .react-flow__controls-button {
+  border-bottom-color: var(--line);
+}
+
+.report-graph .react-flow__edge {
+    transition: opacity 120ms ease;
+  }
+
+  .rf-chain-detail-panel {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 8;
+    width: min(320px, calc(100% - 28px));
+    max-height: calc(100% - 28px);
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+  }
+
+  .rf-chain-detail-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .rf-chain-detail-panel-head button {
+    min-height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+  }
+
+  .rf-chain-detail-line,
+  .rf-chain-detail-list {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 8px;
+    padding: 6px 0;
+    border-top: 1px solid rgba(226, 232, 240, 0.86);
+    font-size: 12px;
+  }
+
+  .rf-chain-detail-line span,
+  .rf-chain-detail-list > span {
+    color: var(--muted);
+    font-weight: 800;
+  }
+
+  .rf-chain-detail-line strong,
+  .rf-chain-detail-list strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  .rf-chain-detail-list ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: 0;
+  }
+
+  .rf-chain-detail-list li {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+.report-graph > svg {
   display: block;
-  min-width: 880px;
+  min-width: 1040px;
   width: 100%;
 }
 
-.report-graph marker path {
+.report-graph > svg marker path {
   fill: rgba(71, 85, 105, 0.72);
+}
+
+.report-graph-lane-band {
+  fill: rgba(248, 250, 252, 0.76);
+  stroke: rgba(203, 213, 225, 0.64);
+  stroke-width: 1;
+}
+
+.report-graph-lane-band-new {
+  fill: rgba(240, 253, 250, 0.54);
+}
+
+.report-graph-lane-band-relation {
+  fill: rgba(255, 251, 235, 0.54);
+}
+
+.report-graph-lane-band-free {
+  fill: rgba(248, 250, 252, 0.82);
 }
 
 .report-graph-lanes text {
@@ -1153,6 +1415,11 @@
   font-size: 12px;
   font-weight: 900;
   text-anchor: middle;
+}
+
+.report-graph-lanes .report-graph-lane-label {
+  text-anchor: start;
+  fill: var(--text);
 }
 
 .graph-edge {
@@ -1172,6 +1439,24 @@
 .graph-edge-changed {
   stroke: #d97706;
   stroke-dasharray: 4 4;
+}
+
+.graph-edge-internal-port-lag,
+.graph-edge-internal-lag-sap,
+.graph-edge-internal-port-sap,
+.graph-edge-internal-service-sap,
+.graph-edge-internal-service-object,
+.graph-edge-internal-service-interface,
+.graph-edge-internal-subscriber-group,
+.graph-edge-internal-group-sap,
+.graph-edge-internal-interface-static-route,
+.graph-edge-internal-static-route-bgp,
+.graph-edge-internal-filter-ref,
+.graph-edge-internal-qos-ref,
+.graph-edge-internal-policy-ref,
+.graph-edge-internal-bgp-group {
+  stroke: #0891b2;
+  stroke-dasharray: 7 5;
 }
 
 .graph-node {
@@ -1199,6 +1484,12 @@
   stroke: rgba(217, 119, 6, 0.46);
 }
 
+.graph-node-type-service rect,
+.graph-node-type-sap rect {
+  fill: #ecfeff;
+  stroke: rgba(8, 145, 178, 0.4);
+}
+
 .graph-node-status-old-only rect,
 .graph-node-status-new-only rect {
   fill: var(--status-unmatched-bg);
@@ -1208,6 +1499,17 @@
 .graph-node-status-candidate rect {
   fill: #fffbeb;
   stroke: rgba(217, 119, 6, 0.45);
+}
+
+.graph-node-type-more rect,
+.graph-node-status-cluster rect {
+  fill: #f8fafc;
+  stroke: rgba(14, 116, 144, 0.42);
+  stroke-dasharray: 5 4;
+}
+
+.graph-node-type-more .graph-node-type {
+  fill: #075985;
 }
 
 .graph-node text {
@@ -1245,11 +1547,13 @@
 }
 
 .graph-dim,
-.graph-hidden {
+.graph-hidden,
+.graph-hidden-mode {
   opacity: 0.16;
 }
 
-.graph-hidden {
+.graph-hidden,
+.graph-hidden-mode {
   pointer-events: none;
 }
 
@@ -1265,6 +1569,10 @@
   color: var(--muted);
   font-size: 13px;
   text-align: center;
+}
+
+.graph-limit-note {
+  margin: 8px 10px 10px;
 }
 
 .object-tools {

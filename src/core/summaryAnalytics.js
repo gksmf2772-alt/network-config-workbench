@@ -3,6 +3,10 @@ import {
   buildAnalysisContext,
   filterAuditFindingsForModeScope,
 } from "./analysisModes.js";
+import {
+  buildCanonicalGraph,
+  buildCanonicalViewGraph,
+} from "./relationGraph/index.js";
 
 const IMPORTANT_FIELDS = new Set([
   "route",
@@ -78,6 +82,24 @@ const DESCRIPTION_ENDPOINT_CACHE_LIMIT = 20000;
 const portLagDescriptionEndpointCache = new Map();
 const portLagDescriptionEndpointSetCache = new Map();
 const interfaceTargetDescriptionEndpointSetCache = new WeakMap();
+const GRAPH_MAX_PLAN_ITEMS = 96;
+const GRAPH_MAX_PLAN_ITEMS_PER_TYPE = 12;
+const GRAPH_PRIORITY_TYPES = [
+  "port",
+  "lag",
+  "interface",
+  "subscriber-interface",
+  "group-interface",
+  "sap",
+  "static-route",
+  "pim",
+  "bgp",
+  "bgp-group",
+  "filter",
+  "qos-policy",
+  "route-policy",
+  "policy",
+];
 
 function cacheDescriptionValue(cache, key, buildValue) {
   const normalizedKey = String(key || "");
@@ -1465,8 +1487,11 @@ export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
   const nodes = [];
   const edges = [];
   const nodeIds = new Set();
+  const sideObjects = [];
   const activePlan = plan.filter(isActivePlanItem);
-  const limitedPlan = activePlan.slice(0, 140);
+  const canonicalViewGraph = buildCanonicalViewGraphFromPlan(activePlan);
+  const graphSelection = selectGraphPlanItems(activePlan);
+  const limitedPlan = graphSelection.items;
 
   limitedPlan.forEach((item, index) => {
     const oldNode = item.oldObject ? graphNodeFromObject(item.oldObject, item, "old", index) : null;
@@ -1476,13 +1501,16 @@ export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
       nodeIds.add(node.id);
       nodes.push(node);
     });
+    if (oldNode && item.oldObject) sideObjects.push({ side: "old", object: item.oldObject, node: oldNode });
+    if (newNode && item.newObject) sideObjects.push({ side: "new", object: item.newObject, node: newNode });
 
-    if (oldNode && newNode) {
+    if (oldNode && newNode && graphNodesHaveSameSettingType(oldNode, newNode)) {
       edges.push({
         id: `map:${item.id || index}`,
         source: oldNode.id,
         target: newNode.id,
         type: item.reason === "manual" ? "manual" : "mapping",
+        graphMode: "comparison",
         label: item.reason === "manual" ? "직접 연결" : "자동 연결",
         confidence: toScore(item.score),
         status: item.status || "matched",
@@ -1490,34 +1518,9 @@ export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
       });
     }
 
-    relationshipChanges(item).forEach((relationship, relationIndex) => {
-      const anchor = newNode || oldNode;
-      if (!anchor) return;
-      const relationId = `rel:${item.id || index}:${relationIndex}`;
-      nodes.push({
-        id: relationId,
-        side: "relation",
-        objectType: "relation",
-        label: relationship.label || relationship.target || relationship.field || "참조 관계",
-        key: relationId,
-        status: "relationship",
-        confidence: 0,
-        fieldOverlap: 0,
-        changedFields: 0,
-        virtual: true,
-      });
-      edges.push({
-        id: `rel-edge:${item.id || index}:${relationIndex}`,
-        source: anchor.id,
-        target: relationId,
-        type: "relationship",
-        label: "참조 관계",
-        confidence: 0,
-        status: relationship.status || "changed",
-        changed: true,
-      });
-    });
   });
+
+  addInternalGraphRelationships({ nodes, edges, nodeIds, sideObjects });
 
   const auditGraph = buildAuditGraphData(auditFindings.filter((finding) => !finding.suppressed).slice(0, 80));
   for (const node of auditGraph.nodes || []) {
@@ -1530,9 +1533,750 @@ export function buildGraphData({ plan = [], auditFindings = [] } = {}) {
   return {
     nodes,
     edges,
+    viewGraph: canonicalViewGraph,
     truncated: activePlan.length > limitedPlan.length,
     totalPlanItems: activePlan.length,
+    selectedPlanItems: limitedPlan.length,
+    hiddenByType: graphSelection.hiddenByType,
+    displayedByType: graphSelection.displayedByType,
   };
+}
+
+function buildCanonicalViewGraphFromPlan(activePlan = [], options = {}) {
+  const entries = graphPlanObjectEntries(activePlan);
+  const sideGraphs = ["old", "new"]
+    .map((side) => {
+      const objects = entries
+        .filter((entry) => entry.side === side && entry.object)
+        .map((entry) => entry.object);
+      if (!objects.length) return null;
+      return {
+        side,
+        graph: buildCanonicalGraph({ objects, deviceId: side }),
+      };
+    })
+    .filter(Boolean);
+
+  if (!sideGraphs.length) return null;
+  return buildCanonicalViewGraph(sideGraphs, options);
+}
+
+function graphNodesHaveSameSettingType(left = {}, right = {}) {
+  const leftType = normalizeGraphSettingType(left.objectType);
+  const rightType = normalizeGraphSettingType(right.objectType);
+  return Boolean(leftType && rightType && leftType === rightType);
+}
+
+function normalizeGraphSettingType(type = "") {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized === "qos-policy") return "qos";
+  if (normalized === "route-policy") return "policy";
+  if (normalized === "bgp-group") return "bgp";
+  if (["subscriber-interface", "group-interface"].includes(normalized)) return "interface";
+  return normalized;
+}
+
+function selectGraphPlanItems(activePlan = []) {
+  const totalByType = countGraphPlanItemsByType(activePlan);
+  const hasOversizedType = Object.values(totalByType).some((count) => count > GRAPH_MAX_PLAN_ITEMS_PER_TYPE);
+  if (activePlan.length <= GRAPH_MAX_PLAN_ITEMS && !hasOversizedType) {
+    return {
+      items: activePlan,
+      displayedByType: totalByType,
+      hiddenByType: {},
+    };
+  }
+
+  const selected = [];
+  const selectedIds = new Set();
+  const byType = groupBy(activePlan, planItemObjectType);
+  const typeOrder = [
+    ...GRAPH_PRIORITY_TYPES,
+    ...[...byType.keys()].filter((type) => !GRAPH_PRIORITY_TYPES.includes(type)).sort(),
+  ];
+
+  for (const type of typeOrder) {
+    const items = byType.get(type) || [];
+    if (!items.length) continue;
+    for (const item of prioritizeGraphPlanItems(items).slice(0, GRAPH_MAX_PLAN_ITEMS_PER_TYPE)) {
+      if (selected.length >= GRAPH_MAX_PLAN_ITEMS) break;
+      const key = graphPlanItemSelectionKey(item);
+      if (selectedIds.has(key)) continue;
+      selectedIds.add(key);
+      selected.push(item);
+    }
+    if (selected.length >= GRAPH_MAX_PLAN_ITEMS) break;
+  }
+
+  const expanded = expandGraphSelectionWithTopologyNeighbors(selected, activePlan, selectedIds);
+  const displayedByType = countGraphPlanItemsByType(expanded);
+  const hiddenByType = {};
+  Object.entries(totalByType).forEach(([type, total]) => {
+    const hidden = total - (displayedByType[type] || 0);
+    if (hidden > 0) hiddenByType[type] = hidden;
+  });
+
+  return { items: expanded, displayedByType, hiddenByType };
+}
+
+function expandGraphSelectionWithTopologyNeighbors(selected = [], activePlan = [], selectedIds = new Set()) {
+  if (selected.length >= GRAPH_MAX_PLAN_ITEMS) return selected;
+
+  const allEntries = graphPlanObjectEntries(activePlan);
+  const selectedEntries = graphPlanObjectEntries(selected);
+  const index = buildGraphPlanObjectRefIndex(allEntries);
+  const expanded = [...selected];
+
+  function addNeighborItem(item) {
+    if (!item || expanded.length >= GRAPH_MAX_PLAN_ITEMS) return;
+    const key = graphPlanItemSelectionKey(item);
+    if (selectedIds.has(key)) return;
+    selectedIds.add(key);
+    expanded.push(item);
+  }
+
+  for (const entry of selectedEntries) {
+    for (const neighbor of graphTopologyNeighborCandidates(entry, index)) {
+      addNeighborItem(neighbor.item);
+      if (expanded.length >= GRAPH_MAX_PLAN_ITEMS) break;
+    }
+    if (expanded.length >= GRAPH_MAX_PLAN_ITEMS) break;
+  }
+
+  return expanded;
+}
+
+function graphPlanObjectEntries(plan = []) {
+  const entries = [];
+  plan.forEach((item) => {
+    if (item.oldObject) entries.push({ side: "old", object: item.oldObject, item });
+    if (item.newObject) entries.push({ side: "new", object: item.newObject, item });
+  });
+  return entries;
+}
+
+function buildGraphPlanObjectRefIndex(entries = []) {
+  const index = new Map();
+  entries.forEach((entry) => {
+    const type = graphObjectType(entry.object);
+    graphObjectRefVariants(entry.object, type).forEach((ref) => {
+      const key = `${entry.side}:${type}:${ref}`;
+      if (!index.has(key)) index.set(key, []);
+      index.get(key).push(entry);
+    });
+  });
+  return index;
+}
+
+function graphTopologyNeighborCandidates(entry = {}, index = new Map()) {
+  const type = graphObjectType(entry.object);
+  const fields = graphObjectFields(entry.object);
+  const candidates = [];
+  const addMatches = (targetTypes, refs) => {
+    for (const ref of refs) {
+      for (const match of findGraphPlanObjectEntries(index, entry.side, targetTypes, ref)) {
+        if (match.item === entry.item) continue;
+        candidates.push(match);
+      }
+    }
+  };
+  const addUniqueEndpointMatch = (targetTypes, refs) => {
+    for (const match of findUniqueGraphPlanObjectEntries(index, entry.side, targetTypes, refs)) {
+      if (match.item === entry.item) continue;
+      candidates.push(match);
+    }
+  };
+
+  if (type === "lag") {
+    addMatches(["port"], graphValueList(fields.members || fields["member-port"]));
+    addUniqueEndpointMatch(["interface", "subscriber-interface", "group-interface"], graphTopologyEndpointRefs(entry.object));
+  } else if (type === "port") {
+    addMatches(["lag"], graphValueList(fields.lag));
+  } else if (["interface", "subscriber-interface", "group-interface"].includes(type)) {
+    addMatches(["lag", "port"], [
+      ...graphValueList(fields.lag),
+      ...graphValueList(fields.port),
+      ...graphValueList(fields.sap).map(extractLagFromSapRef),
+    ]);
+    addUniqueEndpointMatch(["lag", "port"], graphTopologyEndpointRefs(entry.object));
+  } else if (type === "pim") {
+    addMatches(["interface", "subscriber-interface", "group-interface"], [
+      ...graphValueList(fields.interface),
+    ]);
+    addUniqueEndpointMatch(["interface", "subscriber-interface", "group-interface"], graphTopologyEndpointRefs(entry.object));
+  } else if (type === "static-route") {
+    addMatches(["interface", "subscriber-interface", "group-interface"], [
+      ...graphValueList(fields.interface),
+      ...graphValueList(fields["group-interface"]),
+      ...graphValueList(fields["subscriber-interface"]),
+    ]);
+  }
+
+  return [...new Map(candidates.map((candidate) => [graphPlanItemSelectionKey(candidate.item), candidate])).values()];
+}
+
+function findUniqueGraphPlanObjectEntries(index = new Map(), side = "", types = [], refs = []) {
+  const normalizedRefs = [...new Set((Array.isArray(refs) ? refs : [refs]).flatMap(graphRefVariants).filter(Boolean))];
+  if (!normalizedRefs.length) return [];
+
+  const matches = new Map();
+  for (const ref of normalizedRefs) {
+    for (const match of findGraphPlanObjectEntries(index, side, types, ref)) {
+      const key = `${graphPlanItemSelectionKey(match.item)}:${objectIdentity(match.object)}`;
+      matches.set(key, match);
+    }
+  }
+
+  return matches.size === 1 ? [...matches.values()] : [];
+}
+
+function findGraphPlanObjectEntries(index = new Map(), side = "", types = [], value = "") {
+  const variants = graphRefVariants(value);
+  const matches = [];
+  for (const type of types) {
+    for (const ref of variants) {
+      matches.push(...(index.get(`${side}:${type}:${ref}`) || []));
+    }
+  }
+  return matches;
+}
+
+function prioritizeGraphPlanItems(items = []) {
+  return [...items].sort((left, right) => graphPlanItemPriority(right) - graphPlanItemPriority(left));
+}
+
+function graphPlanItemPriority(item = {}) {
+  let score = 0;
+  if (item.oldObject && item.newObject) score += 80;
+  if (item.status === "candidate") score += 70;
+  if (item.status === "old-only" || item.status === "new-only") score += 60;
+  if (hasChangedFields(item)) score += 50;
+  if (hasRelationshipChange(item)) score += 45;
+  if (Number(item.policyViolationCount || 0) > 0) score += 40;
+  if (String(item.reason || "").toLowerCase() === "manual") score += 25;
+  score += Math.max(0, 20 - Math.min(20, Number(item.score || 0) / 5));
+  return score;
+}
+
+function graphPlanItemSelectionKey(item = {}) {
+  return String(item.id || `${planItemObjectType(item)}:${objectKey(item.oldObject || item.newObject || {}, planItemObjectType(item))}`);
+}
+
+function countGraphPlanItemsByType(items = []) {
+  return items.reduce((result, item) => {
+    const type = planItemObjectType(item);
+    result[type] = (result[type] || 0) + 1;
+    return result;
+  }, {});
+}
+
+function addInternalGraphRelationships({ nodes, edges, nodeIds, sideObjects }) {
+  const edgeIds = new Set(edges.map((edge) => edge.id));
+  const bySide = groupBy(sideObjects, (entry) => entry.side);
+
+  ["old", "new"].forEach((side) => {
+    const entries = bySide.get(side) || [];
+    if (!entries.length) return;
+    const index = buildGraphSideIndex(entries);
+    addGraphPortLagEdges({ side, index, edges, edgeIds });
+    addGraphLagInterfaceEdges({ side, index, edges, edgeIds });
+    addGraphServiceSapEdges({ side, index, nodes, nodeIds, edges, edgeIds });
+    addGraphInterfaceRouteEdges({ side, index, edges, edgeIds });
+    addGraphInterfacePimEdges({ side, index, edges, edgeIds });
+    addGraphRouteBgpEdges({ side, index, edges, edgeIds });
+    addGraphReferenceEdges({ side, index, nodes, nodeIds, edges, edgeIds });
+  });
+}
+
+function buildGraphSideIndex(entries = []) {
+  const index = {
+    entries,
+    byType: new Map(),
+    byTypeRef: new Map(),
+  };
+  entries.forEach((entry) => indexGraphEntry(index, entry));
+  return index;
+}
+
+function indexGraphEntry(index, entry) {
+  const type = graphObjectType(entry.object);
+  if (!index.byType.has(type)) index.byType.set(type, []);
+  index.byType.get(type).push(entry);
+
+  const refs = graphObjectRefVariants(entry.object, type);
+  refs.forEach((ref) => {
+    index.byTypeRef.set(`${type}:${ref}`, entry);
+  });
+}
+
+function graphEntriesByTypes(index, types = []) {
+  return types.flatMap((type) => index.byType.get(type) || []);
+}
+
+function findGraphEntryByTypes(index, types = [], value = "") {
+  const variants = graphRefVariants(value);
+  for (const type of types) {
+    for (const ref of variants) {
+      const entry = index.byTypeRef.get(`${type}:${ref}`);
+      if (entry) return entry;
+    }
+  }
+  return null;
+}
+
+function findUniqueGraphEntryByRefs(index, types = [], refs = []) {
+  const normalizedRefs = new Set((Array.isArray(refs) ? refs : [refs]).flatMap(graphRefVariants).filter(Boolean));
+  if (!normalizedRefs.size) return null;
+
+  const matches = new Map();
+  for (const entry of graphEntriesByTypes(index, types)) {
+    const entryRefs = new Set(graphObjectRefVariants(entry.object, graphObjectType(entry.object)));
+    if ([...normalizedRefs].some((ref) => entryRefs.has(ref))) {
+      matches.set(entry.node?.id || objectIdentity(entry.object), entry);
+    }
+  }
+
+  return matches.size === 1 ? [...matches.values()][0] : null;
+}
+
+function addGraphPortLagEdges({ side, index, edges, edgeIds }) {
+  for (const lagEntry of graphEntriesByTypes(index, ["lag"])) {
+    const fields = graphObjectFields(lagEntry.object);
+    for (const member of graphValueList(fields.members || fields["member-port"])) {
+      const portEntry = findGraphEntryByTypes(index, ["port"], member);
+      if (portEntry) {
+        addGraphInternalEdge({ side, source: portEntry.node, target: lagEntry.node, type: "internal-port-lag", label: "port-lag", edges, edgeIds });
+      }
+    }
+  }
+
+  for (const portEntry of graphEntriesByTypes(index, ["port"])) {
+    const fields = graphObjectFields(portEntry.object);
+    for (const lag of graphValueList(fields.lag)) {
+      const lagEntry = findGraphEntryByTypes(index, ["lag"], lag);
+      if (lagEntry) {
+        addGraphInternalEdge({ side, source: portEntry.node, target: lagEntry.node, type: "internal-port-lag", label: "port-lag", edges, edgeIds });
+      }
+    }
+  }
+}
+
+function addGraphLagInterfaceEdges({ side, index, edges, edgeIds }) {
+  const interfaces = graphEntriesByTypes(index, ["interface", "subscriber-interface", "group-interface"]);
+
+  for (const interfaceEntry of interfaces) {
+    const fields = graphObjectFields(interfaceEntry.object);
+    const explicitRefs = [
+      ...graphValueList(fields.lag),
+      ...graphValueList(fields.port),
+      ...graphValueList(fields.sap).map(extractLagFromSapRef),
+    ].filter(Boolean);
+    let linkedByExplicitRef = false;
+
+    for (const lagRef of [...new Set(explicitRefs)]) {
+      const lagEntry = findGraphEntryByTypes(index, ["lag"], lagRef);
+      const portEntry = findGraphEntryByTypes(index, ["port"], lagRef);
+      if (lagEntry) {
+        addGraphInternalEdge({ side, source: lagEntry.node, target: interfaceEntry.node, type: "internal-lag-interface", label: "lag-interface", edges, edgeIds });
+        linkedByExplicitRef = true;
+      } else if (portEntry) {
+        addGraphInternalEdge({ side, source: portEntry.node, target: interfaceEntry.node, type: "internal-port-interface", label: "port-interface", edges, edgeIds });
+        linkedByExplicitRef = true;
+      }
+    }
+
+    if (linkedByExplicitRef) continue;
+
+    const endpointRefs = graphTopologyEndpointRefs(interfaceEntry.object);
+    const lagEntry = findUniqueGraphEntryByRefs(index, ["lag"], endpointRefs);
+    const portEntry = lagEntry ? null : findUniqueGraphEntryByRefs(index, ["port"], endpointRefs);
+    if (lagEntry) {
+      addGraphInternalEdge({ side, source: lagEntry.node, target: interfaceEntry.node, type: "internal-lag-interface", label: "lag-interface", edges, edgeIds });
+    } else if (portEntry) {
+      addGraphInternalEdge({ side, source: portEntry.node, target: interfaceEntry.node, type: "internal-port-interface", label: "port-interface", edges, edgeIds });
+    }
+  }
+}
+
+function addGraphServiceSapEdges({ side, index, nodes, nodeIds, edges, edgeIds }) {
+  const serviceTypes = ["interface", "subscriber-interface", "group-interface", "sap"];
+
+  for (const entry of graphEntriesByTypes(index, serviceTypes)) {
+    const fields = graphObjectFields(entry.object);
+    const serviceNode = graphServiceNodeForEntry({ side, index, nodes, nodeIds, fields });
+    if (serviceNode) {
+      addGraphInternalEdge({ side, source: serviceNode, target: entry.node, type: "internal-service-object", label: "service", edges, edgeIds });
+    }
+
+    if (fields.interface && graphObjectType(entry.object) !== "interface") {
+      const parent = findGraphEntryByTypes(index, ["interface"], fields.interface);
+      if (parent) {
+        addGraphInternalEdge({ side, source: parent.node, target: entry.node, type: "internal-service-interface", label: "service-interface", edges, edgeIds });
+      }
+    }
+
+    if (fields["subscriber-interface"] && graphObjectType(entry.object) !== "subscriber-interface") {
+      const parent = findGraphEntryByTypes(index, ["subscriber-interface"], fields["subscriber-interface"]);
+      if (parent) {
+        addGraphInternalEdge({ side, source: parent.node, target: entry.node, type: "internal-subscriber-group", label: "subscriber-group", edges, edgeIds });
+      }
+    }
+
+    if (fields["group-interface"] && graphObjectType(entry.object) !== "group-interface") {
+      const parent = findGraphEntryByTypes(index, ["group-interface"], fields["group-interface"]);
+      if (parent) {
+        addGraphInternalEdge({ side, source: parent.node, target: entry.node, type: "internal-group-sap", label: "group-sap", edges, edgeIds });
+      }
+    }
+
+    for (const sap of graphValueList(fields.sap)) {
+      const sapEntry = graphObjectType(entry.object) === "sap"
+        ? entry
+        : findGraphEntryByTypes(index, ["sap"], sap) || {
+          node: getOrCreateVirtualGraphNode({ side, index, nodes, nodeIds, objectType: "sap", label: sap }),
+        };
+      if (graphObjectType(entry.object) !== "sap") {
+        addGraphInternalEdge({ side, source: entry.node, target: sapEntry.node, type: "internal-service-sap", label: "service-sap", edges, edgeIds });
+      }
+      const lagRef = extractLagFromSapRef(sap);
+      const lagEntry = findGraphEntryByTypes(index, ["lag"], lagRef);
+      const portEntry = findGraphEntryByTypes(index, ["port"], lagRef);
+      if (lagEntry) {
+        addGraphInternalEdge({ side, source: lagEntry.node, target: sapEntry.node, type: "internal-lag-sap", label: "lag-sap", edges, edgeIds });
+      } else if (portEntry) {
+        addGraphInternalEdge({ side, source: portEntry.node, target: sapEntry.node, type: "internal-port-sap", label: "port-sap", edges, edgeIds });
+      }
+    }
+  }
+}
+
+function addGraphInterfaceRouteEdges({ side, index, edges, edgeIds }) {
+  const interfaces = graphEntriesByTypes(index, ["interface", "subscriber-interface", "group-interface"]);
+  const routes = graphEntriesByTypes(index, ["static-route"]);
+
+  for (const routeEntry of routes) {
+    const routeFields = graphObjectFields(routeEntry.object);
+    const explicitInterface = routeFields.interface || routeFields["group-interface"] || routeFields["subscriber-interface"];
+    if (explicitInterface) {
+      const interfaceEntry = findGraphEntryByTypes(index, ["interface", "subscriber-interface", "group-interface"], explicitInterface);
+      if (interfaceEntry) {
+        addGraphInternalEdge({ side, source: interfaceEntry.node, target: routeEntry.node, type: "internal-interface-static-route", label: "interface-route", edges, edgeIds });
+      }
+    }
+
+    const nextHops = graphValueList(routeFields["next-hop"] || routeFields.gateway);
+    if (!nextHops.length) continue;
+    for (const interfaceEntry of interfaces) {
+      const interfaceFields = graphObjectFields(interfaceEntry.object);
+      const prefix = interfaceFields.address || interfaceFields.prefix;
+      if (!prefix) continue;
+      if (nextHops.some((nextHop) => ipv4InsidePrefix(nextHop, prefix))) {
+        addGraphInternalEdge({ side, source: interfaceEntry.node, target: routeEntry.node, type: "internal-interface-static-route", label: "interface-route", edges, edgeIds });
+      }
+    }
+  }
+}
+
+function addGraphInterfacePimEdges({ side, index, edges, edgeIds }) {
+  const pims = graphEntriesByTypes(index, ["pim"]);
+
+  for (const pimEntry of pims) {
+    const fields = graphObjectFields(pimEntry.object);
+    const interfaceRefs = [
+      ...graphValueList(fields.interface),
+      ...graphValueList(fields["group-interface"]),
+      ...graphValueList(fields["subscriber-interface"]),
+    ].filter(Boolean);
+    if (!interfaceRefs.length) interfaceRefs.push(objectIdentity(pimEntry.object));
+
+    for (const interfaceRef of interfaceRefs) {
+      const interfaceEntry = findGraphEntryByTypes(index, ["interface", "subscriber-interface", "group-interface"], interfaceRef);
+      if (interfaceEntry) {
+        addGraphInternalEdge({ side, source: interfaceEntry.node, target: pimEntry.node, type: "internal-interface-pim", label: "interface-pim", edges, edgeIds });
+      }
+    }
+  }
+}
+
+function addGraphRouteBgpEdges({ side, index, edges, edgeIds }) {
+  const routes = graphEntriesByTypes(index, ["static-route"]);
+  const bgps = graphEntriesByTypes(index, ["bgp"]);
+
+  for (const routeEntry of routes) {
+    const routeFields = graphObjectFields(routeEntry.object);
+    const routePrefixes = graphValueList(routeFields.route || routeFields.prefix || routeFields.address);
+    const nextHops = graphValueList(routeFields["next-hop"] || routeFields.gateway);
+    for (const bgpEntry of bgps) {
+      const bgpFields = graphObjectFields(bgpEntry.object);
+      const neighbors = graphValueList(bgpFields.neighbor || bgpEntry.object?.peerIp);
+      const linked = neighbors.some((neighbor) =>
+        nextHops.some((nextHop) => normalizeGraphRef(nextHop) === normalizeGraphRef(neighbor)) ||
+        routePrefixes.some((prefix) => ipv4InsideRoutedPrefix(neighbor, prefix))
+      );
+      if (linked) {
+        addGraphInternalEdge({ side, source: routeEntry.node, target: bgpEntry.node, type: "internal-static-route-bgp", label: "route-bgp", edges, edgeIds });
+      }
+    }
+  }
+}
+
+function addGraphReferenceEdges({ side, index, nodes, nodeIds, edges, edgeIds }) {
+  for (const entry of index.entries) {
+    const fields = graphObjectFields(entry.object);
+    const sourceType = graphObjectType(entry.object);
+    for (const [field, value] of Object.entries(fields)) {
+      const kind = graphReferenceKind(field, sourceType);
+      if (!kind) continue;
+      for (const ref of graphValueList(value).slice(0, 8)) {
+        if (isEmptyGraphReferenceValue(ref)) continue;
+        const targetEntry = findGraphEntryByTypes(index, kind.targetTypes, ref);
+        const targetNode = targetEntry?.node || getOrCreateVirtualGraphNode({
+          side,
+          index,
+          nodes,
+          nodeIds,
+          objectType: kind.virtualType,
+          label: ref,
+        });
+        addGraphInternalEdge({ side, source: entry.node, target: targetNode, type: kind.edgeType, label: kind.label, edges, edgeIds });
+      }
+    }
+  }
+}
+
+function graphServiceNodeForEntry({ side, index, nodes, nodeIds, fields }) {
+  const serviceId = fields["service-id"] || fields.serviceId || "";
+  const serviceType = fields.service || fields.vprn || fields.router || "";
+  if (!serviceId && !serviceType) return null;
+  const label = [serviceType, serviceId].filter(Boolean).join(":") || serviceId || serviceType;
+  return getOrCreateVirtualGraphNode({ side, index, nodes, nodeIds, objectType: "service", label });
+}
+
+function getOrCreateVirtualGraphNode({ side, index, nodes, nodeIds, objectType, label }) {
+  const normalized = normalizeGraphRef(label);
+  const id = `${side}:virtual:${objectType}:${normalized}`;
+  const existing = index.byTypeRef.get(`${objectType}:${normalized}`);
+  if (existing) return existing.node;
+  const node = {
+    id,
+    side,
+    objectType,
+    label: String(label || objectType),
+    key: `${objectType}:${label}`,
+    status: "reference",
+    confidence: 0,
+    fieldOverlap: 0,
+    changedFields: 0,
+    virtual: true,
+  };
+  if (!nodeIds.has(id)) {
+    nodeIds.add(id);
+    nodes.push(node);
+  }
+  indexGraphEntry(index, {
+    side,
+    object: {
+      normalizedType: objectType,
+      normalizedIdentity: label,
+      fields: {},
+    },
+    node,
+  });
+  return node;
+}
+
+function addGraphInternalEdge({ side, source, target, type, label, edges, edgeIds }) {
+  if (!source || !target || source.id === target.id) return;
+  const id = `internal:${side}:${type}:${source.id}->${target.id}`;
+  if (edgeIds.has(id)) return;
+  edgeIds.add(id);
+  edges.push({
+    id,
+    source: source.id,
+    target: target.id,
+    type,
+    graphMode: "internal",
+    side,
+    label,
+    confidence: 0,
+    status: "linked",
+    changed: false,
+  });
+}
+
+function graphReferenceKind(field = "", sourceType = "") {
+  const normalized = normalizeFieldName(field);
+  if (!normalized || normalized.endsWith(".mode") || normalized === "mode") return null;
+  if (normalized === "group" && sourceType === "bgp") {
+    return { targetTypes: ["bgp-group"], virtualType: "bgp-group", edgeType: "internal-bgp-group", label: "bgp-group" };
+  }
+  if (normalized.includes("filter")) {
+    return { targetTypes: ["filter"], virtualType: "filter", edgeType: "internal-filter-ref", label: "filter-ref" };
+  }
+  if (normalized.includes("qos") || normalized.includes("scheduler-policy")) {
+    return { targetTypes: ["qos-policy"], virtualType: "qos-policy", edgeType: "internal-qos-ref", label: "qos-ref" };
+  }
+  if (normalized.includes("policy")) {
+    return { targetTypes: ["route-policy", "policy", "qos-policy", "filter", "bgp-group"], virtualType: "policy", edgeType: "internal-policy-ref", label: "policy-ref" };
+  }
+  return null;
+}
+
+function graphObjectType(object = {}) {
+  return object.normalizedType || object.type || object.sourceType || "object";
+}
+
+function graphObjectFields(object = {}) {
+  return normalizeFields({
+    ...(object.canonicalFields || {}),
+    ...(object.fields || {}),
+  });
+}
+
+function graphObjectRefVariants(object = {}, type = graphObjectType(object)) {
+  const fields = graphObjectFields(object);
+  const description = fields.description || object.description || "";
+  const seeds = [
+    objectIdentity(object),
+    object.key,
+    object.sourceName,
+    object.id,
+    fields[type],
+    fields.port,
+    fields.lag,
+    fields.interface,
+    fields.sap,
+    fields.route,
+    fields.prefix,
+    fields.address,
+    fields.neighbor,
+    fields.peerIp,
+    fields.group,
+    fields["group-interface"],
+    fields["subscriber-interface"],
+    fields.policy,
+    fields["policy-statement"],
+    fields["service-id"],
+  ];
+  return [...new Set([
+    ...seeds.flatMap(graphRefVariants),
+    ...graphDescriptionRefVariants(description).flatMap(graphRefVariants),
+  ])];
+}
+
+function graphTopologyEndpointRefs(object = {}) {
+  const fields = graphObjectFields(object);
+  const description = fields.description || object.description || "";
+  const seeds = [
+    object.normalizedIdentity,
+    object.sourceName,
+    fields.interface,
+    fields.lag,
+    fields.port,
+    ...graphDescriptionRefVariants(description),
+  ];
+  return [...new Set(seeds.flatMap(graphRefVariants).filter(isGraphTopologyEndpointRef))];
+}
+
+function isGraphTopologyEndpointRef(ref = "") {
+  const value = String(ref || "");
+  if (!value) return false;
+  if (!/[a-z]/i.test(value) || !/\d/.test(value)) return false;
+  if (!value.includes("-")) return false;
+  if (/^(lag|port|po|te|gi|ge|xe|et|eth|ethernet|ae)[-_/]?\w*/i.test(value)) return false;
+  return true;
+}
+
+function graphRefVariants(value = "") {
+  const base = normalizeGraphRef(value);
+  if (!base) return [];
+  const variants = new Set([base]);
+  const directionalBase = stripGraphDirectionalPrefix(base);
+  if (directionalBase && directionalBase !== base) variants.add(directionalBase);
+  const sapBase = extractLagFromSapRef(base);
+  if (sapBase && sapBase !== base) variants.add(sapBase);
+  if (/^lag[-_]/i.test(base)) variants.add(base.replace(/^lag[-_]/i, ""));
+  if (/^\d+$/.test(base)) variants.add(`lag-${base}`);
+  return [...variants].filter(Boolean);
+}
+
+function graphDescriptionRefVariants(description = "") {
+  const variants = new Set();
+  for (const endpoint of portLagDescriptionEndpointCandidates(description)) {
+    variants.add(endpoint);
+    const baseEndpoint = String(endpoint || "").split(/[|_]/)[0];
+    if (baseEndpoint && baseEndpoint !== endpoint) variants.add(baseEndpoint);
+  }
+  return [...variants].filter(Boolean);
+}
+
+function stripGraphDirectionalPrefix(value = "") {
+  return String(value || "")
+    .replace(/^g-(?=(?:to|from|via)-)/i, "")
+    .replace(/^(?:to|from|via)-(?=[a-z0-9])/i, "");
+}
+
+function normalizeGraphRef(value = "") {
+  return String(value ?? "")
+    .replace(/["'[\]]/g, "")
+    .replace(/\bcreate\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function graphValueList(value) {
+  if (Array.isArray(value)) return value.flatMap(graphValueList);
+  const text = String(value ?? "").trim();
+  if (!text) return [];
+  const quoted = [...text.matchAll(/"([^"]+)"/g)].map((match) => match[1]).filter(Boolean);
+  if (quoted.length) return quoted;
+  return text.split(/\s*,\s*/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function isEmptyGraphReferenceValue(value = "") {
+  const normalized = normalizeGraphRef(value);
+  return !normalized || ["-", "none", "null", "true", "false", "enable", "enabled", "disable", "disabled", "present"].includes(normalized);
+}
+
+function extractLagFromSapRef(value = "") {
+  return String(value || "").split(":")[0].trim();
+}
+
+function ipv4InsideRoutedPrefix(ip = "", prefix = "") {
+  const parsed = parseIpv4Cidr(prefix);
+  if (!parsed || parsed.prefixLength < 24) return false;
+  return ipv4InsidePrefix(ip, prefix);
+}
+
+function ipv4InsidePrefix(ip = "", prefix = "") {
+  const parsed = parseIpv4Cidr(prefix);
+  const ipNumber = ipv4ToNumber(ip);
+  if (!parsed || ipNumber == null) return false;
+  const mask = parsed.prefixLength === 0 ? 0 : (0xffffffff << (32 - parsed.prefixLength)) >>> 0;
+  return (ipNumber & mask) === (parsed.network & mask);
+}
+
+function parseIpv4Cidr(prefix = "") {
+  const match = String(prefix || "").trim().match(/^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$/);
+  if (!match) return null;
+  const network = ipv4ToNumber(match[1]);
+  const prefixLength = match[2] === undefined ? 32 : Number(match[2]);
+  if (network == null || !Number.isInteger(prefixLength) || prefixLength < 0 || prefixLength > 32) return null;
+  return { network, prefixLength };
+}
+
+function ipv4ToNumber(value = "") {
+  const parts = String(value || "").trim().split(".");
+  if (parts.length !== 4) return null;
+  let result = 0;
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) return null;
+    const octet = Number(part);
+    if (octet < 0 || octet > 255) return null;
+    result = ((result << 8) + octet) >>> 0;
+  }
+  return result >>> 0;
 }
 
 export function deriveSeverity({
@@ -1898,7 +2642,7 @@ function compactFieldValues(values = []) {
 }
 
 function graphNodeFromObject(object, item, side, index) {
-  const objectType = item.objectType || object.normalizedType || object.type || "object";
+  const objectType = object.normalizedType || object.type || item.objectType || "object";
   const overlap = item.oldObject && item.newObject ? buildFieldOverlapPair(item) : null;
   return {
     id: `${side}:${objectKey(object, objectType)}:${index}`,

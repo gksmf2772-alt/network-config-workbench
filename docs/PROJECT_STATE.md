@@ -388,3 +388,819 @@
 ### Remaining notes
 - Built-in sample data verified the UI contract. A larger full-config case should still be checked manually to confirm grouping remains useful when many object types and many violations are present.
 - This pass does not add pagination or virtual scrolling; it bounds the existing UI and improves group-level navigation.
+
+## 2026-06-05 Relationship Graph Expansion
+
+### Current work
+- Task: improve relationship graph for full config comparisons.
+- Branch: `work/mvp-interface-stabilization`.
+- Related files:
+  - `src/core/summaryAnalytics.js`
+  - `src/core/legacyCore.js`
+  - `src/core/legacySelectors.js`
+  - `src/components/AppShell.jsx`
+  - `src/components/GraphTabPanel.jsx`
+  - `src/styles/global-report.css`
+  - `tests/summary-analytics.test.js`
+  - `tests/summary-renderer.test.js`
+  - `docs/verification/relationship-graph-2026-06-05.md`
+
+### Requirements handled
+- Add a dedicated Graph tab so the relationship graph can be viewed larger than inside Report.
+- Keep existing Report graph, but route the report quick graph action to the dedicated Graph tab.
+- Add graph controls for `비교 관계` and `내부 연결`.
+- Add expand/collapse visual behavior for the graph canvas.
+- Add old/new config internal relationship edges for port, lag, service/SAP, interface, static-route, BGP, filter, QoS, and policy references.
+- Keep comparison mapping edges separate from config-internal edges.
+
+### Decisions
+- Relationship graph edges now carry `graphMode: "comparison"` or `graphMode: "internal"` for UI toggling.
+- Internal graph edges are built per side (`old`, `new`) from already parsed semantic objects.
+- Missing referenced targets such as filter/qos/policy/service are shown as virtual reference nodes instead of hiding the relationship.
+- Static-route to BGP prefix matching ignores broad prefixes shorter than `/24` to avoid noisy default-route links.
+- The graph layout uses topology columns: Port, LAG, Interface, SAP/Service, Static/PIM, BGP, Filter/QoS/Policy.
+
+### Verification
+- `node --check src/core/summaryAnalytics.js`: pass.
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/summary-analytics.test.js`: pass, 28 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 10 tests.
+- `npm.cmd test`: pass, 231 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+- Browser CDP check: pass.
+  - Graph tab active.
+  - Graph rendered with 20 nodes and 20 edges on the verification fixture.
+  - Internal edges: 16.
+  - Comparison edges: 4.
+  - Comparison/internal toggles rendered.
+  - Expand state applied.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-05/relationship-graph/after-graph-tab.png`
+
+### Remaining notes
+- Full production config should be rechecked after the user compares real large configs, because parser coverage still determines which old/new internal links can be inferred.
+- The current graph remains a bounded summary graph and now uses type-balanced representative sampling.
+
+## 2026-06-05 Relationship Graph Sampling Fix
+
+### Issue
+- In full config comparisons, the graph could show only port nodes.
+- Root cause: graph data used the first active plan items in order, and full configs often place many port objects before LAG/interface/static-route/BGP objects.
+- Port-heavy configs also made the graph lane very tall.
+
+### Change
+- Replaced first-N slicing with graph-specific type-balanced sampling.
+- Added a per-type graph cap of 12 plan items.
+- The per-type cap applies even when total plan items are below the global graph cap, so a port-heavy but otherwise small graph does not become vertically dominated by port nodes.
+- Added graph metadata for selected/hidden counts and a UI note explaining representative sampling.
+
+### Verification
+- `node --check src/core/summaryAnalytics.js`: pass.
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/summary-analytics.test.js`: pass, 29 tests.
+- `node --test tests/summary-analytics.test.js tests/summary-renderer.test.js`: pass, 39 tests.
+- `npm.cmd test`: pass, 232 pass / 1 skip.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+- `npm.cmd run guard:legacy-core`: pass.
+- `npm.cmd run validate:graph`: partial.
+  - Synthetic graph case passed.
+  - Full real validation could not run because local fixture `예제 및 테스트 설정/Gangbuk-SEA028_config.txt` is missing.
+- Browser CDP port-heavy graph check: pass.
+  - 40-port fixture rendered port plus lag/interface/sap/static-route/bgp/filter/policy/service.
+  - Nodes reduced to 38.
+  - Limit note showed hidden port count.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-05/relationship-graph/after-graph-balanced-sampling.png`
+
+### Remaining notes
+- The sampling layer remains in place. The following progressive disclosure pass adds click-to-expand cluster nodes on top of this sampling.
+
+## 2026-06-05 Relationship Graph Progressive Disclosure
+
+### Issue
+- The initial relationship graph still showed too much information, making full-config review hard to scan.
+- The flow layout was intentionally type-column based, so users could only read it as row/column lanes.
+- A free layout mode was needed, but it still had to avoid node label overlap.
+
+### Change
+- Default graph rendering now uses compact mode.
+- Compact mode keeps up to 3 nodes per side/type group and replaces the rest with `+N` cluster nodes.
+- Clicking a cluster node or the `상세 보기` button switches the graph to full detail.
+- Added `흐름` and `자유` layout buttons.
+- `자유` layout uses a wider deterministic scatter canvas with collision checks rather than fixed topology columns.
+- Graph interactions now rebind through an abort controller so repeated graph re-renders do not accumulate duplicate listeners.
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/summary-renderer.test.js tests/summary-analytics.test.js`: pass, 39 tests.
+- `npm.cmd test`: pass, 232 pass / 1 skip.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+- `npm.cmd run guard:legacy-core`: pass.
+- Browser CDP full graph UX check: pass.
+  - Compact flow: 35 nodes, 53 edges, 8 cluster nodes, 0 node overlaps.
+  - Full flow: 69 nodes, 110 edges, 0 cluster nodes, 0 node overlaps.
+  - Full free layout: 69 nodes, 110 edges, 0 cluster nodes, 0 node overlaps.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-05/relationship-graph/after-graph-compact-default.png`
+- `docs/verification/screenshots/2026-06-05/relationship-graph/after-graph-free-layout.png`
+
+### Remaining notes
+- The free layout is not drag-and-drop; it is a deterministic scatter layout. It trades a larger scrollable canvas for readable non-overlapping nodes without adding a new graph library.
+
+## 2026-06-05 Relationship Graph React Flow Migration
+
+### Current work
+- Task: replace the legacy direct SVG relationship graph renderer with React Flow.
+- Branch: `work/mvp-interface-stabilization`.
+- Related files:
+  - `package.json`
+  - `package-lock.json`
+  - `src/main.jsx`
+  - `src/core/legacyCore.js`
+  - `src/components/graph/RelationshipGraph.jsx`
+  - `src/components/graph/RelationshipGraphBridge.jsx`
+  - `src/components/graph/ConfigNode.jsx`
+  - `src/components/graph/ConfigEdge.jsx`
+  - `src/utils/graphAdapter.js`
+  - `src/utils/dagreLayout.js`
+  - `src/styles/global-report.css`
+  - `tests/graph-adapter.test.js`
+  - `tests/summary-renderer.test.js`
+  - `docs/verification/relationship-graph-2026-06-05.md`
+
+### Requirements handled
+- Added `@xyflow/react` and `dagre`.
+- Added a graph adapter that converts the existing `summaryAnalytics` graph output into React Flow nodes and edges.
+- Added graph data validation for duplicate node ids, duplicate edge ids, and missing edge endpoints.
+- Added dagre flow layout and kept the existing free/scatter layout option through a React Flow-compatible utility.
+- Added custom React Flow node and edge components.
+- Replaced the relationship graph HTML/SVG output with a React Flow mount root while keeping existing toolbar controls.
+- Preserved compact/full detail behavior, comparison/internal mode toggles, search, label toggle, node click focus, pane reset, and cluster expansion.
+- Kept `summaryAnalytics` graph output structure unchanged.
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/graph-adapter.test.js tests/summary-renderer.test.js`: pass, 13 tests.
+- `npm.cmd test`: pass, 235 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+- Browser CDP React Flow check: pass.
+  - React Flow nodes rendered: 34.
+  - Initial visible edges: 0, by design.
+  - MiniMap rendered: yes.
+  - Controls rendered: yes.
+  - Node click showed connected edges: 2.
+  - Node click dimmed unrelated nodes: 14.
+  - Pane click reset edges and dim state: yes.
+  - Node status data included `unchanged`, `modified`, and `added`.
+  - Free layout toggle rendered React Flow with 34 nodes.
+  - Flow layout toggle restored dagre positioning.
+  - Label toggle hid object labels while preserving type/score text.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-05/relationship-graph-react-flow/after-react-flow-graph.png`
+
+### Remaining notes
+- React Flow added bundle weight. The production build still succeeds, but the existing chunk-size warning remains and should be addressed separately if load time becomes a problem.
+- Search in compact mode can keep aggregate cluster nodes visible when their hidden search text matches. This is expected progressive disclosure behavior.
+
+## 2026-06-05 Relationship Graph Layout Emergency Fix
+
+### Current work
+- Task: fix React Flow graph nodes clustering vertically without stable dagre lanes.
+- Branch: `work/mvp-interface-stabilization`.
+- Related files:
+  - `src/utils/dagreLayout.js`
+  - `src/components/graph/RelationshipGraph.jsx`
+  - `src/components/graph/RelationshipGraphBridge.jsx`
+  - `src/core/legacyCore.js`
+  - `src/styles/global-report.css`
+  - `docs/verification/relationship-graph-2026-06-05.md`
+
+### Requirements handled
+- Applied requested fix 1: replaced the `applyDagreLayout` body with explicit dagre graph setup, LR rank direction, orphan edge filtering, rounded positions, and no `(0,0)` fallback for missing dagre positions.
+- Applied requested fix 2: `RelationshipGraph.jsx` now calculates `layoutedNodes` before passing nodes into `useNodesState`.
+- Applied requested fix 3: React Flow now has explicit `fitViewOptions`, `minZoom={0.05}`, `maxZoom={2}`, and `defaultEdgeOptions={{ hidden: true }}`.
+- Applied requested fix 4: React Flow is wrapped in a `width: 100%; height: 100%; minHeight: 600` container, and the parent `.report-graph-flow-root` height is explicitly set to `calc(100vh - 160px)` with `min-height: 600px`.
+- Preserved the existing free layout helper and `layoutMode` bridge so the previously added free layout toggle does not regress.
+- Did not apply fix 5 in this pass because the user specifically requested fixes 1-4 only.
+
+### Verification
+- `node --check src/utils/dagreLayout.js`: pass.
+- `node --check src/components/graph/RelationshipGraph.jsx`: not applicable; Node cannot directly syntax-check `.jsx` and returns `ERR_UNKNOWN_FILE_EXTENSION`.
+- `node --test tests/graph-adapter.test.js tests/summary-renderer.test.js`: pass, 13 tests.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+- `npm.cmd test`: pass, 235 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- Browser CDP console check: pass.
+  - `console.log('layouted:', rows)` was captured.
+  - Node count: 34.
+  - Distinct x positions: 3.
+  - Distinct y positions: 15.
+  - x range: `40` to `520`.
+  - y range: `40` to `570`.
+  - All nodes at `(0,0)`: false.
+  - FitView control exists: true.
+  - MiniMap exists: true.
+  - `.report-graph-flow-root` height: `800px` on the 1680x960 verification viewport.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-05/relationship-graph-layout-fix/after-layout-fix.png`
+
+### Remaining notes
+- The graph is no longer at `(0,0)` or a single vertical pile. If stricter type columns are still needed, apply the separately listed rank hint work as the next change.
+
+## 2026-06-05 Relationship Graph Readability Fix
+
+### Issue
+- The emergency dagre fix made positions non-zero, but large graphs were still unreadable because React Flow fit the entire graph into one viewport.
+- In full detail mode, many nodes became too small to read and appeared as a dense vertical cluster.
+
+### Change
+- Added `columnRank` metadata for graph node types in `src/utils/graphAdapter.js`.
+- Added a readable column layout path in `src/utils/dagreLayout.js` for large graphs over 42 nodes.
+- Large graph flow layout now uses stable type columns: port, LAG, interface, SAP/service, static/PIM, BGP, filter/QoS/policy, more.
+- React Flow now disables automatic full fit for large graphs and starts at readable zoom `0.82`.
+- Minimum zoom is now `0.35` so the graph cannot collapse into unreadable dots.
+- The graph container now has a fixed viewport height and hidden overflow; navigation is handled through React Flow pan/zoom and MiniMap instead of nested scrollbars.
+
+### Verification
+- `node --check src/utils/dagreLayout.js`: pass.
+- `node --test tests/graph-adapter.test.js tests/summary-renderer.test.js`: pass, 13 tests.
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains.
+- `npm.cmd test`: pass, 235 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- Browser CDP large graph check: pass.
+  - Synthetic full graph detail nodes: 115.
+  - Distinct x columns: 8.
+  - Distinct y positions: 20.
+  - x range: `48` to `1588`.
+  - y range: `48` to `862`.
+  - All nodes at `(0,0)`: false.
+  - Minimum rendered node width: `97px`.
+  - Median rendered node width: `97px`.
+  - FitView control exists: true.
+  - MiniMap exists: true.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-05/relationship-graph-readable-fix/after-readable-large-graph.png`
+
+### Remaining notes
+- Full detail mode can still contain more nodes than the visible viewport. That is intentional; the graph now prioritizes readable nodes and uses pan/zoom/MiniMap for navigation instead of shrinking everything into one view.
+
+## 2026-06-10 Dev Server Startup Hang Check
+
+### Issue
+- `npm.cmd run dev` started a Vite process on port `5173`, but the site did not open.
+- HTTP requests to `/` and `/src/main.jsx` timed out while the Node/Vite process kept consuming CPU.
+
+### Cause
+- Temporary Chrome verification profiles had been created inside the repository under `tmp/`.
+- The repo uses `@tailwindcss/vite`; with a large temporary browser profile inside the project root, Vite/Tailwind scanning could stall dev-server requests and production builds.
+
+### Change
+- Removed the workspace-local `tmp/` directory created during browser verification.
+- Added `tmp/` to `.gitignore` so future verification scratch files do not become a Vite/Tailwind scan target.
+
+### Verification
+- `npm.cmd run build`: pass in `4.56s`; existing chunk-size warning remains.
+- `npm.cmd test`: pass, 235 pass / 1 skip.
+- Restarted dev server with `npm.cmd run dev -- --host 127.0.0.1 --port 5173`.
+- `http://127.0.0.1:5173/`: HTTP 200.
+- `http://127.0.0.1:5173/src/main.jsx`: HTTP 200.
+
+### Next Session Notes
+- Use `npm.cmd run dev`, not bare `npm.cmd run`, to start the site.
+- Keep temporary browser profiles outside the repository or under ignored `tmp/`.
+
+## 2026-06-10 Relationship Graph Focus And Layout Modes
+
+### Issue
+- Clicking one graph element only showed directly connected edges, so users could not quickly understand the related path.
+- The default graph view showed nodes but did not make `port -> lag -> interface -> static-route -> bgp/pim` connectivity clear.
+- Users requested multiple layout modes including row/column and radial views.
+
+### Change
+- Default graph view now keeps primary internal topology edges visible:
+  - `port -> lag`
+  - `lag -> interface`
+  - `port -> interface`
+  - `interface -> static-route`
+  - `static-route -> bgp`
+  - `interface -> pim`
+- Node click focus now expands a multi-hop neighborhood instead of only direct neighbors.
+- Focused edges are highlighted thicker, and related nodes are kept visible while unrelated nodes are dimmed.
+- After clicking a node, React Flow fits the related neighborhood into view.
+- Added a `방사형` graph layout mode alongside existing `행열` and `자유`.
+- Added config-internal `interface -> pim` graph edges.
+
+### Files
+- `src/components/graph/RelationshipGraph.jsx`
+- `src/components/graph/ConfigEdge.jsx`
+- `src/components/graph/ConfigNode.jsx`
+- `src/utils/dagreLayout.js`
+- `src/core/legacyCore.js`
+- `src/core/summaryAnalytics.js`
+- `tests/graph-adapter.test.js`
+- `tests/summary-analytics.test.js`
+- `tests/summary-renderer.test.js`
+
+### Verification
+- `node --test tests/graph-adapter.test.js tests/summary-analytics.test.js tests/summary-renderer.test.js`: pass, 42 tests.
+- `npm.cmd test`: pass, 235 pass / 1 skip.
+- `npm.cmd run build`: pass in `4.76s`; existing chunk-size warning remains.
+- Browser CDP graph check: pass.
+  - Default visible topology edges: 10.
+  - Clicking `old-port` expanded related path edges to 16.
+  - Focused path included comparison edges and both old/new internal chain edges.
+  - Radial mode rendered with distributed x/y positions.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-10/relationship-graph-focus-layouts/after-radial-layout.png`
+
+### Remaining Notes
+- Large real configs may still need a dedicated "selected neighborhood only" view if the focused path grows too broad. Current behavior keeps all nodes visible but dims unrelated nodes to preserve context.
+
+## 2026-06-10 Relationship Graph Circuit Lane Layout
+
+### Issue
+- The large row/column graph placed nodes by config order inside each type column.
+- Because each column was sorted independently, related `port`, `lag`, `interface`, `static-route`, `bgp`, and `pim` objects often appeared on different y positions.
+- This made internal relationship lines cross heavily and look random even when the underlying circuit relationship was correct.
+
+### Change
+- Updated the large graph row/column layout to build topology-connected components before assigning positions.
+- Internal topology edges now determine a shared lane:
+  - `internal-port-lag`
+  - `internal-lag-interface`
+  - `internal-port-interface`
+  - `internal-interface-static-route`
+  - `internal-static-route-bgp`
+  - `internal-interface-pim`
+  - SAP/service topology edges where present.
+- Nodes in the same detected circuit are aligned on the same y-axis across columns.
+- If multiple nodes from the same circuit fall in one column, they stack only within that circuit lane.
+
+### Files
+- `src/utils/dagreLayout.js`
+- `tests/graph-adapter.test.js`
+
+### Verification
+- `node --test tests/graph-adapter.test.js tests/summary-renderer.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 236 pass / 1 skip.
+- `npm.cmd run build`: pass in `4.54s`; existing chunk-size warning remains.
+- Browser CDP synthetic large graph check: pass.
+  - 20 circuit lanes checked.
+  - Every checked `port -> lag -> interface -> static-route -> bgp` circuit had a single shared y coordinate.
+  - Rendered DOM sample showed same-circuit nodes aligned horizontally.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-10/relationship-graph-lane-layout/after-lane-layout.png`
+
+### Remaining Notes
+- If parser output does not include enough internal topology edges for a real circuit, that circuit cannot be lane-aligned yet. The next improvement would be adding more relationship inference, not changing the renderer.
+
+## 2026-06-12 Relationship Graph Type Filter
+
+### Issue
+- The relationship graph exposed too many object categories by default.
+- Shared policy/reference objects such as BGP, QoS, filter, policy, SAP, and service made the graph look overloaded before users selected a focused view.
+
+### Change
+- The default relationship graph view now shows only the topology path requested for the first pass:
+  - `port`
+  - `lag`
+  - `interface`
+  - `static`
+  - `pim`
+- Added graph type checkboxes for `Port`, `LAG`, `Interface`, `Static`, and `PIM`.
+- Preserved type checkbox state when switching graph detail/layout modes.
+- Hidden graph types now fade and shrink through the React Flow node/edge renderer instead of visually competing with active topology nodes.
+- Focus, fit view, and edge visibility now exclude type-filtered nodes.
+- Policy, QoS, filter, SAP/service, and BGP controls are intentionally left for a later expansion.
+
+### Files
+- `src/core/legacyCore.js`
+- `src/components/graph/RelationshipGraph.jsx`
+- `src/components/graph/ConfigNode.jsx`
+- `src/components/graph/ConfigEdge.jsx`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+
+### Verification
+- `node --test tests/summary-renderer.test.js tests/graph-adapter.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 236 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+- Browser CDP type-filter check: pass.
+  - Default visible types: `interface`, `lag`, `pim`, `port`, `static`.
+  - Policy/reference types visible by default: false.
+  - Unchecking `LAG` hides LAG while keeping `Port` visible.
+  - Node hide transition includes opacity and transform animation.
+  - Browser console errors during graph verification: none.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-12/relationship-graph-type-filter/after-type-filter.png`
+
+### Remaining Notes
+- The next graph expansion should add optional controls for shared references (`filter`, `qos`, `policy`, `sap/service`, `bgp`) instead of enabling them by default.
+
+## 2026-06-12 Relationship Graph Connectivity And Spread Fix
+
+### Issue
+- The graph still looked too spread out after type filtering.
+- Cause 1: the readable column layout still reserved x-axis columns for hidden types such as SAP/service and BGP, so visible `interface -> static/pim` nodes were separated by unused column gaps.
+- Cause 2: large graphs auto-fit all visible nodes after render, which zoomed the whole graph down and made nodes hard to read.
+- Cause 3: `lag -> interface` edges only used explicit `lag`, `port`, or `sap` fields on interface objects. LAG description endpoints and interface names/descriptions that identify the same circuit were not used.
+- Cause 4: graph sampling could select a LAG but omit its member port plan item, so the LAG appeared without a connected port even though the full comparison had the port object.
+
+### Change
+- Large readable graph layout now compresses columns around currently visible type filters.
+- Reduced readable column gap from `220px` to `180px`.
+- Large graphs no longer auto-fit every visible node on initial render; they start at readable zoom and keep pan/zoom navigation.
+- Graph reference indexing now includes description endpoint candidates and directional-name variants such as `to-*`, `from-*`, `via-*`, and `g-to-*`.
+- `lag -> interface` graph edges now also check interface object reference variants, so shared description/interface endpoint names can connect the circuit.
+- Graph sampling now expands selected topology nodes with direct neighbors:
+  - selected LAG pulls in member port if available.
+  - selected LAG can pull in same-endpoint interface.
+  - selected interface can pull in referenced LAG/port.
+  - selected PIM/static-route can pull in explicit interface references where available.
+
+### Files
+- `src/components/graph/RelationshipGraph.jsx`
+- `src/utils/dagreLayout.js`
+- `src/core/summaryAnalytics.js`
+- `tests/graph-adapter.test.js`
+- `tests/summary-analytics.test.js`
+
+### Verification
+- `node --test tests/summary-analytics.test.js tests/graph-adapter.test.js tests/summary-renderer.test.js`: pass, 46 tests.
+- `npm.cmd test`: pass, 239 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+- Browser CDP large graph layout check: pass.
+  - Viewport transform stayed readable: `translate(28px, 28px) scale(0.82)`.
+  - Visible types: `interface`, `lag`, `pim`, `port`, `static`.
+  - `port -> lag` x delta: `180`.
+  - `lag -> interface` x delta: `180`.
+  - `interface -> static` x delta: `180`.
+  - Browser console errors during graph verification: none.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-12/relationship-graph-connectivity-layout/after-connectivity-layout.png`
+
+### Remaining Notes
+- If a real config has no parseable member-port, interface reference, SAP reference, or shared description endpoint, the graph still cannot infer that physical relationship. That would require adding new parser evidence, not just renderer changes.
+
+## 2026-06-12 Relationship Graph Row Connectivity Fix
+
+### Issue
+- The relationship graph row/column view could still look arbitrary because broad endpoint reference expansion made one LAG or port appear connected to unrelated interfaces.
+- Small graphs still used the dagre path, so the "row/column" mode did not always render as a readable circuit row.
+- Hidden type-filtered nodes could still participate in layout spacing, leaving large empty gaps and pushing visible topology nodes apart.
+
+### Change
+- `lag -> interface` inference now uses explicit `lag`, `port`, and `sap` references first.
+- Description/name endpoint fallback is now applied only when it resolves to exactly one LAG or port candidate.
+- Topology neighbor expansion no longer uses broad `graphObjectRefVariants()` for LAG/interface/PIM neighbor discovery.
+- Row/column flow mode now always prefers the readable column layout, regardless of graph size.
+- Readable layout now calculates components from currently visible types only; filtered-out nodes no longer reserve visible lane height.
+- Default visible relationship graph types now include `BGP`, so the basic path reads as `Port -> LAG -> Interface -> Static -> BGP -> PIM`.
+- PIM was moved to its own column after BGP instead of sharing the Static column.
+
+### Files
+- `src/core/summaryAnalytics.js`
+- `src/utils/dagreLayout.js`
+- `src/utils/graphAdapter.js`
+- `src/components/graph/RelationshipGraph.jsx`
+- `src/core/legacyCore.js`
+- `tests/summary-analytics.test.js`
+- `tests/graph-adapter.test.js`
+
+### Verification
+- `node --test tests/summary-analytics.test.js tests/graph-adapter.test.js tests/summary-renderer.test.js`: pass, 47 tests.
+- `npm.cmd test`: pass, 240 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+- Browser CDP React Flow synthetic row check: pass.
+  - Console errors: `0`.
+  - Row 1 y-axis spread: `0`.
+  - Row 2 y-axis spread: `0`.
+  - Visible x-order: Port, LAG, Interface, Static, BGP, PIM.
+  - Hidden SAP node opacity: `0`, and it did not affect the visible row placement.
+
+### Screenshots
+- `docs/verification/screenshots/2026-06-12/relationship-graph-row-connectivity/after-readable-flow.png`
+
+### Remaining Notes
+- If a real device config legitimately has one LAG feeding multiple logical interfaces, one physical node still cannot be duplicated into multiple perfect rows without adding a separate "duplicated lane node" visualization mode. The current fix prevents false fan-out and keeps confirmed circuit chains aligned.
+
+## 2026-06-12 Canonical Relation Graph Phase 1
+
+### Current Work
+- Task: start separating graph relation inference from the React Flow renderer.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: add canonical graph types, canonical IDs, interface canonicalization, and first direct relation resolvers.
+
+### Change
+- Added a new canonical graph layer under `src/core/relationGraph/`.
+- Added explicit node kinds:
+  - `PORT`
+  - `LAG`
+  - `L3_INTERFACE`
+  - `PEER_NH`
+  - `STATIC_ROUTE`
+  - `BGP_NEIGHBOR`
+  - `PIM`
+- Added explicit direct relation kinds:
+  - `MEMBER_OF`
+  - `HAS_INTERFACE`
+  - `HAS_PEER`
+  - `USED_BY_STATIC`
+  - `USED_BY_BGP`
+  - `HAS_PIM`
+- Added canonical ID helpers for all target node kinds.
+- Added interface, port, LAG, device, and VRF canonicalization helpers.
+- Added `CanonicalNode` and `GraphEdge` factory functions through plain JS object constructors.
+- `createGraphEdge()` now rejects invalid/transitive endpoint pairs.
+- Implemented `PORT -> LAG` resolver:
+  - LAG member-port evidence.
+  - Port channel-group/LAG evidence.
+  - Same physical port with multiple LAG candidates is classified as `conflict` and no automatic edge is created.
+- Implemented `LAG -> L3_INTERFACE` resolver:
+  - Explicit `lag` reference.
+  - Explicit `sap` reference such as `lag-11:100`.
+  - Interface port reference only when the port already resolves to one LAG.
+  - Multiple LAG candidates are classified as `ambiguous` and no automatic edge is created.
+- Static route, BGP, PIM canonical nodes can be created, but no transitive direct edges are generated in this phase.
+
+### Files
+- `src/core/relationGraph/types.js`
+- `src/core/relationGraph/canonicalInterface.js`
+- `src/core/relationGraph/canonicalIds.js`
+- `src/core/relationGraph/relationResolver.js`
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/relationGraph/index.js`
+- `tests/relation-graph.test.js`
+
+### Verification
+- `node --test tests/relation-graph.test.js`: pass, 8 tests.
+- `node --test tests/relation-graph.test.js tests/summary-analytics.test.js tests/graph-adapter.test.js`: pass, 45 tests.
+- `npm.cmd test`: pass, 248 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+
+### Remaining Notes
+- The existing UI still uses `summaryAnalytics.buildGraphData()`. The new canonical graph builder is implemented and tested independently, but not yet wired into the report/graph rendering pipeline.
+- Next phase should add `PEER_NH`, static route, BGP, and PIM resolvers, then project canonical graph data into a view graph for React Flow.
+
+## 2026-06-12 Canonical Relation Graph Static/BGP/PIM Resolvers
+
+### Current Work
+- Task: extend the canonical graph resolver layer with static route, BGP, and PIM direct relations.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: canonical resolver only. React Flow renderer and legacy summary graph rendering were not changed in this pass.
+
+### Change
+- Added IPv4/CIDR utilities for canonical resolver decisions.
+- Added `PIM_NEIGHBOR` node kind and `USED_BY_PIM` direct relation.
+- Added canonical PIM neighbor ID helper.
+- Added `L3_INTERFACE -> PEER_NH` relation inference from explicit interface peer fields and /30-/31 interface addresses.
+- Added static route resolver:
+  - Requires same device and VRF between route and interface candidates.
+  - Skips routes without next-hop and records `unresolved`.
+  - Uses explicit outgoing interface match at confidence `100`.
+  - Uses interface peer IP match at confidence `95`.
+  - Uses connected subnet membership at confidence `70`.
+  - Emits `PEER_NH -> STATIC_ROUTE` only when the highest score candidate is unique.
+  - Emits `ambiguous` when top candidates tie and does not create the route edge.
+- Added BGP resolver:
+  - Resolves direct connected peers by peer IP or connected subnet.
+  - Allows multihop/loopback neighbors only when directly connected or when static-route reachability proves the neighbor prefix.
+  - Emits `PEER_NH -> BGP_NEIGHBOR` with confidence and evidence.
+- Added PIM resolver:
+  - Separates interface enable from neighbor relations.
+  - Emits `L3_INTERFACE -> PIM` for interface enable.
+  - Emits `PEER_NH -> PIM_NEIGHBOR` only when a neighbor IP is present and resolvable.
+- Preserved transitive edge ban: no `PORT -> STATIC_ROUTE`, `PORT -> BGP_NEIGHBOR`, or `LAG -> STATIC_ROUTE` direct edge is generated.
+
+### Files
+- `src/core/relationGraph/types.js`
+- `src/core/relationGraph/canonicalIds.js`
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/relationGraph/index.js`
+- `src/core/relationGraph/ipUtils.js`
+- `src/core/relationGraph/relationResolver.js`
+- `tests/relation-graph.test.js`
+
+### Verification
+- `node --check src/core/relationGraph/relationResolver.js`: pass.
+- `node --check src/core/relationGraph/canonicalGraphBuilder.js`: pass.
+- `node --test tests/relation-graph.test.js`: pass, 15 tests.
+- `node --test tests/relation-graph.test.js tests/summary-analytics.test.js tests/graph-adapter.test.js`: pass, 52 tests.
+- `npm.cmd test`: pass, 255 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+
+### Remaining Notes
+- The canonical graph layer is still independent from the current UI graph. The next step is to add a canonical graph -> React Flow view graph projection and then wire it into the graph tab behind existing behavior.
+- Static/BGP/PIM resolvers currently use IPv4 only. IPv6 can be added as a separate resolver utility extension.
+- BGP multihop reachability is proven through resolved static-route reachability in this phase. Policy, IGP, and recursive route proof are not implemented yet.
+
+## 2026-06-12 Canonical View Graph React Flow Rendering
+
+### Current Work
+- Task: render a canonical relation graph through a separate view graph instead of passing canonical graph data directly to React Flow.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: React Flow rendering data path, fixed-column view projection, canonicalId-based interaction, and static route aggregation.
+
+### Change
+- Added `buildCanonicalViewGraph()` under `src/core/relationGraph/viewGraph.js`.
+- Default flow view now uses fixed canonical columns:
+  - `PORT`: x `0`
+  - `LAG`: x `260`
+  - `L3_INTERFACE`: x `560`
+  - `PEER_NH`: x `860`
+  - `STATIC_ROUTE`: x `1160`
+  - `BGP_NEIGHBOR`: x `1480`
+  - `PIM`: x `1760`
+- `buildGraphData()` now attaches `graph.viewGraph` while preserving the existing legacy `graph.nodes`/`graph.edges` contract.
+- `renderRelationshipGraph()` prefers `graph.viewGraph` when present, so React Flow receives view graph nodes/edges, not canonical graph nodes/edges.
+- `toReactFlowData()` preserves view node positions and passes through `canonicalId`, `canonicalKind`, `viewLayout`, and aggregate metadata.
+- `RelationshipGraph.jsx` keeps fixed-column coordinates in flow mode and still allows radial/free modes to use their existing layout functions.
+- Click, hover, focus, and dimming now use `data.canonicalId` so cloned nodes for the same canonical object highlight together.
+- Static routes sharing one next-hop are collapsed into `Static Routes: N` aggregate nodes by default.
+- Clicking a static aggregate expands the hidden individual static route child nodes for focused inspection.
+- Added `Peer` to graph type filters so `PEER_NH` is visible in the default chain.
+
+### Files
+- `src/core/relationGraph/viewGraph.js`
+- `src/core/relationGraph/index.js`
+- `src/core/summaryAnalytics.js`
+- `src/core/legacyCore.js`
+- `src/utils/graphAdapter.js`
+- `src/components/graph/RelationshipGraph.jsx`
+- `src/components/graph/ConfigNode.jsx`
+- `src/components/graph/ConfigEdge.jsx`
+- `tests/relation-graph.test.js`
+- `tests/graph-adapter.test.js`
+- `tests/summary-analytics.test.js`
+
+### Verification
+- `node --check src/core/relationGraph/viewGraph.js`: pass.
+- `node --check src/core/summaryAnalytics.js`: pass.
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/relation-graph.test.js tests/graph-adapter.test.js`: pass, 23 tests.
+- `node --test tests/summary-analytics.test.js tests/summary-renderer.test.js tests/graph-adapter.test.js tests/relation-graph.test.js`: pass, 66 tests.
+- `npm.cmd test`: pass, 259 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+- Browser CDP renderer check: pass.
+  - Rendered node types: `port`, `lag`, `interface`, `peer`, `static`, `bgp`, `pim`.
+  - Fixed transforms confirmed: `0`, `260`, `560`, `860`, `1160`, `1480`, `1760`.
+  - Static route children opacity before aggregate click: `0`, `0`.
+  - Static route children opacity after aggregate click: `1`, `1`.
+  - Console/runtime errors: none related to graph rendering. The only captured error-level event was existing `favicon.ico` 404.
+
+### UI Screenshots
+- Default collapsed fixed-column view: `docs/verification/screenshots/2026-06-12/canonical-view-graph/after-fixed-column-default.png`
+- Aggregate expanded fixed-column view: `docs/verification/screenshots/2026-06-12/canonical-view-graph/after-fixed-column-view.png`
+
+### Known Issues
+- `PIM_NEIGHBOR` view nodes share the PIM column because the requested default column order does not include a separate PIM neighbor column.
+- Static route aggregate expansion is local to the current React Flow render state. Changing graph filters or rerendering the graph returns aggregates to the default collapsed state.
+- The view graph is now wired into the report graph rendering path, but broader real-config quality still depends on parser/resolver evidence coverage.
+
+## 2026-06-12 Relationship Graph Trace Matrix UX
+
+### Current Work
+- Task: improve the default relationship graph from a broad node graph into a path trace matrix.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: React Flow renderer view graph projection, row-focused interaction, summary/detail/full graph views, and tests.
+
+### Change
+- Replaced the prior fixed-number column projection with a trace matrix view model.
+- Added view modes:
+  - `summary`: default path view with `PORT | LAG | L3_INTERFACE | PEER_NH | SERVICES`.
+  - `detail`: path view with individual service nodes expanded by service type.
+  - `full`: full graph view using the same dynamic column calculation as detail.
+- Summary view now displays services as one aggregate node, for example `Static 2 | BGP 0 | PIM 1`.
+- Detail/full views use individual `STATIC_ROUTE`, `BGP_NEIGHBOR`, and `PIM` nodes only when those node types exist.
+- Column x positions are calculated from visible columns using `COLUMN_LAYOUT`, so missing BGP/PIM/static columns no longer reserve blank space.
+- Added row bands and column header nodes so one row reads as one connection path.
+- Added chain-focused click behavior:
+  - clicking a node or row band highlights the same `chainId`;
+  - other chains are dimmed;
+  - right side panel shows PORT, LAG, Interface, Peer/NH, Static routes, BGP neighbors, PIM, confidence, and evidence.
+- Changed default graph buttons to user-facing actions:
+  - `경로 요약`
+  - `경로 상세`
+  - `문제만 보기`
+  - `전체 그래프`
+- Moved the old layout-oriented controls under `고급 배치`.
+
+### Files
+- `src/core/relationGraph/viewGraph.js`
+- `src/core/relationGraph/index.js`
+- `src/core/legacyCore.js`
+- `src/styles/global-report.css`
+- `src/utils/graphAdapter.js`
+- `src/components/graph/RelationshipGraph.jsx`
+- `src/components/graph/ConfigNode.jsx`
+- `src/components/graph/ConfigEdge.jsx`
+- `src/components/graph/graphFocus.js`
+- `tests/relation-graph.test.js`
+- `tests/graph-adapter.test.js`
+- `tests/summary-analytics.test.js`
+
+### Verification
+- `node --check src/core/relationGraph/viewGraph.js`: pass.
+- `node --check src/core/legacyCore.js`: pass.
+- `node --check src/core/summaryAnalytics.js`: pass.
+- `node --check src/utils/graphAdapter.js`: pass.
+- `node --check src/components/graph/graphFocus.js`: pass.
+- `node --test tests/relation-graph.test.js tests/graph-adapter.test.js`: pass, 26 tests.
+- `node --test tests/summary-analytics.test.js`: pass, 33 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 10 tests.
+- `npm.cmd test`: pass, 262 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+- Browser CDP renderer check: pass.
+  - Summary headers rendered: `PORT`, `LAG`, `INTERFACE`, `PEER/NH`, `SERVICES`.
+  - Services aggregate rendered: `Static 2 | BGP 0 | PIM 1`.
+  - Row click opened the side detail panel.
+  - Non-selected row dimmed to opacity `0.12`.
+
+### UI Screenshots
+- Summary trace matrix with selected row: `docs/verification/screenshots/2026-06-12/trace-matrix-graph/summary-selected-row.png`
+
+### Known Issues
+- `detail` and `full` currently use the same expanded service-column projection. The main distinction is intended UX usage: `detail` for selected-chain inspection and `full` for broader graph inspection.
+- The side panel is an overlay on the right side of the graph. On narrow graph widths it can cover the far-right SERVICES/PIM area until the user pans or closes the panel.
+- Orphan static/BGP/PIM nodes with no resolver-backed chain are still not emphasized in the default trace matrix; they remain dependent on unresolved/diagnostic reporting.
+
+## 2026-06-12 Relationship Graph Old/New Side Layout
+
+### Current Work
+- Task: place old config trace matrix on the left and new config trace matrix on the right.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: canonical view graph layout coordinates and side headers only.
+
+### Change
+- Changed trace matrix side placement from vertical stacking to horizontal side lanes.
+- `old` side now starts at the left origin.
+- `new` side now starts at `old layout width + side gap`, so both sides keep the same column order but render next to each other.
+- Each side now has its own repeated column headers and a side title:
+  - `기존 설정`
+  - `신규 설정`
+- Row `y` positions are calculated independently within each side, preventing new config rows from being pushed below old config rows.
+- Added a regression test that asserts old nodes are left of new nodes and side headers are present.
+
+### Files
+- `src/core/relationGraph/viewGraph.js`
+- `src/components/graph/ConfigNode.jsx`
+- `tests/relation-graph.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --check src/core/relationGraph/viewGraph.js`: pass.
+- `node --test tests/relation-graph.test.js tests/summary-analytics.test.js tests/graph-adapter.test.js`: pass, 60 tests.
+- `npm.cmd test`: pass, 263 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+- Browser CDP renderer check: pass.
+  - synthetic old port x: `146.97`
+  - synthetic new port x: `875.22`
+  - new side is rendered to the right of old side.
+
+### UI Screenshots
+- Old-left/new-right trace matrix: `docs/verification/screenshots/2026-06-12/trace-matrix-graph/old-left-new-right.png`
+
+### Known Issues
+- Very wide old/new side-by-side layouts may require panning or zooming on smaller screens.
+
+## 2026-06-12 Relationship Graph Services Click Fix
+
+### Current Work
+- Task: fix SERVICES aggregate click resetting the graph instead of showing Static/BGP/PIM details.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: React Flow click handling and legacy graph rerender bridge.
+
+### Cause
+- `SERVICES` aggregate nodes share the same `chainId` as their row.
+- The click handler treated a second click on the same `chainId` as a selection toggle reset.
+- Because `SERVICES` was not handled as an expand/detail action first, clicking `Static | BGP | PIM` could look like the graph returned to its initial state.
+
+### Change
+- `SERVICES` aggregate clicks are now excluded from the same-chain reset path.
+- In the legacy graph bridge, `SERVICES` clicks now trigger `rerenderGraphView(..., { viewMode: "detail" })`.
+- Detail view then shows individual `STATIC_ROUTE`, `BGP_NEIGHBOR`, and `PIM` nodes when present.
+
+### Files
+- `src/components/graph/RelationshipGraph.jsx`
+- `src/core/legacyCore.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/summary-renderer.test.js tests/relation-graph.test.js`: pass, 30 tests.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains.
+- Browser CDP renderer check: pass.
+  - synthetic SERVICES click called `onServicesOpen` once.
+- `npm.cmd test`: pass, 263 pass / 1 skip.

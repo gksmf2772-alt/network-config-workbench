@@ -28,6 +28,15 @@ import {
   buildSummaryDashboardData,
 } from "./summaryAnalytics.js";
 import {
+  toReactFlowData,
+  validateReactFlowData,
+} from "../utils/graphAdapter.js";
+import {
+  applyDagreLayout,
+  applyRadialLayout,
+  applyScatterLayout,
+} from "../utils/dagreLayout.js";
+import {
   buildObjectReviewGroups,
   buildObjectFieldReviewRows,
   REVIEW_SOURCE_LABELS,
@@ -624,6 +633,7 @@ function bindEvents() {
   selectors.profilesTabBtn.addEventListener("click", () => setActiveTab("profiles"));
   selectors.summaryPageTabBtn?.addEventListener("click", () => setActiveTab("summary"));
   selectors.objectsPageTabBtn?.addEventListener("click", () => setActiveTab("objects"));
+  selectors.graphPageTabBtn?.addEventListener("click", () => setActiveTab("graph"));
   selectors.reportPageTabBtn?.addEventListener("click", () => setActiveTab("report"));
   selectors.loadHistoryBtn.addEventListener("click", loadSelectedSession);
   selectors.saveSessionBtn.addEventListener("click", saveSession);
@@ -840,24 +850,29 @@ function setActiveTab(tab, options = {}) {
   if (!options.skipConfirm && tab === "compare" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 탭으로 이동")) return false;
   if (!options.skipConfirm && tab === "summary" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 요약 탭으로 이동")) return false;
   if (!options.skipConfirm && tab === "objects" && !confirmUnsavedProfileAction("프로파일 변경 후 객체 검토 탭으로 이동")) return false;
+  if (!options.skipConfirm && tab === "graph" && !confirmUnsavedProfileAction("프로파일 변경 후 그래프 탭으로 이동")) return false;
   if (!options.skipConfirm && tab === "report" && !confirmUnsavedProfileAction("프로파일 변경 후 리포트 탭으로 이동")) return false;
   hideProfileRulePopover();
   const compare = tab === "compare";
   const profiles = tab === "profiles";
   const summary = tab === "summary";
   const objects = tab === "objects";
+  const graph = tab === "graph";
   const report = tab === "report";
   selectors.compareTabBtn.classList.toggle("active", compare);
   selectors.profilesTabBtn.classList.toggle("active", profiles);
   selectors.summaryPageTabBtn?.classList.toggle("active", summary);
   selectors.objectsPageTabBtn?.classList.toggle("active", objects);
+  selectors.graphPageTabBtn?.classList.toggle("active", graph);
   selectors.reportPageTabBtn?.classList.toggle("active", report);
   selectors.compareTab.classList.toggle("active", compare);
   selectors.profilesTab.classList.toggle("active", profiles);
   selectors.summaryTab?.classList.toggle("active", summary);
   selectors.objectsTab?.classList.toggle("active", objects);
+  selectors.graphTab?.classList.toggle("active", graph);
   selectors.reportTab?.classList.toggle("active", report);
   if (objects) renderObjectNavigator();
+  if (graph) renderStandaloneGraphPage(state.lastReport);
   if (report) renderOverviewReport(state.lastReport);
   if (compare) {
     renderCompareSectionTabs();
@@ -4047,6 +4062,10 @@ function handleReportQuickAction(event) {
     exportReport();
     return;
   }
+  if (action === "graph") {
+    setActiveTab("graph", { skipConfirm: true });
+    return;
+  }
   scrollToReportSection(action);
 }
 
@@ -6829,8 +6848,14 @@ function returnToReportReviewTarget(target = {}) {
 }
 
 function returnToReportGraphTarget(target = {}) {
-  scrollToReportSection("graph");
-  const graphRoot = selectors.overviewReport?.querySelector("[data-graph-root]");
+  if (target.returnTab === "graph") {
+    setActiveTab("graph", { skipConfirm: true });
+  } else {
+    scrollToReportSection("graph");
+  }
+  const graphRoot = target.returnTab === "graph"
+    ? selectors.graphReport?.querySelector("[data-graph-root]")
+    : selectors.overviewReport?.querySelector("[data-graph-root]");
   const nodeId = target.returnTargetId || target.targetId || "";
   const node = nodeId ? graphRoot?.querySelector(`[data-graph-node="${cssEscape(nodeId)}"]`) : null;
   if (!node) return;
@@ -16456,9 +16481,47 @@ function openSelectedObjectReviewInCompare() {
   scrollToDiffObject(planReviewObjectKey(target));
 }
 
+function renderStandaloneGraphPage(report, options = {}) {
+  if (!selectors.graphReport) return;
+  if (!report) {
+    unmountRelationshipGraphReactRoots(selectors.graphReport);
+    selectors.graphReport.dataset.graphRenderedVersion = "";
+    selectors.graphReport.innerHTML = `
+      <section class="overview-section" data-report-section="empty">
+        <div class="summary-empty-state">
+          <strong>그래프 없음</strong>
+          <span>비교 실행 후 관계 그래프가 표시됨.</span>
+        </div>
+      </section>
+    `;
+    return;
+  }
+
+  const renderVersion = String(state.reportRenderVersion || 0);
+  if (!options.force && selectors.graphReport.dataset.graphRenderedVersion === renderVersion) return;
+
+  const dashboard = getDashboardDataForRender(report);
+  unmountRelationshipGraphReactRoots(selectors.graphReport);
+  selectors.graphReport.innerHTML = `
+    <section class="overview-section report-graph-section report-graph-section-standalone" data-report-section="graph">
+      <div class="report-graph-head">
+        <div>
+          <h3>관계 그래프</h3>
+          <p>기존-신규 비교 관계와 각 config 내부 연결을 분리해서 확인합니다.</p>
+        </div>
+        ${renderGraphToolbar()}
+      </div>
+      ${renderRelationshipGraph(dashboard.graph, { standalone: true })}
+    </section>
+  `;
+  selectors.graphReport.dataset.graphRenderedVersion = renderVersion;
+  bindReportGraphInteractions(selectors.graphReport, { includeReportReview: false });
+}
+
 function renderOverviewReport(report, options = {}) {
   if (!selectors.overviewReport) return;
   if (!report) {
+    unmountRelationshipGraphReactRoots(selectors.overviewReport);
     selectors.overviewReport.dataset.reportRenderedVersion = "";
     renderReportQuickContext(null);
     selectors.overviewReport.innerHTML = `
@@ -16481,6 +16544,7 @@ function renderOverviewReport(report, options = {}) {
   const dashboard = getDashboardDataForRender(report);
   const { fieldAnalysis, review, graph, severity, context, lineSummary, audit } = dashboard;
   renderReportQuickContext(report);
+  unmountRelationshipGraphReactRoots(selectors.overviewReport);
   selectors.overviewReport.innerHTML = `
     <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}" data-report-section="summary">
       <div>
@@ -16531,11 +16595,7 @@ function renderOverviewReport(report, options = {}) {
           <h3>관계 그래프</h3>
           <p>설정 연결, 직접 연결, 참조 관계를 2D로 표시합니다.</p>
         </div>
-        <div class="report-graph-tools">
-          <input type="search" class="report-graph-search" placeholder="설정/항목 검색" aria-label="그래프 노드 검색" />
-          <button type="button" data-graph-fit>전체 보기</button>
-          <label><input type="checkbox" data-graph-labels checked /> 라벨</label>
-        </div>
+        ${renderGraphToolbar()}
       </div>
       ${renderRelationshipGraph(graph)}
     </section>
@@ -17449,73 +17509,413 @@ function maskReportFieldValue(field = "", value = "") {
   return String(value);
 }
 
-function renderRelationshipGraph(graph = {}) {
-  const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
-  const edges = Array.isArray(graph.edges) ? graph.edges : [];
-  if (!nodes.length) return `<div class="report-graph-empty">그래프로 표시할 의미 기반 설정이 없습니다.</div>`;
+const GRAPH_COMPACT_NODES_PER_GROUP = 3;
+const GRAPH_DEFAULT_VISIBLE_TYPES = ["port", "lag", "interface", "peer", "services", "static", "bgp", "pim"];
+const GRAPH_TYPE_FILTER_LABELS = [
+  ["port", "Port"],
+  ["lag", "LAG"],
+  ["interface", "Interface"],
+  ["peer", "Peer"],
+  ["services", "Services"],
+  ["static", "Static"],
+  ["bgp", "BGP"],
+  ["pim", "PIM"],
+];
+let relationshipGraphRenderCounter = 0;
+const relationshipGraphRenderSnapshots = new Map();
 
-  const oldNodes = nodes.filter((node) => node.side === "old");
-  const newNodes = nodes.filter((node) => node.side === "new");
-  const relationNodes = nodes.filter((node) => node.side === "relation");
-  const height = Math.max(320, (Math.max(oldNodes.length, newNodes.length, relationNodes.length) + 1) * 58);
-  const positions = new Map();
-  oldNodes.forEach((node, index) => positions.set(node.id, { x: 170, y: 54 + index * 58 }));
-  newNodes.forEach((node, index) => positions.set(node.id, { x: 660, y: 54 + index * 58 }));
-  relationNodes.forEach((node, index) => positions.set(node.id, { x: 880, y: 54 + index * 58 }));
+function normalizeRelationshipGraphLayoutMode(mode = "flow") {
+  return ["flow", "radial", "free"].includes(mode) ? mode : "flow";
+}
 
+function normalizeRelationshipGraphViewMode(mode = "summary") {
+  return ["summary", "detail", "full"].includes(mode) ? mode : "summary";
+}
+
+function renderGraphToolbar() {
   return `
-    <div class="report-graph" data-graph-root>
-      <svg viewBox="0 0 1040 ${height}" role="img" aria-label="설정 관계 그래프">
-        <defs>
-          <marker id="graph-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z"></path>
-          </marker>
-        </defs>
-        <g class="report-graph-lanes">
-          <text x="170" y="24">기존 설정</text>
-          <text x="660" y="24">신규 설정</text>
-          <text x="880" y="24">참조 관계</text>
-        </g>
-        <g class="report-graph-edges">
-          ${edges.map((edge) => {
-            const source = positions.get(edge.source);
-            const target = positions.get(edge.target);
-            if (!source || !target) return "";
-            const mid = Math.max(source.x + 90, Math.min(target.x - 90, (source.x + target.x) / 2));
-            return `
-              <path class="graph-edge graph-edge-${escapeHtml(cssSafeClassName(edge.type || "edge"))} ${edge.changed ? "graph-edge-changed" : ""}"
-                data-graph-edge="${escapeHtml(edge.id)}"
-                data-graph-source="${escapeHtml(edge.source)}"
-                data-graph-target="${escapeHtml(edge.target)}"
-                d="M ${source.x + 72} ${source.y} C ${mid} ${source.y}, ${mid} ${target.y}, ${target.x - 72} ${target.y}">
-                <title>${escapeHtml(edge.label || "연결")} · ${escapeHtml(edge.confidence || 0)}%</title>
-              </path>
-            `;
-          }).join("")}
-        </g>
-        <g class="report-graph-nodes">
-          ${nodes.map((node) => {
-            const point = positions.get(node.id);
-            if (!point) return "";
-            return `
-              <g class="graph-node graph-node-${escapeHtml(cssSafeClassName(node.side || "node"))} graph-node-status-${escapeHtml(cssSafeClassName(node.status || "unknown"))}"
-                data-graph-node="${escapeHtml(node.id)}"
-                data-object-jump="${escapeHtml(node.virtual ? "" : node.key || "")}"
-                data-graph-search="${escapeHtml([node.objectType, node.label, node.key, node.status].join(" ").toLowerCase())}"
-                transform="translate(${point.x}, ${point.y})">
-                <rect x="-72" y="-22" width="144" height="44" rx="8"></rect>
-                <text class="graph-node-type" x="-62" y="-5">${escapeHtml(node.objectType || "설정")}</text>
-                <text class="graph-node-label" x="-62" y="13">${escapeHtml(truncateText(node.label || node.key || "-", 22))}</text>
-                ${node.confidence ? `<text class="graph-node-score" x="60" y="-6">${escapeHtml(node.confidence)}%</text>` : ""}
-                <title>${escapeHtml(node.objectType || "설정")} ${escapeHtml(node.label || "-")} · ${escapeHtml(node.status || "")}</title>
-              </g>
-            `;
-          }).join("")}
-        </g>
-      </svg>
-      ${graph.truncated ? `<p class="small-note">그래프는 성능을 위해 ${escapeHtml(nodes.length)}개 노드까지만 표시했습니다.</p>` : ""}
+    <div class="report-graph-tools">
+      <input type="search" class="report-graph-search" placeholder="설정/항목 검색" aria-label="그래프 노드 검색" />
+      <div class="report-graph-view-toggle" role="group" aria-label="그래프 보기">
+        <button type="button" data-graph-view-mode="summary" class="active" aria-pressed="true">경로 요약</button>
+        <button type="button" data-graph-view-mode="detail" aria-pressed="false">경로 상세</button>
+        <button type="button" data-graph-problem-toggle aria-pressed="false">문제만 보기</button>
+        <button type="button" data-graph-view-mode="full" aria-pressed="false">전체 그래프</button>
+      </div>
+      <details class="report-graph-advanced">
+        <summary>고급 배치</summary>
+        <div class="report-graph-layout-toggle" role="group" aria-label="그래프 배치">
+          <button type="button" data-graph-layout-mode="flow" class="active" aria-pressed="true">표준</button>
+          <button type="button" data-graph-layout-mode="radial" aria-pressed="false">방사형</button>
+          <button type="button" data-graph-layout-mode="free" aria-pressed="false">자유</button>
+        </div>
+        <div class="report-graph-type-filters" role="group" aria-label="그래프 표시 요소">
+          ${GRAPH_TYPE_FILTER_LABELS.map(([type, label]) => `<label class="report-graph-type-toggle"><input type="checkbox" data-graph-type-toggle="${escapeHtml(type)}" checked /> ${escapeHtml(label)}</label>`).join("")}
+        </div>
+        <label class="report-graph-mode-toggle"><input type="checkbox" data-graph-mode-toggle="comparison" checked /> 비교 관계</label>
+        <label class="report-graph-mode-toggle"><input type="checkbox" data-graph-mode-toggle="internal" checked /> 내부 연결</label>
+      </details>
+      <button type="button" data-graph-expand aria-expanded="false">펼치기</button>
+      <button type="button" data-graph-fit>전체 보기</button>
+      <label><input type="checkbox" data-graph-labels checked /> 라벨</label>
     </div>
   `;
+}
+
+function renderRelationshipGraph(graph = {}, options = {}) {
+  const viewMode = normalizeRelationshipGraphViewMode(options.viewMode || (options.detail ? "detail" : "summary"));
+  const canonicalView = graph?.viewGraph?.views?.[viewMode] || graph?.viewGraph;
+  const renderGraph = canonicalView?.nodes?.length ? canonicalView : graph;
+  const displayGraph = renderGraph.fixedView
+    ? {
+      nodes: renderGraph.nodes || [],
+      edges: renderGraph.edges || [],
+      compact: false,
+      hiddenNodeCount: 0,
+      hiddenGroups: [],
+      fixedView: true,
+      viewLayout: renderGraph.viewLayout || "trace-matrix",
+      viewMode: renderGraph.viewMode || viewMode,
+    }
+    : prepareRelationshipGraphDisplay(renderGraph, options);
+  const layoutMode = normalizeRelationshipGraphLayoutMode(options.layout);
+  const { nodes: rawNodes, edges } = toReactFlowData(displayGraph.nodes, displayGraph.edges);
+  if (!rawNodes.length) return `<div class="report-graph-empty">그래프로 표시할 의미 기반 설정이 없습니다.</div>`;
+
+  const useFixedColumnLayout = displayGraph.fixedView && layoutMode === "flow";
+  const nodes = useFixedColumnLayout
+    ? rawNodes
+    : layoutMode === "free"
+    ? applyScatterLayout(rawNodes)
+    : (layoutMode === "radial" ? applyRadialLayout(rawNodes, edges) : applyDagreLayout(rawNodes, edges, "LR"));
+  const validation = validateReactFlowData(nodes, edges);
+  if (!validation.valid) {
+    console.warn("[relationship-graph] invalid React Flow data", validation);
+  }
+  const renderId = registerRelationshipGraphSnapshot({
+    nodes,
+    edges,
+    layoutMode,
+    controls: {
+      enabledModes: ["comparison", "internal"],
+      search: "",
+      visibleTypes: GRAPH_DEFAULT_VISIBLE_TYPES,
+      showLabels: true,
+      viewLayout: useFixedColumnLayout ? (displayGraph.viewLayout || "trace-matrix") : "",
+      viewMode: displayGraph.viewMode || viewMode,
+      problemOnly: Boolean(options.problemOnly),
+    },
+    validation,
+  });
+
+  return `
+    <div class="report-graph ${options.standalone ? "report-graph-standalone" : ""}" data-graph-root data-graph-render-id="${escapeHtml(renderId)}" data-graph-detail="${displayGraph.compact ? "compact" : "full"}" data-graph-view-mode="${escapeHtml(viewMode)}" data-graph-problem-only="${options.problemOnly ? "true" : "false"}" data-graph-layout="${escapeHtml(layoutMode)}">
+      <div class="report-graph-flow-root" data-graph-flow-root></div>
+      ${renderGraphLimitNote(graph, displayGraph)}
+    </div>
+  `;
+}
+
+function registerRelationshipGraphSnapshot(snapshot = {}) {
+  relationshipGraphRenderCounter += 1;
+  const renderId = `relationship-graph-${relationshipGraphRenderCounter}`;
+  relationshipGraphRenderSnapshots.set(renderId, snapshot);
+  if (relationshipGraphRenderSnapshots.size > 12) {
+    const oldest = relationshipGraphRenderSnapshots.keys().next().value;
+    relationshipGraphRenderSnapshots.delete(oldest);
+  }
+  return renderId;
+}
+
+function prepareRelationshipGraphDisplay(graph = {}, options = {}) {
+  const sourceNodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+  const sourceEdges = Array.isArray(graph.edges) ? graph.edges : [];
+  if (options.detail) {
+    return {
+      nodes: sourceNodes,
+      edges: sourceEdges,
+      compact: false,
+      hiddenNodeCount: 0,
+      hiddenGroups: [],
+    };
+  }
+
+  const displayNodes = [];
+  const displayNodeIds = new Set();
+  const hiddenNodeToCluster = new Map();
+  const hiddenGroups = [];
+  const byGroup = groupBy(sourceNodes, (node) => `${node.side || "relation"}|${graphNodeColumnKey(node)}`);
+
+  byGroup.forEach((list, groupKey) => {
+    const sorted = [...list].sort(compareGraphDisplayNodes);
+    const visible = sorted.slice(0, GRAPH_COMPACT_NODES_PER_GROUP);
+    const hidden = sorted.slice(GRAPH_COMPACT_NODES_PER_GROUP);
+    visible.forEach((node) => {
+      displayNodes.push(node);
+      displayNodeIds.add(node.id);
+    });
+    if (!hidden.length) return;
+
+    const [side, columnKey] = groupKey.split("|");
+    const clusterId = `cluster:${side}:${columnKey}`;
+    hidden.forEach((node) => hiddenNodeToCluster.set(node.id, clusterId));
+    hiddenGroups.push({ groupKey, side, columnKey, count: hidden.length });
+    const hiddenSearch = hidden
+      .map((node) => [node.objectType, node.label, node.key, node.status].join(" "))
+      .join(" ");
+    displayNodes.push({
+      id: clusterId,
+      side,
+      columnKey,
+      objectType: "more",
+      label: `+${hidden.length} 더보기`,
+      key: "",
+      status: "cluster",
+      confidence: 0,
+      virtual: true,
+      cluster: true,
+      clusterGroup: groupKey,
+      hiddenCount: hidden.length,
+      hiddenSearch,
+    });
+    displayNodeIds.add(clusterId);
+  });
+
+  const displayEdges = [];
+  const edgeIds = new Set();
+  sourceEdges.forEach((edge) => {
+    const source = hiddenNodeToCluster.get(edge.source) || edge.source;
+    const target = hiddenNodeToCluster.get(edge.target) || edge.target;
+    if (!source || !target || source === target) return;
+    if (!displayNodeIds.has(source) || !displayNodeIds.has(target)) return;
+    const graphMode = edge.graphMode || (String(edge.type || "").startsWith("internal-") ? "internal" : "comparison");
+    const edgeKey = `${source}->${target}:${edge.type || "edge"}:${graphMode}:${edge.changed ? "changed" : "same"}`;
+    if (edgeIds.has(edgeKey)) return;
+    edgeIds.add(edgeKey);
+    displayEdges.push({
+      ...edge,
+      id: `compact:${edgeKey}`,
+      source,
+      target,
+      graphMode,
+    });
+  });
+
+  return {
+    nodes: displayNodes,
+    edges: displayEdges,
+    compact: true,
+    hiddenNodeCount: hiddenGroups.reduce((sum, group) => sum + group.count, 0),
+    hiddenGroups,
+  };
+}
+
+function compareGraphDisplayNodes(left = {}, right = {}) {
+  const priorityDiff = graphDisplayNodePriority(left) - graphDisplayNodePriority(right);
+  if (priorityDiff) return priorityDiff;
+  return String(left.label || left.key || "").localeCompare(String(right.label || right.key || ""), undefined, { numeric: true });
+}
+
+function graphDisplayNodePriority(node = {}) {
+  const status = String(node.status || "").toLowerCase();
+  if (["changed", "different", "candidate", "old-only", "new-only", "missing", "added"].includes(status)) return 0;
+  if (Number(node.confidence || 0) && Number(node.confidence || 0) < 100) return 1;
+  if (["relation", "manual"].includes(String(node.side || "").toLowerCase())) return 2;
+  return 3;
+}
+
+function renderGraphLimitNote(graph = {}, displayGraph = {}) {
+  const notes = [];
+  if (displayGraph.compact && displayGraph.hiddenNodeCount) {
+    notes.push(`기본 보기: 영역별 대표 ${GRAPH_COMPACT_NODES_PER_GROUP}개만 표시합니다. +N 더보기 또는 상세 보기로 전체를 확인할 수 있습니다.`);
+  }
+  if (graph.truncated) {
+    const hiddenByType = graph.hiddenByType || {};
+    const hiddenText = Object.entries(hiddenByType)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 8)
+      .map(([type, count]) => `${type} ${count}`)
+      .join(", ");
+    notes.push(`전체 ${escapeHtml(graph.totalPlanItems || 0)}개 중 타입별 대표 ${escapeHtml(graph.selectedPlanItems || 0)}개 항목을 표시합니다.${hiddenText ? ` 숨김: ${escapeHtml(hiddenText)}` : ""}`);
+  }
+  if (!notes.length) return "";
+  return `
+    <p class="small-note graph-limit-note">
+      ${notes.join("<br>")}
+    </p>
+  `;
+}
+
+function buildRelationshipGraphLayout(nodes = [], options = {}) {
+  const columns = [
+    { key: "port", label: "Port" },
+    { key: "lag", label: "LAG" },
+    { key: "interface", label: "Interface" },
+    { key: "service", label: "SAP/Service" },
+    { key: "route", label: "Static/PIM" },
+    { key: "bgp", label: "BGP" },
+    { key: "policy", label: "Filter/QoS/Policy" },
+  ];
+  const nodeStep = options.standalone ? 70 : 64;
+  const columnStep = options.standalone ? 186 : 166;
+  const marginLeft = 110;
+  const topOffset = 36;
+  const laneGap = 46;
+  const width = Math.max(1040, marginLeft * 2 + (columns.length - 1) * columnStep + 150);
+  const positions = new Map();
+  const columnLabels = columns.map((column, index) => ({
+    ...column,
+    x: marginLeft + index * columnStep,
+  }));
+  const laneSpecs = [
+    { side: "old", label: "기존 config 내부" },
+    { side: "new", label: "신규 config 내부" },
+    { side: "relation", label: "비교/점검 참조" },
+  ].filter((lane) => lane.side !== "relation" || nodes.some((node) => node.side === "relation"));
+
+  let cursorY = topOffset;
+  const laneBands = [];
+  laneSpecs.forEach((lane) => {
+    const laneNodes = nodes.filter((node) => (node.side || "relation") === lane.side);
+    const byColumn = groupBy(laneNodes, graphNodeColumnKey);
+    const maxColumnSize = Math.max(1, ...columns.map((column) => (byColumn.get(column.key) || []).length));
+    const laneHeight = Math.max(118, 52 + maxColumnSize * nodeStep);
+    laneBands.push({ ...lane, y: cursorY, height: laneHeight });
+
+    columns.forEach((column, columnIndex) => {
+      const list = (byColumn.get(column.key) || [])
+        .sort((left, right) => String(left.label || left.key || "").localeCompare(String(right.label || right.key || ""), undefined, { numeric: true }));
+      list.forEach((node, index) => {
+        positions.set(node.id, {
+          x: marginLeft + columnIndex * columnStep,
+          y: cursorY + 52 + index * nodeStep,
+        });
+      });
+    });
+    cursorY += laneHeight + laneGap;
+  });
+
+  return {
+    width,
+    height: Math.max(320, cursorY - laneGap + 16),
+    positions,
+    laneBands,
+    columnLabels,
+  };
+}
+
+function graphNodeColumnKey(node = {}) {
+  if (node.columnKey) return node.columnKey;
+  const type = String(node.objectType || "").toLowerCase();
+  if (type === "port") return "port";
+  if (type === "lag") return "lag";
+  if (["interface", "subscriber-interface", "group-interface"].includes(type)) return "interface";
+  if (["sap", "service"].includes(type)) return "service";
+  if (["static-route", "pim"].includes(type)) return "route";
+  if (["bgp", "bgp-group"].includes(type)) return "bgp";
+  return "policy";
+}
+
+function buildFreeRelationshipGraphLayout(nodes = [], edges = [], options = {}) {
+  const width = options.standalone ? 2400 : 2000;
+  const sideGroups = groupBy(nodes, (node) => node.side || "relation");
+  const maxSideSize = Math.max(1, ...[...sideGroups.values()].map((list) => list.length));
+  const approximateColumns = Math.max(1, Math.floor((width * 0.28) / 220));
+  const height = Math.max(options.standalone ? 760 : 620, Math.ceil(maxSideSize / approximateColumns) * 132 + 220);
+  const positions = new Map();
+  const zones = {
+    old: { x1: 64, x2: width * 0.36, y1: 78, y2: height - 74 },
+    new: { x1: width * 0.36, x2: width * 0.72, y1: 78, y2: height - 74 },
+    relation: { x1: width * 0.72, x2: width - 72, y1: 78, y2: height - 74 },
+  };
+
+  sideGroups.forEach((list, side) => {
+    const zone = zones[side] || zones.relation;
+    const ordered = [...list].sort(compareGraphDisplayNodes);
+    ordered.forEach((node, index) => {
+      positions.set(node.id, findFreeGraphPoint({ node, index, zone, positions }));
+    });
+  });
+
+  return {
+    width,
+    height,
+    positions,
+    laneBands: [
+      { side: "free", label: "자유 배치", y: 36, height: height - 54 },
+    ],
+    columnLabels: [],
+  };
+}
+
+function findFreeGraphPoint({ node = {}, index = 0, zone = {}, positions = new Map() } = {}) {
+  const nodeWidth = 220;
+  const nodeHeight = 96;
+  const zoneWidth = Math.max(nodeWidth + 24, (zone.x2 || 0) - (zone.x1 || 0));
+  const zoneHeight = Math.max(nodeHeight + 24, (zone.y2 || 0) - (zone.y1 || 0));
+  const seedBase = hashGraphValue(node.id || node.key || `${node.side}:${index}`);
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    const xSeed = seededGraphUnit(seedBase + attempt * 7919);
+    const ySeed = seededGraphUnit(seedBase + attempt * 104729);
+    const point = {
+      x: (zone.x1 || 0) + nodeWidth / 2 + xSeed * Math.max(1, zoneWidth - nodeWidth),
+      y: (zone.y1 || 0) + nodeHeight / 2 + ySeed * Math.max(1, zoneHeight - nodeHeight),
+    };
+    if (!freeGraphPointOverlaps(point, positions)) return point;
+  }
+
+  const columns = Math.max(1, Math.floor(zoneWidth / nodeWidth));
+  const maxRows = Math.max(1, Math.ceil(zoneHeight / 132) + 4);
+  for (let row = 0; row < maxRows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const stagger = row % 2 ? nodeWidth * 0.28 : 0;
+      const point = {
+        x: clampNumber((zone.x1 || 0) + nodeWidth / 2 + column * nodeWidth + stagger, (zone.x1 || 0) + 80, (zone.x2 || 0) - 80),
+        y: (zone.y1 || 0) + nodeHeight / 2 + row * 132,
+      };
+      if (!freeGraphPointOverlaps(point, positions)) return point;
+    }
+  }
+
+  return {
+    x: clampNumber((zone.x1 || 0) + nodeWidth / 2, (zone.x1 || 0) + 80, (zone.x2 || 0) - 80),
+    y: (zone.y2 || zoneHeight) - nodeHeight / 2,
+  };
+}
+
+function freeGraphPointOverlaps(point = {}, positions = new Map()) {
+  for (const existing of positions.values()) {
+    if (Math.abs(point.x - existing.x) < 220 && Math.abs(point.y - existing.y) < 96) return true;
+  }
+  return false;
+}
+
+function seededGraphUnit(seed = 0) {
+  const value = Math.sin(seed || 1) * 10000;
+  return value - Math.floor(value);
+}
+
+function hashGraphValue(value = "") {
+  return String(value || "").split("").reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) >>> 0, 2166136261);
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function relationshipGraphPath(source, target) {
+  const nodeRadiusX = 74;
+  const leftToRight = target.x >= source.x;
+  const startX = source.x + (leftToRight ? nodeRadiusX : -nodeRadiusX);
+  const endX = target.x - (leftToRight ? nodeRadiusX : -nodeRadiusX);
+  if (Math.abs(target.x - source.x) < 24) {
+    const bendX = source.x + 120;
+    return `M ${source.x + nodeRadiusX} ${source.y} C ${bendX} ${source.y}, ${bendX} ${target.y}, ${target.x + nodeRadiusX} ${target.y}`;
+  }
+  const distance = Math.max(90, Math.abs(endX - startX) * 0.5);
+  const c1x = startX + (leftToRight ? distance : -distance);
+  const c2x = endX - (leftToRight ? distance : -distance);
+  return `M ${startX} ${source.y} C ${c1x} ${source.y}, ${c2x} ${target.y}, ${endX} ${target.y}`;
 }
 
 function openReportObjectInCompare(element = null) {
@@ -17542,11 +17942,12 @@ function openReportObjectInCompare(element = null) {
     };
   } else if (node) {
     const title = node.querySelector("title")?.textContent || node.dataset.graphSearch || objectKey;
+    const returnTab = selectors.graphReport?.contains(node) ? "graph" : "report";
     state.activeIssueContext = {
       source: "report-graph",
       targetId: node.dataset.graphNode || objectKey,
       objectKey,
-      returnTab: "report",
+      returnTab,
       returnSection: "graph",
       returnTargetId: node.dataset.graphNode || "",
       panelKey: "relationship-graph",
@@ -17559,52 +17960,233 @@ function openReportObjectInCompare(element = null) {
   scrollToDiffObject(objectKey);
 }
 
-function bindReportGraphInteractions() {
-  if (!selectors.overviewReport) return;
-  bindReportReviewTableInteractions();
-  selectors.overviewReport.querySelectorAll("[data-object-jump]").forEach((item) => {
+function openReportGraphReactNode(node = {}, root = selectors.overviewReport) {
+  const data = node.data || {};
+  const objectKey = data.objectKey || "";
+  if (!objectKey) return;
+  const title = `${data.rawNodeType || data.nodeType || "object"} ${data.label || objectKey}`.trim();
+  state.activeIssueContext = {
+    source: "report-graph",
+    targetId: node.id || objectKey,
+    objectKey,
+    returnTab: selectors.graphReport?.contains(root) ? "graph" : "report",
+    returnSection: "graph",
+    returnTargetId: node.id || "",
+    panelKey: "relationship-graph",
+    displayName: title,
+    description: title,
+    field: "",
+    title: "관계 그래프",
+  };
+  scrollToDiffObject(objectKey);
+}
+
+function getRelationshipGraphControls(root = selectors.overviewReport) {
+  const search = root?.querySelector?.(".report-graph-search")?.value || "";
+  const modeControls = [...(root?.querySelectorAll?.("[data-graph-mode-toggle]") || [])];
+  const typeControls = [...(root?.querySelectorAll?.("[data-graph-type-toggle]") || [])];
+  const enabledModes = modeControls
+    .filter((input) => input.checked)
+    .map((input) => input.dataset.graphModeToggle || "")
+    .filter(Boolean);
+  const visibleTypes = typeControls.length
+    ? typeControls
+      .filter((input) => input.checked)
+      .map((input) => input.dataset.graphTypeToggle || "")
+      .filter(Boolean)
+    : GRAPH_DEFAULT_VISIBLE_TYPES;
+  return {
+    search,
+    enabledModes: enabledModes.length ? enabledModes : ["comparison", "internal"],
+    visibleTypes,
+    showLabels: root?.querySelector?.("[data-graph-labels]")?.checked !== false,
+    viewMode: normalizeRelationshipGraphViewMode(root?.querySelector?.("[data-graph-root]")?.dataset.graphViewMode || "summary"),
+    problemOnly: root?.querySelector?.("[data-graph-problem-toggle]")?.getAttribute("aria-pressed") === "true",
+  };
+}
+
+function mountRelationshipGraphReactRoots(root = selectors.overviewReport) {
+  const graphRoot = root?.matches?.("[data-graph-root]") ? root : root?.querySelector?.("[data-graph-root]");
+  const flowRoot = graphRoot?.querySelector?.("[data-graph-flow-root]");
+  const renderId = graphRoot?.dataset.graphRenderId || "";
+  const snapshot = relationshipGraphRenderSnapshots.get(renderId);
+  if (!flowRoot || !snapshot || typeof window.renderRelationshipGraphReactPanel !== "function") return;
+  window.renderRelationshipGraphReactPanel(flowRoot, {
+    ...snapshot,
+    controls: getRelationshipGraphControls(root),
+  }, {
+    onClusterOpen: () => rerenderGraphView(root, { detail: true }),
+    onServicesOpen: () => rerenderGraphView(root, { viewMode: "detail" }),
+    onNodeOpen: (node) => openReportGraphReactNode(node, root),
+  });
+}
+
+function unmountRelationshipGraphReactRoots(root = selectors.overviewReport) {
+  if (typeof window.unmountRelationshipGraphReactPanel !== "function") return;
+  const targets = root?.matches?.("[data-graph-flow-root]")
+    ? [root]
+    : [...(root?.querySelectorAll?.("[data-graph-flow-root]") || [])];
+  targets.forEach((target) => {
+    window.unmountRelationshipGraphReactPanel(target);
+  });
+}
+
+const reportGraphInteractionAbortControllers = new WeakMap();
+
+function bindReportGraphInteractions(root = selectors.overviewReport, options = {}) {
+  if (!root) return;
+  if (options.includeReportReview !== false && root === selectors.overviewReport) {
+    bindReportReviewTableInteractions();
+  }
+  reportGraphInteractionAbortControllers.get(root)?.abort();
+  const controller = new AbortController();
+  reportGraphInteractionAbortControllers.set(root, controller);
+  const listenerOptions = { signal: controller.signal };
+  root.querySelectorAll("[data-object-jump]").forEach((item) => {
+    if (item.closest("[data-graph-root]")) return;
     item.addEventListener("click", () => {
       openReportObjectInCompare(item);
-    });
+    }, listenerOptions);
   });
-  selectors.overviewReport.querySelectorAll("[data-field-type-filter]").forEach((button) => {
+  root.querySelectorAll("[data-field-type-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       if (selectors.objectSearchInput) selectors.objectSearchInput.value = button.dataset.fieldTypeFilter || "";
       renderObjectNavigator();
       setResultTab("objects");
-    });
+    }, listenerOptions);
   });
-  selectors.overviewReport.querySelectorAll(".report-audit-section [data-add-exception]").forEach((button) => {
+  root.querySelectorAll(".report-audit-section [data-add-exception]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       const targetId = button.dataset.addException || "";
-      const scope = selectors.overviewReport?.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
+      const scope = root.querySelector(`[data-exception-scope="${cssEscape(targetId)}"]`)?.value || "object";
       addExceptionFromTarget(targetId, scope, button);
-    });
+    }, listenerOptions);
   });
 
-  const graphRoot = selectors.overviewReport.querySelector("[data-graph-root]");
-  if (graphRoot) {
-    graphRoot.addEventListener("mouseover", (event) => {
-      const node = event.target.closest?.("[data-graph-node]");
-      if (node) setGraphFocus(graphRoot, node.dataset.graphNode);
-    });
-    graphRoot.addEventListener("mouseout", (event) => {
-      if (!event.relatedTarget || !graphRoot.contains(event.relatedTarget)) setGraphFocus(graphRoot, "");
-    });
-    graphRoot.addEventListener("click", (event) => {
-      const node = event.target.closest?.("[data-object-jump]");
-      if (node) openReportObjectInCompare(node);
-    });
-  }
+  const graphRoot = root.querySelector("[data-graph-root]");
+  mountRelationshipGraphReactRoots(root);
 
-  const search = selectors.overviewReport.querySelector(".report-graph-search");
-  search?.addEventListener("input", () => filterReportGraph(search.value));
-  selectors.overviewReport.querySelector("[data-graph-labels]")?.addEventListener("change", (event) => {
+  const search = root.querySelector(".report-graph-search");
+  search?.addEventListener("input", () => filterReportGraph(search.value, root), listenerOptions);
+  root.querySelectorAll("[data-graph-mode-toggle]").forEach((input) => {
+    input.addEventListener("change", () => filterReportGraph(search?.value || "", root), listenerOptions);
+  });
+  root.querySelectorAll("[data-graph-type-toggle]").forEach((input) => {
+    input.addEventListener("change", () => filterReportGraph(search?.value || "", root), listenerOptions);
+  });
+  root.querySelector("[data-graph-labels]")?.addEventListener("change", (event) => {
     graphRoot?.classList.toggle("graph-hide-labels", !event.target.checked);
+    mountRelationshipGraphReactRoots(root);
+  }, listenerOptions);
+  root.querySelector("[data-graph-expand]")?.addEventListener("click", (event) => {
+    const currentGraphRoot = root.querySelector("[data-graph-root]");
+    const expanded = !currentGraphRoot?.classList.contains("graph-expanded");
+    currentGraphRoot?.classList.toggle("graph-expanded", expanded);
+    event.currentTarget.setAttribute("aria-expanded", expanded ? "true" : "false");
+    event.currentTarget.textContent = expanded ? "접기" : "펼치기";
+  }, listenerOptions);
+  root.querySelector("[data-graph-fit]")?.addEventListener("click", () => {
+    root.querySelector("[data-graph-root]")?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }, listenerOptions);
+  root.querySelector("[data-graph-problem-toggle]")?.addEventListener("click", (event) => {
+    const pressed = event.currentTarget.getAttribute("aria-pressed") === "true";
+    event.currentTarget.setAttribute("aria-pressed", pressed ? "false" : "true");
+    filterReportGraph(search?.value || "", root);
+  }, listenerOptions);
+  root.querySelector("[data-graph-detail-toggle]")?.addEventListener("click", () => {
+    const currentGraphRoot = root.querySelector("[data-graph-root]");
+    rerenderGraphView(root, { detail: currentGraphRoot?.dataset.graphDetail !== "full" });
+  }, listenerOptions);
+  root.querySelectorAll("[data-graph-view-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      rerenderGraphView(root, {
+        viewMode: normalizeRelationshipGraphViewMode(button.dataset.graphViewMode),
+      });
+    }, listenerOptions);
   });
-  selectors.overviewReport.querySelector("[data-graph-fit]")?.addEventListener("click", () => {
-    graphRoot?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  root.querySelectorAll("[data-graph-layout-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const currentGraphRoot = root.querySelector("[data-graph-root]");
+      rerenderGraphView(root, {
+        detail: currentGraphRoot?.dataset.graphDetail === "full",
+        viewMode: currentGraphRoot?.dataset.graphViewMode || "summary",
+        layout: normalizeRelationshipGraphLayoutMode(button.dataset.graphLayoutMode),
+      });
+    }, listenerOptions);
+  });
+  syncGraphToolbarState(root, {
+    detail: graphRoot?.dataset.graphDetail === "full",
+    viewMode: graphRoot?.dataset.graphViewMode || "summary",
+    problemOnly: graphRoot?.dataset.graphProblemOnly === "true",
+    layout: graphRoot?.dataset.graphLayout || "flow",
+  });
+  filterReportGraph(search?.value || "", root);
+}
+
+function rerenderGraphView(root = selectors.overviewReport, patch = {}) {
+  const graphRoot = root?.querySelector?.("[data-graph-root]");
+  if (!root || !graphRoot || !state.lastReport) return;
+  const search = root.querySelector(".report-graph-search");
+  const searchValue = search?.value || "";
+  const modeState = new Map([...root.querySelectorAll("[data-graph-mode-toggle]")]
+    .map((input) => [input.dataset.graphModeToggle || "", input.checked]));
+  const typeState = new Map([...root.querySelectorAll("[data-graph-type-toggle]")]
+    .map((input) => [input.dataset.graphTypeToggle || "", input.checked]));
+  const labelsChecked = root.querySelector("[data-graph-labels]")?.checked !== false;
+  const problemOnly = patch.problemOnly ?? (root.querySelector("[data-graph-problem-toggle]")?.getAttribute("aria-pressed") === "true");
+  const expanded = graphRoot.classList.contains("graph-expanded");
+  const standalone = graphRoot.classList.contains("report-graph-standalone");
+  const detail = patch.detail ?? (graphRoot.dataset.graphDetail === "full");
+  const viewMode = normalizeRelationshipGraphViewMode(patch.viewMode || graphRoot.dataset.graphViewMode || (detail ? "detail" : "summary"));
+  const layout = patch.layout || graphRoot.dataset.graphLayout || "flow";
+  const dashboard = getDashboardDataForRender(state.lastReport);
+  unmountRelationshipGraphReactRoots(root);
+  graphRoot.outerHTML = renderRelationshipGraph(dashboard.graph, { standalone, detail, layout, viewMode, problemOnly });
+  const nextGraphRoot = root.querySelector("[data-graph-root]");
+  nextGraphRoot?.classList.toggle("graph-expanded", expanded);
+  nextGraphRoot?.classList.toggle("graph-hide-labels", !labelsChecked);
+  const nextSearch = root.querySelector(".report-graph-search");
+  if (nextSearch) nextSearch.value = searchValue;
+  root.querySelectorAll("[data-graph-mode-toggle]").forEach((input) => {
+    if (modeState.has(input.dataset.graphModeToggle || "")) {
+      input.checked = Boolean(modeState.get(input.dataset.graphModeToggle || ""));
+    }
+  });
+  root.querySelectorAll("[data-graph-type-toggle]").forEach((input) => {
+    if (typeState.has(input.dataset.graphTypeToggle || "")) {
+      input.checked = Boolean(typeState.get(input.dataset.graphTypeToggle || ""));
+    }
+  });
+  syncGraphToolbarState(root, { detail, layout, viewMode, problemOnly });
+  bindReportGraphInteractions(root, { includeReportReview: false });
+  filterReportGraph(searchValue, root);
+}
+
+function syncGraphToolbarState(root = selectors.overviewReport, options = {}) {
+  const detail = Boolean(options.detail);
+  const layout = normalizeRelationshipGraphLayoutMode(options.layout);
+  const viewMode = normalizeRelationshipGraphViewMode(options.viewMode || (detail ? "detail" : "summary"));
+  const detailButton = root?.querySelector?.("[data-graph-detail-toggle]");
+  if (detailButton) {
+    detailButton.setAttribute("aria-pressed", detail ? "true" : "false");
+    detailButton.textContent = detail ? "기본 보기" : "상세 보기";
+  }
+  root?.querySelectorAll?.("[data-graph-view-mode]").forEach((button) => {
+    const active = button.dataset.graphViewMode === viewMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  const problemButton = root?.querySelector?.("[data-graph-problem-toggle]");
+  if (problemButton) {
+    const active = Boolean(options.problemOnly);
+    problemButton.classList.toggle("active", active);
+    problemButton.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+  root?.querySelectorAll?.("[data-graph-layout-mode]").forEach((button) => {
+    const active = button.dataset.graphLayoutMode === layout;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
   });
 }
 
@@ -18255,19 +18837,12 @@ function setGraphFocus(graphRoot, nodeId = "") {
   });
 }
 
-function filterReportGraph(query = "") {
-  const normalized = String(query || "").trim().toLowerCase();
-  const graphRoot = selectors.overviewReport?.querySelector("[data-graph-root]");
+function filterReportGraph(query = "", root = selectors.overviewReport) {
+  const graphRoot = root?.matches?.("[data-graph-root]") ? root : root?.querySelector?.("[data-graph-root]");
   if (!graphRoot) return;
-  const visible = new Set();
-  graphRoot.querySelectorAll("[data-graph-node]").forEach((node) => {
-    const matched = !normalized || String(node.dataset.graphSearch || "").includes(normalized);
-    node.classList.toggle("graph-hidden", !matched);
-    if (matched) visible.add(node.dataset.graphNode);
-  });
-  graphRoot.querySelectorAll("[data-graph-edge]").forEach((edge) => {
-    edge.classList.toggle("graph-hidden", !visible.has(edge.dataset.graphSource) || !visible.has(edge.dataset.graphTarget));
-  });
+  const search = root?.querySelector?.(".report-graph-search");
+  if (search && search.value !== query) search.value = query;
+  mountRelationshipGraphReactRoots(root);
 }
 
 function truncateText(value = "", limit = 24) {

@@ -1224,13 +1224,367 @@ test("mapping diagnostics classify unmatched same-type key mismatches", () => {
   assert.equal(direct.code, "object-key-mismatch");
 });
 
-test("graph data creates mapping and relationship edges", () => {
-  const graph = buildGraphData({ plan });
+test("graph data creates same-setting mapping edges without relationship comparison nodes", () => {
+  const crossTypePlan = {
+    id: "bad-cross-type-map",
+    status: "matched",
+    reason: "auto",
+    objectType: "port",
+    score: 91,
+    oldObject: {
+      normalizedType: "port",
+      normalizedIdentity: "1/1/1",
+      fields: { port: "1/1/1" },
+    },
+    newObject: {
+      normalizedType: "lag",
+      normalizedIdentity: "1",
+      fields: { lag: "1" },
+    },
+  };
+  const graph = buildGraphData({ plan: [...plan, crossTypePlan] });
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const comparisonEdges = graph.edges.filter((edge) => edge.graphMode === "comparison");
 
   assert.ok(graph.nodes.some((node) => node.side === "old"));
   assert.ok(graph.nodes.some((node) => node.side === "new"));
   assert.ok(graph.edges.some((edge) => edge.type === "mapping"));
-  assert.ok(graph.edges.some((edge) => edge.type === "relationship"));
+  assert.equal(graph.edges.some((edge) => edge.type === "relationship"), false);
+  assert.equal(graph.nodes.some((node) => node.side === "relation"), false);
+  assert.ok(comparisonEdges.every((edge) => {
+    const source = nodesById.get(edge.source);
+    const target = nodesById.get(edge.target);
+    return source?.objectType === target?.objectType;
+  }));
+});
+
+test("graph data adds config-internal topology and reference edges", () => {
+  const topologyPlan = [
+    {
+      id: "port-old",
+      status: "old-only",
+      objectType: "port",
+      oldObject: {
+        normalizedType: "port",
+        normalizedIdentity: "1/1/1",
+        fields: { port: "1/1/1" },
+      },
+    },
+    {
+      id: "lag-old",
+      status: "old-only",
+      objectType: "lag",
+      oldObject: {
+        normalizedType: "lag",
+        normalizedIdentity: "10",
+        fields: { lag: "10", members: ["1/1/1"] },
+      },
+    },
+    {
+      id: "interface-old",
+      status: "old-only",
+      objectType: "interface",
+      oldObject: {
+        normalizedType: "interface",
+        normalizedIdentity: "svc-a",
+        fields: {
+          interface: "svc-a",
+          address: "10.0.0.1/31",
+          sap: "lag-10",
+          service: "ies",
+          "service-id": "100",
+          "ingress.filter.ip": "F-IN",
+          "egress.qos": "Q-OUT",
+        },
+      },
+    },
+    {
+      id: "sap-old",
+      status: "old-only",
+      objectType: "sap",
+      oldObject: {
+        normalizedType: "sap",
+        normalizedIdentity: "lag-10",
+        fields: {
+          sap: "lag-10",
+          interface: "svc-a",
+          service: "ies",
+          "service-id": "100",
+        },
+      },
+    },
+    {
+      id: "route-old",
+      status: "old-only",
+      objectType: "static-route",
+      oldObject: {
+        normalizedType: "static-route",
+        normalizedIdentity: "192.0.2.2/32",
+        fields: { route: "192.0.2.2/32", "next-hop": "10.0.0.0" },
+      },
+    },
+    {
+      id: "pim-old",
+      status: "old-only",
+      objectType: "pim",
+      oldObject: {
+        normalizedType: "pim",
+        normalizedIdentity: "svc-a",
+        fields: { interface: "svc-a" },
+      },
+    },
+    {
+      id: "bgp-old",
+      status: "old-only",
+      objectType: "bgp",
+      oldObject: {
+        normalizedType: "bgp",
+        normalizedIdentity: "192.0.2.2",
+        fields: { neighbor: "192.0.2.2", "import.policy": "POL-IN" },
+      },
+    },
+  ];
+
+  const graph = buildGraphData({ plan: [...plan, ...topologyPlan] });
+  const edgeTypes = new Set(graph.edges.map((edge) => edge.type));
+
+  assert.ok(graph.edges.some((edge) => edge.graphMode === "comparison" && edge.type === "mapping"));
+  assert.ok(graph.edges.some((edge) => edge.graphMode === "internal"));
+  assert.ok(edgeTypes.has("internal-port-lag"));
+  assert.ok(edgeTypes.has("internal-lag-interface"));
+  assert.ok(edgeTypes.has("internal-lag-sap"));
+  assert.ok(edgeTypes.has("internal-service-sap"));
+  assert.ok(edgeTypes.has("internal-interface-static-route"));
+  assert.ok(edgeTypes.has("internal-interface-pim"));
+  assert.ok(edgeTypes.has("internal-static-route-bgp"));
+  assert.ok(edgeTypes.has("internal-filter-ref"));
+  assert.ok(edgeTypes.has("internal-qos-ref"));
+  assert.ok(edgeTypes.has("internal-policy-ref"));
+});
+
+test("graph data includes canonical trace-matrix view graph without replacing legacy graph", () => {
+  const graph = buildGraphData({
+    plan: [
+      {
+        id: "port-old",
+        status: "old-only",
+        objectType: "port",
+        oldObject: { normalizedType: "port", normalizedIdentity: "1/1/1", fields: { port: "1/1/1", "channel-group": "11" } },
+      },
+      {
+        id: "lag-old",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: { normalizedType: "lag", normalizedIdentity: "11", fields: { lag: "11" } },
+      },
+      {
+        id: "if-old",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: { normalizedType: "interface", normalizedIdentity: "to-core", fields: { interface: "to-core", sap: "lag-11:100", address: "10.0.0.1/30" } },
+      },
+      {
+        id: "route-old",
+        status: "old-only",
+        objectType: "static-route",
+        oldObject: { normalizedType: "static-route", normalizedIdentity: "192.0.2.0/24", fields: { route: "192.0.2.0/24", "next-hop": "10.0.0.2" } },
+      },
+    ],
+  });
+
+  assert.ok(graph.nodes.length > 0);
+  assert.ok(graph.edges.length > 0);
+  assert.equal(graph.viewGraph.fixedView, true);
+  assert.equal(graph.viewGraph.viewLayout, "trace-matrix");
+  assert.equal(graph.viewGraph.viewMode, "summary");
+  assert.ok(graph.viewGraph.nodes.some((node) => node.serviceAggregate && /Static 1/.test(node.label)));
+  assert.ok(graph.viewGraph.views.detail.edges.some((edge) => edge.relation === "USED_BY_STATIC"));
+});
+
+test("graph data links lag and interface by shared description endpoint", () => {
+  const graph = buildGraphData({
+    plan: [
+      {
+        id: "lag-desc",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "14",
+          fields: {
+            lag: "14",
+            description: "## TO, lag-14(3/2/2), Dobong-TOU-FB06, Po10, ACT ##",
+          },
+        },
+      },
+      {
+        id: "if-desc",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "to-dobong-tou-fb06",
+          fields: {
+            interface: "to-dobong-tou-fb06",
+            address: "10.0.0.1/30",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.ok(graph.edges.some((edge) =>
+    edge.type === "internal-lag-interface" &&
+    edge.source.includes("lag") &&
+    edge.target.includes("interface")
+  ));
+});
+
+test("graph data does not fan one lag description into unrelated interfaces", () => {
+  const graph = buildGraphData({
+    plan: [
+      {
+        id: "lag-desc",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "11",
+          fields: {
+            lag: "11",
+            description: "## TO, lag-11(2/2/3), Dobong-TOU-FB03, Po10, ACT ##",
+          },
+        },
+      },
+      {
+        id: "if-fb03",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "to-dobong-tou-fb03",
+          fields: { interface: "to-dobong-tou-fb03" },
+        },
+      },
+      {
+        id: "if-fb04",
+        status: "old-only",
+        objectType: "interface",
+        oldObject: {
+          normalizedType: "interface",
+          normalizedIdentity: "to-dobong-tou-fb04",
+          fields: { interface: "to-dobong-tou-fb04" },
+        },
+      },
+    ],
+  });
+
+  const lagInterfaceEdges = graph.edges.filter((edge) => edge.type === "internal-lag-interface");
+
+  assert.equal(lagInterfaceEdges.length, 1);
+  assert.match(lagInterfaceEdges[0].target, /fb03/i);
+});
+
+test("graph sampling keeps selected lag member port available for topology edge", () => {
+  const manyPorts = Array.from({ length: 160 }, (_, index) => ({
+    id: `sample-port-${index}`,
+    status: "old-only",
+    objectType: "port",
+    oldObject: {
+      normalizedType: "port",
+      normalizedIdentity: `1/1/${index + 1}`,
+      fields: { port: `1/1/${index + 1}` },
+    },
+  }));
+  const graph = buildGraphData({
+    plan: [
+      ...manyPorts,
+      {
+        id: "sample-lag",
+        status: "old-only",
+        objectType: "lag",
+        oldObject: {
+          normalizedType: "lag",
+          normalizedIdentity: "99",
+          fields: {
+            lag: "99",
+            members: ["1/1/160"],
+            description: "important selected lag",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.ok(graph.nodes.some((node) => node.objectType === "port" && node.label === "1/1/160"));
+  assert.ok(graph.edges.some((edge) => edge.type === "internal-port-lag" && edge.source.includes("1/1/160")));
+});
+
+test("graph data samples full config by type instead of first port-heavy items", () => {
+  const manyPorts = Array.from({ length: 160 }, (_, index) => ({
+    id: `port-${index}`,
+    status: "old-only",
+    objectType: "port",
+    oldObject: {
+      normalizedType: "port",
+      normalizedIdentity: `1/1/${index + 1}`,
+      fields: { port: `1/1/${index + 1}` },
+    },
+  }));
+  const tailObjects = [
+    {
+      id: "tail-lag",
+      status: "old-only",
+      objectType: "lag",
+      oldObject: {
+        normalizedType: "lag",
+        normalizedIdentity: "10",
+        fields: { lag: "10", members: ["1/1/1"] },
+      },
+    },
+    {
+      id: "tail-interface",
+      status: "old-only",
+      objectType: "interface",
+      oldObject: {
+        normalizedType: "interface",
+        normalizedIdentity: "svc-a",
+        fields: { interface: "svc-a", address: "10.0.0.1/31" },
+      },
+    },
+    {
+      id: "tail-static-route",
+      status: "old-only",
+      objectType: "static-route",
+      oldObject: {
+        normalizedType: "static-route",
+        normalizedIdentity: "192.0.2.2/32",
+        fields: { route: "192.0.2.2/32", "next-hop": "10.0.0.0" },
+      },
+    },
+    {
+      id: "tail-bgp",
+      status: "old-only",
+      objectType: "bgp",
+      oldObject: {
+        normalizedType: "bgp",
+        normalizedIdentity: "192.0.2.2",
+        fields: { neighbor: "192.0.2.2" },
+      },
+    },
+  ];
+
+  const graph = buildGraphData({ plan: [...manyPorts, ...tailObjects] });
+  const nodeTypes = new Set(graph.nodes.map((node) => node.objectType));
+  const portNodes = graph.nodes.filter((node) => node.objectType === "port");
+
+  assert.ok(nodeTypes.has("lag"));
+  assert.ok(nodeTypes.has("interface"));
+  assert.ok(nodeTypes.has("static-route"));
+  assert.ok(nodeTypes.has("bgp"));
+  assert.ok(portNodes.length <= 12);
+  assert.ok(graph.truncated);
+  assert.ok(graph.hiddenByType.port > 0);
 });
 
 test("dashboard data derives operator severity and line metrics", () => {

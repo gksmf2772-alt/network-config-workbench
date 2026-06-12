@@ -1,11 +1,12 @@
 import React from "react";
-import { BarChart3, ClipboardList, FileText, GitCompareArrows, Settings2 } from "lucide-react";
+import { BarChart3, ClipboardList, FileText, GitBranch, GitCompareArrows, Settings2 } from "lucide-react";
 import { motion } from "framer-motion";
 import HeaderBar from "./HeaderBar.jsx";
 import ConfigInputPanel from "./ConfigInputPanel.jsx";
 import ProfileTab from "./ProfileTab.jsx";
 import SemanticSummaryPanel from "./SemanticSummaryPanel.jsx";
 import ObjectMatchTable from "./ObjectMatchTable.jsx";
+import GraphTabPanel from "./GraphTabPanel.jsx";
 import RelationshipGraphPanel from "./RelationshipGraphPanel.jsx";
 import { AppButton } from "./ui/AppButton.jsx";
 import { AppToolbar } from "./ui/AppToolbar.jsx";
@@ -32,6 +33,10 @@ export default function AppShell() {
           <Settings2 className="h-4 w-4" />
           프로파일
         </AppButton>
+        <AppButton id="graphPageTabBtn" className="tab-button" type="button" variant="tab">
+          <GitBranch className="h-4 w-4" />
+          그래프
+        </AppButton>
         <AppButton id="reportPageTabBtn" className="tab-button" type="button" variant="tab">
           <FileText className="h-4 w-4" />
           리포트
@@ -52,6 +57,9 @@ export default function AppShell() {
         </section>
         <ConfigInputPanel />
         <ProfileTab />
+        <section id="graphTab" className="tab-panel summary-page-panel">
+          <GraphTabPanel />
+        </section>
         <section id="reportTab" className="tab-panel summary-page-panel">
           <RelationshipGraphPanel />
         </section>

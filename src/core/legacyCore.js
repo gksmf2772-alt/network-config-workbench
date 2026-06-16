@@ -28,15 +28,6 @@ import {
   buildSummaryDashboardData,
 } from "./summaryAnalytics.js";
 import {
-  toReactFlowData,
-  validateReactFlowData,
-} from "../utils/graphAdapter.js";
-import {
-  applyDagreLayout,
-  applyRadialLayout,
-  applyScatterLayout,
-} from "../utils/dagreLayout.js";
-import {
   buildObjectReviewGroups,
   buildObjectFieldReviewRows,
   REVIEW_SOURCE_LABELS,
@@ -633,7 +624,6 @@ function bindEvents() {
   selectors.profilesTabBtn.addEventListener("click", () => setActiveTab("profiles"));
   selectors.summaryPageTabBtn?.addEventListener("click", () => setActiveTab("summary"));
   selectors.objectsPageTabBtn?.addEventListener("click", () => setActiveTab("objects"));
-  selectors.graphPageTabBtn?.addEventListener("click", () => setActiveTab("graph"));
   selectors.reportPageTabBtn?.addEventListener("click", () => setActiveTab("report"));
   selectors.loadHistoryBtn.addEventListener("click", loadSelectedSession);
   selectors.saveSessionBtn.addEventListener("click", saveSession);
@@ -850,29 +840,24 @@ function setActiveTab(tab, options = {}) {
   if (!options.skipConfirm && tab === "compare" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 탭으로 이동")) return false;
   if (!options.skipConfirm && tab === "summary" && !confirmUnsavedProfileAction("프로파일 변경 후 비교 요약 탭으로 이동")) return false;
   if (!options.skipConfirm && tab === "objects" && !confirmUnsavedProfileAction("프로파일 변경 후 객체 검토 탭으로 이동")) return false;
-  if (!options.skipConfirm && tab === "graph" && !confirmUnsavedProfileAction("프로파일 변경 후 그래프 탭으로 이동")) return false;
   if (!options.skipConfirm && tab === "report" && !confirmUnsavedProfileAction("프로파일 변경 후 리포트 탭으로 이동")) return false;
   hideProfileRulePopover();
   const compare = tab === "compare";
   const profiles = tab === "profiles";
   const summary = tab === "summary";
   const objects = tab === "objects";
-  const graph = tab === "graph";
   const report = tab === "report";
   selectors.compareTabBtn.classList.toggle("active", compare);
   selectors.profilesTabBtn.classList.toggle("active", profiles);
   selectors.summaryPageTabBtn?.classList.toggle("active", summary);
   selectors.objectsPageTabBtn?.classList.toggle("active", objects);
-  selectors.graphPageTabBtn?.classList.toggle("active", graph);
   selectors.reportPageTabBtn?.classList.toggle("active", report);
   selectors.compareTab.classList.toggle("active", compare);
   selectors.profilesTab.classList.toggle("active", profiles);
   selectors.summaryTab?.classList.toggle("active", summary);
   selectors.objectsTab?.classList.toggle("active", objects);
-  selectors.graphTab?.classList.toggle("active", graph);
   selectors.reportTab?.classList.toggle("active", report);
   if (objects) renderObjectNavigator();
-  if (graph) renderStandaloneGraphPage(state.lastReport);
   if (report) renderOverviewReport(state.lastReport);
   if (compare) {
     renderCompareSectionTabs();
@@ -4062,10 +4047,6 @@ function handleReportQuickAction(event) {
     exportReport();
     return;
   }
-  if (action === "graph") {
-    setActiveTab("graph", { skipConfirm: true });
-    return;
-  }
   scrollToReportSection(action);
 }
 
@@ -4087,7 +4068,7 @@ function renderReportQuickContext(report = state.lastReport) {
       : `<span>리포트</span><strong>없음</strong><small>비교 실행 필요</small>`;
   }
 
-  ["summary", "review", "graph", "export"].forEach((action) => {
+  ["summary", "review", "export"].forEach((action) => {
     const button = selectors.reportQuickActions?.querySelector(`[data-report-action="${cssEscape(action)}"]`);
     if (!button) return;
     button.disabled = !report;
@@ -6741,13 +6722,12 @@ function getCompareIssueReturnLabel(target = {}) {
   const source = String(target.source || "");
   if (source === "object-review") return "객체 검토로";
   if (source === "report-review") return "리포트 검토로";
-  if (source === "report-graph") return "그래프로";
   return "요약으로";
 }
 
 function canReturnToCompareIssueSource(target = {}) {
   const source = String(target.source || "");
-  return source === "object-review" || source === "report-review" || source === "report-graph" || Boolean(target.returnTab);
+  return source === "object-review" || source === "report-review" || Boolean(target.returnTab);
 }
 
 function renderCompareIssueContextBanner() {
@@ -6771,7 +6751,6 @@ function renderCompareIssueContextBanner() {
   const sourceLabels = {
     "object-review": "객체 검토에서 이동한 항목",
     "report-review": "리포트 검토에서 이동한 항목",
-    "report-graph": "리포트 그래프에서 이동한 항목",
   };
   const sourceLabel = sourceLabels[target.source] || "요약에서 이동한 항목";
   const guidance = target.source === "object-review"
@@ -6811,10 +6790,6 @@ function returnToCompareIssueSource() {
     returnToObjectReviewTarget(target);
     return;
   }
-  if (source === "report-graph") {
-    returnToReportGraphTarget(target);
-    return;
-  }
   if (source === "report-review" || target.returnTab === "report") {
     returnToReportReviewTarget(target);
     return;
@@ -6845,24 +6820,6 @@ function returnToReportReviewTarget(target = {}) {
     objectType: target.objectType || target.settingType || "",
     field: target.field || "",
   });
-}
-
-function returnToReportGraphTarget(target = {}) {
-  if (target.returnTab === "graph") {
-    setActiveTab("graph", { skipConfirm: true });
-  } else {
-    scrollToReportSection("graph");
-  }
-  const graphRoot = target.returnTab === "graph"
-    ? selectors.graphReport?.querySelector("[data-graph-root]")
-    : selectors.overviewReport?.querySelector("[data-graph-root]");
-  const nodeId = target.returnTargetId || target.targetId || "";
-  const node = nodeId ? graphRoot?.querySelector(`[data-graph-node="${cssEscape(nodeId)}"]`) : null;
-  if (!node) return;
-  setGraphFocus(graphRoot, nodeId);
-  node.scrollIntoView({ block: "center", inline: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
-  node.classList.add("summary-panel-pulse");
-  window.setTimeout(() => node.classList.remove("summary-panel-pulse"), 900);
 }
 
 async function addExceptionFromTarget(targetId = "", exceptionScope = "object", triggerButton = null) {
@@ -16481,47 +16438,9 @@ function openSelectedObjectReviewInCompare() {
   scrollToDiffObject(planReviewObjectKey(target));
 }
 
-function renderStandaloneGraphPage(report, options = {}) {
-  if (!selectors.graphReport) return;
-  if (!report) {
-    unmountRelationshipGraphReactRoots(selectors.graphReport);
-    selectors.graphReport.dataset.graphRenderedVersion = "";
-    selectors.graphReport.innerHTML = `
-      <section class="overview-section" data-report-section="empty">
-        <div class="summary-empty-state">
-          <strong>그래프 없음</strong>
-          <span>비교 실행 후 관계 그래프가 표시됨.</span>
-        </div>
-      </section>
-    `;
-    return;
-  }
-
-  const renderVersion = String(state.reportRenderVersion || 0);
-  if (!options.force && selectors.graphReport.dataset.graphRenderedVersion === renderVersion) return;
-
-  const dashboard = getDashboardDataForRender(report);
-  unmountRelationshipGraphReactRoots(selectors.graphReport);
-  selectors.graphReport.innerHTML = `
-    <section class="overview-section report-graph-section report-graph-section-standalone" data-report-section="graph">
-      <div class="report-graph-head">
-        <div>
-          <h3>관계 그래프</h3>
-          <p>기존-신규 비교 관계와 각 config 내부 연결을 분리해서 확인합니다.</p>
-        </div>
-        ${renderGraphToolbar()}
-      </div>
-      ${renderRelationshipGraph(dashboard.graph, { standalone: true })}
-    </section>
-  `;
-  selectors.graphReport.dataset.graphRenderedVersion = renderVersion;
-  bindReportGraphInteractions(selectors.graphReport, { includeReportReview: false });
-}
-
 function renderOverviewReport(report, options = {}) {
   if (!selectors.overviewReport) return;
   if (!report) {
-    unmountRelationshipGraphReactRoots(selectors.overviewReport);
     selectors.overviewReport.dataset.reportRenderedVersion = "";
     renderReportQuickContext(null);
     selectors.overviewReport.innerHTML = `
@@ -16544,7 +16463,6 @@ function renderOverviewReport(report, options = {}) {
   const dashboard = getDashboardDataForRender(report);
   const { fieldAnalysis, review, graph, severity, context, lineSummary, audit } = dashboard;
   renderReportQuickContext(report);
-  unmountRelationshipGraphReactRoots(selectors.overviewReport);
   selectors.overviewReport.innerHTML = `
     <section class="overview-section report-workspace-header summary-risk-${escapeHtml(severity.level || "ok")}" data-report-section="summary">
       <div>
@@ -16573,6 +16491,11 @@ function renderOverviewReport(report, options = {}) {
       <h3>검토 테이블</h3>
       ${renderReportReviewTable(review)}
     </section>
+    <section class="overview-section report-subscriber-section" data-report-section="subscriber-paths">
+      <h3>가입자 경로 테이블</h3>
+      <p class="small-note">한 행은 Serial IP 기준으로 확인된 기존/신규 가입자 경로 1개를 의미합니다.</p>
+      ${renderReportSubscriberTable(graph)}
+    </section>
     <section class="overview-section report-audit-section" data-report-section="audit">
       <h3>표준 점검 리포트</h3>
       ${(context.standardsAuditVisible || context.migrationReadinessVisible || context.debugDiagnosticsVisible)
@@ -16588,16 +16511,6 @@ function renderOverviewReport(report, options = {}) {
     <section class="overview-section report-field-section" data-report-section="fields">
       <h3>공통 필드 분석</h3>
       ${renderFieldOverlapSummary(fieldAnalysis)}
-    </section>
-    <section class="overview-section report-graph-section" data-report-section="graph">
-      <div class="report-graph-head">
-        <div>
-          <h3>관계 그래프</h3>
-          <p>설정 연결, 직접 연결, 참조 관계를 2D로 표시합니다.</p>
-        </div>
-        ${renderGraphToolbar()}
-      </div>
-      ${renderRelationshipGraph(graph)}
     </section>
     <section class="overview-section" data-report-section="counts">
       <h3>설정 수</h3>
@@ -16677,7 +16590,7 @@ function renderReportReviewTable(review = {}) {
           <span class="report-review-view-current" data-report-review-view-current>${viewMode === "full" ? "전체 옵션: 모든 필드 컬럼 표시" : "핵심 보기: 주요 컬럼 + 변경 요약"}</span>
         </div>
         <button type="button" data-report-review-clear>초기화</button>
-        <span data-report-review-count>${escapeHtml(rows.length)}/${escapeHtml(rows.length)}</span>
+        <span class="report-table-count" data-report-review-count aria-live="polite">${escapeHtml(formatReportTableCount(rows.length, rows.length))}</span>
         <span class="report-review-save-state" data-report-review-save-state>필터 자동 저장</span>
       </div>
       <div class="report-review-table-wrap">
@@ -16760,6 +16673,788 @@ function renderReportReviewTable(review = {}) {
   `;
 }
 
+const REPORT_SUBSCRIBER_COLUMNS = Object.freeze([
+  { key: "side", title: "구분", filter: "select" },
+  { key: "subscriber", title: "가입자/장비", filter: "search" },
+  { key: "port", title: "Port", filter: "search" },
+  { key: "lag", title: "LAG", filter: "search" },
+  { key: "interface", title: "Interface", filter: "search" },
+  { key: "serialIp", title: "Serial IP", filter: "search" },
+  { key: "static", title: "Static Route", filter: "search" },
+  { key: "bgp", title: "BGP", filter: "search" },
+  { key: "pim", title: "PIM", filter: "search" },
+  { key: "confidence", title: "신뢰도", filter: "select", extra: true },
+  { key: "evidence", title: "근거", filter: "search", extra: true },
+]);
+
+function renderReportSubscriberTable(graph = {}) {
+  const rows = buildReportSubscriberRows(graph);
+  const filterOptions = getReportSubscriberFilterOptions(rows);
+  const viewMode = state.reportSubscriberRenderMode === "full" ? "full" : "compact";
+  state.reportSubscriberRows = rows;
+
+  return `
+    <div class="report-subscriber-root" data-report-subscriber-root data-report-subscriber-view-mode="${escapeHtml(viewMode)}">
+      <div class="report-review-tools report-subscriber-tools">
+        <input type="search" data-report-subscriber-search placeholder="전체 검색" aria-label="가입자 경로 테이블 전체 검색" />
+        <div class="report-review-view-control">
+          <div class="report-review-view-toggle" role="group" aria-label="가입자 경로 테이블 보기">
+            <button type="button" data-report-subscriber-view="compact" class="${viewMode === "compact" ? "active" : ""}" aria-pressed="${viewMode === "compact" ? "true" : "false"}">핵심 보기</button>
+            <button type="button" data-report-subscriber-view="full" class="${viewMode === "full" ? "active" : ""}" aria-pressed="${viewMode === "full" ? "true" : "false"}">전체 보기</button>
+          </div>
+          <span class="report-review-view-current" data-report-subscriber-view-current>${viewMode === "full" ? "전체 보기: 신뢰도와 근거 포함" : "핵심 보기: 경로와 서비스 중심"}</span>
+        </div>
+        <button type="button" data-report-subscriber-clear>초기화</button>
+        <span class="report-table-count" data-report-subscriber-count aria-live="polite">${escapeHtml(formatReportTableCount(rows.length, rows.length))}</span>
+        <span class="report-review-save-state" data-report-subscriber-save-state>필터 자동 저장</span>
+      </div>
+      <div class="report-subscriber-table-wrap">
+        <table class="report-subscriber-table">
+          <colgroup>
+            <col class="report-subscriber-col-side" />
+            <col class="report-subscriber-col-key" />
+            <col class="report-subscriber-col-port" />
+            <col class="report-subscriber-col-lag" />
+            <col class="report-subscriber-col-interface" />
+            <col class="report-subscriber-col-serial-ip" />
+            <col class="report-subscriber-col-service" />
+            <col class="report-subscriber-col-service" />
+            <col class="report-subscriber-col-service" />
+            <col class="report-subscriber-extra-column report-subscriber-col-confidence" />
+            <col class="report-subscriber-extra-column report-subscriber-col-evidence" />
+            <col class="report-subscriber-col-action" />
+          </colgroup>
+          <thead>
+            <tr>
+              ${REPORT_SUBSCRIBER_COLUMNS.map((column) => {
+                const header = column.filter === "select"
+                  ? renderReportSubscriberHeaderSelect(column.title, column.key, filterOptions[column.key] || [])
+                  : renderReportSubscriberHeaderSearch(column.title, column.key, filterOptions[column.key] || []);
+                return `<th class="${column.extra ? "report-subscriber-extra-column" : ""}">${header}</th>`;
+              }).join("")}
+              <th><div class="report-review-th"><div class="report-review-th-bar"><span>동작</span></div></div></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length ? rows.map((row, index) => renderReportSubscriberRow(row, index)).join("") : `<tr><td colspan="12" class="report-review-empty">가입자 경로 데이터 없음</td></tr>`}
+          </tbody>
+        </table>
+        <div class="report-review-filter-empty" data-report-subscriber-filter-empty hidden>조건에 맞는 가입자 경로 없음</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderReportSubscriberRow(row = {}, index = 0) {
+  return `
+    <tr
+      data-report-subscriber-row
+      data-report-subscriber-index="${escapeHtml(index)}"
+      data-report-subscriber-jump="${escapeHtml(row.jumpKey || "")}"
+      data-subscriber-side="${escapeHtml(row.sideLabel)}"
+      data-subscriber-side-option="${escapeHtml(reportReviewOptionValue(row.sideLabel))}"
+      data-subscriber-subscriber="${escapeHtml(row.subscriber)}"
+      data-subscriber-subscriber-option="${escapeHtml(reportReviewOptionValue(row.subscriber))}"
+      data-subscriber-port="${escapeHtml(row.portSearch || row.port)}"
+      data-subscriber-port-option="${escapeHtml(reportReviewOptionValue(row.portFilter || row.port))}"
+      data-subscriber-lag="${escapeHtml(row.lagSearch || row.lag)}"
+      data-subscriber-lag-option="${escapeHtml(reportReviewOptionValue(row.lagFilter || row.lag))}"
+      data-subscriber-interface="${escapeHtml(row.interfaceLabel)}"
+      data-subscriber-interface-option="${escapeHtml(reportReviewOptionValue(row.interfaceLabel))}"
+      data-subscriber-serial-ip="${escapeHtml(row.serialIpSearch || row.serialIp)}"
+      data-subscriber-serial-ip-option="${escapeHtml(reportReviewOptionValue(row.serialIpFilter || row.serialIp))}"
+      data-subscriber-static="${escapeHtml(row.staticSearch)}"
+      data-subscriber-static-option="${escapeHtml(reportReviewOptionValue(row.staticFilter))}"
+      data-subscriber-static-count="${escapeHtml(row.staticCount || 0)}"
+      data-subscriber-bgp="${escapeHtml(row.bgpSearch)}"
+      data-subscriber-bgp-option="${escapeHtml(reportReviewOptionValue(row.bgpFilter))}"
+      data-subscriber-bgp-count="${escapeHtml(row.bgpCount || 0)}"
+      data-subscriber-pim="${escapeHtml(row.pimSearch)}"
+      data-subscriber-pim-option="${escapeHtml(reportReviewOptionValue(row.pimFilter))}"
+      data-subscriber-pim-count="${escapeHtml(row.pimCount || 0)}"
+      data-subscriber-confidence="${escapeHtml(row.confidence)}"
+      data-subscriber-confidence-option="${escapeHtml(reportReviewOptionValue(row.confidence))}"
+      data-subscriber-evidence="${escapeHtml(row.evidence)}"
+      data-subscriber-evidence-option="${escapeHtml(reportReviewOptionValue(row.evidence))}"
+      data-subscriber-search="${escapeHtml(row.searchText)}">
+      <td>${renderReportSubscriberTextCell(row.sideLabel)}</td>
+      <td>${renderReportSubscriberTextCell(row.subscriber, row.sideLabel)}</td>
+      <td>${renderReportSubscriberTextCell(row.port)}</td>
+      <td>${renderReportSubscriberTextCell(row.lag)}</td>
+      <td>${renderReportSubscriberTextCell(row.interfaceLabel)}</td>
+      <td>${renderReportSubscriberTextCell(row.serialIp)}</td>
+      <td>${renderReportSubscriberServiceCell(row.staticCount, row.staticSummary, row.staticSearch)}</td>
+      <td>${renderReportSubscriberServiceCell(row.bgpCount, row.bgpSummary, row.bgpSearch)}</td>
+      <td>${renderReportSubscriberServiceCell(row.pimCount, row.pimSummary, row.pimSearch)}</td>
+      <td class="report-subscriber-extra-column">${renderReportSubscriberTextCell(row.confidence)}</td>
+      <td class="report-subscriber-extra-column">${renderReportSubscriberTextCell(row.evidence)}</td>
+      <td>
+        <div class="report-review-actions">
+          ${row.jumpKey ? `<button type="button" data-object-jump="${escapeHtml(row.jumpKey)}">비교 보기</button>` : `<span class="small-note">대상 없음</span>`}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderReportSubscriberTextCell(value = "", subValue = "") {
+  const main = String(value || "").trim() || "-";
+  const sub = String(subValue || "").trim();
+  return `
+    <div class="report-subscriber-cell" title="${escapeHtml([main, sub].filter(Boolean).join(" / "))}">
+      <span class="report-subscriber-main">${escapeHtml(main)}</span>
+      ${sub ? `<span class="report-subscriber-sub">${escapeHtml(sub)}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderReportSubscriberServiceCell(count = 0, summary = "", searchText = "") {
+  const numericCount = Number(count) || 0;
+  if (!numericCount) return renderReportSubscriberTextCell("-");
+  return `
+    <div class="report-subscriber-cell" title="${escapeHtml(searchText || summary)}">
+      <span class="report-subscriber-main"><span class="report-subscriber-count">${escapeHtml(numericCount)}</span>${escapeHtml(summary || `${numericCount}개`)}</span>
+    </div>
+  `;
+}
+
+function renderReportSubscriberHeaderSearch(title = "", key = "", options = []) {
+  const panelId = reportSubscriberFilterPanelId(key, title);
+  const panelStyle = reportReviewFilterPanelStyle([title, ...options]);
+  return `
+    <div class="report-review-th">
+      ${renderReportReviewHeaderBar(title, panelId, key, "subscriber")}
+      <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(title)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
+        <input type="search" data-report-subscriber-column-search="${escapeHtml(key)}" placeholder="검색" aria-label="${escapeHtml(title)} 검색" />
+        ${renderReportReviewValueChecklist(title, key, options)}
+      </div>
+    </div>
+  `;
+}
+
+function renderReportSubscriberHeaderSelect(title = "", key = "", options = []) {
+  const panelId = reportSubscriberFilterPanelId(key, title);
+  const panelStyle = reportReviewFilterPanelStyle([title, ...options]);
+  return `
+    <div class="report-review-th">
+      ${renderReportReviewHeaderBar(title, panelId, key, "subscriber")}
+      <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(title)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
+        <select data-report-subscriber-column-filter="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 필터">
+          <option value="all">전체</option>
+          ${options.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}
+        </select>
+        ${renderReportReviewValueChecklist(title, key, options)}
+      </div>
+    </div>
+  `;
+}
+
+function reportSubscriberFilterPanelId(key = "", title = "") {
+  const normalized = canonicalizeComparableLine(key || title).replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return `report-subscriber-filter-${normalized || "column"}`;
+}
+
+function buildReportSubscriberRows(graph = {}) {
+  const view = graph?.viewGraph?.views?.summary || graph?.viewGraph || {};
+  const chainBuckets = new Map();
+
+  for (const node of view.nodes || []) {
+    const detail = node?.chainDetail;
+    if (!detail?.chainId || node?.isColumnHeader) continue;
+    if (!detail.interface) continue;
+    if (!chainBuckets.has(detail.chainId)) {
+      chainBuckets.set(detail.chainId, {
+        detail,
+        keys: {},
+      });
+    }
+    const bucket = chainBuckets.get(detail.chainId);
+    const kind = node.canonicalKind || node.columnKind || "";
+    if (kind && node.key && !bucket.keys[kind]) bucket.keys[kind] = node.key;
+  }
+
+  const subscriberBuckets = new Map();
+  let order = 0;
+  for (const { detail, keys } of chainBuckets.values()) {
+    const key = reportSubscriberMergeKey(detail, order);
+    if (!subscriberBuckets.has(key)) {
+      subscriberBuckets.set(key, {
+        detail: cloneReportSubscriberDetail(detail),
+        keys: { ...keys },
+        order,
+      });
+    } else {
+      const bucket = subscriberBuckets.get(key);
+      bucket.detail = mergeReportSubscriberDetail(bucket.detail, detail);
+      bucket.keys = mergeReportSubscriberKeys(bucket.keys, keys);
+    }
+    order += 1;
+  }
+
+  const pairedBuckets = new Map();
+  for (const bucket of subscriberBuckets.values()) {
+    const pairKey = reportSubscriberPairKey(bucket.detail, bucket.order);
+    if (!pairedBuckets.has(pairKey)) {
+      pairedBuckets.set(pairKey, { order: bucket.order, old: null, new: null, singles: [] });
+    }
+    const pair = pairedBuckets.get(pairKey);
+    pair.order = Math.min(pair.order, bucket.order);
+    const side = bucket.detail?.side || "";
+    if (side === "old" || side === "new") {
+      pair[side] = pair[side] ? mergeReportSubscriberBucket(pair[side], bucket) : bucket;
+    } else {
+      pair.singles.push(bucket);
+    }
+  }
+
+  const rows = [];
+  const mergedPairs = mergeReportSubscriberPairsByLabel(
+    [...pairedBuckets.values()].sort((left, right) => left.order - right.order)
+  );
+  for (const pair of mergedPairs) {
+    if (pair.old && pair.new) {
+      rows.push(buildReportSubscriberComparisonRow(pair.old.detail, pair.old.keys, pair.new.detail, pair.new.keys, pair.order));
+    } else if (pair.old) {
+      rows.push(buildReportSubscriberRow(pair.old.detail, pair.old.keys, pair.order));
+    } else if (pair.new) {
+      rows.push(buildReportSubscriberRow(pair.new.detail, pair.new.keys, pair.order));
+    }
+    for (const single of pair.singles) {
+      rows.push(buildReportSubscriberRow(single.detail, single.keys, single.order));
+    }
+  }
+
+  return rows
+    .sort((left, right) => {
+      const sideOrder = reportSubscriberSideOrder(left.side) - reportSubscriberSideOrder(right.side);
+      if (sideOrder) return sideOrder;
+      return (left.rowIndex || 0) - (right.rowIndex || 0);
+    });
+}
+
+function mergeReportSubscriberPairsByLabel(pairs = []) {
+  const result = [];
+  const consumed = new Set();
+
+  for (let index = 0; index < pairs.length; index += 1) {
+    if (consumed.has(index)) continue;
+    const pair = pairs[index];
+    const side = reportSubscriberSinglePairSide(pair);
+    const labelKey = side ? reportSubscriberDetailLabelKey(reportSubscriberSinglePairDetail(pair)) : "";
+
+    if (!side || !labelKey) {
+      result.push(pair);
+      continue;
+    }
+
+    let matchIndex = -1;
+    for (let candidateIndex = index + 1; candidateIndex < pairs.length; candidateIndex += 1) {
+      if (consumed.has(candidateIndex)) continue;
+      const candidate = pairs[candidateIndex];
+      const candidateSide = reportSubscriberSinglePairSide(candidate);
+      if (!candidateSide || candidateSide === side) continue;
+      if (reportSubscriberDetailLabelKey(reportSubscriberSinglePairDetail(candidate)) !== labelKey) continue;
+      matchIndex = candidateIndex;
+      break;
+    }
+
+    if (matchIndex < 0) {
+      result.push(pair);
+      continue;
+    }
+
+    consumed.add(matchIndex);
+    result.push(mergeReportSubscriberPairGroup(pair, pairs[matchIndex]));
+  }
+
+  return result.sort((left, right) => left.order - right.order);
+}
+
+function reportSubscriberSinglePairSide(pair = {}) {
+  if ((pair.singles || []).length) return "";
+  if (pair.old && !pair.new) return "old";
+  if (pair.new && !pair.old) return "new";
+  return "";
+}
+
+function reportSubscriberSinglePairDetail(pair = {}) {
+  return pair.old?.detail || pair.new?.detail || null;
+}
+
+function mergeReportSubscriberPairGroup(left = {}, right = {}) {
+  const oldBucket = left.old && right.old
+    ? mergeReportSubscriberBucket(left.old, right.old)
+    : left.old || right.old || null;
+  const newBucket = left.new && right.new
+    ? mergeReportSubscriberBucket(left.new, right.new)
+    : left.new || right.new || null;
+  return {
+    order: Math.min(left.order ?? right.order ?? 0, right.order ?? left.order ?? 0),
+    old: oldBucket,
+    new: newBucket,
+    singles: [...(left.singles || []), ...(right.singles || [])],
+  };
+}
+
+function reportSubscriberDetailLabelKey(detail = {}) {
+  const labels = [
+    reportSubscriberNodeLabel(detail.interface),
+    detail.interface?.attributes?.name,
+    detail.interface?.attributes?.normalizedName,
+    ...(Array.isArray(detail.interface?.attributes?.aliases) ? detail.interface.attributes.aliases : []),
+  ];
+  for (const label of labels) {
+    const key = normalizeReportSubscriberLabelKey(label);
+    if (key) return key;
+  }
+  return "";
+}
+
+function normalizeReportSubscriberLabelKey(value = "") {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized || normalized === "-" || normalized === "system") return "";
+  if (/^(?:port|lag|interface|subscriber-interface|group-interface)$/.test(normalized)) return "";
+  return normalized;
+}
+
+function mergeReportSubscriberBucket(left = {}, right = {}) {
+  return {
+    detail: mergeReportSubscriberDetail(left.detail, right.detail),
+    keys: mergeReportSubscriberKeys(left.keys, right.keys),
+    order: Math.min(left.order ?? right.order ?? 0, right.order ?? left.order ?? 0),
+  };
+}
+
+function reportSubscriberMergeKey(detail = {}, index = 0) {
+  const side = detail.side || "";
+  const interfaceId = detail.interface?.id || "";
+  if (interfaceId) return [side, "interface", interfaceId].join("|");
+  const lagId = detail.lag?.id || "";
+  if (lagId) return [side, "lag", lagId].join("|");
+  const portId = detail.port?.id || "";
+  if (portId) return [side, "port", portId].join("|");
+  const peerId = detail.peer?.id || "";
+  if (peerId) return [side, "peer", peerId].join("|");
+  return detail.chainId || `subscriber-row-${index}`;
+}
+
+function reportSubscriberPairKey(detail = {}, index = 0) {
+  const serialKey = reportSubscriberSerialNetworkKey(reportSubscriberAddressLabel(detail.interface));
+  if (serialKey) return `serial:${serialKey}`;
+  return `single:${reportSubscriberMergeKey(detail, index)}`;
+}
+
+function cloneReportSubscriberDetail(detail = {}) {
+  return {
+    ...detail,
+    ports: reportSubscriberNodeList(detail.port, detail.ports),
+    lags: reportSubscriberNodeList(detail.lag, detail.lags),
+    peers: reportSubscriberNodeList(detail.peer, detail.peers),
+    staticRoutes: reportSubscriberNodeList(null, detail.staticRoutes),
+    bgpNeighbors: reportSubscriberNodeList(null, detail.bgpNeighbors),
+    pim: reportSubscriberNodeList(null, detail.pim),
+    evidence: [...(detail.evidence || [])],
+  };
+}
+
+function mergeReportSubscriberDetail(left = {}, right = {}) {
+  const ports = mergeReportSubscriberNodes(left.ports || reportSubscriberNodeList(left.port, []), reportSubscriberNodeList(right.port, right.ports));
+  const lags = mergeReportSubscriberNodes(left.lags || reportSubscriberNodeList(left.lag, []), reportSubscriberNodeList(right.lag, right.lags));
+  const peers = mergeReportSubscriberNodes(left.peers || reportSubscriberNodeList(left.peer, []), reportSubscriberNodeList(right.peer, right.peers));
+  const staticRoutes = mergeReportSubscriberNodes(left.staticRoutes, right.staticRoutes);
+  const bgpNeighbors = mergeReportSubscriberNodes(left.bgpNeighbors, right.bgpNeighbors);
+  const pim = mergeReportSubscriberNodes(left.pim, right.pim);
+  const confidenceValues = [left.confidence?.min, right.confidence?.min]
+    .map((value) => Number(value))
+    .filter(Number.isFinite);
+
+  return {
+    ...left,
+    rowIndex: Math.min(left.rowIndex ?? right.rowIndex ?? 0, right.rowIndex ?? left.rowIndex ?? 0),
+    chainId: left.chainId || right.chainId || "",
+    port: ports[0] || left.port || right.port || null,
+    lag: lags[0] || left.lag || right.lag || null,
+    peer: peers[0] || left.peer || right.peer || null,
+    ports,
+    lags,
+    peers,
+    staticRoutes,
+    bgpNeighbors,
+    pim,
+    serviceCounts: {
+      static: staticRoutes.length,
+      bgp: bgpNeighbors.length,
+      pim: pim.length,
+    },
+    confidence: {
+      ...(left.confidence || {}),
+      min: confidenceValues.length ? Math.min(...confidenceValues) : left.confidence?.min ?? right.confidence?.min ?? null,
+    },
+    evidence: mergeReportSubscriberEvidence(left.evidence, right.evidence),
+  };
+}
+
+function mergeReportSubscriberKeys(left = {}, right = {}) {
+  return {
+    ...right,
+    ...left,
+  };
+}
+
+function reportSubscriberNodeList(primary = null, list = []) {
+  return mergeReportSubscriberNodes(
+    primary ? [primary] : [],
+    Array.isArray(list) ? list : []
+  );
+}
+
+function mergeReportSubscriberNodes(left = [], right = []) {
+  const byKey = new Map();
+  for (const node of [...(left || []), ...(right || [])]) {
+    if (!node) continue;
+    const key = node.id || `${node.kind || ""}:${reportSubscriberNodeLabel(node)}`;
+    if (!byKey.has(key)) byKey.set(key, node);
+  }
+  return [...byKey.values()];
+}
+
+function mergeReportSubscriberEvidence(left = [], right = []) {
+  const byKey = new Map();
+  for (const item of [...(left || []), ...(right || [])]) {
+    if (!item) continue;
+    const key = typeof item === "string"
+      ? item
+      : [item.source || "", item.line || "", item.text || item.reason || item.field || ""].join("|");
+    if (!byKey.has(key)) byKey.set(key, item);
+  }
+  return [...byKey.values()];
+}
+
+function buildReportSubscriberRow(detail = {}, keys = {}, index = 0) {
+  const portInfo = reportSubscriberServiceInfo(reportSubscriberNodeList(detail.port, detail.ports));
+  const lagInfo = reportSubscriberServiceInfo(reportSubscriberNodeList(detail.lag, detail.lags));
+  const peerInfo = reportSubscriberServiceInfo(reportSubscriberNodeList(detail.peer, detail.peers));
+  const staticInfo = reportSubscriberServiceInfo(detail.staticRoutes);
+  const bgpInfo = reportSubscriberServiceInfo(detail.bgpNeighbors);
+  const pimInfo = reportSubscriberServiceInfo(detail.pim);
+  const confidence = detail.confidence?.min == null ? "-" : `${detail.confidence.min}%`;
+  const evidence = reportSubscriberEvidenceText(detail.evidence);
+  const interfaceLabel = reportSubscriberNodeLabel(detail.interface);
+  const serialIp = reportSubscriberAddressLabel(detail.interface);
+  const peer = peerInfo.summary;
+  const subscriber = interfaceLabel || peer || lagInfo.summary || portInfo.summary || `경로 ${index + 1}`;
+  const jumpKey = keys.L3_INTERFACE || keys.PEER_NH || keys.LAG || keys.PORT || "";
+  const sideLabelValue = reportSubscriberSideLabel(detail.side);
+  const searchText = [
+    sideLabelValue,
+    subscriber,
+    portInfo.searchText,
+    lagInfo.searchText,
+    interfaceLabel,
+    serialIp,
+    peerInfo.searchText,
+    staticInfo.searchText,
+    bgpInfo.searchText,
+    pimInfo.searchText,
+    confidence,
+    evidence,
+  ].join(" ").toLowerCase();
+
+  return {
+    index,
+    side: detail.side || "",
+    sideLabel: sideLabelValue,
+    rowIndex: detail.rowIndex || 0,
+    chainId: detail.chainId || "",
+    subscriber,
+    port: portInfo.summary,
+    portSearch: portInfo.searchText,
+    portFilter: portInfo.filterValue,
+    lag: lagInfo.summary,
+    lagSearch: lagInfo.searchText,
+    lagFilter: lagInfo.filterValue,
+    interfaceLabel,
+    serialIp,
+    serialIpSearch: serialIp,
+    serialIpFilter: serialIp || "-",
+    peer,
+    peerSearch: peerInfo.searchText,
+    peerFilter: peerInfo.filterValue,
+    staticCount: staticInfo.count,
+    staticSummary: staticInfo.summary,
+    staticSearch: staticInfo.searchText,
+    staticFilter: staticInfo.filterValue,
+    bgpCount: bgpInfo.count,
+    bgpSummary: bgpInfo.summary,
+    bgpSearch: bgpInfo.searchText,
+    bgpFilter: bgpInfo.filterValue,
+    pimCount: pimInfo.count,
+    pimSummary: pimInfo.summary,
+    pimSearch: pimInfo.searchText,
+    pimFilter: pimInfo.filterValue,
+    confidence,
+    evidence,
+    jumpKey,
+    searchText,
+  };
+}
+
+function buildReportSubscriberComparisonRow(oldDetail = {}, oldKeys = {}, newDetail = {}, newKeys = {}, index = 0) {
+  const oldRow = buildReportSubscriberRow(oldDetail, oldKeys, index);
+  const newRow = buildReportSubscriberRow(newDetail, newKeys, index);
+  const staticInfo = reportSubscriberPairedServiceInfo(oldRow, newRow, "static");
+  const bgpInfo = reportSubscriberPairedServiceInfo(oldRow, newRow, "bgp");
+  const pimInfo = reportSubscriberPairedServiceInfo(oldRow, newRow, "pim");
+  const confidence = reportSubscriberPairedConfidence(oldRow.confidence, newRow.confidence);
+  const evidence = reportSubscriberPairCellValue(oldRow.evidence, newRow.evidence);
+  const sideLabelValue = reportSubscriberSideLabel("both");
+  const subscriber = reportSubscriberPairCellValue(oldRow.subscriber, newRow.subscriber);
+  const port = reportSubscriberPairCellValue(oldRow.port, newRow.port);
+  const lag = reportSubscriberPairCellValue(oldRow.lag, newRow.lag);
+  const interfaceLabel = reportSubscriberPairCellValue(oldRow.interfaceLabel, newRow.interfaceLabel);
+  const serialIp = reportSubscriberPairCellValue(oldRow.serialIp, newRow.serialIp);
+  const peer = reportSubscriberPairCellValue(oldRow.peer, newRow.peer);
+  const searchText = [
+    sideLabelValue,
+    subscriber,
+    port,
+    lag,
+    interfaceLabel,
+    serialIp,
+    peer,
+    oldRow.portSearch,
+    newRow.portSearch,
+    oldRow.lagSearch,
+    newRow.lagSearch,
+    oldRow.interfaceLabel,
+    newRow.interfaceLabel,
+    oldRow.serialIpSearch,
+    newRow.serialIpSearch,
+    staticInfo.searchText,
+    bgpInfo.searchText,
+    pimInfo.searchText,
+    confidence,
+    evidence,
+  ].join(" ").toLowerCase();
+
+  return {
+    index,
+    side: "both",
+    sideLabel: sideLabelValue,
+    rowIndex: Math.min(oldRow.rowIndex || 0, newRow.rowIndex || 0),
+    chainId: [oldRow.chainId, newRow.chainId].filter(Boolean).join(" "),
+    subscriber,
+    port,
+    portSearch: [oldRow.portSearch, newRow.portSearch, port].filter(Boolean).join(" "),
+    portFilter: port || "-",
+    lag,
+    lagSearch: [oldRow.lagSearch, newRow.lagSearch, lag].filter(Boolean).join(" "),
+    lagFilter: lag || "-",
+    interfaceLabel,
+    serialIp,
+    serialIpSearch: [oldRow.serialIpSearch, newRow.serialIpSearch, serialIp].filter(Boolean).join(" "),
+    serialIpFilter: serialIp || "-",
+    peer,
+    peerSearch: [oldRow.peerSearch, newRow.peerSearch, peer].filter(Boolean).join(" "),
+    peerFilter: peer || "-",
+    staticCount: staticInfo.count,
+    staticSummary: staticInfo.summary,
+    staticSearch: staticInfo.searchText,
+    staticFilter: staticInfo.filterValue,
+    bgpCount: bgpInfo.count,
+    bgpSummary: bgpInfo.summary,
+    bgpSearch: bgpInfo.searchText,
+    bgpFilter: bgpInfo.filterValue,
+    pimCount: pimInfo.count,
+    pimSummary: pimInfo.summary,
+    pimSearch: pimInfo.searchText,
+    pimFilter: pimInfo.filterValue,
+    confidence,
+    evidence,
+    jumpKey: oldRow.jumpKey || newRow.jumpKey,
+    searchText,
+  };
+}
+
+function reportSubscriberPairCellValue(oldValue = "", newValue = "") {
+  const oldText = String(oldValue || "").trim();
+  const newText = String(newValue || "").trim();
+  const emptyValues = new Set(["", "-"]);
+  const hasOld = !emptyValues.has(oldText);
+  const hasNew = !emptyValues.has(newText);
+  if (hasOld && hasNew && oldText === newText) return oldText;
+  if (hasOld && hasNew) return `${oldText} → ${newText}`;
+  if (hasOld) return `${oldText} → -`;
+  if (hasNew) return `- → ${newText}`;
+  return "-";
+}
+
+function reportSubscriberPairedServiceInfo(oldRow = {}, newRow = {}, key = "") {
+  const countKey = `${key}Count`;
+  const summaryKey = `${key}Summary`;
+  const searchKey = `${key}Search`;
+  const filterKey = `${key}Filter`;
+  const oldCount = Number(oldRow[countKey]) || 0;
+  const newCount = Number(newRow[countKey]) || 0;
+  const oldSummary = String(oldRow[summaryKey] || "").trim();
+  const newSummary = String(newRow[summaryKey] || "").trim();
+  const oldSearch = String(oldRow[searchKey] || "").trim();
+  const newSearch = String(newRow[searchKey] || "").trim();
+
+  if (oldCount === newCount && oldSummary && oldSummary === newSummary) {
+    return {
+      count: oldCount,
+      summary: oldSummary,
+      searchText: [oldSearch, newSearch, oldSummary].filter(Boolean).join(" "),
+      filterValue: oldRow[filterKey] || oldSummary || "-",
+    };
+  }
+
+  if (!oldCount && !newCount) {
+    return { count: 0, summary: "", searchText: "", filterValue: "-" };
+  }
+
+  const summary = `기존 ${oldCount || "-"} → 신규 ${newCount || "-"}`;
+  return {
+    count: Math.max(oldCount, newCount),
+    summary,
+    searchText: [oldSearch, newSearch, oldSummary, newSummary, summary].filter(Boolean).join(" "),
+    filterValue: summary,
+  };
+}
+
+function reportSubscriberPairedConfidence(oldConfidence = "", newConfidence = "") {
+  const values = [oldConfidence, newConfidence]
+    .map((value) => Number(String(value || "").replace(/%$/, "")))
+    .filter(Number.isFinite);
+  return values.length ? `${Math.min(...values)}%` : "-";
+}
+
+function reportSubscriberServiceInfo(nodes = []) {
+  const labels = [...new Set((nodes || []).map(reportSubscriberNodeLabel).filter(Boolean))];
+  const count = labels.length;
+  const summary = count <= 1 ? (labels[0] || "") : `${labels[0]} 외 ${count - 1}`;
+  return {
+    count,
+    summary,
+    searchText: labels.join(" "),
+    filterValue: count ? `${count}개 ${labels.join(" ")}` : "-",
+  };
+}
+
+function reportSubscriberNodeLabel(node = null) {
+  if (!node) return "";
+  return String(
+    node.label ||
+    node.attributes?.name ||
+    node.attributes?.lag ||
+    node.attributes?.ip ||
+    node.attributes?.prefix ||
+    node.attributes?.neighborIp ||
+    node.attributes?.interface ||
+    node.id ||
+    ""
+  ).trim();
+}
+
+function reportSubscriberAddressLabel(node = null) {
+  const address = node?.attributes?.address || node?.attributes?.ipAddress || "";
+  return String(address || "").trim();
+}
+
+function reportSubscriberSerialNetworkKey(value = "") {
+  const cidr = reportSubscriberParseCidr(value);
+  if (!cidr) return "";
+  return `${reportSubscriberIntToIpv4(cidr.network)}/${cidr.prefixLength}`;
+}
+
+function reportSubscriberParseCidr(value = "") {
+  const match = String(value || "").match(/(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?/);
+  if (!match) return null;
+  const ipInt = reportSubscriberIpv4ToInt(match[1]);
+  const prefixLength = match[2] == null ? 32 : Number(match[2]);
+  if (ipInt == null || !Number.isInteger(prefixLength) || prefixLength < 0 || prefixLength > 32) return null;
+  const mask = prefixLength <= 0 ? 0 : (0xffffffff << (32 - prefixLength)) >>> 0;
+  return {
+    prefixLength,
+    network: (ipInt & mask) >>> 0,
+  };
+}
+
+function reportSubscriberIpv4ToInt(value = "") {
+  const parts = String(value || "").split(".");
+  if (parts.length !== 4) return null;
+  let result = 0;
+  for (const part of parts) {
+    const number = Number(part);
+    if (!Number.isInteger(number) || number < 0 || number > 255) return null;
+    result = ((result << 8) + number) >>> 0;
+  }
+  return result >>> 0;
+}
+
+function reportSubscriberIntToIpv4(value = 0) {
+  const number = Number(value) >>> 0;
+  return [
+    (number >>> 24) & 255,
+    (number >>> 16) & 255,
+    (number >>> 8) & 255,
+    number & 255,
+  ].join(".");
+}
+
+function reportSubscriberEvidenceText(evidence = []) {
+  return (evidence || [])
+    .map((item) => {
+      if (!item) return "";
+      if (typeof item === "string") return item;
+      return [
+        item.source || "",
+        item.line ? `L${item.line}` : "",
+        item.text || item.reason || item.field || "",
+      ].filter(Boolean).join(" ");
+    })
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(" / ");
+}
+
+function reportSubscriberSideLabel(side = "") {
+  if (side === "both") return "기존→신규";
+  if (side === "old") return "기존";
+  if (side === "new") return "신규";
+  return "설정";
+}
+
+function reportSubscriberSideOrder(side = "") {
+  if (side === "both") return 0;
+  if (side === "old") return 1;
+  if (side === "new") return 2;
+  return 3;
+}
+
+function getReportSubscriberFilterOptions(rows = []) {
+  const values = Object.fromEntries(REPORT_SUBSCRIBER_COLUMNS.map((column) => [column.key, new Set()]));
+  for (const row of rows) {
+    values.side.add(row.sideLabel);
+    values.subscriber.add(row.subscriber);
+    values.port.add(row.portFilter || row.port);
+    values.lag.add(row.lagFilter || row.lag);
+    values.interface.add(row.interfaceLabel);
+    values.serialIp.add(row.serialIpFilter || row.serialIp);
+    values.static.add(row.staticFilter);
+    values.bgp.add(row.bgpFilter);
+    values.pim.add(row.pimFilter);
+    values.confidence.add(row.confidence);
+    values.evidence.add(row.evidence);
+  }
+  return Object.fromEntries(Object.entries(values).map(([key, set]) => [key, sortReportReviewOptions(set)]));
+}
+
 function buildReportReviewRows(review = {}) {
   const unmatchedOld = (review.unmatchedOld || []).map((item) => ({ ...item, group: "기존 설정에서만 있음" }));
   const unmatchedNew = (review.unmatchedNew || []).map((item) => ({ ...item, group: "신규 설정에서만 있음" }));
@@ -16814,7 +17509,7 @@ function renderReportReviewHeaderSearch(title = "", key = "", options = []) {
   const panelStyle = reportReviewFilterPanelStyle([title, ...options]);
   return `
     <div class="report-review-th">
-      ${renderReportReviewHeaderBar(title, panelId)}
+      ${renderReportReviewHeaderBar(title, panelId, key, "review")}
       <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(title)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
         <input type="search" data-report-column-search="${escapeHtml(key)}" placeholder="검색" aria-label="${escapeHtml(title)} 검색" />
         ${renderReportReviewValueChecklist(title, key, options)}
@@ -16828,7 +17523,7 @@ function renderReportReviewHeaderSelect(title = "", key = "", options = [], valu
   const panelStyle = reportReviewFilterPanelStyle([title, ...options, ...valueOptions]);
   return `
     <div class="report-review-th">
-      ${renderReportReviewHeaderBar(title, panelId)}
+      ${renderReportReviewHeaderBar(title, panelId, key, "review")}
       <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(title)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
         <select data-report-column-filter="${escapeHtml(key)}" aria-label="${escapeHtml(title)} 필터">
           <option value="all">전체</option>
@@ -16849,7 +17544,7 @@ function renderReportReviewFieldHeader(field = "", statuses = [], valueOptions =
   ]);
   return `
     <div class="report-review-th report-review-field-th">
-      ${renderReportReviewHeaderBar(field, panelId)}
+      ${renderReportReviewHeaderBar(field, panelId, `field:${field}`, "review")}
       <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="${escapeHtml(field)} 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
         <input type="search" data-report-field-search="${escapeHtml(field)}" placeholder="값 검색" aria-label="${escapeHtml(field)} 값 검색" />
         <select data-report-field-status-filter="${escapeHtml(field)}" aria-label="${escapeHtml(field)} 상태 필터">
@@ -16871,7 +17566,7 @@ function renderReportReviewFieldSummaryHeader(fields = [], statuses = []) {
   ]);
   return `
     <div class="report-review-th report-review-summary-th">
-      ${renderReportReviewHeaderBar("변경 요약", panelId)}
+      ${renderReportReviewHeaderBar("변경 요약", panelId, "fieldSummary", "review")}
       <div id="${escapeHtml(panelId)}" class="report-review-filter-panel" data-report-filter-panel role="group" aria-label="변경 요약 필터 옵션" style="${escapeHtml(panelStyle)}" hidden>
         <input type="search" data-report-column-search="fieldSummary" placeholder="필드/값 검색" aria-label="변경 요약 검색" />
         <select data-report-review-filter="field" aria-label="필드 필터">
@@ -16925,16 +17620,32 @@ function renderReportReviewValueChecklist(title = "", key = "", options = []) {
   `;
 }
 
-function renderReportReviewHeaderBar(title = "", panelId = "") {
+function renderReportReviewHeaderBar(title = "", panelId = "", sortKey = "", sortScope = "review") {
   const controls = panelId ? ` aria-controls="${escapeHtml(panelId)}"` : "";
+  const sortAttribute = sortScope === "subscriber"
+    ? `data-report-subscriber-sort="${escapeHtml(sortKey)}"`
+    : `data-report-review-sort="${escapeHtml(sortKey)}"`;
+  const columnCount = sortScope === "subscriber" && sortKey
+    ? `<span class="report-column-count" data-report-subscriber-column-count="${escapeHtml(sortKey)}" title="표시 값 0 / 전체 값 0">0/0</span>`
+    : "";
+  const sortButton = sortKey ? `
+      <button type="button" class="report-review-sort-toggle" ${sortAttribute} data-report-sort-label="${escapeHtml(title)}" aria-label="${escapeHtml(title)} 오름차순 정렬" aria-sort="none" title="정렬">
+        <span aria-hidden="true">↕</span>
+      </button>` : "";
   return `
     <div class="report-review-th-bar">
-      <span>${escapeHtml(title)}</span>
-      <button type="button" class="report-review-filter-toggle" data-report-filter-toggle data-report-filter-title="${escapeHtml(title)}" aria-expanded="false"${controls} aria-label="${escapeHtml(title)} 필터 열기">
-        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path d="M2 3h12L9.5 8.2v3.6l-3 1.7V8.2L2 3z" fill="currentColor" />
-        </svg>
-      </button>
+      <span class="report-review-th-title">
+        <span class="report-review-th-label">${escapeHtml(title)}</span>
+        ${columnCount}
+      </span>
+      <div class="report-review-th-actions">
+        ${sortButton}
+        <button type="button" class="report-review-filter-toggle" data-report-filter-toggle data-report-filter-title="${escapeHtml(title)}" aria-expanded="false"${controls} aria-label="${escapeHtml(title)} 필터 열기">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M2 3h12L9.5 8.2v3.6l-3 1.7V8.2L2 3z" fill="currentColor" />
+          </svg>
+        </button>
+      </div>
     </div>
   `;
 }
@@ -17509,421 +18220,26 @@ function maskReportFieldValue(field = "", value = "") {
   return String(value);
 }
 
-const GRAPH_COMPACT_NODES_PER_GROUP = 3;
-const GRAPH_DEFAULT_VISIBLE_TYPES = ["port", "lag", "interface", "peer", "services", "static", "bgp", "pim"];
-const GRAPH_TYPE_FILTER_LABELS = [
-  ["port", "Port"],
-  ["lag", "LAG"],
-  ["interface", "Interface"],
-  ["peer", "Peer"],
-  ["services", "Services"],
-  ["static", "Static"],
-  ["bgp", "BGP"],
-  ["pim", "PIM"],
-];
-let relationshipGraphRenderCounter = 0;
-const relationshipGraphRenderSnapshots = new Map();
-
-function normalizeRelationshipGraphLayoutMode(mode = "flow") {
-  return ["flow", "radial", "free"].includes(mode) ? mode : "flow";
-}
-
-function normalizeRelationshipGraphViewMode(mode = "summary") {
-  return ["summary", "detail", "full"].includes(mode) ? mode : "summary";
-}
-
-function renderGraphToolbar() {
-  return `
-    <div class="report-graph-tools">
-      <input type="search" class="report-graph-search" placeholder="설정/항목 검색" aria-label="그래프 노드 검색" />
-      <div class="report-graph-view-toggle" role="group" aria-label="그래프 보기">
-        <button type="button" data-graph-view-mode="summary" class="active" aria-pressed="true">경로 요약</button>
-        <button type="button" data-graph-view-mode="detail" aria-pressed="false">경로 상세</button>
-        <button type="button" data-graph-problem-toggle aria-pressed="false">문제만 보기</button>
-        <button type="button" data-graph-view-mode="full" aria-pressed="false">전체 그래프</button>
-      </div>
-      <details class="report-graph-advanced">
-        <summary>고급 배치</summary>
-        <div class="report-graph-layout-toggle" role="group" aria-label="그래프 배치">
-          <button type="button" data-graph-layout-mode="flow" class="active" aria-pressed="true">표준</button>
-          <button type="button" data-graph-layout-mode="radial" aria-pressed="false">방사형</button>
-          <button type="button" data-graph-layout-mode="free" aria-pressed="false">자유</button>
-        </div>
-        <div class="report-graph-type-filters" role="group" aria-label="그래프 표시 요소">
-          ${GRAPH_TYPE_FILTER_LABELS.map(([type, label]) => `<label class="report-graph-type-toggle"><input type="checkbox" data-graph-type-toggle="${escapeHtml(type)}" checked /> ${escapeHtml(label)}</label>`).join("")}
-        </div>
-        <label class="report-graph-mode-toggle"><input type="checkbox" data-graph-mode-toggle="comparison" checked /> 비교 관계</label>
-        <label class="report-graph-mode-toggle"><input type="checkbox" data-graph-mode-toggle="internal" checked /> 내부 연결</label>
-      </details>
-      <button type="button" data-graph-expand aria-expanded="false">펼치기</button>
-      <button type="button" data-graph-fit>전체 보기</button>
-      <label><input type="checkbox" data-graph-labels checked /> 라벨</label>
-    </div>
-  `;
-}
-
-function renderRelationshipGraph(graph = {}, options = {}) {
-  const viewMode = normalizeRelationshipGraphViewMode(options.viewMode || (options.detail ? "detail" : "summary"));
-  const canonicalView = graph?.viewGraph?.views?.[viewMode] || graph?.viewGraph;
-  const renderGraph = canonicalView?.nodes?.length ? canonicalView : graph;
-  const displayGraph = renderGraph.fixedView
-    ? {
-      nodes: renderGraph.nodes || [],
-      edges: renderGraph.edges || [],
-      compact: false,
-      hiddenNodeCount: 0,
-      hiddenGroups: [],
-      fixedView: true,
-      viewLayout: renderGraph.viewLayout || "trace-matrix",
-      viewMode: renderGraph.viewMode || viewMode,
-    }
-    : prepareRelationshipGraphDisplay(renderGraph, options);
-  const layoutMode = normalizeRelationshipGraphLayoutMode(options.layout);
-  const { nodes: rawNodes, edges } = toReactFlowData(displayGraph.nodes, displayGraph.edges);
-  if (!rawNodes.length) return `<div class="report-graph-empty">그래프로 표시할 의미 기반 설정이 없습니다.</div>`;
-
-  const useFixedColumnLayout = displayGraph.fixedView && layoutMode === "flow";
-  const nodes = useFixedColumnLayout
-    ? rawNodes
-    : layoutMode === "free"
-    ? applyScatterLayout(rawNodes)
-    : (layoutMode === "radial" ? applyRadialLayout(rawNodes, edges) : applyDagreLayout(rawNodes, edges, "LR"));
-  const validation = validateReactFlowData(nodes, edges);
-  if (!validation.valid) {
-    console.warn("[relationship-graph] invalid React Flow data", validation);
-  }
-  const renderId = registerRelationshipGraphSnapshot({
-    nodes,
-    edges,
-    layoutMode,
-    controls: {
-      enabledModes: ["comparison", "internal"],
-      search: "",
-      visibleTypes: GRAPH_DEFAULT_VISIBLE_TYPES,
-      showLabels: true,
-      viewLayout: useFixedColumnLayout ? (displayGraph.viewLayout || "trace-matrix") : "",
-      viewMode: displayGraph.viewMode || viewMode,
-      problemOnly: Boolean(options.problemOnly),
-    },
-    validation,
-  });
-
-  return `
-    <div class="report-graph ${options.standalone ? "report-graph-standalone" : ""}" data-graph-root data-graph-render-id="${escapeHtml(renderId)}" data-graph-detail="${displayGraph.compact ? "compact" : "full"}" data-graph-view-mode="${escapeHtml(viewMode)}" data-graph-problem-only="${options.problemOnly ? "true" : "false"}" data-graph-layout="${escapeHtml(layoutMode)}">
-      <div class="report-graph-flow-root" data-graph-flow-root></div>
-      ${renderGraphLimitNote(graph, displayGraph)}
-    </div>
-  `;
-}
-
-function registerRelationshipGraphSnapshot(snapshot = {}) {
-  relationshipGraphRenderCounter += 1;
-  const renderId = `relationship-graph-${relationshipGraphRenderCounter}`;
-  relationshipGraphRenderSnapshots.set(renderId, snapshot);
-  if (relationshipGraphRenderSnapshots.size > 12) {
-    const oldest = relationshipGraphRenderSnapshots.keys().next().value;
-    relationshipGraphRenderSnapshots.delete(oldest);
-  }
-  return renderId;
-}
-
-function prepareRelationshipGraphDisplay(graph = {}, options = {}) {
-  const sourceNodes = Array.isArray(graph.nodes) ? graph.nodes : [];
-  const sourceEdges = Array.isArray(graph.edges) ? graph.edges : [];
-  if (options.detail) {
-    return {
-      nodes: sourceNodes,
-      edges: sourceEdges,
-      compact: false,
-      hiddenNodeCount: 0,
-      hiddenGroups: [],
-    };
-  }
-
-  const displayNodes = [];
-  const displayNodeIds = new Set();
-  const hiddenNodeToCluster = new Map();
-  const hiddenGroups = [];
-  const byGroup = groupBy(sourceNodes, (node) => `${node.side || "relation"}|${graphNodeColumnKey(node)}`);
-
-  byGroup.forEach((list, groupKey) => {
-    const sorted = [...list].sort(compareGraphDisplayNodes);
-    const visible = sorted.slice(0, GRAPH_COMPACT_NODES_PER_GROUP);
-    const hidden = sorted.slice(GRAPH_COMPACT_NODES_PER_GROUP);
-    visible.forEach((node) => {
-      displayNodes.push(node);
-      displayNodeIds.add(node.id);
-    });
-    if (!hidden.length) return;
-
-    const [side, columnKey] = groupKey.split("|");
-    const clusterId = `cluster:${side}:${columnKey}`;
-    hidden.forEach((node) => hiddenNodeToCluster.set(node.id, clusterId));
-    hiddenGroups.push({ groupKey, side, columnKey, count: hidden.length });
-    const hiddenSearch = hidden
-      .map((node) => [node.objectType, node.label, node.key, node.status].join(" "))
-      .join(" ");
-    displayNodes.push({
-      id: clusterId,
-      side,
-      columnKey,
-      objectType: "more",
-      label: `+${hidden.length} 더보기`,
-      key: "",
-      status: "cluster",
-      confidence: 0,
-      virtual: true,
-      cluster: true,
-      clusterGroup: groupKey,
-      hiddenCount: hidden.length,
-      hiddenSearch,
-    });
-    displayNodeIds.add(clusterId);
-  });
-
-  const displayEdges = [];
-  const edgeIds = new Set();
-  sourceEdges.forEach((edge) => {
-    const source = hiddenNodeToCluster.get(edge.source) || edge.source;
-    const target = hiddenNodeToCluster.get(edge.target) || edge.target;
-    if (!source || !target || source === target) return;
-    if (!displayNodeIds.has(source) || !displayNodeIds.has(target)) return;
-    const graphMode = edge.graphMode || (String(edge.type || "").startsWith("internal-") ? "internal" : "comparison");
-    const edgeKey = `${source}->${target}:${edge.type || "edge"}:${graphMode}:${edge.changed ? "changed" : "same"}`;
-    if (edgeIds.has(edgeKey)) return;
-    edgeIds.add(edgeKey);
-    displayEdges.push({
-      ...edge,
-      id: `compact:${edgeKey}`,
-      source,
-      target,
-      graphMode,
-    });
-  });
-
-  return {
-    nodes: displayNodes,
-    edges: displayEdges,
-    compact: true,
-    hiddenNodeCount: hiddenGroups.reduce((sum, group) => sum + group.count, 0),
-    hiddenGroups,
-  };
-}
-
-function compareGraphDisplayNodes(left = {}, right = {}) {
-  const priorityDiff = graphDisplayNodePriority(left) - graphDisplayNodePriority(right);
-  if (priorityDiff) return priorityDiff;
-  return String(left.label || left.key || "").localeCompare(String(right.label || right.key || ""), undefined, { numeric: true });
-}
-
-function graphDisplayNodePriority(node = {}) {
-  const status = String(node.status || "").toLowerCase();
-  if (["changed", "different", "candidate", "old-only", "new-only", "missing", "added"].includes(status)) return 0;
-  if (Number(node.confidence || 0) && Number(node.confidence || 0) < 100) return 1;
-  if (["relation", "manual"].includes(String(node.side || "").toLowerCase())) return 2;
-  return 3;
-}
-
-function renderGraphLimitNote(graph = {}, displayGraph = {}) {
-  const notes = [];
-  if (displayGraph.compact && displayGraph.hiddenNodeCount) {
-    notes.push(`기본 보기: 영역별 대표 ${GRAPH_COMPACT_NODES_PER_GROUP}개만 표시합니다. +N 더보기 또는 상세 보기로 전체를 확인할 수 있습니다.`);
-  }
-  if (graph.truncated) {
-    const hiddenByType = graph.hiddenByType || {};
-    const hiddenText = Object.entries(hiddenByType)
-      .sort((left, right) => right[1] - left[1])
-      .slice(0, 8)
-      .map(([type, count]) => `${type} ${count}`)
-      .join(", ");
-    notes.push(`전체 ${escapeHtml(graph.totalPlanItems || 0)}개 중 타입별 대표 ${escapeHtml(graph.selectedPlanItems || 0)}개 항목을 표시합니다.${hiddenText ? ` 숨김: ${escapeHtml(hiddenText)}` : ""}`);
-  }
-  if (!notes.length) return "";
-  return `
-    <p class="small-note graph-limit-note">
-      ${notes.join("<br>")}
-    </p>
-  `;
-}
-
-function buildRelationshipGraphLayout(nodes = [], options = {}) {
-  const columns = [
-    { key: "port", label: "Port" },
-    { key: "lag", label: "LAG" },
-    { key: "interface", label: "Interface" },
-    { key: "service", label: "SAP/Service" },
-    { key: "route", label: "Static/PIM" },
-    { key: "bgp", label: "BGP" },
-    { key: "policy", label: "Filter/QoS/Policy" },
-  ];
-  const nodeStep = options.standalone ? 70 : 64;
-  const columnStep = options.standalone ? 186 : 166;
-  const marginLeft = 110;
-  const topOffset = 36;
-  const laneGap = 46;
-  const width = Math.max(1040, marginLeft * 2 + (columns.length - 1) * columnStep + 150);
-  const positions = new Map();
-  const columnLabels = columns.map((column, index) => ({
-    ...column,
-    x: marginLeft + index * columnStep,
-  }));
-  const laneSpecs = [
-    { side: "old", label: "기존 config 내부" },
-    { side: "new", label: "신규 config 내부" },
-    { side: "relation", label: "비교/점검 참조" },
-  ].filter((lane) => lane.side !== "relation" || nodes.some((node) => node.side === "relation"));
-
-  let cursorY = topOffset;
-  const laneBands = [];
-  laneSpecs.forEach((lane) => {
-    const laneNodes = nodes.filter((node) => (node.side || "relation") === lane.side);
-    const byColumn = groupBy(laneNodes, graphNodeColumnKey);
-    const maxColumnSize = Math.max(1, ...columns.map((column) => (byColumn.get(column.key) || []).length));
-    const laneHeight = Math.max(118, 52 + maxColumnSize * nodeStep);
-    laneBands.push({ ...lane, y: cursorY, height: laneHeight });
-
-    columns.forEach((column, columnIndex) => {
-      const list = (byColumn.get(column.key) || [])
-        .sort((left, right) => String(left.label || left.key || "").localeCompare(String(right.label || right.key || ""), undefined, { numeric: true }));
-      list.forEach((node, index) => {
-        positions.set(node.id, {
-          x: marginLeft + columnIndex * columnStep,
-          y: cursorY + 52 + index * nodeStep,
-        });
-      });
-    });
-    cursorY += laneHeight + laneGap;
-  });
-
-  return {
-    width,
-    height: Math.max(320, cursorY - laneGap + 16),
-    positions,
-    laneBands,
-    columnLabels,
-  };
-}
-
-function graphNodeColumnKey(node = {}) {
-  if (node.columnKey) return node.columnKey;
-  const type = String(node.objectType || "").toLowerCase();
-  if (type === "port") return "port";
-  if (type === "lag") return "lag";
-  if (["interface", "subscriber-interface", "group-interface"].includes(type)) return "interface";
-  if (["sap", "service"].includes(type)) return "service";
-  if (["static-route", "pim"].includes(type)) return "route";
-  if (["bgp", "bgp-group"].includes(type)) return "bgp";
-  return "policy";
-}
-
-function buildFreeRelationshipGraphLayout(nodes = [], edges = [], options = {}) {
-  const width = options.standalone ? 2400 : 2000;
-  const sideGroups = groupBy(nodes, (node) => node.side || "relation");
-  const maxSideSize = Math.max(1, ...[...sideGroups.values()].map((list) => list.length));
-  const approximateColumns = Math.max(1, Math.floor((width * 0.28) / 220));
-  const height = Math.max(options.standalone ? 760 : 620, Math.ceil(maxSideSize / approximateColumns) * 132 + 220);
-  const positions = new Map();
-  const zones = {
-    old: { x1: 64, x2: width * 0.36, y1: 78, y2: height - 74 },
-    new: { x1: width * 0.36, x2: width * 0.72, y1: 78, y2: height - 74 },
-    relation: { x1: width * 0.72, x2: width - 72, y1: 78, y2: height - 74 },
-  };
-
-  sideGroups.forEach((list, side) => {
-    const zone = zones[side] || zones.relation;
-    const ordered = [...list].sort(compareGraphDisplayNodes);
-    ordered.forEach((node, index) => {
-      positions.set(node.id, findFreeGraphPoint({ node, index, zone, positions }));
-    });
-  });
-
-  return {
-    width,
-    height,
-    positions,
-    laneBands: [
-      { side: "free", label: "자유 배치", y: 36, height: height - 54 },
-    ],
-    columnLabels: [],
-  };
-}
-
-function findFreeGraphPoint({ node = {}, index = 0, zone = {}, positions = new Map() } = {}) {
-  const nodeWidth = 220;
-  const nodeHeight = 96;
-  const zoneWidth = Math.max(nodeWidth + 24, (zone.x2 || 0) - (zone.x1 || 0));
-  const zoneHeight = Math.max(nodeHeight + 24, (zone.y2 || 0) - (zone.y1 || 0));
-  const seedBase = hashGraphValue(node.id || node.key || `${node.side}:${index}`);
-  for (let attempt = 0; attempt < 160; attempt += 1) {
-    const xSeed = seededGraphUnit(seedBase + attempt * 7919);
-    const ySeed = seededGraphUnit(seedBase + attempt * 104729);
-    const point = {
-      x: (zone.x1 || 0) + nodeWidth / 2 + xSeed * Math.max(1, zoneWidth - nodeWidth),
-      y: (zone.y1 || 0) + nodeHeight / 2 + ySeed * Math.max(1, zoneHeight - nodeHeight),
-    };
-    if (!freeGraphPointOverlaps(point, positions)) return point;
-  }
-
-  const columns = Math.max(1, Math.floor(zoneWidth / nodeWidth));
-  const maxRows = Math.max(1, Math.ceil(zoneHeight / 132) + 4);
-  for (let row = 0; row < maxRows; row += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const stagger = row % 2 ? nodeWidth * 0.28 : 0;
-      const point = {
-        x: clampNumber((zone.x1 || 0) + nodeWidth / 2 + column * nodeWidth + stagger, (zone.x1 || 0) + 80, (zone.x2 || 0) - 80),
-        y: (zone.y1 || 0) + nodeHeight / 2 + row * 132,
-      };
-      if (!freeGraphPointOverlaps(point, positions)) return point;
-    }
-  }
-
-  return {
-    x: clampNumber((zone.x1 || 0) + nodeWidth / 2, (zone.x1 || 0) + 80, (zone.x2 || 0) - 80),
-    y: (zone.y2 || zoneHeight) - nodeHeight / 2,
-  };
-}
-
-function freeGraphPointOverlaps(point = {}, positions = new Map()) {
-  for (const existing of positions.values()) {
-    if (Math.abs(point.x - existing.x) < 220 && Math.abs(point.y - existing.y) < 96) return true;
-  }
-  return false;
-}
-
-function seededGraphUnit(seed = 0) {
-  const value = Math.sin(seed || 1) * 10000;
-  return value - Math.floor(value);
-}
-
-function hashGraphValue(value = "") {
-  return String(value || "").split("").reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) >>> 0, 2166136261);
-}
-
-function clampNumber(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function relationshipGraphPath(source, target) {
-  const nodeRadiusX = 74;
-  const leftToRight = target.x >= source.x;
-  const startX = source.x + (leftToRight ? nodeRadiusX : -nodeRadiusX);
-  const endX = target.x - (leftToRight ? nodeRadiusX : -nodeRadiusX);
-  if (Math.abs(target.x - source.x) < 24) {
-    const bendX = source.x + 120;
-    return `M ${source.x + nodeRadiusX} ${source.y} C ${bendX} ${source.y}, ${bendX} ${target.y}, ${target.x + nodeRadiusX} ${target.y}`;
-  }
-  const distance = Math.max(90, Math.abs(endX - startX) * 0.5);
-  const c1x = startX + (leftToRight ? distance : -distance);
-  const c2x = endX - (leftToRight ? distance : -distance);
-  return `M ${startX} ${source.y} C ${c1x} ${source.y}, ${c2x} ${target.y}, ${endX} ${target.y}`;
-}
-
 function openReportObjectInCompare(element = null) {
-  const row = element?.closest?.("[data-report-review-row], [data-report-review-detail-row]");
-  const node = element?.closest?.("[data-graph-node]");
-  const objectKey = element?.dataset?.objectJump || row?.dataset.reportReviewJump || node?.dataset.objectJump || "";
+  const row = element?.closest?.("[data-report-review-row], [data-report-review-detail-row], [data-report-subscriber-row]");
+  const objectKey = element?.dataset?.objectJump || row?.dataset.reportReviewJump || row?.dataset.reportSubscriberJump || "";
   if (!objectKey) return;
-  if (row) {
+  if (row?.matches?.("[data-report-subscriber-row]")) {
+    state.activeIssueContext = {
+      source: "report-subscriber",
+      targetId: row.dataset.reportSubscriberJump || objectKey,
+      objectKey,
+      objectType: row.dataset.subscriberInterface ? "interface" : "",
+      returnTab: "report",
+      returnSection: "subscriber-paths",
+      returnTargetId: row.dataset.reportSubscriberJump || objectKey,
+      panelKey: row.dataset.subscriberSide || "report-subscriber",
+      displayName: row.dataset.subscriberSubscriber || objectKey,
+      description: row.dataset.subscriberSearch || "",
+      field: "",
+      title: "가입자 경로 테이블",
+    };
+  } else if (row) {
     state.activeIssueContext = {
       source: "report-review",
       targetId: row.dataset.reportReviewJump || objectKey,
@@ -17940,95 +18256,8 @@ function openReportObjectInCompare(element = null) {
       field: row.dataset.reviewFields?.split(/\s+/).filter(Boolean)[0] || "",
       title: row.dataset.reviewReason || row.dataset.reviewGroup || "리포트 검토 항목",
     };
-  } else if (node) {
-    const title = node.querySelector("title")?.textContent || node.dataset.graphSearch || objectKey;
-    const returnTab = selectors.graphReport?.contains(node) ? "graph" : "report";
-    state.activeIssueContext = {
-      source: "report-graph",
-      targetId: node.dataset.graphNode || objectKey,
-      objectKey,
-      returnTab,
-      returnSection: "graph",
-      returnTargetId: node.dataset.graphNode || "",
-      panelKey: "relationship-graph",
-      displayName: title,
-      description: title,
-      field: "",
-      title: "관계 그래프",
-    };
   }
   scrollToDiffObject(objectKey);
-}
-
-function openReportGraphReactNode(node = {}, root = selectors.overviewReport) {
-  const data = node.data || {};
-  const objectKey = data.objectKey || "";
-  if (!objectKey) return;
-  const title = `${data.rawNodeType || data.nodeType || "object"} ${data.label || objectKey}`.trim();
-  state.activeIssueContext = {
-    source: "report-graph",
-    targetId: node.id || objectKey,
-    objectKey,
-    returnTab: selectors.graphReport?.contains(root) ? "graph" : "report",
-    returnSection: "graph",
-    returnTargetId: node.id || "",
-    panelKey: "relationship-graph",
-    displayName: title,
-    description: title,
-    field: "",
-    title: "관계 그래프",
-  };
-  scrollToDiffObject(objectKey);
-}
-
-function getRelationshipGraphControls(root = selectors.overviewReport) {
-  const search = root?.querySelector?.(".report-graph-search")?.value || "";
-  const modeControls = [...(root?.querySelectorAll?.("[data-graph-mode-toggle]") || [])];
-  const typeControls = [...(root?.querySelectorAll?.("[data-graph-type-toggle]") || [])];
-  const enabledModes = modeControls
-    .filter((input) => input.checked)
-    .map((input) => input.dataset.graphModeToggle || "")
-    .filter(Boolean);
-  const visibleTypes = typeControls.length
-    ? typeControls
-      .filter((input) => input.checked)
-      .map((input) => input.dataset.graphTypeToggle || "")
-      .filter(Boolean)
-    : GRAPH_DEFAULT_VISIBLE_TYPES;
-  return {
-    search,
-    enabledModes: enabledModes.length ? enabledModes : ["comparison", "internal"],
-    visibleTypes,
-    showLabels: root?.querySelector?.("[data-graph-labels]")?.checked !== false,
-    viewMode: normalizeRelationshipGraphViewMode(root?.querySelector?.("[data-graph-root]")?.dataset.graphViewMode || "summary"),
-    problemOnly: root?.querySelector?.("[data-graph-problem-toggle]")?.getAttribute("aria-pressed") === "true",
-  };
-}
-
-function mountRelationshipGraphReactRoots(root = selectors.overviewReport) {
-  const graphRoot = root?.matches?.("[data-graph-root]") ? root : root?.querySelector?.("[data-graph-root]");
-  const flowRoot = graphRoot?.querySelector?.("[data-graph-flow-root]");
-  const renderId = graphRoot?.dataset.graphRenderId || "";
-  const snapshot = relationshipGraphRenderSnapshots.get(renderId);
-  if (!flowRoot || !snapshot || typeof window.renderRelationshipGraphReactPanel !== "function") return;
-  window.renderRelationshipGraphReactPanel(flowRoot, {
-    ...snapshot,
-    controls: getRelationshipGraphControls(root),
-  }, {
-    onClusterOpen: () => rerenderGraphView(root, { detail: true }),
-    onServicesOpen: () => rerenderGraphView(root, { viewMode: "detail" }),
-    onNodeOpen: (node) => openReportGraphReactNode(node, root),
-  });
-}
-
-function unmountRelationshipGraphReactRoots(root = selectors.overviewReport) {
-  if (typeof window.unmountRelationshipGraphReactPanel !== "function") return;
-  const targets = root?.matches?.("[data-graph-flow-root]")
-    ? [root]
-    : [...(root?.querySelectorAll?.("[data-graph-flow-root]") || [])];
-  targets.forEach((target) => {
-    window.unmountRelationshipGraphReactPanel(target);
-  });
 }
 
 const reportGraphInteractionAbortControllers = new WeakMap();
@@ -18037,13 +18266,13 @@ function bindReportGraphInteractions(root = selectors.overviewReport, options = 
   if (!root) return;
   if (options.includeReportReview !== false && root === selectors.overviewReport) {
     bindReportReviewTableInteractions();
+    bindReportSubscriberTableInteractions();
   }
   reportGraphInteractionAbortControllers.get(root)?.abort();
   const controller = new AbortController();
   reportGraphInteractionAbortControllers.set(root, controller);
   const listenerOptions = { signal: controller.signal };
   root.querySelectorAll("[data-object-jump]").forEach((item) => {
-    if (item.closest("[data-graph-root]")) return;
     item.addEventListener("click", () => {
       openReportObjectInCompare(item);
     }, listenerOptions);
@@ -18064,136 +18293,15 @@ function bindReportGraphInteractions(root = selectors.overviewReport, options = 
     }, listenerOptions);
   });
 
-  const graphRoot = root.querySelector("[data-graph-root]");
-  mountRelationshipGraphReactRoots(root);
-
-  const search = root.querySelector(".report-graph-search");
-  search?.addEventListener("input", () => filterReportGraph(search.value, root), listenerOptions);
-  root.querySelectorAll("[data-graph-mode-toggle]").forEach((input) => {
-    input.addEventListener("change", () => filterReportGraph(search?.value || "", root), listenerOptions);
-  });
-  root.querySelectorAll("[data-graph-type-toggle]").forEach((input) => {
-    input.addEventListener("change", () => filterReportGraph(search?.value || "", root), listenerOptions);
-  });
-  root.querySelector("[data-graph-labels]")?.addEventListener("change", (event) => {
-    graphRoot?.classList.toggle("graph-hide-labels", !event.target.checked);
-    mountRelationshipGraphReactRoots(root);
-  }, listenerOptions);
-  root.querySelector("[data-graph-expand]")?.addEventListener("click", (event) => {
-    const currentGraphRoot = root.querySelector("[data-graph-root]");
-    const expanded = !currentGraphRoot?.classList.contains("graph-expanded");
-    currentGraphRoot?.classList.toggle("graph-expanded", expanded);
-    event.currentTarget.setAttribute("aria-expanded", expanded ? "true" : "false");
-    event.currentTarget.textContent = expanded ? "접기" : "펼치기";
-  }, listenerOptions);
-  root.querySelector("[data-graph-fit]")?.addEventListener("click", () => {
-    root.querySelector("[data-graph-root]")?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
-  }, listenerOptions);
-  root.querySelector("[data-graph-problem-toggle]")?.addEventListener("click", (event) => {
-    const pressed = event.currentTarget.getAttribute("aria-pressed") === "true";
-    event.currentTarget.setAttribute("aria-pressed", pressed ? "false" : "true");
-    filterReportGraph(search?.value || "", root);
-  }, listenerOptions);
-  root.querySelector("[data-graph-detail-toggle]")?.addEventListener("click", () => {
-    const currentGraphRoot = root.querySelector("[data-graph-root]");
-    rerenderGraphView(root, { detail: currentGraphRoot?.dataset.graphDetail !== "full" });
-  }, listenerOptions);
-  root.querySelectorAll("[data-graph-view-mode]").forEach((button) => {
-    button.addEventListener("click", () => {
-      rerenderGraphView(root, {
-        viewMode: normalizeRelationshipGraphViewMode(button.dataset.graphViewMode),
-      });
-    }, listenerOptions);
-  });
-  root.querySelectorAll("[data-graph-layout-mode]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const currentGraphRoot = root.querySelector("[data-graph-root]");
-      rerenderGraphView(root, {
-        detail: currentGraphRoot?.dataset.graphDetail === "full",
-        viewMode: currentGraphRoot?.dataset.graphViewMode || "summary",
-        layout: normalizeRelationshipGraphLayoutMode(button.dataset.graphLayoutMode),
-      });
-    }, listenerOptions);
-  });
-  syncGraphToolbarState(root, {
-    detail: graphRoot?.dataset.graphDetail === "full",
-    viewMode: graphRoot?.dataset.graphViewMode || "summary",
-    problemOnly: graphRoot?.dataset.graphProblemOnly === "true",
-    layout: graphRoot?.dataset.graphLayout || "flow",
-  });
-  filterReportGraph(search?.value || "", root);
-}
-
-function rerenderGraphView(root = selectors.overviewReport, patch = {}) {
-  const graphRoot = root?.querySelector?.("[data-graph-root]");
-  if (!root || !graphRoot || !state.lastReport) return;
-  const search = root.querySelector(".report-graph-search");
-  const searchValue = search?.value || "";
-  const modeState = new Map([...root.querySelectorAll("[data-graph-mode-toggle]")]
-    .map((input) => [input.dataset.graphModeToggle || "", input.checked]));
-  const typeState = new Map([...root.querySelectorAll("[data-graph-type-toggle]")]
-    .map((input) => [input.dataset.graphTypeToggle || "", input.checked]));
-  const labelsChecked = root.querySelector("[data-graph-labels]")?.checked !== false;
-  const problemOnly = patch.problemOnly ?? (root.querySelector("[data-graph-problem-toggle]")?.getAttribute("aria-pressed") === "true");
-  const expanded = graphRoot.classList.contains("graph-expanded");
-  const standalone = graphRoot.classList.contains("report-graph-standalone");
-  const detail = patch.detail ?? (graphRoot.dataset.graphDetail === "full");
-  const viewMode = normalizeRelationshipGraphViewMode(patch.viewMode || graphRoot.dataset.graphViewMode || (detail ? "detail" : "summary"));
-  const layout = patch.layout || graphRoot.dataset.graphLayout || "flow";
-  const dashboard = getDashboardDataForRender(state.lastReport);
-  unmountRelationshipGraphReactRoots(root);
-  graphRoot.outerHTML = renderRelationshipGraph(dashboard.graph, { standalone, detail, layout, viewMode, problemOnly });
-  const nextGraphRoot = root.querySelector("[data-graph-root]");
-  nextGraphRoot?.classList.toggle("graph-expanded", expanded);
-  nextGraphRoot?.classList.toggle("graph-hide-labels", !labelsChecked);
-  const nextSearch = root.querySelector(".report-graph-search");
-  if (nextSearch) nextSearch.value = searchValue;
-  root.querySelectorAll("[data-graph-mode-toggle]").forEach((input) => {
-    if (modeState.has(input.dataset.graphModeToggle || "")) {
-      input.checked = Boolean(modeState.get(input.dataset.graphModeToggle || ""));
-    }
-  });
-  root.querySelectorAll("[data-graph-type-toggle]").forEach((input) => {
-    if (typeState.has(input.dataset.graphTypeToggle || "")) {
-      input.checked = Boolean(typeState.get(input.dataset.graphTypeToggle || ""));
-    }
-  });
-  syncGraphToolbarState(root, { detail, layout, viewMode, problemOnly });
-  bindReportGraphInteractions(root, { includeReportReview: false });
-  filterReportGraph(searchValue, root);
-}
-
-function syncGraphToolbarState(root = selectors.overviewReport, options = {}) {
-  const detail = Boolean(options.detail);
-  const layout = normalizeRelationshipGraphLayoutMode(options.layout);
-  const viewMode = normalizeRelationshipGraphViewMode(options.viewMode || (detail ? "detail" : "summary"));
-  const detailButton = root?.querySelector?.("[data-graph-detail-toggle]");
-  if (detailButton) {
-    detailButton.setAttribute("aria-pressed", detail ? "true" : "false");
-    detailButton.textContent = detail ? "기본 보기" : "상세 보기";
-  }
-  root?.querySelectorAll?.("[data-graph-view-mode]").forEach((button) => {
-    const active = button.dataset.graphViewMode === viewMode;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-  });
-  const problemButton = root?.querySelector?.("[data-graph-problem-toggle]");
-  if (problemButton) {
-    const active = Boolean(options.problemOnly);
-    problemButton.classList.toggle("active", active);
-    problemButton.setAttribute("aria-pressed", active ? "true" : "false");
-  }
-  root?.querySelectorAll?.("[data-graph-layout-mode]").forEach((button) => {
-    const active = button.dataset.graphLayoutMode === layout;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-  });
 }
 
 const REPORT_REVIEW_FILTER_STORAGE_KEY = "network-config-workbench.report-review-filters.v1";
 const REPORT_REVIEW_VIEW_STORAGE_KEY = "network-config-workbench.report-review-view.v1";
+const REPORT_SUBSCRIBER_FILTER_STORAGE_KEY = "network-config-workbench.report-subscriber-filters.v1";
+const REPORT_SUBSCRIBER_VIEW_STORAGE_KEY = "network-config-workbench.report-subscriber-view.v1";
 
 let reportReviewFilterAbortController = null;
+let reportSubscriberFilterAbortController = null;
 
 function bindReportReviewTableInteractions() {
   const root = selectors.overviewReport?.querySelector("[data-report-review-root]");
@@ -18215,6 +18323,7 @@ function bindReportReviewTableInteractions() {
   const checklistAlls = [...root.querySelectorAll("[data-report-check-all]")];
   const checklistSearches = [...root.querySelectorAll("[data-report-check-search]")];
   const filterToggles = [...root.querySelectorAll("[data-report-filter-toggle]")];
+  const sortButtons = [...root.querySelectorAll("[data-report-review-sort]")];
   const viewButtons = [...root.querySelectorAll("[data-report-review-view]")];
   const rows = [...root.querySelectorAll("[data-report-review-row]")];
   const tableWrap = root.querySelector(".report-review-table-wrap");
@@ -18357,7 +18466,8 @@ function bindReportReviewTableInteractions() {
       if (visible) visibleCount += 1;
     });
 
-    if (count) count.textContent = `${visibleCount}/${rows.length}`;
+    applyReportReviewTableSort(root, rows);
+    if (count) count.textContent = formatReportTableCount(visibleCount, rows.length);
     if (empty) empty.hidden = visibleCount > 0 || rows.length === 0;
     updateReportReviewFilterIndicators(root);
     positionOpenReportReviewFilter(root);
@@ -18409,6 +18519,14 @@ function bindReportReviewTableInteractions() {
       }
     });
   });
+  sortButtons.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.reportReviewSort = nextReportTableSortState(state.reportReviewSort, button.dataset.reportReviewSort || "");
+      closeReportReviewFilterPanels(root);
+      apply({ saveMessage: `정렬 적용: ${button.dataset.reportSortLabel || "컬럼"}` });
+    });
+  });
   viewButtons.forEach((button) => {
     button.addEventListener("click", () => {
       setReportReviewViewMode(root, button.dataset.reportReviewView || "compact");
@@ -18448,11 +18566,215 @@ function bindReportReviewTableInteractions() {
     root.querySelectorAll("[data-report-check-item]").forEach((item) => {
       item.hidden = false;
     });
+    state.reportReviewSort = null;
     closeReportReviewFilterPanels(root);
     apply({ saveMessage: "필터 초기화됨" });
   });
   root.querySelectorAll("[data-report-checklist]").forEach(updateReportChecklistAllState);
   apply();
+}
+
+function bindReportSubscriberTableInteractions() {
+  const root = selectors.overviewReport?.querySelector("[data-report-subscriber-root]");
+  if (!root) return;
+  reportSubscriberFilterAbortController?.abort();
+  reportSubscriberFilterAbortController = new AbortController();
+  const filterListenerOptions = { signal: reportSubscriberFilterAbortController.signal };
+
+  const search = root.querySelector("[data-report-subscriber-search]");
+  const clear = root.querySelector("[data-report-subscriber-clear]");
+  const count = root.querySelector("[data-report-subscriber-count]");
+  const empty = root.querySelector("[data-report-subscriber-filter-empty]");
+  const columnFilters = [...root.querySelectorAll("[data-report-subscriber-column-filter]")];
+  const columnSearches = [...root.querySelectorAll("[data-report-subscriber-column-search]")];
+  const checklistInputs = [...root.querySelectorAll("[data-report-check-value]")];
+  const checklistAlls = [...root.querySelectorAll("[data-report-check-all]")];
+  const checklistSearches = [...root.querySelectorAll("[data-report-check-search]")];
+  const filterToggles = [...root.querySelectorAll("[data-report-filter-toggle]")];
+  const sortButtons = [...root.querySelectorAll("[data-report-subscriber-sort]")];
+  const viewButtons = [...root.querySelectorAll("[data-report-subscriber-view]")];
+  const rows = [...root.querySelectorAll("[data-report-subscriber-row]")];
+  const tableWrap = root.querySelector(".report-subscriber-table-wrap");
+
+  restoreReportSubscriberViewMode(root);
+  restoreReportSubscriberFilterState(root);
+
+  const apply = (options = {}) => {
+    const query = String(search?.value || "").trim().toLowerCase();
+    const columnValues = Object.fromEntries(columnFilters.map((filter) => [
+      filter.dataset.reportSubscriberColumnFilter,
+      filter.value || "all",
+    ]));
+    const columnQueries = Object.fromEntries(columnSearches.map((filter) => [
+      filter.dataset.reportSubscriberColumnSearch,
+      String(filter.value || "").trim().toLowerCase(),
+    ]));
+    const checklistSelections = getReportReviewChecklistSelections(root);
+    let visibleCount = 0;
+
+    rows.forEach((row) => {
+      const columnFilterMatch = REPORT_SUBSCRIBER_COLUMNS.every((column) => {
+        const value = columnValues[column.key] || "all";
+        if (value === "all") return true;
+        return reportSubscriberColumnValue(row, column.key) === value;
+      });
+      const columnSearchMatch = REPORT_SUBSCRIBER_COLUMNS.every((column) => {
+        const columnQuery = columnQueries[column.key] || "";
+        if (!columnQuery) return true;
+        return reportSubscriberColumnValue(row, column.key).toLowerCase().includes(columnQuery);
+      });
+      const checklistMatch = REPORT_SUBSCRIBER_COLUMNS.every((column) => (
+        reportReviewChecklistMatches(checklistSelections, column.key, reportSubscriberColumnOptionValue(row, column.key))
+      ));
+      const queryMatch = !query || String(row.dataset.subscriberSearch || "").includes(query);
+      const visible = columnFilterMatch && columnSearchMatch && checklistMatch && queryMatch;
+      row.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+
+    applyReportSubscriberTableSort(root, rows);
+    if (count) count.textContent = formatReportTableCount(visibleCount, rows.length);
+    updateReportSubscriberColumnCounts(root, rows);
+    if (empty) empty.hidden = visibleCount > 0 || rows.length === 0;
+    updateReportReviewFilterIndicators(root);
+    positionOpenReportReviewFilter(root);
+    saveReportSubscriberFilterState(root, options.saveMessage);
+  };
+
+  search?.addEventListener("input", apply);
+  columnFilters.forEach((filter) => filter.addEventListener("change", apply));
+  columnSearches.forEach((filter) => filter.addEventListener("input", apply));
+  checklistInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      updateReportChecklistAllState(input.closest("[data-report-checklist]"));
+      apply();
+    });
+  });
+  checklistAlls.forEach((input) => {
+    input.addEventListener("change", () => {
+      const checklist = input.closest("[data-report-checklist]");
+      checklist?.querySelectorAll("[data-report-check-value]").forEach((item) => {
+        item.checked = input.checked;
+      });
+      updateReportChecklistAllState(checklist);
+      apply();
+    });
+  });
+  checklistSearches.forEach((input) => {
+    input.addEventListener("input", () => {
+      const query = String(input.value || "").trim().toLowerCase();
+      input.closest("[data-report-checklist]")?.querySelectorAll("[data-report-check-item]").forEach((item) => {
+        item.hidden = query && !String(item.dataset.reportCheckLabel || "").includes(query);
+      });
+    });
+  });
+  filterToggles.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const panel = button.closest(".report-review-th")?.querySelector("[data-report-filter-panel]");
+      const willOpen = panel?.hidden;
+      closeReportReviewFilterPanels(root);
+      if (panel && willOpen) {
+        panel.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        button.setAttribute("aria-label", `${button.dataset.reportFilterTitle || "열"} 필터 닫기`);
+        positionReportReviewFilterPanel(button, panel);
+        panel.querySelector("input, select")?.focus();
+      }
+    });
+  });
+  sortButtons.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.reportSubscriberSort = nextReportTableSortState(state.reportSubscriberSort, button.dataset.reportSubscriberSort || "");
+      closeReportReviewFilterPanels(root);
+      apply({ saveMessage: `정렬 적용: ${button.dataset.reportSortLabel || "컬럼"}` });
+    });
+  });
+  viewButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setReportSubscriberViewMode(root, button.dataset.reportSubscriberView || "compact");
+    });
+  });
+  rows.forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, input, select, label, [data-report-filter-toggle], [data-report-filter-panel]")) return;
+      openReportObjectInCompare(row);
+    });
+  });
+  tableWrap?.addEventListener("scroll", () => positionOpenReportReviewFilter(root), filterListenerOptions);
+  window.addEventListener("scroll", () => positionOpenReportReviewFilter(root), { ...filterListenerOptions, capture: true });
+  window.addEventListener("resize", () => positionOpenReportReviewFilter(root), filterListenerOptions);
+  root.addEventListener("click", (event) => {
+    if (event.target.closest(".report-review-th")) return;
+    closeReportReviewFilterPanels(root);
+  });
+  root.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const panel = event.target.closest("[data-report-filter-panel]");
+    closeReportReviewFilterPanels(root);
+    if (panel?.id) root.querySelector(`[aria-controls="${cssEscape(panel.id)}"]`)?.focus();
+  });
+  clear?.addEventListener("click", () => {
+    if (search) search.value = "";
+    columnFilters.forEach((filter) => {
+      filter.value = "all";
+    });
+    columnSearches.forEach((filter) => {
+      filter.value = "";
+    });
+    checklistInputs.forEach((input) => {
+      input.checked = true;
+    });
+    checklistAlls.forEach((input) => {
+      input.checked = true;
+      input.indeterminate = false;
+    });
+    checklistSearches.forEach((input) => {
+      input.value = "";
+    });
+    root.querySelectorAll("[data-report-check-item]").forEach((item) => {
+      item.hidden = false;
+    });
+    state.reportSubscriberSort = null;
+    closeReportReviewFilterPanels(root);
+    apply({ saveMessage: "필터 초기화됨" });
+  });
+  root.querySelectorAll("[data-report-checklist]").forEach(updateReportChecklistAllState);
+  apply();
+}
+
+function reportSubscriberColumnDatasetKey(key = "") {
+  return `subscriber${String(key || "").replace(/(^|-)([a-z])/g, (_, __, char) => char.toUpperCase())}`;
+}
+
+function reportSubscriberColumnValue(row, key = "") {
+  return String(row?.dataset?.[reportSubscriberColumnDatasetKey(key)] || "");
+}
+
+function reportSubscriberColumnOptionValue(row, key = "") {
+  return String(row?.dataset?.[`${reportSubscriberColumnDatasetKey(key)}Option`] || "");
+}
+
+function updateReportSubscriberColumnCounts(root, rows = []) {
+  if (!root) return;
+  root.querySelectorAll("[data-report-subscriber-column-count]").forEach((item) => {
+    const key = item.dataset.reportSubscriberColumnCount || "";
+    const total = rows.filter((row) => reportSubscriberColumnHasValue(row, key)).length;
+    const visible = rows.filter((row) => !row.hidden && reportSubscriberColumnHasValue(row, key)).length;
+    item.textContent = `${visible}/${total}`;
+    item.title = `표시 값 ${visible} / 전체 값 ${total}`;
+    item.setAttribute("aria-label", item.title);
+  });
+}
+
+function reportSubscriberColumnHasValue(row, key = "") {
+  if (!row || !key) return false;
+  if (key === "static") return Number(row.dataset.subscriberStaticCount || 0) > 0;
+  if (key === "bgp") return Number(row.dataset.subscriberBgpCount || 0) > 0;
+  if (key === "pim") return Number(row.dataset.subscriberPimCount || 0) > 0;
+  const value = reportSubscriberColumnValue(row, key).trim();
+  return Boolean(value && value !== "-");
 }
 
 function closeOtherReportFieldRulePopovers(root, activeDetails = null) {
@@ -18667,6 +18989,95 @@ function saveReportReviewFilterState(root, statusMessage = "필터 자동 저장
   }
 }
 
+function restoreReportSubscriberViewMode(root) {
+  if (!root) return;
+  let stored = "";
+  try {
+    stored = window.localStorage?.getItem(REPORT_SUBSCRIBER_VIEW_STORAGE_KEY) || "";
+  } catch {
+    stored = "";
+  }
+  setReportSubscriberViewMode(root, stored || root.dataset.reportSubscriberViewMode || "compact", { persist: false });
+}
+
+function setReportSubscriberViewMode(root, mode = "compact", options = {}) {
+  if (!root) return;
+  const normalized = mode === "full" ? "full" : "compact";
+  state.reportSubscriberRenderMode = normalized;
+  root.dataset.reportSubscriberViewMode = normalized;
+  root.querySelectorAll("[data-report-subscriber-view]").forEach((button) => {
+    const active = button.dataset.reportSubscriberView === normalized;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  const current = root.querySelector("[data-report-subscriber-view-current]");
+  if (current) {
+    current.textContent = normalized === "full"
+      ? "전체 보기: 신뢰도와 근거 포함"
+      : "핵심 보기: 경로와 서비스 중심";
+  }
+  if (options.persist !== false) {
+    try {
+      window.localStorage?.setItem(REPORT_SUBSCRIBER_VIEW_STORAGE_KEY, normalized);
+    } catch {
+      // Ignore preference persistence failures.
+    }
+  }
+}
+
+function restoreReportSubscriberFilterState(root) {
+  if (!root) return;
+  const state = loadReportSubscriberFilterState();
+  if (!state) return;
+  const search = root.querySelector("[data-report-subscriber-search]");
+  if (search) search.value = state.search || "";
+  restoreReportSelectValues(root, "[data-report-subscriber-column-filter]", "reportSubscriberColumnFilter", state.columnFilters);
+  restoreReportInputValues(root, "[data-report-subscriber-column-search]", "reportSubscriberColumnSearch", state.columnSearches);
+  restoreReportInputValues(root, "[data-report-check-search]", "reportCheckSearch", state.checklistSearches);
+  restoreReportChecklistValues(root, state.checklists);
+  root.querySelectorAll("[data-report-check-search]").forEach((input) => {
+    const query = String(input.value || "").trim().toLowerCase();
+    input.closest("[data-report-checklist]")?.querySelectorAll("[data-report-check-item]").forEach((item) => {
+      item.hidden = query && !String(item.dataset.reportCheckLabel || "").includes(query);
+    });
+  });
+}
+
+function loadReportSubscriberFilterState() {
+  try {
+    return JSON.parse(window.localStorage?.getItem(REPORT_SUBSCRIBER_FILTER_STORAGE_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function setReportSubscriberSaveState(root, message, stateName = "") {
+  const status = root?.querySelector("[data-report-subscriber-save-state]");
+  if (status) {
+    status.textContent = message;
+    if (stateName) status.dataset.state = stateName;
+    else status.removeAttribute("data-state");
+  }
+}
+
+function saveReportSubscriberFilterState(root, statusMessage = "필터 자동 저장") {
+  if (!root) return;
+  const payload = {
+    version: 1,
+    search: root.querySelector("[data-report-subscriber-search]")?.value || "",
+    columnFilters: collectReportControlValues(root, "[data-report-subscriber-column-filter]", "reportSubscriberColumnFilter"),
+    columnSearches: collectReportControlValues(root, "[data-report-subscriber-column-search]", "reportSubscriberColumnSearch"),
+    checklistSearches: collectReportControlValues(root, "[data-report-check-search]", "reportCheckSearch"),
+    checklists: collectReportChecklistValues(root),
+  };
+  try {
+    window.localStorage?.setItem(REPORT_SUBSCRIBER_FILTER_STORAGE_KEY, JSON.stringify(payload));
+    setReportSubscriberSaveState(root, statusMessage);
+  } catch {
+    setReportSubscriberSaveState(root, "필터 저장 불가");
+  }
+}
+
 function collectReportControlValues(root, selector, dataKey) {
   return Object.fromEntries([...root.querySelectorAll(selector)]
     .map((control) => [control.dataset[dataKey] || "", control.value || ""])
@@ -18822,27 +19233,118 @@ function getReportReviewFieldCell(row, field = "") {
     .find((cell) => cell.dataset.reportFieldCell === field);
 }
 
-function setGraphFocus(graphRoot, nodeId = "") {
-  graphRoot.querySelectorAll(".graph-node, .graph-edge").forEach((item) => item.classList.remove("graph-focus", "graph-dim"));
-  if (!nodeId) return;
-  const connected = new Set([nodeId]);
-  graphRoot.querySelectorAll(`[data-graph-source="${cssEscape(nodeId)}"], [data-graph-target="${cssEscape(nodeId)}"]`).forEach((edge) => {
-    edge.classList.add("graph-focus");
-    connected.add(edge.dataset.graphSource);
-    connected.add(edge.dataset.graphTarget);
-  });
-  graphRoot.querySelectorAll("[data-graph-node]").forEach((node) => {
-    if (connected.has(node.dataset.graphNode)) node.classList.add("graph-focus");
-    else node.classList.add("graph-dim");
+function formatReportTableCount(visibleCount = 0, totalCount = 0) {
+  return `표시 ${Number(visibleCount) || 0} / 전체 ${Number(totalCount) || 0}`;
+}
+
+function nextReportTableSortState(current = null, key = "") {
+  if (!key) return null;
+  if (current?.key === key && current.direction === "asc") return { key, direction: "desc" };
+  return { key, direction: "asc" };
+}
+
+function updateReportTableSortButtons(root, selector = "", sortState = null) {
+  root?.querySelectorAll(selector).forEach((button) => {
+    const key = button.dataset.reportReviewSort || button.dataset.reportSubscriberSort || "";
+    const active = Boolean(sortState?.key && sortState.key === key);
+    const direction = active ? sortState.direction || "asc" : "";
+    const title = button.dataset.reportSortLabel || "컬럼";
+    button.toggleAttribute("data-sort-active", active);
+    button.dataset.sortDirection = direction;
+    button.setAttribute("aria-sort", active ? (direction === "desc" ? "descending" : "ascending") : "none");
+    button.setAttribute("aria-label", active
+      ? `${title} ${direction === "desc" ? "내림차순" : "오름차순"} 정렬 적용됨`
+      : `${title} 오름차순 정렬`);
+    const glyph = button.querySelector("[aria-hidden='true']");
+    if (glyph) glyph.textContent = active ? (direction === "desc" ? "↓" : "↑") : "↕";
   });
 }
 
-function filterReportGraph(query = "", root = selectors.overviewReport) {
-  const graphRoot = root?.matches?.("[data-graph-root]") ? root : root?.querySelector?.("[data-graph-root]");
-  if (!graphRoot) return;
-  const search = root?.querySelector?.(".report-graph-search");
-  if (search && search.value !== query) search.value = query;
-  mountRelationshipGraphReactRoots(root);
+function compareReportTableValues(leftValue = "", rightValue = "", direction = "asc") {
+  const dir = direction === "desc" ? -1 : 1;
+  const left = String(leftValue ?? "").trim();
+  const right = String(rightValue ?? "").trim();
+  const leftNumber = reportTableSortableNumber(left);
+  const rightNumber = reportTableSortableNumber(right);
+  let result = 0;
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    result = leftNumber - rightNumber;
+  } else {
+    result = left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+  }
+  return result * dir;
+}
+
+function reportTableSortableNumber(value = "") {
+  const text = String(value ?? "").trim();
+  if (!text || text === "-") return Number.NaN;
+  const percent = text.match(/^(-?\d+(?:\.\d+)?)%$/);
+  if (percent) return Number(percent[1]);
+  if (/^-?\d+(?:\.\d+)?$/.test(text)) return Number(text);
+  return Number.NaN;
+}
+
+function applyReportReviewTableSort(root, rows = []) {
+  const tableBody = root?.querySelector(".report-review-field-table tbody");
+  if (!tableBody) return;
+  const sortState = state.reportReviewSort || null;
+  const sortedRows = sortReportTableRows(rows, sortState, reportReviewSortValue);
+  sortedRows.forEach((row) => {
+    tableBody.appendChild(row);
+    const detailId = row.dataset.reportReviewDetail || "";
+    const detail = detailId
+      ? root.querySelector(`[data-report-review-detail-row="${cssEscape(detailId)}"]`)
+      : null;
+    if (detail) tableBody.appendChild(detail);
+  });
+  updateReportTableSortButtons(root, "[data-report-review-sort]", sortState);
+}
+
+function applyReportSubscriberTableSort(root, rows = []) {
+  const tableBody = root?.querySelector(".report-subscriber-table tbody");
+  if (!tableBody) return;
+  const sortState = state.reportSubscriberSort || null;
+  sortReportTableRows(rows, sortState, reportSubscriberSortValue)
+    .forEach((row) => tableBody.appendChild(row));
+  updateReportTableSortButtons(root, "[data-report-subscriber-sort]", sortState);
+}
+
+function sortReportTableRows(rows = [], sortState = null, valueGetter = null) {
+  const sorted = [...rows];
+  const key = sortState?.key || "";
+  const direction = sortState?.direction || "asc";
+  sorted.sort((left, right) => {
+    const leftIndex = Number(left.dataset.reportReviewIndex ?? left.dataset.reportSubscriberIndex ?? 0);
+    const rightIndex = Number(right.dataset.reportReviewIndex ?? right.dataset.reportSubscriberIndex ?? 0);
+    if (key && typeof valueGetter === "function") {
+      const valueResult = compareReportTableValues(valueGetter(left, key), valueGetter(right, key), direction);
+      if (valueResult) return valueResult;
+    }
+    return leftIndex - rightIndex;
+  });
+  return sorted;
+}
+
+function reportReviewSortValue(row, key = "") {
+  if (key.startsWith("field:")) {
+    return getReportReviewFieldCell(row, key.slice("field:".length))?.dataset.fieldSearch || "";
+  }
+  if (key === "group") return row.dataset.reviewGroup || "";
+  if (key === "type") return row.dataset.reviewType || "";
+  if (key === "key") return row.dataset.reviewKey || "";
+  if (key === "fieldSummary") return row.dataset.reviewFieldSummary || "";
+  if (key === "description") return row.dataset.reviewDescription || "";
+  if (key === "reason") return row.dataset.reviewReason || "";
+  if (key === "diagnostic") return row.dataset.reviewDiagnostic || "";
+  if (key === "score") return row.dataset.reviewScore || "";
+  return row.dataset.reviewSearch || "";
+}
+
+function reportSubscriberSortValue(row, key = "") {
+  if (key === "static") return row.dataset.subscriberStaticCount || "";
+  if (key === "bgp") return row.dataset.subscriberBgpCount || "";
+  if (key === "pim") return row.dataset.subscriberPimCount || "";
+  return reportSubscriberColumnValue(row, key);
 }
 
 function truncateText(value = "", limit = 24) {

@@ -191,6 +191,132 @@
 - Dev server URL: `http://127.0.0.1:5173/`.
 - Before changing compare pane rendering again, verify that selected section tabs keep `.diff-line` rendering and do not render semantic object block wrappers.
 
+## 2026-06-12 Report Subscriber Path Table
+
+### Current Work
+- Task: add a second report table where one row represents one subscriber/device path and columns show Port, LAG, Interface, Peer/NH, Static Route, BGP, and PIM.
+- Branch: `work/mvp-interface-stabilization`
+- Scope: keep the existing object-level review table unchanged and add a separate subscriber path table below it.
+
+### Decisions
+- The new table derives rows from `graph.viewGraph.views.summary` chain details, so it uses the same canonical relation mapping as the relationship graph.
+- One row is side-specific: old config paths and new config paths are separate rows, distinguished by the `구분` column.
+- Filters, checklist panels, view mode, count, reset, and auto-save are implemented with `data-report-subscriber-*` selectors and separate localStorage keys.
+- The table uses fixed layout, bounded vertical scrolling, and ellipsis cells to prevent long config text from stretching the UI.
+
+### Changed Files
+- `src/core/legacyCore.js`
+- `src/core/legacyState.js`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification Plan
+- `node --check src/core/legacyCore.js`
+- `node --test tests/summary-renderer.test.js`
+- `npm.cmd test`
+- `npm.cmd run build`
+- `npm.cmd run guard:legacy-core`
+
+### Verification Result
+- `node --check src/core/legacyCore.js`: pass
+- `node --test tests/summary-renderer.test.js`: pass, 11 pass
+- `npm.cmd test`: pass, 264 pass / 1 skip
+- `npm.cmd run build`: pass, existing Vite chunk-size warning remains
+- `npm.cmd run guard:legacy-core`: pass
+- Dev server for manual UI check: `http://127.0.0.1:5174/` because port 5173 was already in use
+
+### Remaining Notes
+- The current implementation does not pair old/new subscriber paths into a single comparison row. Pairing can be added later if a stable subscriber identity rule is defined.
+
+## 2026-06-12 ECharts Sankey PoC
+
+### Current Work
+- Task: implement first-pass ECharts Sankey PoC without removing the existing React Flow relationship graph.
+- Branch: `work/mvp-interface-stabilization`
+- Scope: show `OLD_PORT -> OLD_LAG -> PATH_ANCHOR -> NEW_LAG -> NEW_PORT` from existing canonical chain details, with a simple selected path card on click.
+
+### Decisions
+- Added `echarts` and `echarts-for-react` because the requested PoC explicitly targets ECharts Sankey.
+
+## 2026-06-16 Dependency Graph ServicePath Mock Polish
+
+### Current Work
+- Task: keep the current Dependency Graph screen structure and polish the mock graph so it explains a real circuit/service path instead of looking like disconnected object pills.
+- Branch: `work/mvp-interface-stabilization`
+- Scope: mock Dependency Graph model, compact node/edge visual states, drawer tabs, and tests only. Real parser/canonical graph wiring was not reconnected or changed in this pass.
+
+### Decisions
+- The mock graph now has a `ServicePath` anchor for `to-pef1-1 / 14.59.4.65`.
+- Main graph nodes remain actual setting object kinds only: port, lag, interface, peer, static, bgp, pim, internal, and system-interface.
+- Diff state is represented on compact nodes as low-noise badges: added, removed, changed, unchanged.
+- OLD/NEW scope is represented as a small source badge, not as a large summary node.
+- Relation evidence is attached to edges with relation kinds such as `PORT_MEMBER_OF_LAG`, `LAG_BINDS_INTERFACE`, `PEER_SAME_SUBNET`, `NEXT_HOP_MATCH`, `BGP_NEIGHBOR_MATCH`, `PIM_ENABLED`, and `INTERNAL_POLICY_REF`.
+- Drawer tabs are now `summary`, `evidence`, `path`, `diff`, and `source`, so users can inspect why a relation exists without turning cluster/domain labels into graph nodes.
+- Cluster hulls were visually muted so they read as background grouping, not as primary graph cards.
+
+### Changed Files
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/dependency-graph-model.test.js`: pass, 20 pass.
+- `node --test tests/summary-renderer.test.js`: pass, 14 pass.
+- `npm.cmd test`: pass, 311 pass / 1 skip.
+- `npm.cmd run build`: pass, existing Vite chunk size warning remains.
+- Browser DOM verification at `http://localhost:5173/`:
+  - Dependency Graph root rendered with `data-mock-graph="true"`.
+  - 20 compact nodes and 18 graph edges rendered.
+  - Diff states rendered: added, changed, removed, unchanged.
+  - Source scopes rendered: old, new, both.
+  - Relation kinds rendered: `BGP_NEIGHBOR_MATCH`, `INTERNAL_POLICY_REF`, `LAG_BINDS_INTERFACE`, `NEXT_HOP_MATCH`, `PEER_SAME_SUBNET`, `PIM_ENABLED`, `PORT_MEMBER_OF_LAG`.
+  - Raw Graph View button remains visible.
+  - Node click opens the overlay drawer without shrinking the graph.
+  - Drawer tabs show summary, evidence, path, diff, and source/config information.
+  - Local app console logs filtered by localhost: no warning/error entries.
+- UI capture:
+  - `docs/verification/screenshots/2026-06-16/dependency-graph-service-path/after-graph-canvas.png`
+  - Note: Browser screenshot capture timed out for some later desktop clips. DOM verification and one canvas/top capture were saved; additional desktop screenshot may need retry in a fresh browser session if required.
+
+### Known Issues
+- Clicking an edge that visually overlaps nearby compact nodes can still select the node instead of the edge. The selected node's evidence tab exposes the same relation evidence, but edge hit priority should be improved later.
+- Current work remains mock-only by instruction. Real canonical graph/data reconnection should wait until the mock direction is accepted.
+- Existing React Flow graph remains rendered below the PoC as `Raw Graph View`.
+- VisualPath generation pairs old/new chain details by peer IP first, then interface name fallback.
+- If no chain data exists, the PoC renders a small mock path so the ECharts integration can still be visually verified.
+- Right detail panel, tree view, KPI cards, and lower charts are intentionally out of scope for this first pass.
+
+### Changed Files
+- `package.json`
+- `package-lock.json`
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/components/graph/sankeyPocModel.js`
+- `src/components/graph/RelationshipGraphBridge.jsx`
+- `src/core/legacyCore.js`
+- `src/styles/global-report.css`
+- `tests/sankey-poc-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification Result
+- `node --check src/core/legacyCore.js`: pass
+- `node --check src/components/graph/sankeyPocModel.js`: pass
+- `node --test tests/sankey-poc-model.test.js`: pass, 2 pass
+- `node --test tests/summary-renderer.test.js`: pass, 11 pass
+- `npm.cmd test`: pass, 266 pass / 1 skip
+- `npm.cmd run build`: pass, Vite chunk-size warning remains and is larger after ECharts integration
+- `npm.cmd run guard:legacy-core`: pass
+- `git diff --check`: pass, Windows CRLF warnings only
+
+### Known Issues
+- ECharts is currently bundled into the main client chunk, increasing `assets/index-*.js` to about 1.8 MB minified. A later pass should lazy-load the Sankey PoC component or split ECharts into a manual chunk.
+- VisualPath pairing is a PoC heuristic, not the final subscriber/device pair resolver.
+- Aggregate node expansion, side detail panel, tree view, and bottom charts are not implemented in this pass.
+
 ## 2026-06-04 Full Config Section Split Fix
 
 ### Current work
@@ -1204,3 +1330,1594 @@
 - Browser CDP renderer check: pass.
   - synthetic SERVICES click called `onServicesOpen` once.
 - `npm.cmd test`: pass, 263 pass / 1 skip.
+
+## 2026-06-12 ECharts Sankey Detail Panel
+
+### Current Work
+- Task: implement the second-pass ECharts Sankey detail panel for node/link clicks.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: keep the existing React Flow graph and Sankey PoC, but replace the simple selected-path card with a right-side detail panel.
+
+### Change
+- Sankey node/link clicks still select the first related `pathId` and log `[sankey-poc] selectedPath` for debugging.
+- The selected path now renders in a right-side detail panel with:
+  - selected path title and status badge;
+  - path anchor details: chain ID, interface, peer/next-hop, VRF, confidence;
+  - OLD path and NEW path cards: port, LAG, interface, peer/next-hop;
+  - service impact counts: Static Route, BGP Neighbor, PIM;
+  - resolver evidence/config evidence list when available.
+- The detail panel uses fixed side width, internal scrolling, and ellipsis handling so long config names do not expand the graph layout.
+- Empty state now explains that selecting a Sankey node or link populates the panel.
+
+### Files
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --check src/components/graph/sankeyPocModel.js`: pass.
+- `node --test tests/sankey-poc-model.test.js`: pass, 2 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `npm.cmd test`: pass, 266 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains because ECharts is still bundled into the main app chunk.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with existing CRLF normalization warnings only.
+
+### UI Verification
+- Local dev server was available at `http://127.0.0.1:5174`.
+- Automated screenshot was not captured for this step because the current app requires a populated compare state before the Sankey panel renders meaningful data in a fresh browser profile.
+- Manual check scenario for next UI pass:
+  - run compare with a config pair that produces Sankey paths;
+  - open the graph/report area containing `Sankey View PoC`;
+  - click a Sankey node and a Sankey link;
+  - verify the right panel shows OLD path, NEW path, service impact, confidence, and evidence without expanding the chart layout.
+
+### Known Issues
+- ECharts still increases the Vite main bundle size; later work should lazy-load the Sankey PoC or move ECharts into a manual chunk.
+- The Sankey detail panel uses the currently available VisualPath data. Evidence depth depends on canonical chain details and may be sparse for mock/fallback paths.
+
+## 2026-06-12 ECharts Sankey Selected Path Tree
+
+### Current Work
+- Task: add a Tree View for the selected Sankey path.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: keep the existing Sankey chart, right detail panel, and React Flow raw graph; add only the selected-path tree inside the Sankey detail panel.
+
+### Change
+- Added `SankeyPathTree` to the Sankey detail panel.
+- The tree groups selected path data into:
+  - `OLD`: old port, LAG, interface, peer/next-hop.
+  - `COMMON`: anchor interface, peer/next-hop, VRF, confidence.
+  - `NEW`: new LAG, port, interface, peer/next-hop.
+  - `SERVICES`: Static Route, BGP Neighbor, PIM counts.
+- Missing old/new sides render explicit empty states instead of blank rows.
+- Added tree styling with group badges, connector lines, bounded text, and ellipsis handling so long values do not expand the right panel.
+
+### Files
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/sankey-poc-model.test.js`: pass, 2 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains because ECharts is still bundled into the main app chunk.
+- `npm.cmd test`: pass, 266 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with existing CRLF normalization warnings only.
+
+### Known Issues
+- No new screenshot was captured in this step because the Sankey panel needs a populated compare state for meaningful UI verification in a fresh browser profile.
+- The tree currently shows aggregate service counts. A later pass can expand SERVICES into individual Static/BGP/PIM objects if the Sankey side panel gets a drill-down mode.
+
+## 2026-06-12 ECharts Sankey KPI And Impact Panels
+
+### Current Work
+- Task: add top KPI cards and bottom service impact, change distribution, and impact ranking panels to the ECharts Sankey PoC.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: keep the Sankey chart, selected detail panel, tree view, and React Flow raw graph; add derived summary panels around the Sankey chart.
+
+### Change
+- Added Sankey model helpers:
+  - `buildSankeyKpis`
+  - `summarizeSankeyServices`
+  - `buildSankeyChangeDistribution`
+  - `buildSankeyImpactRanking`
+- Added top KPI cards for:
+  - total paths;
+  - changed/review paths;
+  - service-affected paths;
+  - average confidence.
+- Added bottom panels for:
+  - service impact summary: Static Route, BGP Neighbor, PIM counts;
+  - change type distribution with status bars;
+  - impact ranking with score, service count, confidence, and status.
+- Impact ranking rows select the same Sankey path as chart node/link clicks and update the existing right detail panel.
+- Added bounded layout, ellipsis handling, and responsive columns so summary panels do not stretch the graph area.
+
+### Files
+- `src/components/graph/sankeyPocModel.js`
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/sankey-poc-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --check src/components/graph/sankeyPocModel.js`: pass.
+- `node --test tests/sankey-poc-model.test.js`: pass, 3 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains because ECharts is still bundled into the main app chunk.
+- `npm.cmd test`: pass, 267 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with existing CRLF normalization warnings only.
+
+### Known Issues
+- No new screenshot was captured in this step because the Sankey panel needs a populated compare state for meaningful UI verification in a fresh browser profile.
+- Impact score is a derived PoC score based on path status, service count, confidence, and existing `impactScore`; it is not yet a user-approved operational severity formula.
+
+## 2026-06-12 Move Sankey PoC From Report To Graph Tab
+
+### Current Work
+- Task: move the four-pass ECharts Sankey implementation out of the report tab and into the dedicated graph tab.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: move render placement only; keep the existing Sankey model, detail panel, tree view, KPI cards, bottom panels, and React Flow raw graph behavior.
+
+### Change
+- Removed `renderSankeyPoc(graph)` from the report tab's embedded graph section.
+- The report tab now keeps only the existing React Flow relationship graph section.
+- Added `renderSankeyPoc(dashboard.graph)` to `renderStandaloneGraphPage`, so the dedicated graph tab now shows:
+  - Sankey PoC with KPI cards;
+  - selected path detail panel;
+  - selected path tree view;
+  - service impact summary;
+  - change type distribution;
+  - impact ranking;
+  - Raw Graph View below it.
+- Updated static renderer tests to assert Sankey is mounted from `renderStandaloneGraphPage` and not from `renderOverviewReport`.
+
+### Files
+- `src/core/legacyCore.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --check src/core/legacyCore.js`: pass.
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `node --test tests/sankey-poc-model.test.js`: pass, 3 tests.
+- `npm.cmd test`: pass, 267 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains because ECharts is still bundled into the main app chunk.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with existing CRLF normalization warnings only.
+
+### Known Issues
+- No new screenshot captured yet. Manual UI check should compare the report tab and graph tab after running a populated config comparison:
+  - report tab: no Sankey PoC block;
+  - graph tab: Sankey PoC appears above Raw Graph View.
+
+## 2026-06-12 Sankey Main Flow Data Filtering
+
+### Current Work
+- Task: fix the ECharts Sankey data generation so the main Sankey does not render raw, unbounded VisualPath data.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: data shaping and rendering bindings only. Existing React Flow raw graph remains unchanged.
+
+### Change
+- Added `isMainSankeyEligible(path)` so the main Sankey only includes `changed` or `unchanged` paths that have:
+  - old/new sides;
+  - old/new port and LAG;
+  - a valid logical anchor from interface name or peer IP.
+- Excluded `added`, `removed`, `ambiguous`, `unresolved`, and structurally incomplete paths from the main Sankey.
+- Split Sankey node internals from user-visible labels:
+  - internal `id`/`name` stay stable and unique;
+  - `displayLabel` is used for chart labels and tooltips;
+  - forbidden placeholders such as `sankey-path`, `chain:`, `no-port`, `no-lag`, `no-interface`, and `no-peer` are not displayed.
+- Added path anchor labels from short interface name and peer IP, with `미매핑 경로` kept out of the main Sankey by eligibility filtering.
+- Added stage-level visible node limiting:
+  - top 8 groups per stage are shown;
+  - overflow is grouped as `+N 더보기` aggregate nodes.
+- Aggregated links by `sourceId + targetId + status`.
+- Capped main Sankey links to 100 and exposed a truncation notice for runtime data.
+- Updated KPI cards and notice area to separate:
+  - total raw VisualPath count;
+  - main Sankey display count;
+  - excluded added/removed/ambiguous/unresolved counts;
+  - displayed-path average confidence.
+- The right detail panel default state now only instructs the user to click a flow node or link.
+
+### Files
+- `src/components/graph/sankeyPocModel.js`
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/sankey-poc-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --check src/components/graph/sankeyPocModel.js`: pass.
+- `node --test tests/sankey-poc-model.test.js`: pass, 9 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `npm.cmd test`: pass, 273 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains because ECharts is bundled into the main app chunk.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with existing CRLF normalization warnings only.
+
+### Runtime Count Notes
+- The model now returns `totalPathCount`, `displayedPathCount`, `excludedSummary`, `nodes.length`, `links.length`, `aggregateNodeCount`, and `truncated` for the real browser compare dataset.
+- CLI fallback mock data result:
+  - total paths: 2
+  - main Sankey paths: 2
+  - excluded added/removed/ambiguous/unresolved: 0/0/0/0
+  - nodes: 10
+  - links: 8
+  - aggregate nodes: 0
+- The user's 647-path runtime dataset is not stored as a local fixture, so exact production counts must be read from the graph tab KPI/notice after running that comparison.
+
+### Known Issues
+- No screenshot captured in this step because the reported 647-path compare state is runtime-only and not available as a local fixture.
+- The Sankey PoC still selects the first `pathId` from an aggregate node/link. A later detail-drilldown pass can expose an aggregate member list instead.
+
+## 2026-06-12 Sankey Graph Focus Layout
+
+### Current Work
+- Task: update only the ECharts Sankey UI/layout so the graph becomes the primary visual area.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: layout and visibility only. `src/components/graph/sankeyPocModel.js` data filtering/generation logic was not modified in this step.
+
+### Change
+- Removed the large KPI card render from the Sankey screen.
+- Replaced the title/KPI area with a compact one-line toolbar containing:
+  - short title: `변경 흐름`;
+  - compact summary pills for total, displayed, excluded, changed, added, removed, and average confidence;
+  - `통계 보기`, `상세 패널`, and `Raw Graph View` buttons.
+- Removed user-visible `PoC` wording from the Sankey UI.
+- Hid the right detail panel by default.
+- Detail opens as an absolute positioned right drawer when a node/link is selected or the detail button is toggled.
+- Added a drawer close button that clears selection and hides the drawer.
+- Hid the bottom statistics panels by default.
+- `통계 보기` toggles the existing Service Impact, Change Distribution, and Impact Ranking panels.
+- Enlarged the Sankey chart area:
+  - `height: calc(100vh - 170px)`;
+  - `min-height: 620px`;
+  - compact card padding.
+- Kept a `Raw Graph View` button in the Sankey toolbar and retained the existing raw React Flow section below the Sankey block.
+
+### Files
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `node --test tests/sankey-poc-model.test.js`: pass, 9 tests.
+- `npm.cmd test`: pass, 273 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains because ECharts is bundled into the main app chunk.
+- `npm.cmd run guard:legacy-core`: pass.
+
+### UI Verification
+- Screenshot: `docs/verification/screenshots/2026-06-12/sankey-layout/after-desktop.png`.
+- Browser verification used Chrome headless against the running Vite dev server.
+- Screenshot metrics:
+  - viewport height: 950px;
+  - Sankey chart height: 780px;
+  - chart height ratio: 82% of viewport;
+  - compact toolbar visible: true;
+  - detail panel initially hidden: true;
+  - bottom stats initially hidden: true;
+  - Raw Graph View button visible: true;
+  - visible `PoC` text: false.
+
+### Known Issues
+- Screenshot verification used the component's fallback mock graph because the user's 647-path runtime comparison state is not stored as a local fixture.
+- The current Sankey node visual density for the fallback mock is very large because only two mock paths are present and ECharts allocates available vertical space to them. The requested layout goal, graph-first screen occupancy, is satisfied.
+
+## 2026-06-12 Sankey Aggregate Load More Interaction
+
+### Current Work
+- Task: implement only the `+ more` aggregate node interaction for the ECharts Sankey view.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: preserve the existing main Sankey filtering/selection behavior; add stage-level visible limits and aggregate click handling.
+
+### Change
+- Added per-stage visible node limits for Sankey stages.
+- `buildSankeyData()` now accepts `stageVisibleLimits` while keeping the existing `visibleNodeLimit` option compatible.
+- Aggregate nodes still represent hidden groups per stage; increasing a stage limit reduces that stage's remaining aggregate count.
+- Clicking an aggregate node increases only that node's stage visible limit by 20.
+- Aggregate clicks do not clear the current selected path, detail drawer state, or stats panel state.
+- When the hidden count reaches zero for a stage, that stage's aggregate node is no longer generated.
+
+### Files
+- `src/components/graph/sankeyPocModel.js`
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `tests/sankey-poc-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --check src/components/graph/sankeyPocModel.js`: pass.
+- `node --check src/components/graph/SankeyFlowPoc.jsx`: not applicable; Node v24 does not directly syntax-check `.jsx` modules.
+- `node --test tests/sankey-poc-model.test.js`: pass, 10 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `npm.cmd test`: pass, 274 pass / 1 skip.
+- `npm.cmd run build`: pass; existing Vite chunk-size warning remains because ECharts is bundled into the main app chunk.
+- `npm.cmd run guard:legacy-core`: pass.
+
+### Known Issues
+- No new screenshot was captured for this interaction-only change. The behavior is covered by model and renderer tests; a browser dataset with enough per-stage aggregate nodes is needed for meaningful manual click verification.
+
+## 2026-06-15 Sankey Visual Style And Animation
+
+### Current Work
+- Task: improve only the ECharts Sankey visual styling and animation.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: renderer/CSS styling only. Sankey data filtering, eligibility, path generation, and resolver logic were not changed.
+
+### Change
+- Added Sankey-specific visual color tokens in the React renderer.
+- Added CSS custom properties for Sankey status colors.
+- Replaced saturated stage colors with muted old/common/new stage fills.
+- Lowered default Sankey link opacity:
+  - unchanged: `0.1`;
+  - changed/other statuses: `0.18`.
+- Added hover emphasis with stronger adjacent node/link focus, shadow, and thicker selected links.
+- Added blur styling for unrelated nodes/links during hover focus.
+- Added ECharts animation options:
+  - `animationDuration: 650`;
+  - `animationDurationUpdate: 360`;
+  - `animationEasing: "cubicOut"`;
+  - `animationEasingUpdate: "cubicOut"`.
+- Cleaned node labels by tightening max length, reducing label width/font size, and normalizing whitespace.
+- Reduced the graph container and action button color intensity to avoid a primary-color-heavy look.
+
+### Files
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `node --test tests/sankey-poc-model.test.js`: pass, 10 tests.
+- `npm.cmd test`: pass, 274 pass / 1 skip.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with CRLF normalization warnings only.
+
+### Known Issues
+- No new screenshot was captured in this pass. The current verification is automated/static plus production build; visual confirmation should be done in the graph tab with a populated compare state.
+
+## 2026-06-15 Relation Graph Display Casing Preservation
+
+### Current Work
+- Task: keep report and graph labels in their original config casing after normalization.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: display labels only. Canonical IDs, resolver matching, graph relations, report layout, and UI styling were not changed.
+
+### Cause
+- PORT, LAG, L3 interface, and PIM canonical nodes were using normalized values directly for `label` and display attributes such as `attributes.name`, `attributes.lag`, and `attributes.interface`.
+- The graph view and the report subscriber path table both read those canonical display fields, so normalized lowercase values appeared in the UI.
+
+### Change
+- Canonical node IDs still use normalized values for stable matching.
+- Display fields now prefer the original object name from `sourceName` / `identity`.
+- Added normalized companion attributes for resolver use:
+  - `attributes.normalizedName` for PORT and L3 interface.
+  - `attributes.normalizedLag` for LAG.
+  - `attributes.normalizedInterface` for PIM.
+- Resolver lookup paths now use normalized companion attributes where needed.
+- Peer/PIM neighbor metadata preserves display interface names while retaining normalized interface names for matching.
+
+### Files
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/relationGraph/relationResolver.js`
+- `tests/relation-graph.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/relation-graph.test.js`: pass, 21 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 11 tests.
+- `node --test tests/sankey-poc-model.test.js`: pass, 10 tests.
+- `npm.cmd test`: pass, 275 pass / 1 skip.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with CRLF normalization warnings only.
+
+### Known Issues
+- No screenshot was captured because this change is display-data plumbing only and does not alter layout or styling.
+- Existing unrelated working-tree changes from prior graph/report work remain present.
+
+## 2026-06-15 Report Subscriber Path Row Merge
+
+### Current Work
+- Task: fix duplicated subscriber/device rows in the report subscriber path table.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: report subscriber path row generation only. Parser, canonical graph relations, graph view rendering, and table styling were not changed.
+
+### Cause
+- The canonical relation graph correctly creates `PEER_NH` nodes for static-route next-hop candidates.
+- The relationship graph summary view can have one chain per `PEER_NH`.
+- The report subscriber path table reused those graph chains directly, so one interface with multiple static-route next-hops appeared as multiple subscriber/device rows.
+- This was a table row aggregation issue, not a parser issue.
+
+### Change
+- The report subscriber table now first dedupes graph chain rows, then merges rows by subscriber identity:
+  - primary key: `side + L3_INTERFACE canonical id`;
+  - fallback keys: LAG, PORT, then PEER_NH when no interface exists.
+- Merged rows aggregate and dedupe:
+  - Port;
+  - LAG;
+  - Peer/NH;
+  - Static Route;
+  - BGP;
+  - PIM;
+  - evidence and minimum confidence.
+- Column search/filter data uses the full aggregated values while the visible cell keeps the compact `first item 외 N` summary.
+
+### Files
+- `src/core/legacyCore.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/summary-renderer.test.js`: pass, 12 tests.
+- `node --test tests/relation-graph.test.js`: pass, 21 tests.
+- `npm.cmd test`: pass, 276 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, with CRLF normalization warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+
+### Known Issues
+- No screenshot was captured in this pass. The new regression test reproduces the reported duplicate pattern with one interface and multiple static-route next-hop rows.
+
+## 2026-06-15 Report Graph Removal And No-LAG Port Matching
+
+### Current Work
+- Task: remove the duplicated relationship graph from the report tab, show direct port/interface matching when a circuit has no LAG, and prevent port/LAG-only rows from appearing as subscriber/device rows.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: report rendering and relationship view graph row construction only. Canonical resolver rules remain unchanged.
+
+### Cause
+- The report tab still had a graph section even though the same relationship graph and Sankey view already live in the graph tab.
+- The subscriber path table accepted graph chains without an L3 interface, so orphan or unused PORT/LAG chains could fall back into the `subscriber` label and appear as 가입자/장비 values.
+- Interfaces that referenced a physical port directly but had no LAG did not have a display-only upstream port row in the view graph.
+
+### Change
+- Removed the relationship graph render block from `renderOverviewReport`; the graph tab still renders Sankey and Raw Graph View through `renderStandaloneGraphPage`.
+- `buildReportSubscriberRows` now skips chains that do not have an L3 interface, preventing port/LAG-only rows from being reported as subscriber/device rows.
+- L3 interface canonical nodes now retain direct `portRefs` from parsed fields.
+- The view graph indexes canonical ports by normalized port name and builds view-only `DIRECT_PORT_INTERFACE` edges when an interface has no LAG but has a direct port reference.
+- No `PORT -> STATIC_ROUTE`, `PORT -> BGP_NEIGHBOR`, or canonical transitive relation was added.
+
+### Files
+- `src/core/legacyCore.js`
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/relationGraph/viewGraph.js`
+- `tests/relation-graph.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-16/subscriber-table-bgp-counts/report-tab-empty-state.png`
+
+### Verification
+- `node --test tests/relation-graph.test.js`: pass, 22 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 12 tests.
+- `npm.cmd test`: pass, 277 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- Browser load check at `http://127.0.0.1:5179/`: app loaded, no console errors, empty initial state had no report graph roots.
+
+### UI Verification Notes
+- A populated comparison state was not available in the fresh browser session, so the report-tab removal is covered by static renderer tests rather than a populated screenshot.
+- Screenshot capture was attempted twice but Browser CDP returned `Page.captureScreenshot` timeout. No screenshot file was produced for this pass.
+
+### Known Issues
+- Direct port/interface matching depends on the parsed interface object exposing a `port` or `member-port` field. Config forms that express this relation in another field name may need an additional parser mapping.
+- Existing unrelated working-tree changes from prior graph/report work remain present.
+
+## 2026-06-15 Subscriber Path Serial IP, BGP, And Direct Port Display
+
+### Current Work
+- Task: fix subscriber path table display so new-side labels keep original config casing, replace the visible Peer/NH column with interface Serial IP, show BGP neighbors, and display directly assigned physical ports for MN-style interfaces without LAG.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: canonical display extraction, subscriber path table rendering, direct port fallback, and regression tests.
+
+### Cause
+- Some new-side objects were built from normalized identity/field values, so display casing could remain lowercase even when raw config had mixed case.
+- The visible `Peer/NH` column showed computed peer next-hop values, but the requested operator-facing value is the local interface serial IP.
+- BGP neighbor display depends on `PEER_NH -> BGP_NEIGHBOR` relation generation; if a BGP object missed its normalized `neighbor` field but still had a raw `neighbor` line, it could fail to connect.
+- Direct physical-port interfaces without LAG can be expressed through `port`, `member-port`, or direct physical SAP values such as `sap 1/1/...`; these were not all preserved as direct port references for the view graph.
+
+### Change
+- Canonical graph display names now prefer raw config identity extraction for PORT, LAG, L3 interface, PIM, and BGP before falling back to normalized identity fields.
+- L3 interface nodes now retain direct physical port references from:
+  - `port`;
+  - `member-port`;
+  - direct physical `sap` values containing `/`;
+  - raw interface lines containing `port`, `port-id`, `physical-port`, or `sap`.
+- BGP canonical node creation now falls back to raw `neighbor` extraction when normalized fields do not contain a neighbor value.
+- The subscriber path table visible column changed from `Peer/NH` to `Serial IP`.
+- The Interface column now shows the interface name only; the local serial address/prefix is shown in the new `Serial IP` column.
+- Internal peer data is still retained for Static/BGP/PIM relation calculation and global row search.
+
+### Files
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/legacyCore.js`
+- `src/styles/global-report.css`
+- `tests/relation-graph.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/relation-graph.test.js`: pass, 25 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 12 tests.
+- `npm.cmd test`: pass, 280 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+
+### Known Issues
+- A populated runtime comparison dataset was not available in the browser session, so visual confirmation for the exact user screenshots still needs to be done on the user's loaded config state.
+- Direct physical-port matching now covers common `port`/`member-port`/physical `sap` forms. If MN config uses another proprietary field name, add that field to the direct port reference extraction list.
+
+## 2026-06-15 Subscriber Path Serial Pairing And Service Context Fix
+
+### Current Work
+- Task: fix the report subscriber path table so old/new rows for the same circuit are paired by interface Serial IP, and improve missing new-side Static/BGP/PIM service display caused by graph VRF context mismatches.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: subscriber path table row generation, MD-CLI context extraction, canonical relation VRF comparison, and focused regression tests.
+
+### Cause
+- The subscriber path table grouped rows by `side + interface id`, so old and new circuits with the same serial link were rendered as separate rows.
+- Static-route fan-out rows were already merged by interface, but old/new topology values could not be compared in the same row.
+- MD-CLI one-line service objects did not include a `routing-context`, and router-scoped BGP/PIM objects did not retain router context consistently.
+- Canonical relation resolution treated `Base` and `default` VRFs as different values, so new-side Static/BGP/PIM services could fail to attach to the interface path even when they were in the same base router context.
+
+### Change
+- `buildReportSubscriberRows` now:
+  - first merges per-side graph chains by interface;
+  - calculates a Serial IP CIDR network key, for example `.57/30` and `.58/30` both become the same `/30` circuit key;
+  - pairs old/new buckets with the same serial subnet into one row;
+  - displays topology and service values as `old -> new`, for example `7/2/4 -> 2/2/c6/1`, `174 -> lag-B-2206`, and `Static: old 1 -> new 1`.
+- Rows without a matching opposite side still render as old-only or new-only rows.
+- `sameDeviceAndVrf` in the relation resolver now treats `base` and `default` as equivalent for canonical graph relation matching.
+- MD-CLI one-line service parser now preserves VPRN `routing-context` for service interface/subscriber objects and creates service-scoped one-line static-route objects.
+- MD-CLI router one-line BGP/PIM objects and block BGP/PIM objects now keep router context in fields.
+- Report description text now says one row represents a Serial IP based old/new subscriber path.
+
+### Files
+- `src/core/legacyCore.js`
+- `src/core/parsers/nokiaMdCliParser.js`
+- `src/core/relationGraph/relationResolver.js`
+- `tests/summary-renderer.test.js`
+- `tests/relation-graph.test.js`
+- `tests/mvp-core-scope.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/summary-renderer.test.js`: pass, 13 tests.
+- `node --test tests/relation-graph.test.js`: pass, 26 tests.
+- `node --test tests/mvp-core-scope.test.js`: pass, 16 tests.
+- `npm.cmd test`: pass, 283 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+
+### Known Issues
+- If the source config does not expose an old-side port/LAG relationship at all, the paired row can only display `- -> new-value` for that field. The table does not invent an old port/LAG without parser/resolver evidence.
+- Visual confirmation against the user's loaded full config still needs to be performed in the app because the local fresh browser state does not contain that dataset.
+
+## 2026-06-15 Graph Overview And Focus Mode Phase 1
+
+### Current Work
+- Task: restructure the graph tab phase 1 so the default screen is Overview Mode, subscriber/device candidates are shown as compact Top N rows, Focus Flow is shown only after selecting one row, the full Sankey flow is removed from the default view, and Raw Graph View remains available.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: graph tab React view composition, overview/focus model helpers, compact graph CSS, and regression tests.
+
+### Change
+- Added `OVERVIEW_TOP_N = 10`, `buildGraphOverviewModel`, and `buildFocusGraphModel` to the graph model layer.
+- Overview Mode now renders:
+  - compact summary bar: total, changed, added, removed, ambiguous, unresolved, average confidence;
+  - compact impact map by Physical, LAG, Interface, Static, BGP, PIM, and problem/mismatch;
+  - Top 10 subscriber/device/path rows sorted by problem status, add/remove, change count, and service impact.
+- Selecting a compact row switches to Focus Mode and renders one large `OLD -> COMMON -> NEW -> SERVICES` Focus Flow.
+- Detail panel remains closed after row selection and can be opened explicitly with `상세 패널` or `상세 보기`.
+- The ECharts Sankey full flow is no longer rendered as the graph tab default body. Existing Sankey data generation functions remain for later group/raw flow work and tests.
+- Raw Graph View remains mounted below the overview/focus area and is reachable through the `Raw Graph View` button.
+
+### Files
+- `src/components/graph/sankeyPocModel.js`
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/sankey-poc-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/graph-overview-focus/overview-mode-viewport.png`
+- `docs/verification/screenshots/2026-06-15/graph-overview-focus/focus-flow-viewport.png`
+
+### Verification
+- `node --test tests/sankey-poc-model.test.js`: pass, 13 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 13 tests.
+- `npm.cmd test`: pass, 286 pass / 1 skip.
+- `npm.cmd run guard:legacy-core`: pass.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- Browser verification at `http://127.0.0.1:5173/` with synthetic subscriber fixtures:
+  - app loaded with no console errors;
+  - graph tab defaulted to Overview Mode;
+  - Overview showed compact summary, impact map, and Top N list rather than the full Sankey flow;
+  - selecting a row switched to Focus Flow;
+  - detail panel remained closed until explicitly requested;
+  - Raw Graph View remained present.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/graph-overview-focus/overview-mode-viewport.png`
+- `docs/verification/screenshots/2026-06-15/graph-overview-focus/focus-flow-viewport.png`
+
+### Known Issues
+- Phase 1 does not implement Group Mode or virtualized lists yet.
+- Detail Drawer overlay and Tree/Evidence tabs remain for later phases.
+- The old Sankey rendering helpers are still present in code for later selected-group flow work, but the default graph screen no longer renders the full Sankey chart.
+
+## 2026-06-15 Graph Subscriber Summary Phase 2
+
+### Current Work
+- Task: verify and lock down phase 2 graph behavior: `SubscriberSummaryList`, compact Top N subscriber/device rows, Overview-to-Focus transition, and Raw Graph View preservation.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: regression coverage and handoff documentation. The implementation had already been introduced with the Overview/Focus graph changes, so this pass avoids unrelated UI changes.
+
+### Change
+- Added renderer regression checks that confirm:
+  - `SubscriberSummaryList` exists and uses compact `sankey-poc-subscriber-row` items;
+  - the list is driven by `overviewModel.topSubscribers`;
+  - selected state is tracked by `selectedPathId`/`chainId`;
+  - selecting a row switches to `FocusFlowView`;
+  - non-focus state renders `SankeyOverviewPanel`;
+  - the default graph body does not render the full ECharts Sankey chart.
+- Kept `Raw Graph View` intact.
+- Kept `+more` aggregate behavior out of the default Overview screen. Existing Sankey helper code remains for future selected-group work but is not rendered in the default graph body.
+
+### Files
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/sankey-poc-model.test.js`: pass, 13 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 13 tests.
+- `npm.cmd test`: pass, 286 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+
+### Known Issues
+- Phase 2 still uses a compact Top N list rather than a virtualized full subscriber list. This is intentional for the current requirement.
+- Group-specific Sankey flow remains a later phase; the default graph screen stays Overview/Focus based.
+
+## 2026-06-15 Graph Detail Drawer Phase 3
+
+### Current Work
+- Task: implement only the graph DetailDrawer overlay for selected subscriber/path details.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: graph tab drawer composition, drawer tabs, selection behavior, overlay CSS, regression tests, and UI verification.
+
+### Change
+- Replaced the always-content detail panel shape with a `DetailDrawer` overlay that is closed by default.
+- Selecting a compact subscriber/path row now:
+  - sets the selected path;
+  - switches Overview to Focus;
+  - opens the right-side drawer;
+  - resets the drawer tab to `summary`.
+- The drawer is absolutely positioned inside `.sankey-poc-body`, so it overlays the graph and does not reduce the main graph width.
+- Drawer tabs:
+  - `요약`: old path, common anchor, new path, services, confidence;
+  - `Tree`: OLD / COMMON / NEW / SERVICES tree view;
+  - `Evidence`: selected path status, confidence, and evidence list.
+- Tree View is rendered only inside the drawer `Tree` tab.
+- Raw Graph View remains available.
+
+### Files
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/graph-detail-drawer/detail-drawer-evidence-tab.png`
+
+### Verification
+- `node --test tests/sankey-poc-model.test.js`: pass, 13 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 13 tests.
+- `npm.cmd test`: pass, 286 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- Browser verification at `http://127.0.0.1:5174/`:
+  - graph default state: Overview, compact rows present, drawer closed, Raw Graph View present;
+  - row selection switched to Focus and opened one right-side drawer;
+  - `.sankey-poc-body` width stayed `1155px` before and after drawer open;
+  - drawer CSS position was `absolute`;
+  - drawer tabs were `요약`, `Tree`, `Evidence`;
+  - Tree tab showed OLD / COMMON / NEW / SERVICES only inside the drawer;
+  - Evidence tab showed evidence/empty evidence area;
+  - browser error logs were empty.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/graph-detail-drawer/detail-drawer-evidence-tab.png`
+
+### Known Issues
+- The drawer width is fixed to `min(420px, calc(100% - 20px))`; very narrow screens will show the drawer over most of the graph. This is expected for the current desktop-focused graph workflow.
+- Existing Sankey helper code remains for later selected-group work, but the default graph screen still uses Overview/Focus rather than a full Sankey chart.
+
+## 2026-06-15 Graph Design Interaction Phase 4
+
+### Current Work
+- Task: improve graph tab visual design and interactions only.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: low-saturation color tokens, hover/selection motion, opacity treatment for non-selected rows/ranking entries, compact spacing, focus view distinction, unnecessary UI copy removal, and verification. Sankey/path data generation logic was not changed.
+
+### Change
+- Refined Sankey graph presentation tokens to lower-saturation colors:
+  - `changed`: `#8a5a2b`
+  - `added`: `#477663`
+  - `removed`: `#8b4b5a`
+  - `ambiguous`: `#6c5b8d`
+  - `unresolved`: `#8d4f5a`
+  - graph accent: `#42606f`
+- Added shared motion token `--sankey-motion: 160ms ease`.
+- Added hover and selected-state transitions for graph toolbar buttons, compact subscriber rows, ranking rows, focus actions, focus cards, and drawer.
+- Added opacity reduction rules for non-selected compact rows and ranking rows when a selected item exists.
+- Made focus view visually distinct from compact overview with a stronger low-saturation background, raised focus cards, and `sankeyFocusIn` animation.
+- Added `sankeyDrawerIn` animation for the overlay detail drawer and a reduced-motion fallback.
+- Removed extra explanatory copy from the graph overview/focus empty states and shortened the data notice. UI no longer shows PoC wording.
+- Kept `Raw Graph View` available and did not add any new graph structure.
+
+### Files
+- `src/components/graph/sankeyPocModel.js`
+- `src/components/graph/SankeyFlowPoc.jsx`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/graph-design-interactions/focus-flow-drawer.png`
+
+### Verification
+- `node --test tests/summary-renderer.test.js`: pass, 13 tests.
+- `node --test tests/sankey-poc-model.test.js`: pass, 13 tests.
+- `npm.cmd test`: pass, 286 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- Browser verification at `http://127.0.0.1:5173/`:
+  - graph tab rendered Overview/focus UI without PoC text;
+  - compact summary rows rendered before selection;
+  - selecting a row switched to Focus Flow and opened the overlay detail drawer;
+  - drawer tabs remained `요약`, `Tree`, `Evidence`;
+  - `Raw Graph View` remained present;
+  - browser console error logs were empty.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/graph-design-interactions/focus-flow-drawer.png`
+
+### Known Issues
+- Browser verification used a small synthetic config to exercise graph selection because the default sample contains only a static-route comparison and does not produce a topology-focused graph path.
+- Build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Graph Performance Limits Phase 5
+
+### Current Work
+- Task: add graph performance limits and tests only.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Overview Top N verification, rendered Sankey node/link caps, large subscriber list model test, Raw Graph View access guard, drawer initial closed guard, and focus rendering guard. Existing graph features were not removed.
+
+### Change
+- Added explicit Sankey render caps in `src/components/graph/sankeyPocModel.js`:
+  - `MAX_RENDERED_GRAPH_NODES = 60`
+  - `MAX_RENDERED_GRAPH_LINKS = 100`
+- `buildSankeyData()` now applies both caps before passing data to the rendering layer.
+- Link selection now skips links whose endpoints would push the rendered node set above `MAX_RENDERED_GRAPH_NODES`.
+- Returned Sankey metadata now includes `displayedNodeCount`, `totalNodeCount`, `hiddenNodeCount`, `maxNodes`, and a `truncated` flag that considers both hidden links and hidden nodes.
+- Overview remains bounded by `OVERVIEW_TOP_N = 10`; full subscriber summaries can exist in the model, but the default overview exposes only Top N rows.
+- Deferred interaction guards remain in place:
+  - drawer starts closed;
+  - Focus Flow is rendered only when a path is selected;
+  - Raw Graph View button remains available.
+
+### Files
+- `src/components/graph/sankeyPocModel.js`
+- `tests/sankey-poc-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `node --test tests/sankey-poc-model.test.js`: pass, 17 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 291 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build failed because Vite/esbuild could not read the parent path while resolving `vite.config.js`.
+
+### Added Tests
+- Sankey link cap uses `MAX_RENDERED_GRAPH_LINKS`.
+- Sankey node cap keeps `nodes.length <= maxNodes`.
+- Rendered links never reference hidden nodes after node capping.
+- Default Sankey caps are exported and applied.
+- Overview model stays bounded with 75 subscriber paths by rendering only Top N rows.
+- `buildFocusGraphModel(null)` returns `null`, so no Focus node model is created before selection.
+- Static renderer guard confirms Raw Graph View remains available.
+- Static renderer guard confirms drawer starts closed and is rendered only when `detailOpen` is true.
+- Static renderer guard confirms Focus Flow is gated by `viewMode === "focus" && focusModel`.
+
+### Known Issues
+- Virtualized list was reviewed but not applied in this phase because the default Overview renders only Top N rows. If a future expanded "all subscribers" list is added, virtualization should be implemented for that expanded list.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Dependency Graph Scaffold Phase 1
+
+### Current Work
+- Task: reset the graph tab direction from summary/list/dashboard style back to a graph-first dependency exploration screen.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: phase 1 scaffold only. Parser, canonical graph builder, and relation resolver logic were not broadly changed.
+
+### Change
+- Added a Dependency Graph view scaffold for the graph tab default body.
+- The default graph tab now renders:
+  - left filter/selection panel;
+  - central large free-form graph canvas;
+  - right overlay detail drawer that does not shrink the canvas;
+  - bottom group carousel;
+  - preserved Raw Graph View section below the scaffold.
+- The new view renders PORT, LAG, INTERFACE, PEER/NH, STATIC, BGP, PIM, and INTERNAL node groups with a deterministic free-form SVG layout.
+- The graph model uses existing visual path data when available and falls back to a small mock dependency graph only when no graph data exists.
+- The old ECharts Sankey/Overview-Focus graph body is no longer mounted as the graph tab default screen for this phase.
+- The `Raw Graph View` button scrolls to the retained raw graph section.
+
+### Files
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/RelationshipGraphBridge.jsx`
+- `src/core/legacyCore.js`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-scaffold/after-desktop.png`
+
+### Verification
+- `node --test tests/dependency-graph-model.test.js`: pass, 3 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 294 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- Browser verification at `http://127.0.0.1:4173/` using the built app and local Chrome executable:
+  - graph tab became active after running the sample comparison;
+  - `[data-dependency-graph-root]` mounted;
+  - central graph canvas mounted;
+  - left side panel mounted;
+  - right drawer mounted with `position: absolute`;
+  - bottom carousel mounted;
+  - Raw Graph View remained present;
+  - Sankey root was not mounted as the graph tab default body;
+  - rendered sample contained 14 dependency nodes, 13 edges, and 8 group labels;
+  - canvas height was 695px in the desktop viewport.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/dependency-graph-scaffold/after-desktop.png`
+
+### Known Issues
+- This is a phase 1 scaffold and uses a deterministic SVG free-form layout rather than a final force/organic graph engine.
+- Group carousel cards are visual scaffolding only; full group filtering/expansion behavior is reserved for later phases.
+- The model intentionally avoids parser/resolver changes in this phase, so relationship accuracy remains whatever the existing graph data provides.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Dependency Graph Data Conversion Phase 2
+
+### Current Work
+- Task: connect real canonical/view graph data to the Dependency Graph node and edge model.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: data conversion, kind styling, edge styling, hover/click adjacency highlight, and kind filters only. The phase 1 layout scaffold was preserved.
+
+### Change
+- Added Dependency Graph node conversion for:
+  - `port`
+  - `lag`
+  - `interface`
+  - `peer`
+  - `static`
+  - `bgp`
+  - `pim`
+  - `internal`
+  - `system`
+  - `group` as a supported model kind.
+- Added Dependency Graph edge conversion for:
+  - `direct`
+  - `inferred`
+  - `routing`
+  - `bgp`
+  - `pim`
+  - `backup`
+  - `reference`
+  - `internal`.
+- Canonical relations are mapped to graph edge styles:
+  - `MEMBER_OF`, `HAS_INTERFACE`, and direct port-interface view edges -> `direct`.
+  - `HAS_PEER` -> `inferred`.
+  - `USED_BY_STATIC` -> `routing`.
+  - `USED_BY_BGP` -> `bgp`.
+  - `HAS_PIM` and `USED_BY_PIM` -> `pim`.
+  - filter/QoS/policy/reference style edges -> `reference`.
+  - internal edges -> `internal`.
+- Labels now use safe display text and block debug/internal placeholders such as `chain:`, `sankey-path`, `no-port`, `no-lag`, `no-interface`, and `no-peer`.
+- Kind filters now remove the selected node kind and any related edges from the SVG graph.
+- Hover and click now highlight the selected node's 1-hop adjacent nodes/edges while dimming unrelated items.
+- Raw Graph View remains available below the Dependency Graph scaffold.
+
+### Files
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-data/after-desktop.png`
+
+### Verification
+- `node --test tests/dependency-graph-model.test.js`: pass, 8 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 299 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The first sandboxed build could not read the parent path while resolving `vite.config.js`.
+- Browser verification using built app at `http://127.0.0.1:4173/` and local Chrome executable:
+  - `[data-dependency-graph-root]` mounted.
+  - `[data-dependency-canvas]` mounted.
+  - `Raw Graph View` button remained present.
+  - synthetic topology comparison rendered 17 nodes and 21 edges.
+  - rendered node kinds: `port`, `lag`, `interface`, `peer`, `static`, `bgp`, `pim`, `internal`, `system`.
+  - rendered edge kinds: `backup`, `bgp`, `direct`, `inferred`, `internal`, `pim`, `routing`.
+  - node labels did not expose debug placeholders.
+  - hovering a port produced adjacency highlight: 2 highlighted nodes, 1 active edge, unrelated nodes/edges faded.
+  - clicking a port opened the overlay drawer and kept the selected node highlighted.
+  - disabling the BGP filter removed BGP nodes and BGP edges; re-enabling restored them.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/dependency-graph-data/after-desktop.png`
+
+### Known Issues
+- The phase 1 free-form SVG layout is preserved by request, so dense data can still visually overlap in places. Layout refinement is intentionally left for a later phase.
+- The current drawer still exposes the canonical node ID for diagnostics. Node labels are cleaned, but the diagnostic detail field remains available.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Dependency Graph Grouping Phase 3
+
+### Current Work
+- Task: add grouping, collapse/expand, Top-N limits, compact placeholders, and group carousel wiring to the Dependency Graph.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Dependency Graph rendering/model layer only. Raw Graph View remains preserved; Sankey is not restored as the default graph screen.
+
+### Change
+- Added `DependencyGraphGroup`-style model data with `id`, `label`, `type`, `nodeIds`, `count`, `statusSummary`, `collapsed`, and `hiddenChildrenCount`.
+- Added group creation for all network, domain groups, problem group, status groups, and subscriber/device buckets where metadata exists.
+- Domain groups cover Physical, L2/LAG, L3/Interface, Peer/NH, Routing/Static, BGP, PIM, and Internal.
+- Default graph is now a compact group overview. Individual PORT/LAG/INTERFACE/PEER/STATIC/BGP/PIM nodes are not rendered all at once.
+- Selecting a group in the bottom carousel expands only that group and keeps other groups compact.
+- Clicking a group node toggles collapse/expand for that group.
+- Added compact SVG placeholder chips such as `... 외 24개`; clicking the chip increases the group visible limit by one step.
+- Added rendering caps: `MAX_VISIBLE_GROUPS = 12`, `MAX_VISIBLE_NODES_PER_CLUSTER = 8`, `MAX_VISIBLE_EDGES = 160`, `MAX_VISIBLE_LABELS = 80`, `MAX_RENDERED_GRAPH_NODES = 60`, `MAX_RENDERED_GRAPH_LINKS = 160`.
+- Edges whose endpoints are hidden are aggregated to visible group nodes where possible; overflow edges are hidden and counted.
+- The bottom group carousel now uses generated graph groups and updates `selectedGroupId` while preserving node-kind filters.
+
+### Files
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-groups/after-desktop.png`
+
+### Verification
+- `node --test tests/dependency-graph-model.test.js`: pass, 10 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 301 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after rerun with elevated permissions. The sandboxed build could not read the parent path while resolving `vite.config.js`.
+- Browser verification using built app at `http://127.0.0.1:4173/` and local Chrome executable:
+  - default graph mounted `[data-dependency-graph-root]`;
+  - Raw Graph View button remained present;
+  - default graph rendered compact group nodes, not all individual nodes;
+  - Physical group carousel card selection changed the active group and expanded only that group;
+  - Physical group initially showed 8 port nodes and `... 외 24개`;
+  - clicking the placeholder increased visible port nodes to 16 and changed the placeholder to `... 외 16개`;
+  - status bar showed rendered node/edge counts without the earlier misleading ratio.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/dependency-graph-groups/after-desktop.png`
+
+### Known Issues
+- The group overview still uses the phase 1 deterministic SVG layout rather than a final force/organic layout engine.
+- Group expansion currently increases visible nodes by a fixed step. It does not yet support per-kind nested expansion controls inside one group.
+- Placeholder chips are SVG click targets; keyboard activation for placeholder chips can be improved in a later accessibility pass.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Dependency Graph Focus Mode Phase 4
+
+### Current Work
+- Task: add Focus Mode and right overlay Detail Drawer for selected Dependency Graph node/edge/group.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Dependency Graph model/view/CSS/tests only. Raw Graph View remains preserved and the default view remains Dependency Graph.
+
+### Change
+- Added `GRAPH_VIEW_MODES` with `dependency`, `focus`, `sankey`, and `raw`.
+- Added `DEFAULT_FOCUS_STATE` with `selectedNodeId`, `selectedEdgeId`, `focusDepth`, and `includeInternalRelations`.
+- Added `buildFocusGraphModel()`:
+  - selected node is placed near the graph center;
+  - 1-hop and 2-hop neighborhoods are calculated from raw dependency edges;
+  - non-selected graph data remains out of the focus render set or is visually faded in the canvas state;
+  - selected group nodes expand only that group up to `MAX_VISIBLE_NODES_PER_CLUSTER`.
+- Added `buildDependencyPaths()`:
+  - computes shortest dependency paths from the selected node or edge endpoint;
+  - exposes path summaries such as `INTERFACE -> PEER / NH -> BGP`, `INTERFACE -> PEER / NH -> STATIC`, and `INTERFACE -> PIM`;
+  - path entries keep `nodeIds`, `edgeIds`, and `relationKinds` for graph highlight.
+- Reworked `DependencyGraphView` selection state:
+  - default selection is empty so the default graph is not dimmed by an implicit anchor selection;
+  - node click opens the drawer;
+  - node double click enters Focus Mode;
+  - edge click opens edge details;
+  - edge double click enters Focus Mode from the edge source;
+  - background click clears selection and returns to Dependency view;
+  - ESC closes the drawer.
+- Added right overlay `DetailDrawer`:
+  - tabs: Summary, Detail, Path, History;
+  - node summary shows name, type, device, IP, VRF, status, confidence, and impact count;
+  - edge summary shows source, target, edge kind, status, confidence, and direct/inferred classification;
+  - path tab can select a dependency path and highlight its edge/node set;
+  - drawer is absolutely positioned over the graph stage and does not shrink the canvas width.
+- Added wide transparent SVG edge hitboxes so users can reliably click thin dependency lines.
+- Added Focus/Dependency view toggle, 1-hop/2-hop controls, and internal relation toggle.
+- Added CSS for focus anchors, selected/path-highlight edges, faded focus edges, drawer tabs, path list buttons, and overlay controls.
+
+### Files
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-focus/after-desktop.png`
+
+### Verification
+- `node --test tests/dependency-graph-model.test.js`: pass, 14 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 305 pass / 1 skip.
+- `git diff --check`: pass, CRLF warnings only.
+- `npm.cmd run build`: pass after elevated rerun. Sandboxed build is blocked by esbuild path access to `vite.config.js`.
+- Browser verification using built app at `http://127.0.0.1:4173/`:
+  - initial Dependency Graph mounted with drawer closed;
+  - Raw Graph View button remained available;
+  - node click opened the overlay drawer with four tabs: `요약`, `세부 정보`, `경로`, `변경 이력`;
+  - drawer did not shrink graph canvas width (`911px` before and after open in the test viewport);
+  - Focus Mode button switched graph root to `data-view-mode="focus"` and rendered a focus anchor;
+  - edge hitbox click opened edge detail drawer with source/target fields and selected edge highlight;
+  - close button closed the drawer while preserving graph canvas width.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/dependency-graph-focus/after-desktop.png`
+
+### Known Issues
+- Browser automation could not type a larger custom sample into the hidden editor-backed config textarea. Topology-rich dependency paths are verified by unit tests instead of the browser smoke test.
+- Browser ESC keypress automation failed because the in-app browser reported a focused target mismatch. The source code has the ESC handler and static test coverage; drawer close button was verified in browser.
+- The default bundled sample config only produces a very small dependency graph, so the saved screenshot shows a simple Focus state. Larger path visual density should be checked with real customer configs in a follow-up pass.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Dependency Graph Layout Stabilization Phase 5
+
+### Current Work
+- Task: stabilize the Dependency Graph layout and add view controls: Organic/Radial/Force/Focus layouts, zoom/pan/fit, minimap, fullscreen, render caps, and label density.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Dependency Graph model/view/CSS/tests only. Default view remains Dependency Graph; Sankey remains a secondary view and Raw Graph View remains available.
+
+### Change
+- Added layout modes:
+  - `organic`: deterministic natural cluster spread;
+  - `radial`: group-centered radial placement;
+  - `force`: deterministic force-like placement with stable node-id based seed;
+  - `focus`: enters the existing selected node/edge Focus Mode.
+- Added deterministic layout helpers in `dependencyGraphModel.js`:
+  - `stableHash`;
+  - `seededUnit`;
+  - `organicGroupPosition`;
+  - `radialGroupPosition`;
+  - `forceGroupPosition`.
+- Updated render limits:
+  - `MAX_RENDERED_GRAPH_NODES = 300`;
+  - `MAX_RENDERED_GRAPH_EDGES = 500`;
+  - `MAX_VISIBLE_LABELS = 120`.
+- Raw dependency edges are now preserved through conversion and capped only at render time, so hidden edge counts can be reported.
+- Added SVG viewport controls:
+  - zoom in/out;
+  - reset to 100%;
+  - fit view based on rendered node bounds;
+  - pan by dragging empty canvas;
+  - clear selection.
+- Added static minimap/overview map with current viewport rectangle.
+- Added fullscreen mode:
+  - graph shell becomes fixed overlay;
+  - left panel overlays instead of shrinking the canvas;
+  - bottom carousel is hidden;
+  - ESC exits fullscreen.
+- Added label density:
+  - low zoom shows only system/group/selected/related labels;
+  - medium zoom prioritizes problem/aggregate labels;
+  - high zoom shows individual labels up to `MAX_VISIBLE_LABELS`;
+  - selected and hovered labels stay visible.
+- Added compressed-data status text when nodes/edges are hidden by render limits.
+- Kept Raw Graph View button in the toolbar.
+
+### Files
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-layout/after-desktop.png`
+
+### Verification
+- `node --test tests/dependency-graph-model.test.js`: pass, 17 tests.
+- `node --test tests/summary-renderer.test.js`: pass, 14 tests.
+- `npm.cmd test`: pass, 308 pass / 1 skip.
+- `npm.cmd run build`: pass after elevated rerun. Sandboxed build is still blocked by esbuild path access to `vite.config.js`.
+- Browser verification using built app at `http://127.0.0.1:4174/`:
+  - Dependency Graph mounted after running a small old/new config compare;
+  - toolbar showed `Organic`, `Radial`, `Force`, `Focus`, zoom, fit, clear, fullscreen, and Raw Graph View;
+  - minimap rendered;
+  - Organic/Radial/Force changed node positions;
+  - zoom reset changed status to `100%`;
+  - zoom out changed status to `85%` and later `55%`;
+  - label density changed to `low` at 55% and `high` at 130%;
+  - fullscreen entered with `data-fullscreen="true"`;
+  - ESC exited fullscreen with `data-fullscreen="false"`;
+  - rendered counts stayed under the configured caps.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/dependency-graph-layout/after-desktop.png`
+
+### Known Issues
+- The minimap is currently static and shows the viewport rectangle, but it does not yet support click/drag navigation.
+- `Force` mode is deterministic and force-like, not a full physical simulation engine.
+- Browser automation had duplicate global button names because an outer legacy root and the new shell both expose controls; verification scoped interactions to `.dependency-graph-shell`.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Dependency Graph Object Node Correction
+
+### Current Work
+- Task: correct the Dependency Graph default canvas so it renders real configuration objects instead of large summary/classification cards.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Dependency Graph model/view/CSS/tests only. Raw Graph View remains available and Sankey remains non-default.
+
+### Change
+- Main graph render nodes are now limited to real setting object kinds:
+  - `port`;
+  - `lag`;
+  - `interface`;
+  - `peer`;
+  - `static`;
+  - `bgp`;
+  - `pim`;
+  - `internal`;
+  - `system-interface`.
+- Removed runtime promotion of these summary objects to main graph nodes:
+  - `DOMAIN` / domain group cards;
+  - `PROBLEM` / problem group cards;
+  - `SYSTEM` / Network anchor card;
+  - `group-node:*` aggregate cards.
+- Added `MAIN_GRAPH_NODE_KINDS` and switched the default render path to `buildObjectRenderGraph`.
+- Groups now remain as cluster metadata and render as SVG hull/background regions with label/count only.
+- The `... 외 N개` overflow item remains a small placeholder chip, not a large graph node.
+- Added compact object node renderer:
+  - small pill/rounded nodes for ordinary objects;
+  - only selected/focus anchor nodes receive larger emphasis/ring-like border;
+  - long detail stays in drawer/tooltip surfaces.
+- Carousel group selection now changes the selected group/range without selecting a `group-node:*` or opening the drawer.
+- Focus Mode refuses `group-node:*` summary ids as focus targets.
+- Added `system-interface` style token/filter support for real system-interface objects while keeping `system` out of main graph nodes.
+
+### Files
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-object-nodes/after-desktop.png`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-object-nodes/after-canvas.png`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-object-nodes/after-canvas-visible.png`
+
+### Verification
+- `npm.cmd test`: pass, 308 pass / 1 skip.
+- `npm.cmd run build`: pass after elevated rerun. Sandboxed build is still blocked by esbuild path access to `vite.config.js`.
+- Browser verification using built app at `http://127.0.0.1:4174/` with a small old/new topology sample:
+  - Dependency Graph root mounted;
+  - compact object nodes: 10;
+  - group nodes: 0;
+  - system summary nodes: 0;
+  - cluster hulls: 10;
+  - object node kind counts included `port`, `lag`, `interface`, `peer`, `static`, `bgp`, and `pim`;
+  - Raw Graph View button remained available;
+  - Sankey was not the default graph view;
+  - browser console error log was empty.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/dependency-graph-object-nodes/after-desktop.png`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-object-nodes/after-canvas.png`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-object-nodes/after-canvas-visible.png`
+
+### Known Issues
+- The old local `buildGroupedRenderGraph`/`focusGroupModel` helper code still exists as unreachable legacy implementation, but the default and focus runtime paths no longer call it for group cards.
+- Full-page screenshots can visually shrink the canvas because the app page is tall; canvas-specific clipped screenshots were saved alongside the full-page capture.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-15 Dependency Graph Mock Object View Reset
+
+### Current Work
+- Task: reset the Graph tab direction after the user rejected summary/card-like Dependency Graph output.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Dependency Graph visual model and Graph tab wrapper only. Real data connection is intentionally disconnected for this step.
+
+### Requirement Applied
+- Main graph nodes must be real setting objects only:
+  - `port`;
+  - `lag`;
+  - `interface`;
+  - `peer`;
+  - `static`;
+  - `bgp`;
+  - `pim`;
+  - `internal`;
+  - `system-interface`.
+- `DOMAIN`, `PROBLEM`, `SYSTEM`, `group`, `summary`, `hidden`, added/removed, and "more" placeholders must not render as main graph nodes.
+- Cluster/domain information is represented only as translucent SVG hulls/background regions.
+- The first implementation uses static mock data and must not connect actual parser/canonical data yet.
+
+### Change
+- Added `buildDependencyMockGraphModel()` with exactly 20 compact object nodes and 18 direct dependency edges.
+- The mock graph centers on `INTERFACE to-pef1-1 / 14.59.4.65`.
+- Left cluster:
+  - PORT `2/1/1`;
+  - PORT `2/1/2`;
+  - additional compact PORT examples;
+  - LAG `311`.
+- Right cluster:
+  - PEER `14.59.4.65`;
+  - BGP `112.188.17.25`;
+  - additional compact peer/BGP examples.
+- Bottom cluster:
+  - STATIC `0.0.0.0/0`;
+  - PIM `239.1.1.1`;
+  - INTERNAL `route-map`;
+  - INTERNAL `policy`.
+- `DependencyGraphView` now calls `buildDependencyMockGraphModel()` instead of `buildDependencyGraphModel(graph)`.
+- The left summary panel and bottom carousel are hidden in mock mode so the graph canvas occupies most of the screen.
+- Graph tab now renders the mock Dependency Graph even when no comparison report exists, so the mock direction can be reviewed before reconnecting real data.
+- Raw Graph View label/button remains available; Sankey is not the default view.
+
+### Files
+- `src/components/graph/dependencyGraphModel.js`
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/core/legacyCore.js`
+- `src/styles/global-report.css`
+- `tests/dependency-graph-model.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-mock-object-view/after-desktop.png`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-mock-object-view/after-full-page.png`
+
+### Verification
+- `npm.cmd test`: pass, 310 pass / 1 skip.
+- `git diff --check`: pass. Only existing CRLF normalization warnings were printed.
+- `npm.cmd run build`: pass after elevated rerun. Sandboxed build is still blocked by esbuild path access to `vite.config.js`.
+- Browser verification using dev app at `http://127.0.0.1:5176/`:
+  - `data-mock-graph="true"`;
+  - dependency canvas count: 1;
+  - compact node count: 20;
+  - edge count: 18;
+  - cluster hull count: 4;
+  - side panel count: 0;
+  - carousel count: 0;
+  - forbidden text count for DOMAIN/PROBLEM/SYSTEM/summary/hidden/more: 0;
+  - forbidden main node kind count: 0;
+  - required labels all present: `to-pef1-1 / 14.59.4.65`, `2/1/1`, `2/1/2`, `311`, `14.59.4.65`, `112.188.17.25`, `0.0.0.0/0`, `239.1.1.1`, `route-map`, `policy`;
+  - Raw Graph View title present;
+  - browser console error log: empty.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-15/dependency-graph-mock-object-view/after-desktop.png`
+- `docs/verification/screenshots/2026-06-15/dependency-graph-mock-object-view/after-full-page.png`
+
+### Known Issues
+- This is intentionally mock-only. Real canonical/parser data must not be reconnected until the mock visual direction is accepted.
+- The full-page screenshot is not the primary review artifact because the app header repeats in the capture; use `after-desktop.png` plus DOM verification metrics for the current mock check.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-16 Dependency Graph Polish
+
+### Current Work
+- Task: keep the current real-setting-object centered Dependency Graph structure and apply visual polish only.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Dependency Graph view/CSS/test contracts plus the graph tab wrapper. No parser/canonical data reconnection and no dashboard/Sankey/table direction change.
+
+### Change
+- Kept the mock object graph as the default Graph tab review target:
+  - 20 compact setting-object nodes;
+  - 18 dependency edges;
+  - no DOMAIN/PROBLEM/SYSTEM/group/summary card nodes in the main canvas.
+- Separated Raw Graph View into its own hidden panel:
+  - default graph view shows only Dependency Graph;
+  - `Raw Graph View` button switches to the legacy React Flow panel;
+  - `Dependency Graph` button returns to the polished dependency canvas.
+- Replaced rectangular/dashed cluster boxes with soft translucent SVG hull paths and small count badges.
+- Reduced default node weight and kept large emphasis only for the anchor/selected node.
+- Added two-hop visual support so directly related nodes stay readable while unrelated items are dimmed.
+- Softened edge curves, opacity, and color tokens to reduce visual noise.
+- Polished toolbar, minimap, render status, hover/selection transitions, and overlay drawer spacing.
+
+### Files
+- `src/components/graph/DependencyGraphView.jsx`
+- `src/core/legacyCore.js`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-16/dependency-graph-polish/after-desktop.png`
+
+### Verification
+- `npm.cmd test`: pass, 310 pass / 1 skip.
+- `git diff --check`: pass. Only CRLF normalization warnings were printed.
+- `npm.cmd run build`: pass after elevated rerun. Sandboxed build is still blocked by esbuild path access to `vite.config.js`.
+- Browser verification using dev app at `http://127.0.0.1:5173/` with local Chrome:
+  - Graph tab mounted with Dependency panel visible and Raw panel hidden by default;
+  - compact object node count: 20;
+  - cluster hull count: 4;
+  - Raw Graph View switch hid Dependency panel and showed Raw panel;
+  - returning to Dependency Graph hid the Raw panel again;
+  - node click opened the overlay drawer;
+  - drawer did not shrink the graph canvas width (`1348px` before and after drawer open);
+  - screenshot saved with drawer closed and Dependency panel active.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-16/dependency-graph-polish/after-desktop.png`
+
+### Known Issues
+- This remains intentionally mock-only until the visual direction is accepted.
+- Browser console recorded one generic 404 resource error during dev-server load; no page runtime error was observed.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-16 Remove Unusable Graph Tab
+
+### Current Work
+- Task: remove the currently unusable Graph tab and related renderer code.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: remove Graph tab UI, React Flow/Dagre/ECharts/Sankey/Dependency Graph renderer files, graph-tab event handlers, graph-tab CSS, and graph UI tests.
+- Preserved: internal relationship/canonical graph data builders used by report subscriber-path tables and analytics tests.
+
+### Change
+- Removed the top-level Graph tab button and `#graphTab` panel from the app shell.
+- Removed report quick action `data-report-action="graph"` and kept only summary/review/export actions.
+- Removed graph tab renderer registration from `src/main.jsx`.
+- Removed legacy graph tab state transitions, standalone graph rendering, graph focus/filter handlers, and React root mounting helpers from `src/core/legacyCore.js`.
+- Removed graph renderer source files:
+  - React Flow relationship graph;
+  - Dependency Graph view/model;
+  - Sankey PoC view/model;
+  - graph adapter and Dagre layout utility.
+- Removed unused graph CSS blocks from report/summary/compare styles.
+- Removed unused graph UI dependencies from package manifests:
+  - `@xyflow/react`;
+  - `dagre`;
+  - `echarts`;
+  - `echarts-for-react`.
+- Renamed the old report panel component from graph-oriented naming to `ReportPanel.jsx`.
+
+### Files
+- `src/components/AppShell.jsx`
+- `src/components/ReportPanel.jsx`
+- `src/components/RelationshipGraphPanel.jsx` (deleted)
+- `src/components/GraphTabPanel.jsx` (deleted)
+- `src/components/graph/*` (deleted graph UI renderer files)
+- `src/core/legacyCore.js`
+- `src/core/legacySelectors.js`
+- `src/main.jsx`
+- `src/styles/global-report.css`
+- `src/styles/global-summary.css`
+- `src/styles/global-compare-settings.css`
+- `src/utils/dagreLayout.js` (deleted)
+- `src/utils/graphAdapter.js` (deleted)
+- `tests/summary-renderer.test.js`
+- `tests/graph-adapter.test.js` (deleted)
+- `tests/dependency-graph-model.test.js` (deleted)
+- `tests/sankey-poc-model.test.js` (deleted)
+- `package.json`
+- `package-lock.json`
+- `docs/verification/screenshots/2026-06-16/remove-graph-tab/after-desktop.png`
+
+### Verification
+- `npm.cmd test`: pass, 266 pass / 1 skip.
+- `npm.cmd run build`: pass. Existing Vite chunk-size warning remains for `legacyCore`.
+- Browser verification at `http://localhost:5173/`:
+  - tab buttons: `summaryPageTabBtn`, `objectsPageTabBtn`, `compareTabBtn`, `profilesTabBtn`, `reportPageTabBtn`;
+  - `#graphPageTabBtn`: absent;
+  - `#graphTab`: absent;
+  - `#graphReport`: absent;
+  - report quick actions: `summary`, `review`, `export`;
+  - screenshot saved.
+
+### UI Verification Materials
+- `docs/verification/screenshots/2026-06-16/remove-graph-tab/after-desktop.png`
+
+### Known Issues
+- Internal names and tests that refer to `graph` inside `summaryAnalytics` and `core/relationGraph` remain intentionally because the report subscriber path table still consumes that relationship data.
+- `package.json` still has `validate:graph` and `validate:all` includes graph mode; these validate internal relationship data, not the removed Graph tab UI.
+- The production build still emits the existing Vite chunk-size warning for large bundles.
+
+## 2026-06-16 Report Subscriber Path Table Relationship Fix
+
+### Current Work
+- Task: fix Report tab subscriber path table mismatches for full Nokia Classic to Nokia MD-CLI config comparison.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: relationship data only. The removed Graph tab UI remains removed; internal `core/relationGraph` code is preserved because the report table uses it.
+
+### Change
+- Preserved original display casing for port, LAG, interface, BGP, and PIM labels while keeping normalized keys for matching.
+- Added interface aliases so a `subscriber-interface` row can match related `group-interface` references.
+- Attached PIM entries that refer to a group interface back to the subscriber-interface path row.
+- Extracted SAP/LAG and direct physical port references from interface fields/raw lines.
+- Restored report summary rows for interfaces whose explicit `HAS_INTERFACE` canonical relation is absent or ambiguous, using interface SAP/LAG refs as a view/report fallback.
+- Added direct physical port fallback for LAG-less interfaces such as MN interfaces.
+- Kept canonical graph rules intact: no transitive PORT to STATIC/BGP edge is generated.
+
+### Files
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/relationGraph/relationResolver.js`
+- `src/core/relationGraph/viewGraph.js`
+- `tests/relation-graph.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `npm.cmd test`: pass, 268 pass / 1 skip / 269 total.
+- `npm.cmd run build`: pass. Existing Vite chunk-size warning remains for `legacyCore`.
+
+### Known Issues
+- The fix is verified with reduced tests matching the reported patterns: subscriber-interface/group-interface PIM, ambiguous SAP-to-LAG refs, direct physical port refs, and casing recovery.
+- The exact full Nokia Classic/MD-CLI input from the screenshot was not available as a fixture, so FN20 should be rechecked in the UI with the user's full config.
+- If FN20 still shows an unexpected static-route count after this relationship fix, the next likely target is static route ownership/resolution for that specific serial network, not the report row renderer.
+
+## 2026-06-16 MD-CLI Split Prefix Interface Mapping Fix
+
+### Current Work
+- Task: fix likely MD-CLI full-config interface mapping failure where `address` and `prefix-length` are split under `ipv4 primary`.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: parser/address normalization and relation graph address fallback only. Existing report UI layout is unchanged.
+
+### Change
+- Relaxed MD-CLI block interface address extraction so nested or inline `primary ... address ... prefix-length ...` forms are combined as CIDR.
+- Added canonical graph fallback that combines `fields.address` plus `fields.prefix-length` when parser output still carries split fields.
+- Added raw-line fallback for interface address recovery before peer/NH relation resolution.
+- Added relation resolver fallback so split address fields can still generate PEER/NH and static/BGP/PIM relationships.
+
+### Files
+- `src/core/parsers/nokiaMdCliParser.js`
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/relationGraph/relationResolver.js`
+- `tests/static-route-object-key.test.js`
+- `tests/relation-graph.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- Targeted parser/relation tests passed through `npm.cmd test -- tests/static-route-object-key.test.js` and `npm.cmd test -- tests/relation-graph.test.js`.
+- Added coverage for MD-CLI `interface { ipv4 { primary { address 112.188.23.49; prefix-length 30 }}}` parsing to `112.188.23.49/30`.
+- Added coverage that split address/prefix fields generate peer `112.188.23.50` in canonical relation graph.
+
+### Known Issues
+- The user's exact full comparison input is still not checked into the repository as a fixture, so UI confirmation should be repeated with the Nokia Classic to Nokia MD-CLI full config pair.
+
+## 2026-06-16 MD-CLI Subscriber Service Relationship Stabilization
+
+### Current Work
+- Task: fix Report tab subscriber path table errors for Nokia MD-CLI full config where subscriber/group interfaces, backup LAG interfaces, BGP, PIM, and static routes were split or missing.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: parser and canonical relationship model only. Report table layout/UI was not redesigned.
+
+### Change
+- Prevented MD-CLI `pim { interface ... }` blocks from also being parsed as standalone service `interface` objects in `parseMdCliServiceObjects`.
+- Changed canonical node merging so empty wrapper attributes do not overwrite real interface attributes such as `address`, `ipAddress`, `lagRefs`, and `portRefs`.
+- Deduplicated canonical graph entries by node id and merged their source fields/raw lines, preventing duplicate wrapper entries from creating false ambiguous PIM/interface relations.
+- Allowed BGP neighbor resolution to use static route reachability whenever direct peer/subnet matching has no candidate, covering loopback BGP neighbors reached through serial next-hop routes even when the config lacks an explicit multihop field.
+
+### Files
+- `src/core/parsers/nokiaMdCliParser.js`
+- `src/core/relationGraph/canonicalGraphBuilder.js`
+- `src/core/relationGraph/relationResolver.js`
+- `tests/static-route-object-key.test.js`
+- `tests/relation-graph.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- Added parser coverage that MD-CLI PIM interface blocks do not create standalone `interface` rows while the parent `subscriber-interface` keeps its `group-interface`.
+- Added canonical graph coverage for `to-Nowon-TOU-FN20`: address-bearing interface plus addressless wrapper duplicate still produces one subscriber path with Port, LAG, Serial IP, Static Route, BGP, and PIM.
+- Ran the user's attached MD-CLI full config file:
+  - Parsed objects: `762` total; `subscriber-interface 27`, `interface 59`, `pim 59`, `bgp 57`, `static-route 64`.
+  - Canonical nodes: `L3_INTERFACE 82`, `PIM 59`, `BGP_NEIGHBOR 57`, `STATIC_ROUTE 64`.
+  - Canonical edges: `HAS_INTERFACE 62`, `HAS_PEER 78`, `USED_BY_STATIC 86`, `USED_BY_BGP 50`, `HAS_PIM 58`.
+  - Report subscriber rows from the attached new config: `82`.
+  - `g-to-Nowon-TOU-FN05` no longer appears as a separate subscriber row; it is attached as PIM under `to-Nowon-TOU-FN05`.
+  - `to-Dobong-TOU-FB04`: `6/1/c10/1`, `lag-A-6110`, `112.188.21.57/30`, static `112.188.30.136/32`, BGP `112.188.30.136`, PIM `g-to-Dobong-TOU-FB04`.
+  - `to-Dobong-TOU-FD04`: `2/2/c4/1`, `lag-B-2204`, `112.188.23.49/30`, static `112.188.30.112/32`, BGP `112.188.30.112`, PIM `to-Dobong-TOU-FD04`.
+  - `to-Nowon-TOU-FN20`: `2/2/c2/1`, `lag-B-2202`, `112.188.27.137/30`, static `112.188.30.71/32`, BGP `112.188.30.71`, PIM `to-Nowon-TOU-FN20`.
+- Targeted test commands passed:
+  - `npm.cmd test -- tests/relation-graph.test.js`
+  - `npm.cmd test -- tests/static-route-object-key.test.js`
+
+### Known Issues
+- The current user attachment is the new MD-CLI config only. The reported old-side MN static-route false positive requires the matching old Nokia Classic full config or the old `To-MNT*`/static-route section to reproduce exactly.
+- The attached new config still has a few unresolved/ambiguous diagnostics (`USED_BY_BGP`, `USED_BY_STATIC`, one `HAS_PIM`) that should be checked against device-specific policy/context before forcing automatic links.
+
+## 2026-06-16 Report Table Sorting And Counts
+
+### Current Work
+- Task: add sorting and clearer total-count visibility to report tables.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: Report tab table interaction only. Existing report data generation, parser, relation resolver, table columns, and layout structure were preserved.
+
+### Change
+- Added sortable header buttons to the Report tab review table and subscriber path table.
+- Sorting is applied by DOM row reordering so existing filters, detail rows, compare-jump buttons, and compact/full view modes keep their existing behavior.
+- Review table supports sorting by visible compact columns, full-mode option fields, score, reason, and diagnostic fields.
+- Subscriber path table supports sorting by all current columns. Static/BGP/PIM service columns sort by service count while retaining the existing compact cell summary.
+- Replaced terse count text such as `1/1` with explicit `표시 N / 전체 M` count text for both report tables.
+- Reset buttons now also clear the active sort state for their own table.
+
+### Files
+- `src/core/legacyCore.js`
+- `src/core/legacyState.js`
+- `src/styles/global-report.css`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+- `docs/verification/screenshots/2026-06-16/report-table-sort-count/after-desktop.png`
+
+### Verification
+- `npm.cmd test -- tests/summary-renderer.test.js`: pass. Because the package script includes `tests/*.test.js`, this executed the full test suite: `274` tests, `273` pass, `1` skip.
+- `npm.cmd run build`: pass. Existing Vite chunk-size warning remains for `legacyCore`.
+- `git diff --check`: pass with only existing LF-to-CRLF working-tree warnings.
+- Browser verification on `http://127.0.0.1:5180/`:
+  - ran the small built-in sample comparison;
+  - opened the Report tab;
+  - review table rendered `6` sort buttons and count `표시 1 / 전체 1`;
+  - subscriber path table rendered `11` sort buttons and count `표시 0 / 전체 0`;
+  - browser console error log was empty.
+
+### Known Issues
+- Browser verification used the small built-in sample config because a full user comparison session is not persisted as a repository fixture.
+- The working tree contains unrelated pre-existing graph removal/report/parser changes from earlier tasks; this change only intentionally touches report table sorting/count behavior.
+
+## 2026-06-16 Subscriber Path Table BGP And Pairing Fix
+
+### Current Work
+- Task: fix Report tab subscriber path table cases where PE/IV BGP values were missing, lag-A subscriber-interface old/new rows did not pair, and add per-column value counts.
+- Branch: `work/mvp-interface-stabilization`.
+- Scope: report/view graph enrichment and subscriber path table counters only. Canonical resolver ambiguity rules and existing report table layout were preserved.
+
+### Change
+- Added report/view-layer BGP enrichment through exact `/32` static route prefixes. This lets PE/IV rows show BGP neighbors when the canonical graph correctly leaves the underlying BGP edge ambiguous because multiple equal-cost static next-hop candidates exist.
+- Kept the canonical rule that ambiguous BGP reachability does not create `USED_BY_BGP` edges.
+- Added a secondary old/new subscriber row pairing pass by normalized interface label. Serial IP/subnet matching remains primary, but unpaired old-only/new-only rows with the same subscriber-interface name now merge, covering lag-A cases where the active interface serial address changes.
+- Added per-column count badges to the subscriber path table headers. Counts show visible rows with a value over total rows with a value for each column.
+
+### Files
+- `src/core/relationGraph/viewGraph.js`
+- `src/core/legacyCore.js`
+- `src/styles/global-report.css`
+- `tests/relation-graph.test.js`
+- `tests/summary-renderer.test.js`
+- `docs/PROJECT_STATE.md`
+
+### Verification
+- `npm.cmd test -- tests/relation-graph.test.js tests/summary-renderer.test.js`: pass. Because the package script includes `tests/*.test.js`, this executed the full test suite: `276` tests, `275` pass, `1` skip.
+- `npm.cmd run build`: pass. Existing Vite chunk-size warning remains for `legacyCore`.
+- Browser server check: `http://127.0.0.1:5181/` returned HTTP `200`.
+- Browser DOM check without a persisted comparison session confirmed the app loads and the Report tab opens; subscriber table count badges require an active comparison result to render.
+- UI screenshot saved at `docs/verification/screenshots/2026-06-16/subscriber-table-bgp-counts/report-tab-empty-state.png`.
+
+### Known Issues
+- The exact old Nokia Classic full config used in the user screenshots is not available as a repository fixture, so lag-A pairing was covered by a focused synthetic regression test and the new MD-CLI attachment was used for service-side inspection.
+- The browser session used for verification did not contain the user's full comparison data, so visual confirmation with the exact full Classic-to-MD-CLI pair should be repeated when that pair is available in the running app.

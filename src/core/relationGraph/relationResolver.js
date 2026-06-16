@@ -311,7 +311,7 @@ export function resolveLagInterfaceRelations(context, { memberOfEdges = [] } = {
 
 function interfaceNameFromEntry(interfaceEntry) {
   const fields = objectFields(interfaceEntry.object);
-  return canonicalizeInterfaceName(
+  return interfaceEntry.node.attributes?.normalizedName || canonicalizeInterfaceName(
     interfaceEntry.node.attributes?.name ||
     fields.interface ||
     fields["subscriber-interface"] ||
@@ -320,11 +320,44 @@ function interfaceNameFromEntry(interfaceEntry) {
   );
 }
 
+function interfaceNameAliasesFromEntry(interfaceEntry) {
+  const fields = objectFields(interfaceEntry.object);
+  return [...new Set([
+    interfaceNameFromEntry(interfaceEntry),
+    ...(graphValueList(interfaceEntry.node.attributes?.normalizedAliases)),
+    ...(graphValueList(interfaceEntry.node.attributes?.aliases).map(canonicalizeInterfaceName)),
+    canonicalizeInterfaceName(interfaceEntry.node.attributes?.name),
+    canonicalizeInterfaceName(fields.interface),
+    canonicalizeInterfaceName(fields["subscriber-interface"]),
+    ...graphValueList(fields["group-interface"]).map(canonicalizeInterfaceName),
+  ].filter(Boolean))];
+}
+
+function displayInterfaceNameFromEntry(interfaceEntry) {
+  const fields = objectFields(interfaceEntry.object);
+  return String(
+    interfaceEntry.node.attributes?.name ||
+    interfaceEntry.object?.sourceName ||
+    interfaceEntry.object?.identity ||
+    fields.interface ||
+    fields["subscriber-interface"] ||
+    fields["group-interface"] ||
+    objectIdentity(interfaceEntry.object) ||
+    interfaceNameFromEntry(interfaceEntry)
+  ).trim();
+}
+
 function interfaceAddresses(interfaceEntry) {
   const fields = objectFields(interfaceEntry.object);
+  const address = firstGraphValue(fields.address || fields.prefix);
+  const prefixLength = firstGraphValue(fields["prefix-length"] || fields.prefixLength);
+  const fieldAddress = address && prefixLength && !String(address).includes("/")
+    ? `${address}/${prefixLength}`
+    : address;
   return [
     ...graphValueList(interfaceEntry.node.attributes?.address),
     ...graphValueList(interfaceEntry.node.attributes?.ipAddress),
+    ...graphValueList(fieldAddress),
     ...graphValueList(fields.address),
     ...graphValueList(fields["ip-address"]),
     ...graphValueList(fields.ipAddress),
@@ -365,7 +398,8 @@ function ensurePeerNode(context, interfaceEntry, ip, reason, evidence = []) {
     attributes: {
       ip: peerIp,
       interfaceId: interfaceEntry.node.id,
-      interfaceName: interfaceNameFromEntry(interfaceEntry),
+      interfaceName: displayInterfaceNameFromEntry(interfaceEntry),
+      normalizedInterfaceName: interfaceNameFromEntry(interfaceEntry),
     },
     sourceObjectIds: [interfaceEntry.object?.id || ""],
     evidence: evidence.length ? evidence : evidenceFromObject(interfaceEntry.object, reason),
@@ -395,13 +429,22 @@ function dedupeEdges(edges = []) {
 function sameDeviceAndVrf(leftEntry, rightEntry) {
   return (
     leftEntry.node.deviceId === rightEntry.node.deviceId &&
-    leftEntry.node.vrf === rightEntry.node.vrf
+    graphVrfEquivalent(leftEntry.node.vrf, rightEntry.node.vrf)
   );
+}
+
+function graphVrfEquivalent(left = "", right = "") {
+  const leftVrf = String(left || "default").toLowerCase();
+  const rightVrf = String(right || "default").toLowerCase();
+  if (leftVrf === rightVrf) return true;
+  return new Set([leftVrf, rightVrf]).size === 2 &&
+    ["base", "default"].includes(leftVrf) &&
+    ["base", "default"].includes(rightVrf);
 }
 
 function interfaceMatchesRef(interfaceEntry, ref = "") {
   const normalizedRef = canonicalizeInterfaceName(ref);
-  return Boolean(normalizedRef && normalizedRef === interfaceNameFromEntry(interfaceEntry));
+  return Boolean(normalizedRef && interfaceNameAliasesFromEntry(interfaceEntry).includes(normalizedRef));
 }
 
 function addRelationCandidate(candidates, candidate) {
@@ -686,7 +729,7 @@ export function resolveBgpRelations(context, { staticRouteResults = [] } = {}) {
     });
     edges.push(...peerEdges);
 
-    if (isBgpMultihopOrLoopback(bgpEntry) && !candidates.size) {
+    if (!candidates.size) {
       addStaticReachabilityCandidates(candidates, bgpEntry, neighborIp, staticRouteResults);
     }
 
@@ -734,7 +777,19 @@ export function resolveBgpRelations(context, { staticRouteResults = [] } = {}) {
 
 function pimInterfaceName(pimEntry) {
   const fields = objectFields(pimEntry.object);
-  return canonicalizeInterfaceName(pimEntry.node.attributes?.interface || fields.interface || objectIdentity(pimEntry.object));
+  return pimEntry.node.attributes?.normalizedInterface || canonicalizeInterfaceName(pimEntry.node.attributes?.interface || fields.interface || objectIdentity(pimEntry.object));
+}
+
+function pimDisplayInterfaceName(pimEntry) {
+  const fields = objectFields(pimEntry.object);
+  return String(
+    pimEntry.node.attributes?.interface ||
+    pimEntry.object?.sourceName ||
+    pimEntry.object?.identity ||
+    fields.interface ||
+    objectIdentity(pimEntry.object) ||
+    pimInterfaceName(pimEntry)
+  ).trim();
 }
 
 function pimNeighborIps(pimEntry) {
@@ -755,7 +810,7 @@ function findPimInterfaceCandidates(context, pimEntry) {
   if (!interfaceName) return candidates;
   for (const interfaceEntry of context.entriesByKind.get(NodeKind.L3_INTERFACE) || []) {
     if (!sameDeviceAndVrf(pimEntry, interfaceEntry)) continue;
-    if (interfaceNameFromEntry(interfaceEntry) === interfaceName) candidates.push(interfaceEntry);
+    if (interfaceNameAliasesFromEntry(interfaceEntry).includes(interfaceName)) candidates.push(interfaceEntry);
   }
   return candidates;
 }
@@ -774,7 +829,8 @@ function ensurePimNeighborNode(context, pimEntry, neighborIp) {
     deviceId: pimEntry.node.deviceId,
     vrf: pimEntry.node.vrf,
     attributes: {
-      interface: pimInterfaceName(pimEntry),
+      interface: pimDisplayInterfaceName(pimEntry),
+      normalizedInterface: pimInterfaceName(pimEntry),
       neighborIp: peerIp,
     },
     sourceObjectIds: [pimEntry.object?.id || ""],

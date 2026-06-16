@@ -209,27 +209,19 @@ function extractAddress(lines) {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    const addressMatch = trimmed.match(/^address\s+(\S+)/i);
+    const addressMatch =
+      trimmed.match(/^address\s+"?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)"?/i) ||
+      trimmed.match(/\bipv4\s+primary\s+address\s+"?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)"?/i) ||
+      trimmed.match(/\bprimary\b.*\baddress\s+"?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)"?/i);
     if (addressMatch) {
       ipv4Address = stripQuotes(addressMatch[1]);
       raw = trimmed;
-      continue;
     }
 
-    const prefixMatch = trimmed.match(/^prefix-length\s+(\d{1,3})$/i);
+    const prefixMatch = trimmed.match(/\bprefix-length\s+(\d{1,3})\b/i);
     if (prefixMatch) {
       prefixLength = prefixMatch[1];
       continue;
-    }
-
-    const ipv4Primary = trimmed.match(/^primary\s+address\s+(\S+)/i);
-    if (ipv4Primary) {
-      const value = stripQuotes(ipv4Primary[1]);
-      return {
-        ipAddress: value.includes("/") ? value.split("/")[0] : value,
-        prefix: value,
-        raw: trimmed,
-      };
     }
   }
 
@@ -974,6 +966,7 @@ function parseMdCliPimInterfaces(lines) {
       collectBraceBlocks(pimBlock.lines, /^interface\s+"?([^"\s{]+)"?\s*\{/i)
         .map((interfaceBlock, interfaceIndex) => {
           const interfaceName = canonicalInterfaceName(interfaceBlock.name);
+          const contextFields = mdCliRoutingContextFields(pimBlock.context);
           const object = createNormalizedObject({
             id: `nokia-md-pim-${pimIndex}-${interfaceIndex}-${interfaceName}`,
             vendor: "nokia-md-cli",
@@ -983,6 +976,7 @@ function parseMdCliPimInterfaces(lines) {
             normalizedIdentity: interfaceName,
             rawLines: interfaceBlock.lines,
             fields: {
+              ...contextFields,
               interface: interfaceName,
             },
           });
@@ -1051,6 +1045,7 @@ function parseMdCliBgpNeighbors(lines) {
   return blocks.map((block, index) => {
     const peerIp = block.name;
     const description = extractDescription(block.lines);
+    const contextFields = mdCliRoutingContextFields(block.context);
 
     let peerAs = null;
     let group = null;
@@ -1079,6 +1074,7 @@ function parseMdCliBgpNeighbors(lines) {
       normalizedIdentity: peerIp,
       rawLines: block.lines,
       fields: {
+        ...contextFields,
         neighbor: peerIp,
         description,
         peerAs,
@@ -1233,6 +1229,10 @@ function parseMdCliServiceObjects(lines) {
     let match = text.match(/^interface\s+"?([^"\s{]+)"?\s*\{/i);
     if (match) {
       const rawLines = findMdCliBlockLines(lines, index);
+      if (stack.includes("pim")) {
+        stack.push("pim-interface");
+        return;
+      }
       context.interface = canonicalInterfaceName(match[1]);
       context.interfaceAddressBlock = Boolean(extractAddress(rawLines)?.prefix);
       stack.push("interface");
@@ -1723,6 +1723,19 @@ function createMdCliServiceOneLineObject({ type, identityParts, sourceType, sour
   });
 }
 
+function mdCliOneLineServiceContextFields(serviceType = "", serviceId = "") {
+  const service = stripQuotes(serviceType || "");
+  const id = stripQuotes(serviceId || "");
+  const fields = {
+    service,
+    "service-id": id,
+  };
+  if (service.toLowerCase() === "vprn" && id) {
+    fields["routing-context"] = `vprn:${id.toLowerCase()}`;
+  }
+  return fields;
+}
+
 function createMdCliSubscriberOneLineObject({ subscriberName, fields, rawLine, index }) {
   return createMdCliServiceOneLineObject({
     type: "subscriber-interface",
@@ -1738,8 +1751,7 @@ function createMdCliSubscriberOneLineObject({ subscriberName, fields, rawLine, i
 function parseMdCliOneLineInterfaceService({ tokens, rawLine, index, serviceType, serviceId, interfaceIndex }) {
   const interfaceName = canonicalInterfaceName(tokens[interfaceIndex + 1]);
   const baseFields = {
-    service: serviceType,
-    "service-id": serviceId,
+    ...mdCliOneLineServiceContextFields(serviceType, serviceId),
     interface: interfaceName,
   };
   const sapIndex = findToken(tokens, "sap", interfaceIndex + 2);
@@ -1778,8 +1790,7 @@ function parseMdCliOneLineInterfaceService({ tokens, rawLine, index, serviceType
 function parseMdCliOneLineSubscriberService({ tokens, rawLine, index, serviceType, serviceId, subscriberIndex }) {
   const subscriberName = canonicalServiceName(tokens[subscriberIndex + 1]);
   const baseFields = {
-    service: serviceType,
-    "service-id": serviceId,
+    ...mdCliOneLineServiceContextFields(serviceType, serviceId),
     "subscriber-interface": subscriberName,
   };
   const groupIndex = findToken(tokens, "group-interface", subscriberIndex + 2);
@@ -1933,8 +1944,38 @@ function parseMdCliOneLineService(tokens, rawLine, index) {
 
   const serviceType = tokens[1] || "";
   const serviceId = stripQuotes(tokens[2] || "");
+  const staticRoutesIndex = findToken(tokens, "static-routes", 3);
   const interfaceIndex = findToken(tokens, "interface", 3);
   const subscriberIndex = findToken(tokens, "subscriber-interface", 3);
+
+  if (
+    staticRoutesIndex >= 0 &&
+    tokenEquals(tokens, staticRoutesIndex + 1, "route") &&
+    tokens[staticRoutesIndex + 2]
+  ) {
+    const route = stripQuotes(tokens[staticRoutesIndex + 2]);
+    const fields = mapLeafFields(
+      {
+        ...mdCliOneLineServiceContextFields(serviceType, serviceId),
+        route,
+        prefix: route,
+      },
+      tokens,
+      staticRoutesIndex + 3,
+      STATIC_ROUTE_ONE_LINE_FIELDS
+    );
+    const normalizedFields = normalizeNokiaSemanticFields(fields);
+    const identity = canonicalStaticRouteIdentity(normalizedFields) || route;
+    return createMdCliOneLineObject({
+      type: "static-route",
+      identity,
+      sourceType: "route",
+      sourceName: route,
+      fields: normalizedFields,
+      rawLine,
+      index,
+    });
+  }
 
   if (subscriberIndex >= 0 && tokens[subscriberIndex + 1]) {
     return parseMdCliOneLineSubscriberService({
@@ -1973,7 +2014,7 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
   if (bgpIndex >= 0 && tokenEquals(tokens, bgpIndex + 1, "neighbor") && tokens[bgpIndex + 2]) {
     const peerIp = stripQuotes(tokens[bgpIndex + 2]);
     const fields = mapLeafFields(
-      { neighbor: peerIp, peerIp },
+      { router: routerName, neighbor: peerIp, peerIp },
       tokens,
       bgpIndex + 3,
       BGP_ONE_LINE_FIELDS
@@ -2071,7 +2112,7 @@ function parseMdCliOneLineRouter(tokens, rawLine, index) {
   if (pimIndex >= 0 && tokenEquals(tokens, pimIndex + 1, "interface") && tokens[pimIndex + 2]) {
     const interfaceName = canonicalInterfaceName(tokens[pimIndex + 2]);
     const fields = mapLeafFields(
-      { interface: interfaceName },
+      { router: routerName, interface: interfaceName },
       tokens,
       pimIndex + 3,
       PIM_ONE_LINE_FIELDS

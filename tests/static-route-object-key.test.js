@@ -357,6 +357,77 @@ test("Nokia Classic interface maps MD-CLI block interface as one object", () => 
   }
 });
 
+test("Nokia MD-CLI block interface combines split primary address and prefix-length", () => {
+  const newConfig = [
+    'service {',
+    '  ies "100" {',
+    '    interface "to-Dobong-TOU-FD04" {',
+    "      admin-state enable",
+    '      description "## to-Dobong-TOU-FD04, Po11(Te7/1), SBY ##"',
+    "      sap lag-B-2204 {",
+    "        ingress {",
+    "          filter {",
+    '            ip "prtsr-backup"',
+    "          }",
+    "        }",
+    "      }",
+    "      ipv4 {",
+    "        primary {",
+    "          address 112.188.23.49",
+    "          prefix-length 30",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", newConfig, "new");
+  const interfaces = result.objects.filter((object) => object.normalizedType === "interface");
+
+  assert.equal(interfaces.length, 1);
+  assert.equal(interfaces[0].fields.address, "112.188.23.49/30");
+  assert.equal(interfaces[0].fields.ipAddress, "112.188.23.49");
+  assert.equal(interfaces[0].prefix, "112.188.23.49/30");
+});
+
+test("Nokia MD-CLI PIM interface block is not parsed as standalone service interface", () => {
+  const newConfig = [
+    'router "Base" {',
+    "  pim {",
+    '    interface "g-to-Dobong-TOU-FB04" {',
+    "    }",
+    "  }",
+    "}",
+    "service {",
+    '  ies "100" {',
+    '    subscriber-interface "to-Dobong-TOU-FB04" {',
+    "      ipv4 {",
+    "        address 112.188.21.57 {",
+    "          prefix-length 30",
+    "        }",
+    "      }",
+    '      group-interface "g-to-Dobong-TOU-FB04" {',
+    "        sap lag-A-6110 {",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const result = parse("nokia-md-cli", newConfig, "new");
+  const pims = result.objects.filter((object) => object.normalizedType === "pim");
+  const interfaces = result.objects.filter((object) => object.normalizedType === "interface");
+  const subscriber = result.objects.find((object) => object.normalizedType === "subscriber-interface");
+
+  assert.equal(pims.length, 1);
+  assert.equal(pims[0].normalizedIdentity, "g-to-dobong-tou-fb04");
+  assert.equal(interfaces.some((object) => object.normalizedIdentity === "g-to-dobong-tou-fb04"), false);
+  assert.equal(subscriber?.normalizedIdentity, "to-dobong-tou-fb04");
+  assert.equal(subscriber?.fields["group-interface"], "g-to-dobong-tou-fb04");
+});
+
 test("legacy main compare parser keeps static route blocks as route-level objects", () => {
   const source = fs.readFileSync("src/core/legacyCore.js", "utf8");
   const styles = readGlobalStyles();

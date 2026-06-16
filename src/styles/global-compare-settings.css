@@ -1099,13 +1099,11 @@
   }
 
   .summary-status-header,
-  .summary-workspace-grid,
-  .report-graph-head {
+  .summary-workspace-grid {
     grid-template-columns: 1fr;
   }
 
-  .summary-status-badges,
-  .report-graph-tools {
+  .summary-status-badges {
     justify-content: flex-start;
   }
 

@@ -1,4 +1,14 @@
 import { NodeKind, RelationKind } from "./types.js";
+import {
+  canonicalizeLagNumber,
+  canonicalizePortName,
+  graphValueList,
+} from "./canonicalInterface.js";
+import {
+  normalizeIp,
+  parseIPv4Cidr,
+  prefixContainsIp,
+} from "./ipUtils.js";
 
 export const ViewMode = Object.freeze({
   SUMMARY: "summary",
@@ -86,6 +96,8 @@ const EDGE_TYPE_BY_RELATION = Object.freeze({
   [RelationKind.HAS_PIM]: "canonical-interface-pim",
   [RelationKind.USED_BY_PIM]: "canonical-peer-pim",
 });
+
+const DIRECT_PORT_INTERFACE_RELATION = "DIRECT_PORT_INTERFACE";
 
 function viewColumnKind(kind) {
   return kind === NodeKind.PIM_NEIGHBOR ? NodeKind.PIM : kind;
@@ -374,8 +386,29 @@ function addEdge(viewEdges, viewEdgeIds, {
 
 function buildIndexes(graph = {}) {
   const nodesById = new Map((graph.nodes || []).map((node) => [node.id, node]));
+  const portByName = new Map();
+  const lagByName = new Map();
+  const bgpByNeighborIp = new Map();
   const outgoingByRelation = new Map();
   const incomingByRelation = new Map();
+
+  for (const node of graph.nodes || []) {
+    if (node.kind === NodeKind.PORT) {
+      const key = node.attributes?.normalizedName || canonicalizePortName(node.attributes?.name || node.label || node.id);
+      if (key && !portByName.has(key)) portByName.set(key, node);
+    }
+    if (node.kind === NodeKind.LAG) {
+      const key = node.attributes?.normalizedLag || canonicalizeLagNumber(node.attributes?.lag || node.label || node.id);
+      if (key && !lagByName.has(key)) lagByName.set(key, node);
+    }
+    if (node.kind === NodeKind.BGP_NEIGHBOR) {
+      const key = normalizeIp(node.attributes?.neighborIp || node.label);
+      if (key) {
+        if (!bgpByNeighborIp.has(key)) bgpByNeighborIp.set(key, []);
+        bgpByNeighborIp.get(key).push(node);
+      }
+    }
+  }
 
   for (const edge of graph.edges || []) {
     const outKey = `${edge.relation}:${edge.source}`;
@@ -388,6 +421,9 @@ function buildIndexes(graph = {}) {
 
   return {
     nodesById,
+    portByName,
+    lagByName,
+    bgpByNeighborIp,
     outgoing(relation, sourceId) {
       return outgoingByRelation.get(`${relation}:${sourceId}`) || [];
     },
@@ -412,16 +448,40 @@ function firstOrNull(list = []) {
   return list.length ? list[0] : null;
 }
 
+function directPortNodesForInterface(indexes, interfaceNode) {
+  const refs = graphValueList(interfaceNode.attributes?.portRefs);
+  const nodes = refs
+    .map((ref) => indexes.portByName.get(canonicalizePortName(ref)))
+    .filter(Boolean);
+  return [...new Map(nodes.map((node) => [node.id, node])).values()].sort(compareCanonicalNodes);
+}
+
+function directLagNodesForInterface(indexes, interfaceNode) {
+  const refs = graphValueList(interfaceNode.attributes?.lagRefs);
+  const nodes = refs
+    .map((ref) => indexes.lagByName.get(canonicalizeLagNumber(ref)))
+    .filter(Boolean);
+  return [...new Map(nodes.map((node) => [node.id, node])).values()].sort(compareCanonicalNodes);
+}
+
 function buildInterfaceRows({ side, interfaceNode, indexes }) {
   const hasInterfaceEdges = indexes.incoming(RelationKind.HAS_INTERFACE, interfaceNode.id);
   const lagNodes = nodesForEdges(hasInterfaceEdges, indexes.nodesById, "source");
+  const fallbackLagNodes = lagNodes.length ? [] : directLagNodesForInterface(indexes, interfaceNode);
   const upstream = [];
 
-  if (!lagNodes.length) {
-    upstream.push({ portNode: null, lagNode: null });
+  const upstreamLagNodes = lagNodes.length ? lagNodes : fallbackLagNodes;
+
+  if (!upstreamLagNodes.length) {
+    const directPortNodes = directPortNodesForInterface(indexes, interfaceNode);
+    if (directPortNodes.length) {
+      for (const portNode of directPortNodes) upstream.push({ portNode, lagNode: null });
+    } else {
+      upstream.push({ portNode: null, lagNode: null });
+    }
   }
 
-  for (const lagNode of lagNodes) {
+  for (const lagNode of upstreamLagNodes) {
     const memberEdges = indexes.incoming(RelationKind.MEMBER_OF, lagNode.id);
     const portNodes = nodesForEdges(memberEdges, indexes.nodesById, "source");
     if (!portNodes.length) {
@@ -495,6 +555,47 @@ function bgpNodesForPeer(indexes, peerNode) {
   return nodesForEdges(indexes.outgoing(RelationKind.USED_BY_BGP, peerNode.id), indexes.nodesById, "target");
 }
 
+function vrfEquivalentForView(left = "", right = "") {
+  const leftVrf = String(left || "default").toLowerCase();
+  const rightVrf = String(right || "default").toLowerCase();
+  if (leftVrf === rightVrf) return true;
+  return new Set([leftVrf, rightVrf]).size === 2 &&
+    ["base", "default"].includes(leftVrf) &&
+    ["base", "default"].includes(rightVrf);
+}
+
+function graphNodeScopeMatches(left = null, right = null) {
+  if (!left || !right) return false;
+  return left.deviceId === right.deviceId && vrfEquivalentForView(left.vrf, right.vrf);
+}
+
+function hostStaticPrefix(staticNode = null) {
+  const prefix = String(staticNode?.attributes?.prefix || staticNode?.label || "").trim();
+  const cidr = parseIPv4Cidr(prefix);
+  return cidr?.prefixLength === 32 ? prefix : "";
+}
+
+function uniqueSortedNodes(nodes = []) {
+  return [...new Map((nodes || []).filter(Boolean).map((node) => [node.id, node])).values()]
+    .sort(compareCanonicalNodes);
+}
+
+function bgpNodesForStaticRoutes(indexes, staticNodes = [], scopeNode = null) {
+  const result = [];
+  for (const staticNode of staticNodes || []) {
+    const prefix = hostStaticPrefix(staticNode);
+    if (!prefix) continue;
+    for (const [neighborIp, bgpNodes] of indexes.bgpByNeighborIp.entries()) {
+      if (!prefixContainsIp(prefix, neighborIp)) continue;
+      for (const bgpNode of bgpNodes) {
+        if (scopeNode && !graphNodeScopeMatches(scopeNode, bgpNode)) continue;
+        result.push(bgpNode);
+      }
+    }
+  }
+  return uniqueSortedNodes(result);
+}
+
 function pimNeighborNodesForPeer(indexes, peerNode) {
   if (!peerNode) return [];
   return nodesForEdges(indexes.outgoing(RelationKind.USED_BY_PIM, peerNode.id), indexes.nodesById, "target");
@@ -507,7 +608,10 @@ function findEdge(indexes, relation, sourceNode, targetNode) {
 
 function enrichRow({ row, indexes }) {
   const staticNodes = staticRouteNodesForPeer(indexes, row.peerNode);
-  const bgpNodes = bgpNodesForPeer(indexes, row.peerNode);
+  const bgpNodes = uniqueSortedNodes([
+    ...bgpNodesForPeer(indexes, row.peerNode),
+    ...bgpNodesForStaticRoutes(indexes, staticNodes, row.peerNode || row.interfaceNode),
+  ]);
   const pimNeighborNodes = pimNeighborNodesForPeer(indexes, row.peerNode);
   const pimNodes = [
     row.pimNode,
@@ -638,6 +742,19 @@ function addPathEdges({ viewEdges, viewEdgeIds, nodeIds, row, indexes, side, cha
     chainDetail,
     original: findEdge(indexes, RelationKind.HAS_INTERFACE, row.lagNode, row.interfaceNode),
   });
+  if (!nodeIds.lag && nodeIds.port && nodeIds.interface) {
+    addEdge(viewEdges, viewEdgeIds, {
+      source: nodeIds.port,
+      target: nodeIds.interface,
+      relation: DIRECT_PORT_INTERFACE_RELATION,
+      side,
+      chainId,
+      chainDetail,
+      type: "canonical-port-interface",
+      canonicalSourceId: row.portNode?.id || "",
+      canonicalTargetId: row.interfaceNode?.id || "",
+    });
+  }
   addEdge(viewEdges, viewEdgeIds, {
     source: nodeIds.interface,
     target: nodeIds.peer,

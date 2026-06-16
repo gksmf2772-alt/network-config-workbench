@@ -13,9 +13,7 @@ import "./styles/global-semantic-diff.css";
 import "./styles/global-compare-settings.css";
 import "./styles/profile-mapping.css";
 import { registerLegacyProfileMappingRenderer } from "./components/ProfileMappingWorkbench.jsx";
-import { registerLegacyRelationshipGraphRenderer } from "./components/graph/RelationshipGraphBridge.jsx";
 
 createRoot(document.getElementById("root")).render(<App />);
 
 registerLegacyProfileMappingRenderer();
-registerLegacyRelationshipGraphRenderer();

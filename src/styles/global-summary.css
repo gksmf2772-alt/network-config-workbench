@@ -1181,8 +1181,7 @@ textarea[id$="ConfigInput"],
 .summary-table button,
 .report-review-table button,
 .report-review-field-table button,
-.report-review-tools button,
-.report-graph-tools button {
+.report-review-tools button {
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1200,8 +1199,7 @@ textarea[id$="ConfigInput"],
 .summary-table button:hover,
 .report-review-table button:hover,
 .report-review-field-table button:hover,
-.report-review-tools button:hover,
-.report-graph-tools button:hover {
+.report-review-tools button:hover:hover {
   border-color: rgba(8, 145, 178, 0.5);
   background: #ecfeff;
 }

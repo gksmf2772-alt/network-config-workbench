@@ -174,6 +174,24 @@ test("MVP MD-CLI one-line service interfaces with duplicate addresses remain sep
   assert.equal(new Set(interfaces.map((item) => item.fields.sap)).size, 2);
 });
 
+test("MD-CLI one-line service and router relations preserve routing context fields", () => {
+  const result = parse("nokia-md-cli", [
+    '/configure { service vprn "100" interface "to-core" ipv4 primary address 10.0.0.1 prefix-length 30 }',
+    '/configure { service vprn "100" static-routes route 192.0.2.0/24 route-type unicast next-hop 10.0.0.2 }',
+    '/configure { router "Base" bgp neighbor "10.0.0.2" peer-as 65000 }',
+    '/configure { router "Base" pim interface "to-core" }',
+  ].join("\n"), "new");
+  const serviceInterface = result.objects.find((item) => item.normalizedType === "interface" && item.fields.interface === "to-core");
+  const staticRoute = result.objects.find((item) => item.normalizedType === "static-route");
+  const bgp = result.objects.find((item) => item.normalizedType === "bgp");
+  const pim = result.objects.find((item) => item.normalizedType === "pim");
+
+  assert.equal(serviceInterface?.fields["routing-context"], "vprn:100");
+  assert.equal(staticRoute?.fields["routing-context"], "vprn:100");
+  assert.equal(bgp?.fields.router, "Base");
+  assert.equal(pim?.fields.router, "Base");
+});
+
 test("MVP static route same prefix with changed next-hop stays review candidate", () => {
   const oldConfig = [
     "static-route-entry 10.20.30.0/24",
